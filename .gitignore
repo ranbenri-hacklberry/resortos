@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+.venv/
+
+# Large Models & Heavy Binaries
+server/models/
+*.safetensors
+*.bin
+*.onnx
+*.pth
+*.pt
+*.tar.gz
+*.zip
+
+# Build Output
+dist/
+build/
+
+# Wrangler / Cloudflare
+.wrangler/
+
+# Environment & Logs
+.env
+.env.local
+*.log
+
+# OS Junk
+.DS_Store
+Thumbs.db

@@ -1,0 +1,38 @@
+{
+  "name": "mlx-studio-local",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "NODE_OPTIONS=--dns-result-order=ipv4first vite --port 3001 --host",
+    "bridge": "node server/index.js",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.0.0",
+    "@vitejs/plugin-react-swc": "^4.3.0",
+    "cors": "^2.8.5",
+    "dexie": "^4.4.4",
+    "dexie-react-hooks": "^4.4.0",
+    "express": "^4.18.2",
+    "framer-motion": "^11.0.0",
+    "html-to-image": "^1.11.13",
+    "i18next": "^23.0.0",
+    "i18next-browser-languagedetector": "^7.0.0",
+    "konva": "^9.0.0",
+    "lucide-react": "^0.400.0",
+    "puppeteer": "^22.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-i18next": "^14.0.0",
+    "react-konva": "^18.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.0.0",
+    "vite": "^6.0.0"
+  },
+  "browserslist": [
+    "> 0.2%",
+    "not dead"
+  ]
+}
