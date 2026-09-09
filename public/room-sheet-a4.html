@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>דף חדר A4</title>
+  <style>
+    :root {
+      --cream: #F3EBDA;
+      --ink: #1A1410;
+      --muted: #4A433A;
+      --line: #2C281F;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      background: #E8DFCC;
+      color: var(--ink);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .toolbar {
+      max-width: 210mm;
+      margin: 16px auto;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 8px;
+    }
+    .toolbar select, .toolbar button {
+      font: inherit;
+      font-size: 15px;
+      padding: 8px 12px;
+      border: 1px solid #8A8170;
+      background: var(--cream);
+      color: var(--ink);
+      border-radius: 8px;
+    }
+    .toolbar button {
+      background: var(--ink);
+      color: var(--cream);
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .hint { font-size: 13px; color: var(--muted); max-width: 42ch; }
+    .sheet {
+      position: relative;
+      width: 210mm;
+      height: 295mm;
+      margin: 0 auto 24px;
+      background: var(--cream);
+      overflow: hidden;
+      color: var(--ink);
+    }
+    .content {
+      height: 100%;
+      padding: 24mm 16mm 22mm;
+      display: flex;
+      flex-direction: column;
+      gap: 7mm;
+    }
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+    h2 {
+      margin: 6px 0 0;
+      font-size: 54px;
+      line-height: 1.1;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+    }
+    .rule {
+      height: 1px;
+      background: var(--ink);
+      opacity: 0.22;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6mm 8mm;
+    }
+    .split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8mm 12mm;
+    }
+    .stack {
+      display: flex;
+      flex-direction: column;
+      gap: 8mm;
+    }
+    .label {
+      font-size: 18px;
+      font-weight: 500;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .value {
+      font-size: 39px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+    }
+    .value.small { font-size: 27px; letter-spacing: 0; }
+    .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; letter-spacing: 0.08em; }
+    #lockbox, #gate {
+      direction: ltr;
+      unicode-bidi: isolate;
+      text-align: right;
+      font-size: 48px;
+    }
+    .note {
+      font-size: 21px;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+    .checkin-phone {
+      margin-top: auto;
+      border: 1px solid var(--ink);
+      padding: 5mm 6mm 4mm;
+    }
+    .checkin-phone .label {
+      margin-bottom: 3mm;
+    }
+    .checkin-phone .value {
+      font-size: 24mm;
+      line-height: 1;
+      letter-spacing: -0.04em;
+      font-weight: 800;
+      direction: ltr;
+      unicode-bidi: isolate;
+      text-align: center;
+      white-space: nowrap;
+    }
+    .footer {
+      font-size: 18px;
+      line-height: 1.4;
+      color: var(--muted);
+    }
+    .office {
+      margin-top: 10px;
+      font-size: 16px;
+      line-height: 1.4;
+      color: var(--muted);
+    }
+    @page {
+      size: A4 portrait;
+      margin: 0;
+    }
+    @media print {
+      html {
+        margin: 0 !important;
+        padding: 0 !important;
+        height: 100% !important;
+        overflow: hidden !important;
+        background: var(--cream) !important;
+      }
+      body {
+        width: 210mm !important;
+        height: 295mm !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        background: var(--cream) !important;
+      }
+      .toolbar { display: none !important; }
+      .sheet {
+        width: 210mm !important;
+        height: 295mm !important;
+        margin: 0 !important;
+        overflow: hidden !important;
+        background: var(--cream) !important;
+      }
+      html, body, .sheet, .sheet * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <label>
+      בקתה
+      <select id="unit"></select>
+    </label>
+    <span class="hint">הדפסה: A4, צבע, עמוד אחד. בטלו «Print headers and footers» בחלון ההדפסה.</span>
+    <button type="button" onclick="window.print()">הדפסה</button>
+  </div>
+
+  <article class="sheet" id="sheet">
+    <div class="content">
+      <header>
+        <h1>ברוכים הבאים</h1>
+        <h2 id="property">בתי נורית</h2>
+      </header>
+
+      <div class="rule"></div>
+
+      <div class="grid">
+        <div>
+          <div class="label">צ׳ק-אין</div>
+          <div class="value">15:00</div>
+        </div>
+        <div>
+          <div class="label">צ׳ק-אאוט</div>
+          <div class="value">11:00</div>
+        </div>
+        <div>
+          <div class="label">שבת — יציאה</div>
+          <div class="value small" id="saturday">15:00</div>
+        </div>
+      </div>
+
+      <div class="rule"></div>
+
+      <div class="split">
+        <div class="stack">
+          <div id="lockbox-block">
+            <div class="label">קוד כספת מפתח</div>
+            <div class="value mono" id="lockbox">2310</div>
+          </div>
+          <div id="gate-block">
+            <div class="label">קוד שער המושב</div>
+            <div class="value mono" id="gate">#2464</div>
+          </div>
+        </div>
+        <div class="stack">
+          <div id="wifi-block">
+            <div class="label">רשת Wi-Fi</div>
+            <div class="value small" id="ssid">MIALEES RESORT</div>
+          </div>
+          <div id="pass-block">
+            <div class="label">סיסמת Wi-Fi</div>
+            <div class="value small mono" id="pass">MIAL2026</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rule"></div>
+
+      <div class="note">
+        דף השהייה בטלפון נשלח אליכם בהודעה — שם מופיעים ניווט, צ׳ק-אין, והקודים אחרי הכניסה.
+        אם אין קישור, חייגו לשירות בשטח.
+      </div>
+
+      <div class="checkin-phone">
+        <div class="label">שירות בזמן צ׳ק-אין</div>
+        <div class="value" id="service">054-713-6676</div>
+      </div>
+
+      <div class="footer" id="footer">
+        ביציאה מחזירים את המפתח לכספת וסוגרים אותה. צ׳ק-אאוט מאוחר בתיאום מראש.
+        <div class="office">
+          שירות לקוחות 08:00–20:00 · 050-950-6222<br />
+          לתשלומים, חיובים, חשבוניות או הארכת שהייה
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <script>
+    const UNITS = [
+      { id: 'k671', property: 'בתי נורית', cabin: 'בתי נורית 1', ramot: true, lockbox: '2310', gate: '#2464', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
+      { id: 'k673', property: 'בתי נורית', cabin: 'בתי נורית 2', ramot: true, lockbox: '2320', gate: '#2464', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
+      { id: 'k674', property: 'בתי נורית', cabin: 'בתי נורית 3', ramot: true, lockbox: '2330', gate: '#2464', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
+      { id: 'k675', property: 'בתי נורית', cabin: 'בתי נורית 4', ramot: true, lockbox: '2340', gate: '#2464', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
+      { id: 'k676', property: 'בתי נורית', cabin: 'בתי נורית 5', ramot: true, lockbox: '2350', gate: '#2464', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
+      { id: 'k677', property: 'בתי נורית', cabin: 'בתי נורית 6', ramot: true, lockbox: '2360', gate: '#2464', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
+      { id: 'k678', property: 'בתי נורית', cabin: 'בתי נורית 7', ramot: true, lockbox: '2370', gate: '#2464', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
+      { id: 'k679', property: 'בתי נורית', cabin: 'בתי נורית 8', ramot: true, lockbox: '2380', gate: '#2464', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
+      { id: 'suite-1', property: 'מיאליס ריזורט', cabin: 'סוויטה 1 (הירוקה)', ramot: false, lockbox: '', gate: 'חיוג לשער', ssid: 'CASAMIA', pass: 'CASAMIA10' },
+      { id: 'suite-2', property: 'מיאליס ריזורט', cabin: 'סוויטה 2 (הורודה)', ramot: false, lockbox: '', gate: 'חיוג לשער', ssid: 'CASAMIA', pass: 'CASAMIA10' },
+      { id: 'mialis-villa', property: 'מיאליס ריזורט', cabin: 'וילה מיאליס ריזורט', ramot: false, lockbox: '', gate: 'חיוג לשער', ssid: 'CASAMIA', pass: 'CASAMIA10' },
+      { id: 'k808', property: "טאג' מאהל", cabin: "טאג' מאהל · בקתה 1", ramot: true, lockbox: '2510', gate: '#2464', ssid: 'LUTUS', pass: '12345678' },
+      { id: 'k809', property: "טאג' מאהל", cabin: "טאג' מאהל · בקתה 2", ramot: true, lockbox: '2520', gate: '#2464', ssid: 'LUTUS', pass: '12345678' },
+      { id: 'k810', property: "טאג' מאהל", cabin: "טאג' מאהל · בקתה 3", ramot: true, lockbox: '2530', gate: '#2464', ssid: 'LUTUS', pass: '12345678' },
+      { id: 'k811', property: "טאג' מאהל", cabin: "טאג' מאהל · בקתה 4", ramot: true, lockbox: '2540', gate: '#2464', ssid: 'LUTUS', pass: '12345678' },
+      { id: 'k680', property: 'מול הנוף', cabin: 'מול הנוף · בקתה 1', ramot: true, lockbox: '2910', gate: '#2464', ssid: 'Mol_hanof', pass: '12345678' },
+      { id: 'k681', property: 'מול הנוף', cabin: 'מול הנוף · בקתה 2', ramot: true, lockbox: '2920', gate: '#2464', ssid: 'Mol_hanof', pass: '12345678' },
+      { id: 'k682', property: 'מול הנוף', cabin: 'מול הנוף · בקתה 3', ramot: true, lockbox: '2930', gate: '#2464', ssid: 'Mol_hanof', pass: '12345678' },
+      { id: 'k683', property: 'מול הנוף', cabin: 'מול הנוף · בקתה 4', ramot: true, lockbox: '2940', gate: '#2464', ssid: 'Mol_hanof', pass: '12345678' },
+      { id: 'k684', property: 'מול הנוף', cabin: 'מול הנוף · בקתה 5', ramot: true, lockbox: '2950', gate: '#2464', ssid: 'Mol_hanof', pass: '12345678' },
+      { id: 'k685', property: 'נופים בלבן', cabin: 'נופים בלבן · בקתה 1', ramot: true, lockbox: '2810', gate: '#2464', ssid: 'TP-LINK_FA30', pass: '15107312' },
+      { id: 'k686', property: 'נופים בלבן', cabin: 'נופים בלבן · בקתה 2', ramot: true, lockbox: '2810', gate: '#2464', ssid: '', pass: '' },
+      { id: 'k687', property: 'בקתות טוסקנה', cabin: 'טוסקנה · פירנצה 1', ramot: true, lockbox: '2710', gate: '#2464', ssid: 'Toscana', pass: '12345678' },
+      { id: 'k688', property: 'בקתות טוסקנה', cabin: 'טוסקנה · פירנצה 2', ramot: true, lockbox: '2720', gate: '#2464', ssid: 'Toscana', pass: '12345678' },
+      { id: 'k689', property: 'בקתות טוסקנה', cabin: 'טוסקנה · שאטו', ramot: true, lockbox: '2730', gate: '#2464', ssid: 'Toscana', pass: '12345678' },
+      { id: 'k690', property: 'החצר המוסיקלית', cabin: 'חצר מוסיקלית · חליל', ramot: true, lockbox: '2610', gate: '#2464', ssid: 'Music yard', pass: '12345678' },
+      { id: 'k691', property: 'החצר המוסיקלית', cabin: 'חצר מוסיקלית · מיתר', ramot: true, lockbox: '2610', gate: '#2464', ssid: 'Music yard', pass: '12345678' },
+      { id: 'k692', property: 'החצר המוסיקלית', cabin: 'חצר מוסיקלית · פעמון', ramot: true, lockbox: '2610', gate: '#2464', ssid: 'Music yard', pass: '12345678' },
+      { id: 'k693', property: 'בקתות מאיה', cabin: 'בקתות מאיה · בקתה 1', ramot: true, lockbox: '2410', gate: '#2464', ssid: '', pass: '12345678' },
+      { id: 'k694', property: 'בקתות מאיה', cabin: 'בקתות מאיה · בקתה 2', ramot: true, lockbox: '2420', gate: '#2464', ssid: '', pass: '12345678' },
+      { id: 'k695', property: 'בקתות מאיה', cabin: 'בקתות מאיה · בקתה 3', ramot: true, lockbox: '2430', gate: '#2464', ssid: '', pass: '12345678' },
+      { id: 'k826', property: 'קאסה נובה', cabin: 'קאסה נובה · Aura', ramot: false, lockbox: '', gate: '', ssid: 'MIALEES', pass: 'AD654321' },
+      { id: 'k827', property: 'קאסה נובה', cabin: 'קאסה נובה · Bloom', ramot: false, lockbox: '', gate: '', ssid: 'MIALEES', pass: 'AD654321' }
+    ];
+
+    const select = document.getElementById('unit');
+    UNITS.forEach((unit) => {
+      const option = document.createElement('option');
+      option.value = unit.id;
+      option.textContent = unit.cabin;
+      select.appendChild(option);
+    });
+
+    function setText(id, value, hideIfEmpty) {
+      const el = document.getElementById(id);
+      const block = document.getElementById(id + '-block');
+      if (hideIfEmpty && !value) {
+        if (block) block.style.display = 'none';
+        return;
+      }
+      if (block) block.style.display = '';
+      el.textContent = value || 'שם הרשת במקום';
+    }
+
+    function render(unit) {
+      document.getElementById('property').textContent = unit.property;
+      document.getElementById('saturday').textContent = unit.property === 'קאסה נובה' ? 'צאת השבת' : '15:00';
+      document.getElementById('service').textContent = unit.ramot ? '054-713-6676' : '050-759-7944';
+      setText('lockbox', unit.lockbox, true);
+      setText('gate', unit.gate, true);
+      const wifiBlock = document.getElementById('wifi-block');
+      const passBlock = document.getElementById('pass-block');
+      if (!unit.pass) {
+        wifiBlock.style.display = 'none';
+        passBlock.style.display = 'none';
+      } else {
+        wifiBlock.style.display = '';
+        passBlock.style.display = '';
+        document.getElementById('ssid').textContent = unit.ssid || 'שם הרשת במקום';
+        document.getElementById('pass').textContent = unit.pass;
+      }
+    }
+
+    select.addEventListener('change', () => {
+      render(UNITS.find((unit) => unit.id === select.value));
+    });
+    render(UNITS[0]);
+  </script>
+</body>
+</html>

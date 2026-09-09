@@ -1,29 +1,27 @@
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from './supabaseClient';
 
-const getHost = () => {
-  if (typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-    return window.location.hostname;
-  }
-  return '127.0.0.1';
-};
+export { supabase };
 
-const SUPABASE_URL = `http://${getHost()}:54321`;
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
-
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+function digitsOnly(value) {
+  return String(value || '').replace(/\D/g, '');
+}
 
 export async function authorizeUser(phone) {
   try {
-    let cleanPhone = phone;
-    if (phone && phone.startsWith('972')) {
-      cleanPhone = '0' + phone.substring(3);
+    const rawDigits = digitsOnly(phone);
+    if (rawDigits.length < 8 || rawDigits.length > 15) {
+      return { authorized: false, entities: [] };
     }
-    
-    // Timeout promise after 1.5s to prevent blank loading screens on remote devices
+
+    let localPhone = rawDigits;
+    if (rawDigits.startsWith('972') && rawDigits.length >= 11) {
+      localPhone = '0' + rawDigits.substring(3);
+    }
+
     const queryPromise = supabase
       .from('employees')
       .select('business_id, business_name, name, access_level, is_admin, is_super_admin')
-      .or(`phone.eq.${phone},whatsapp_phone.eq.${phone},phone.eq.${cleanPhone},whatsapp_phone.eq.${cleanPhone}`);
+      .or(`phone.eq.${rawDigits},whatsapp_phone.eq.${rawDigits},phone.eq.${localPhone},whatsapp_phone.eq.${localPhone}`);
 
     const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Auth timeout')), 1500));
 

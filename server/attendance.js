@@ -1,4 +1,3 @@
-import puppeteer from 'puppeteer';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -7,17 +6,22 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SESSION_FILE = path.join(__dirname, 'session.json');
 
 export async function toggleClock(action) {
+    const username = process.env.SENZEY_USERNAME;
+    const password = process.env.SENZEY_PASSWORD;
+    if (!username || !password) {
+        return { success: false, error: 'Senzey credentials are not configured' };
+    }
+
+    const { default: puppeteer } = await import('puppeteer');
     const browser = await puppeteer.launch({ 
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        args: ['--disable-dev-shm-usage']
     });
     const page = await browser.newPage();
     
-    // Set a realistic viewport
     await page.setViewport({ width: 1280, height: 800 });
 
     try {
-        // Load cookies if exist
         if (fs.existsSync(SESSION_FILE)) {
             const cookiesString = fs.readFileSync(SESSION_FILE, 'utf8');
             const cookies = JSON.parse(cookiesString);
@@ -27,29 +31,25 @@ export async function toggleClock(action) {
 
         await page.goto('https://deck-bar.senzey.com/login.php', { waitUntil: 'networkidle2', timeout: 30000 });
 
-        // Check if we need to login (look for username field)
         const needsLogin = await page.$('#username');
 
         if (needsLogin) {
             console.log('Logging in to Senzey...');
-            await page.type('#username', 'רן');
-            await page.type('#password', 'רן2301');
+            await page.type('#username', username);
+            await page.type('#password', password);
             await Promise.all([
                 page.click('button.btn'),
                 page.waitForNavigation({ waitUntil: 'networkidle2' }),
             ]);
 
-            // Save session for next time
             const cookies = await page.cookies();
-            fs.writeFileSync(SESSION_FILE, JSON.stringify(cookies, null, 2));
+            fs.writeFileSync(SESSION_FILE, JSON.stringify(cookies, null, 2), { mode: 0o600 });
         }
 
         console.log(`Attempting to clock ${action === 'in' ? 'IN' : 'OUT'}...`);
 
-        // Target text for the button
         const targetText = action === 'in' ? 'כניסה' : 'יציאה';
         
-        // Find the button by its Hebrew text
         const targetButton = await page.evaluateHandle((text) => {
             const btns = Array.from(document.querySelectorAll('button, input[type="submit"], a, div.btn'));
             return btns.find(btn => (btn.textContent || btn.value || '').includes(text));
@@ -61,8 +61,6 @@ export async function toggleClock(action) {
 
         await targetButton.asElement().click();
         
-        // Wait for potential UI changes or success message
-        // Senzey usually shows a success alert or updates a status text
         await new Promise(r => setTimeout(r, 4000)); 
 
         const timestamp = new Date().getTime();

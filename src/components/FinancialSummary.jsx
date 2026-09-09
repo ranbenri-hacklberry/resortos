@@ -1,315 +1,257 @@
-import React, { useMemo } from 'react';
-import { motion } from 'framer-motion';
-import { useTranslation } from 'react-i18next';
-import { 
-  TrendingUp, 
-  DollarSign, 
-  CreditCard, 
-  Calendar as CalendarIcon, 
-  Receipt, 
-  CheckCircle2, 
-  ShieldCheck 
-} from 'lucide-react';
-import { useLiveBookings, useLiveUnits } from '../lib/hotelos-db';
+import React, { useEffect, useMemo, useState, useTransition } from 'react';
+import { Building2, CalendarDays } from 'lucide-react';
+import { useLiveBookings, useLiveUnits } from '../lib/resortos-db';
+import { loadDailyCollection, seedDailyCollectionIfEmpty } from '../lib/dailyCollection';
+import { syncCloudBookingsToDexie } from '../lib/cloudDb';
+import { loadMaxCredits } from '../lib/maxCredits';
+import { loadBeinleumiStatement } from '../lib/beinleumiStatement';
+import { incomingBankRows, matchBankToCollection } from '../lib/bankCollectionMatch';
+import { mergeKinorotArrivals } from '../lib/bookingFinance';
+import { loadHypPayments } from '../lib/hypPayments';
+import { fetchAllFinanceTransactions, fetchFinanceOverview } from '../lib/openFinanceApi';
+import { addDaysIso } from '../lib/cashFlowForecast';
+import { israelToday } from '../lib/cabinAccess';
+import FinanceBanksPanel from './FinanceBanksPanel';
+import FinanceBookingsPanel from './FinanceBookingsPanel';
 
 const DEMO_TENANT_ID = '22222222-2222-2222-2222-222222222222';
 
 export default function FinancialSummary({ tenantId = DEMO_TENANT_ID, theme = 'dark' }) {
-  const { t } = useTranslation();
-
   const bookings = useLiveBookings(tenantId);
   const units = useLiveUnits(tenantId);
-
   const isLight = theme === 'light';
+  const [part, setPart] = useState('bookings');
+  const [seen, setSeen] = useState({ banks: false, bookings: true });
+  const [, startTab] = useTransition();
+  const [store, setStore] = useState(() => loadDailyCollection());
+  const [maxPayload, setMaxPayload] = useState(null);
+  const [beinleumiPayload, setBeinleumiPayload] = useState(null);
+  const [hypPayload, setHypPayload] = useState(null);
+  const [bankTxs, setBankTxs] = useState([]);
+  const [overview, setOverview] = useState(null);
 
-  const themeStyles = {
+  const styles = {
     wrapperBg: isLight ? '#FFFFFF' : '#0F172A',
     cardBg: isLight ? '#F8FAFC' : '#1E293B',
     cardBorder: isLight ? '#E2E8F0' : 'rgba(255,255,255,0.08)',
     textPrimary: isLight ? '#0F172A' : '#F8FAFC',
     textMuted: isLight ? '#64748B' : '#94A3B8',
-    cellBorder: isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)',
+    inputBg: isLight ? '#FFFFFF' : '#0B1220',
     shadow: isLight ? '0 10px 30px rgba(0,0,0,0.06)' : '0 20px 40px rgba(0,0,0,0.3)'
   };
 
-  // Payment Status Badge Helper
-  const getPaymentBadge = (status) => {
-    switch (status) {
-      case 'PAID':
-        return { label: t('PAID'), bg: 'rgba(16, 185, 129, 0.18)', color: '#10B981', border: '#10B981' };
-      case 'PARTIAL':
-        return { label: t('PARTIAL'), bg: 'rgba(245, 158, 11, 0.18)', color: '#F59E0B', border: '#F59E0B' };
-      default:
-        return { label: t('UNPAID'), bg: 'rgba(239, 68, 68, 0.18)', color: '#EF4444', border: '#EF4444' };
-    }
-  };
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const next = await seedDailyCollectionIfEmpty();
+      if (!cancelled) setStore(next);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
-  // Financial Ledger Calculations (Current Month) - 1.5% System & Processing Fee
-  const financialData = useMemo(() => {
-    const activeBookings = bookings.filter(b => !b.deleted_at && b.booking_status !== 'CANCELED');
+  useEffect(() => {
+    if (!tenantId) return undefined;
+    syncCloudBookingsToDexie(tenantId);
+    const timer = setInterval(() => syncCloudBookingsToDexie(tenantId), 15000);
+    return () => clearInterval(timer);
+  }, [tenantId]);
 
-    let totalGrossAgorot = 0;
-    let totalFeeAgorot = 0;
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await loadMaxCredits();
+        if (!cancelled) setMaxPayload(data);
+      } catch {
+        if (!cancelled) setMaxPayload(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
-    const transactionList = activeBookings.map(b => {
-      const grossAgorot = b.total_price_agorot || 0;
-      // 1.5% System & Processing Fee
-      const feeAgorot = Math.round(grossAgorot * 0.015);
-      const netAgorot = grossAgorot - feeAgorot;
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await loadBeinleumiStatement();
+        if (!cancelled) setBeinleumiPayload(data);
+      } catch {
+        if (!cancelled) setBeinleumiPayload(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
-      totalGrossAgorot += grossAgorot;
-      totalFeeAgorot += feeAgorot;
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await loadHypPayments();
+        if (!cancelled) setHypPayload(data);
+      } catch {
+        if (!cancelled) setHypPayload(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
-      const unitRecord = units.find(u => u.id === b.unit_id);
-      const unitName = unitRecord ? t(unitRecord.id + '_short', unitRecord.name) : t('UNIT');
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const today = israelToday();
+      let nextOverview = null;
+      let txItems = [];
+      try {
+        nextOverview = await fetchFinanceOverview();
+      } catch {
+        nextOverview = null;
+      }
+      try {
+        const tx = await fetchAllFinanceTransactions({
+          dateFrom: addDaysIso(today, -150),
+          dateTo: today,
+          limit: 100
+        });
+        txItems = tx.items || [];
+      } catch {
+        txItems = [];
+      }
+      if (cancelled) return;
+      setOverview(nextOverview);
+      setBankTxs(txItems);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
-      return {
-        id: b.id,
-        guest_name: t(b.id + '_guest', b.guest_name || 'אורח'),
-        unit_name: unitName,
-        check_in_date: b.check_in_date,
-        check_out_date: b.check_out_date,
-        payment_status: b.payment_status || 'UNPAID',
-        channel_source: b.channel_source || 'DIRECT',
-        gross_ils: Math.round(grossAgorot / 100),
-        fee_ils: Math.round(feeAgorot / 100),
-        net_ils: Math.round(netAgorot / 100)
-      };
+  function showPart(next) {
+    startTab(() => {
+      setSeen((prev) => (prev[next] ? prev : { ...prev, [next]: true }));
+      setPart(next);
     });
+  }
 
-    const totalNetAgorot = totalGrossAgorot - totalFeeAgorot;
-
-    // Calculate next month's 10th date
-    const today = new Date();
-    const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 10);
-    const scheduledPayoutDate = `${String(nextMonth.getDate()).padStart(2, '0')}/${String(nextMonth.getMonth() + 1).padStart(2, '0')}/${nextMonth.getFullYear()}`;
-
-    return {
-      closedBookingsCount: activeBookings.length,
-      grossRevenueIls: Math.round(totalGrossAgorot / 100),
-      totalFeesIls: Math.round(totalFeeAgorot / 100),
-      netPayoutIls: Math.round(totalNetAgorot / 100),
-      scheduledPayoutDate,
-      transactions: transactionList
-    };
-  }, [bookings, units, t]);
-
-  const cardStyle = {
-    background: themeStyles.cardBg,
-    border: `1px solid ${themeStyles.cardBorder}`,
-    borderRadius: '16px',
-    padding: '1.25rem',
-    boxShadow: themeStyles.shadow,
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'space-between',
-    gap: '0.75rem'
-  };
+  const allRows = useMemo(
+    () => mergeKinorotArrivals(store?.rows || [], bookings, units),
+    [store, bookings, units]
+  );
+  const bankRows = useMemo(
+    () => incomingBankRows(beinleumiPayload, bankTxs),
+    [beinleumiPayload, bankTxs]
+  );
+  const bankMatch = useMemo(
+    () => matchBankToCollection(allRows, bankRows),
+    [allRows, bankRows]
+  );
 
   return (
     <div style={{
-      background: themeStyles.wrapperBg,
-      color: themeStyles.textPrimary,
-      padding: '0.75rem',
+      background: styles.wrapperBg,
+      color: styles.textPrimary,
+      padding: '0.85rem',
       marginTop: '0.75rem',
       borderRadius: '16px',
-      boxShadow: themeStyles.shadow,
+      boxShadow: styles.shadow,
       fontFamily: 'system-ui, -apple-system, sans-serif'
     }}>
-      {/* SUMMARY CARDS GRID - STARTS IMMEDIATELY UNDER TOP NAVBAR */}
-
-      {/* SUMMARY CARDS GRID */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-        gap: '1rem',
-        marginBottom: '2rem'
+        gridTemplateColumns: '1fr 1fr',
+        gap: '0.55rem',
+        marginBottom: '1rem'
       }}>
-        {/* 1. Closed Bookings Count */}
-        <motion.div whileHover={{ y: -2 }} style={cardStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: themeStyles.textMuted }}>
-              {t('TOTAL_CLOSED_BOOKINGS')}
-            </span>
-            <div style={{ background: 'rgba(99, 102, 241, 0.15)', padding: '0.4rem', borderRadius: '10px', color: '#6366F1' }}>
-              <TrendingUp size={18} />
-            </div>
+        <button
+          type="button"
+          onClick={() => showPart('bookings')}
+          style={{
+            border: part === 'bookings' ? 'none' : `1px solid ${styles.cardBorder}`,
+            borderRadius: '14px',
+            padding: '0.85rem 1rem',
+            background: part === 'bookings' ? 'linear-gradient(135deg, #D97706, #B45309)' : styles.cardBg,
+            color: part === 'bookings' ? '#fff' : styles.textPrimary,
+            cursor: 'pointer',
+            textAlign: 'right'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 900, fontSize: '1.05rem' }}>
+            <CalendarDays size={18} /> הזמנות וגבייה
           </div>
-          <div style={{ fontSize: '1.8rem', fontWeight: 900, color: themeStyles.textPrimary }}>
-            {financialData.closedBookingsCount} <span style={{ fontSize: '0.85rem', fontWeight: 600, color: themeStyles.textMuted }}>{t('BOOKINGS_LABEL', 'הזמנות')}</span>
+          <div style={{ marginTop: '0.25rem', fontSize: '0.78rem', opacity: 0.85, fontWeight: 600 }}>
+            סכום הזמנה מול מה ששולם בפועל באשראי, מזומן והעברה
           </div>
-        </motion.div>
-
-        {/* 2. Gross Revenue */}
-        <motion.div whileHover={{ y: -2 }} style={cardStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: themeStyles.textMuted }}>
-              {t('GROSS_REVENUE')}
-            </span>
-            <div style={{ background: 'rgba(16, 185, 129, 0.15)', padding: '0.4rem', borderRadius: '10px', color: '#10B981' }}>
-              <DollarSign size={18} />
-            </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => showPart('banks')}
+          style={{
+            border: part === 'banks' ? 'none' : `1px solid ${styles.cardBorder}`,
+            borderRadius: '14px',
+            padding: '0.85rem 1rem',
+            background: part === 'banks' ? 'linear-gradient(135deg, #4F46E5, #3730A3)' : styles.cardBg,
+            color: part === 'banks' ? '#fff' : styles.textPrimary,
+            cursor: 'pointer',
+            textAlign: 'right'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 900, fontSize: '1.05rem' }}>
+            <Building2 size={18} /> בנקים ותזרים
           </div>
-          <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#10B981' }}>
-            ₪{financialData.grossRevenueIls.toLocaleString()}
+          <div style={{ marginTop: '0.25rem', fontSize: '0.78rem', opacity: 0.85, fontWeight: 600 }}>
+            יתרות, תנועות אחרונות, ותחזית יתרה לפי יום
           </div>
-        </motion.div>
-
-        {/* 3. System & Processing Fees (1.5%) */}
-        <motion.div whileHover={{ y: -2 }} style={cardStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: themeStyles.textMuted }}>
-              {t('SYSTEM_FEES')}
-            </span>
-            <div style={{ background: 'rgba(239, 68, 68, 0.15)', padding: '0.4rem', borderRadius: '10px', color: '#EF4444' }}>
-              <CreditCard size={18} />
-            </div>
-          </div>
-          <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#EF4444' }}>
-            ₪{financialData.totalFeesIls.toLocaleString()}
-          </div>
-        </motion.div>
-
-        {/* 4. Net Payout Credit */}
-        <motion.div whileHover={{ y: -2 }} style={{
-          ...cardStyle,
-          background: isLight 
-            ? 'linear-gradient(135deg, #ECFDF5, #D1FAE5)' 
-            : 'linear-gradient(135deg, #064E3B, #065F46)',
-          border: '1.5px solid #10B981'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.8rem', fontWeight: 800, color: isLight ? '#065F46' : '#A7F3D0' }}>
-              {t('NET_PAYOUT_CREDIT')}
-            </span>
-            <div style={{ background: '#10B981', padding: '0.4rem', borderRadius: '10px', color: '#FFF' }}>
-              <CheckCircle2 size={18} />
-            </div>
-          </div>
-          <div style={{ fontSize: '2rem', fontWeight: 900, color: isLight ? '#047857' : '#FFFFFF' }}>
-            ₪{financialData.netPayoutIls.toLocaleString()}
-          </div>
-        </motion.div>
-
-        {/* 5. Scheduled Payout Date */}
-        <motion.div whileHover={{ y: -2 }} style={cardStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: themeStyles.textMuted }}>
-              {t('SCHEDULED_PAYOUT_DATE')}
-            </span>
-            <div style={{ background: 'rgba(245, 158, 11, 0.15)', padding: '0.4rem', borderRadius: '10px', color: '#F59E0B' }}>
-              <CalendarIcon size={18} />
-            </div>
-          </div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#F59E0B' }}>
-            {financialData.scheduledPayoutDate}
-          </div>
-        </motion.div>
+        </button>
       </div>
 
-      {/* DETAILED TRANSACTIONS BREAKDOWN - MAIN SCREEN CARDS STYLE */}
-      <div>
-        <h3 style={{ fontSize: '1.05rem', fontWeight: 800, marginBottom: '1rem', color: themeStyles.textPrimary }}>
-          {t('TRANSACTIONS_LEDGER')} ({financialData.transactions.length})
-        </h3>
-
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-          gap: '1rem'
-        }}>
-          {financialData.transactions.map((tx) => {
-            const badge = getPaymentBadge(tx.payment_status);
-
-            return (
-              <motion.div
-                key={tx.id}
-                whileHover={{ scale: 1.01 }}
-                style={{
-                  background: isLight ? '#FFFFFF' : 'linear-gradient(135deg, #1E293B, #0F172A)',
-                  border: `1.5px solid ${badge.border}`,
-                  borderRadius: '12px',
-                  padding: '1rem',
-                  boxShadow: isLight ? '0 4px 12px rgba(0,0,0,0.06)' : '0 4px 16px rgba(0,0,0,0.3)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '0.75rem'
-                }}
-              >
-                {/* Header Row: Guest Name & Badge */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
-                  <div>
-                    <span style={{ fontWeight: 800, fontSize: '0.95rem', color: isLight ? '#0F172A' : '#FFFFFF' }}>
-                      {tx.guest_name}
-                    </span>
-                    <span style={{ fontSize: '0.8rem', color: themeStyles.textMuted, marginRight: '0.5rem' }}>
-                      • {tx.unit_name}
-                    </span>
-                  </div>
-                  <span style={{
-                    background: badge.bg,
-                    color: badge.color,
-                    border: `1px solid ${badge.border}`,
-                    fontSize: '0.7rem',
-                    fontWeight: 800,
-                    padding: '2px 8px',
-                    borderRadius: '6px'
-                  }}>
-                    {badge.label}
-                  </span>
-                </div>
-
-                {/* Dates Row */}
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  fontSize: '0.8rem',
-                  color: themeStyles.textMuted,
-                  background: isLight ? '#F1F5F9' : 'rgba(255,255,255,0.03)',
-                  padding: '0.4rem 0.6rem',
-                  borderRadius: '8px'
-                }}>
-                  <CalendarIcon size={14} color="#6366F1" />
-                  <span>{t('STAY_DATES', 'תאריכי שהייה:')} <strong>{tx.check_in_date}</strong> - <strong>{tx.check_out_date}</strong></span>
-                </div>
-
-                {/* Financial Details Row: Gross, Fee, Net */}
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr 1fr',
-                  gap: '0.5rem',
-                  textAlign: 'center',
-                  borderTop: `1px solid ${themeStyles.cellBorder}`,
-                  paddingTop: '0.6rem',
-                  fontSize: '0.75rem'
-                }}>
-                  <div>
-                    <div style={{ color: themeStyles.textMuted }}>{t('GROSS_SHORT', 'ברוטו')}</div>
-                    <div style={{ fontWeight: 800, fontSize: '0.9rem', color: themeStyles.textPrimary }}>
-                      ₪{tx.gross_ils.toLocaleString()}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div style={{ color: themeStyles.textMuted }}>{t('FEE_SHORT', 'עמלה (1.5%)')}</div>
-                    <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#EF4444' }}>
-                      -₪{tx.fee_ils.toLocaleString()}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div style={{ color: '#10B981', fontWeight: 700 }}>{t('NET_PAYOUT_LABEL', 'נטו למשיכה')}</div>
-                    <div style={{ fontWeight: 900, fontSize: '0.95rem', color: '#10B981' }}>
-                      ₪{tx.net_ils.toLocaleString()}
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })}
+      {seen.banks ? (
+        <div style={{ display: part === 'banks' ? 'block' : 'none' }}>
+          <FinanceBanksPanel
+            theme={theme}
+            styles={styles}
+            maxCredits={maxPayload?.rows || []}
+            collectionRows={allRows}
+            beinleumiStatement={beinleumiPayload}
+            overview={overview}
+            transactions={bankTxs}
+            onStatementSynced={async () => {
+              try {
+                setBeinleumiPayload(await loadBeinleumiStatement());
+              } catch {
+                /* keep previous statement if scrape did not write a file */
+              }
+            }}
+            onHypSynced={async () => {
+              try {
+                setHypPayload(await loadHypPayments());
+              } catch {
+                /* keep previous hyp file if sync did not write */
+              }
+            }}
+          />
         </div>
-      </div>
+      ) : null}
+      {seen.bookings ? (
+        <div style={{ display: part === 'bookings' ? 'block' : 'none' }}>
+          <FinanceBookingsPanel
+            theme={theme}
+            styles={styles}
+            store={store}
+            setStore={setStore}
+            allRows={allRows}
+            bookings={bookings}
+            units={units}
+            bankMatch={bankMatch}
+            hypPayload={hypPayload}
+            beinleumiStatement={beinleumiPayload}
+            bankRows={bankRows}
+            onHypSynced={async () => {
+              try {
+                setHypPayload(await loadHypPayments());
+              } catch {
+                /* keep previous hyp file if sync did not write */
+              }
+            }}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

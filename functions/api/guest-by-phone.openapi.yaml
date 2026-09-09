@@ -1,0 +1,82 @@
+openapi: 3.0.3
+info:
+  title: ResortOS guest context
+  version: 1.0.0
+  description: Read-only lookup of the current or next stay for a WhatsApp sender.
+servers:
+  - url: https://resortos.app
+paths:
+  /api/guest-by-phone:
+    get:
+      summary: Resolve guest + cabin from a phone or WhatsApp sender id
+      parameters:
+        - in: query
+          name: phone
+          schema: { type: string }
+          example: '+972548076123'
+        - in: query
+          name: sender
+          schema: { type: string }
+          description: WhatsApp sender id if it is not a plain E.164 phone
+          example: '972548076123@c.us'
+        - in: query
+          name: wa
+          schema: { type: string }
+          description: Alias for sender
+        - in: query
+          name: wa_id
+          schema: { type: string }
+          description: Alias for sender (Meta Cloud API wa_id)
+      security:
+        - apiKey: []
+      responses:
+        '200':
+          description: Match or not found
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/GuestFound'
+                  - $ref: '#/components/schemas/GuestMissing'
+        '401':
+          description: Missing or wrong x-api-key
+        '503':
+          description: Calendar / PMS unreachable
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: x-api-key
+  schemas:
+    Reservation:
+      type: object
+      properties:
+        guestName: { type: string }
+        phone: { type: string }
+        unitId: { type: string }
+        unitName: { type: string }
+        checkIn: { type: string, format: date }
+        checkOut: { type: string, format: date }
+        status: { type: string, enum: [confirmed, checked_in, checked_out, cancelled] }
+        partySize: { type: integer }
+        notes: { type: string }
+    GuestFound:
+      allOf:
+        - $ref: '#/components/schemas/Reservation'
+        - type: object
+          required: [found, guestName, unitId, checkIn, checkOut, status]
+          properties:
+            found: { type: boolean, enum: [true] }
+            reservations:
+              type: array
+              items: { $ref: '#/components/schemas/Reservation' }
+    GuestMissing:
+      type: object
+      required: [found, phone]
+      properties:
+        found: { type: boolean, enum: [false] }
+        phone: { type: string }
+        suggestions:
+          type: array
+          items: { $ref: '#/components/schemas/Reservation' }

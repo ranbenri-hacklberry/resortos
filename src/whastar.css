@@ -1,0 +1,30 @@
+@import "tailwindcss/theme" layer(theme);
+@import "tailwindcss/utilities" layer(utilities);
+
+@theme {
+  --font-sans: "Heebo", system-ui, -apple-system, sans-serif;
+  --color-ws: #F6F3EC;
+  --color-ws-card: #FAF8F3;
+  --color-ws-ink: #1C1917;
+  --color-ws-muted: #78716C;
+  --color-ws-line: rgba(28, 25, 23, 0.10);
+  --color-ws-wa: #25d366;
+  --color-ws-gold: #C2410C;
+  --color-ws-well: #F3EDE3;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@layer base {
+  .ws-page button {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+}

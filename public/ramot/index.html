@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>מתחמי רמות</title>
+  <link rel="icon" href="/favicon.png" />
+  <style>
+    :root {
+      --bg: #f6f1ea;
+      --card: #fffdf9;
+      --ink: #2c241c;
+      --muted: #6f6458;
+      --line: #e4d8cc;
+      --waze: #33ccff;
+      --maps: #34a853;
+      --pin: #7c3aed;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: radial-gradient(1200px 600px at 80% -10%, #efe4d6, var(--bg));
+      color: var(--ink);
+      min-height: 100vh;
+    }
+    main { max-width: 520px; margin: 0 auto; padding: 1.1rem 0.9rem 2.5rem; }
+    h1 { font-size: 1.45rem; margin: 0 0 0.25rem; }
+    .sub { color: var(--muted); font-weight: 700; font-size: 0.9rem; margin-bottom: 1rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 0.9rem;
+      margin-bottom: 0.7rem;
+      box-shadow: 0 8px 24px rgba(80, 50, 20, 0.06);
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.6rem;
+    }
+    button.name {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: var(--ink);
+      font: inherit;
+      font-weight: 800;
+      font-size: 1.08rem;
+      text-align: right;
+      padding: 0;
+      cursor: pointer;
+      flex: 1;
+    }
+    .nav {
+      display: flex;
+      gap: 0.4rem;
+      flex-shrink: 0;
+    }
+    .nav a {
+      text-decoration: none;
+      font-weight: 800;
+      font-size: 0.78rem;
+      border-radius: 999px;
+      padding: 0.42rem 0.7rem;
+      color: #123;
+    }
+    .nav .waze { background: #d7f4ff; }
+    .nav .maps { background: #dff5e6; }
+    .secret { margin-top: 0.85rem; border-top: 1px dashed var(--line); padding-top: 0.75rem; }
+    .chip {
+      display: inline-block;
+      background: #f3eee7;
+      border-radius: 999px;
+      padding: 0.2rem 0.6rem;
+      font-size: 0.78rem;
+      font-weight: 800;
+      margin-left: 0.35rem;
+    }
+    .unit {
+      display: grid;
+      gap: 0.15rem;
+      padding: 0.55rem 0;
+      border-bottom: 1px solid #f0e7dc;
+    }
+    .unit:last-child { border-bottom: 0; }
+    .code { font-size: 1.25rem; letter-spacing: 0.12em; font-weight: 900; }
+    .wifi-box { margin: 0.65rem 0 0.25rem; }
+    .wifi {
+      color: var(--ink);
+      font-size: 1.02rem;
+      font-weight: 800;
+      line-height: 1.45;
+    }
+    .wifi span {
+      display: inline-block;
+      min-width: 4.8rem;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+    dialog {
+      border: 0;
+      border-radius: 20px;
+      padding: 1.1rem;
+      width: min(360px, 92vw);
+      background: var(--card);
+      color: var(--ink);
+    }
+    dialog::backdrop { background: rgba(30, 20, 10, 0.45); }
+    input[type=password], input[type=tel] {
+      width: 100%;
+      font-size: 1.4rem;
+      letter-spacing: 0.35em;
+      text-align: center;
+      padding: 0.7rem;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      margin: 0.7rem 0;
+    }
+    .go, .err {
+      width: 100%;
+      border: 0;
+      border-radius: 12px;
+      padding: 0.75rem;
+      font-weight: 800;
+      font-size: 1rem;
+      background: var(--pin);
+      color: white;
+      cursor: pointer;
+    }
+    .err { background: transparent; color: #b91c1c; padding: 0; cursor: default; }
+    .hint { color: var(--muted); font-size: 0.82rem; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>מתחמי רמות</h1>
+    <p class="sub">וויז ומפות בלי סיסמה. כספות ו־Wi‑Fi — אחרי קוד.</p>
+    <div id="list"></div>
+  </main>
+  <dialog id="pinDialog">
+    <form method="dialog" id="pinForm">
+      <div style="font-weight:900;font-size:1.1rem">קוד לכספות ו־Wi‑Fi</div>
+      <p class="hint">ארבע ספרות</p>
+      <input id="pin" name="pin" type="tel" inputmode="numeric" maxlength="4" autocomplete="one-time-code" />
+      <div id="pinErr" class="err" hidden>קוד שגוי</div>
+      <button class="go" type="submit">פתיחה</button>
+    </form>
+  </dialog>
+  <script>
+    const listEl = document.getElementById('list');
+    const dialog = document.getElementById('pinDialog');
+    const pinInput = document.getElementById('pin');
+    const pinErr = document.getElementById('pinErr');
+    const FALLBACK = [
+      { id: 'nurit', name: 'בתי נורית', wazeUrl: 'https://waze.com/ul/hsvc6gs4p2', mapsUrl: 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent('בתי נורית מושב רמות') + '&travelmode=driving' },
+      { id: 'taj', name: 'טאג׳ מאהל', wazeUrl: 'https://waze.com/ul?q=Taj+Mahal+Ramot&navigate=yes', mapsUrl: 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent("טאג' מאהל מושב רמות") + '&travelmode=driving' },
+      { id: 'mool', name: 'מול הנוף', wazeUrl: 'https://waze.com/ul/hsvc6gtk3v', mapsUrl: 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent('מול הנוף ברמות') + '&travelmode=driving' },
+      { id: 'nofim', name: 'נופים בלבן', wazeUrl: 'https://waze.com/ul?q=Nofim+Belavan+Ramot&navigate=yes', mapsUrl: 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent('נופים בלבן מושב רמות') + '&travelmode=driving' },
+      { id: 'toscana', name: 'בקתות טוסקנה', wazeUrl: 'https://waze.com/ul/hsvc6gsux5', mapsUrl: 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent('בקתות טוסקנה מושב רמות') + '&travelmode=driving' },
+      { id: 'musical', name: 'החצר המוסיקלית', wazeUrl: 'https://waze.com/ul/hsvc6gsdq7', mapsUrl: 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent('החצר המוסיקלית מושב רמות') + '&travelmode=driving' },
+      { id: 'maya', name: 'בקתות מאיה', wazeUrl: 'https://waze.com/ul/hsvc6gs4k0', mapsUrl: 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent('בקתות מאיה מושב רמות') + '&travelmode=driving' },
+      { id: 'siesta', name: 'סייסטה', wazeUrl: 'https://waze.com/ul?q=Siesta+Ramot&navigate=yes', mapsUrl: 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent('סייסטה ברמות') + '&travelmode=driving' }
+    ];
+    let publicList = FALLBACK;
+    let secrets = null;
+    let pendingId = null;
+    let openId = null;
+
+    function wifiBlock(networks) {
+      const net = (networks || []).find((n) => n && (n.ssid || n.password));
+      if (!net) return '';
+      const lines = [];
+      if (net.ssid) lines.push(`<div class="wifi"><span>שם רשת</span>${net.ssid}</div>`);
+      if (net.password) lines.push(`<div class="wifi"><span>סיסמה</span>${net.password}</div>`);
+      return lines.length ? `<div class="wifi-box">${lines.join('')}</div>` : '';
+    }
+
+    function render() {
+      listEl.innerHTML = publicList.map((row) => {
+        const open = secrets && openId === row.id && secrets.complexes.find((c) => c.id === row.id);
+        const units = open ? open.units.map((u) => `
+          <div class="unit">
+            <div style="font-weight:800">${u.name}</div>
+            <div class="code">${u.lockbox || '—'}</div>
+          </div>
+        `).join('') : '';
+        const secret = open ? `
+          <div class="secret">
+            <span class="chip">שער המושב ${secrets.gate}</span>
+            ${wifiBlock(open.wifi)}
+            ${units}
+          </div>
+        ` : '';
+        return `
+          <article class="card" data-id="${row.id}">
+            <div class="row">
+              <button class="name" type="button" data-open="${row.id}">${row.name}</button>
+              <div class="nav">
+                <a class="waze" href="${row.wazeUrl}" target="_blank" rel="noopener">Waze</a>
+                <a class="maps" href="${row.mapsUrl}" target="_blank" rel="noopener">מפות</a>
+              </div>
+            </div>
+            ${secret}
+          </article>
+        `;
+      }).join('');
+    }
+
+    async function loadPublic() {
+      try {
+        const res = await fetch('/api/ramot-lockboxes');
+        const data = await res.json();
+        publicList = (data.complexes && data.complexes.length) ? data.complexes : FALLBACK;
+      } catch (_) {
+        publicList = FALLBACK;
+      }
+      render();
+    }
+
+    async function unlock(pin, propertyId) {
+      const res = await fetch('/api/ramot-lockboxes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin })
+      });
+      if (!res.ok) return false;
+      secrets = await res.json();
+      sessionStorage.setItem('ramot-pin-ok', pin);
+      openId = propertyId || pendingId;
+      pendingId = null;
+      render();
+      const card = document.querySelector(`[data-id="${propertyId}"]`);
+      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return true;
+    }
+
+    listEl.addEventListener('click', async (event) => {
+      const btn = event.target.closest('[data-open]');
+      if (!btn) return;
+      const id = btn.getAttribute('data-open');
+      if (secrets) {
+        openId = openId === id ? null : id;
+        render();
+        return;
+      }
+      pendingId = id;
+      const saved = sessionStorage.getItem('ramot-pin-ok');
+      if (saved && await unlock(saved, id)) return;
+      pinErr.hidden = true;
+      pinInput.value = '';
+      dialog.showModal();
+      pinInput.focus();
+    });
+
+    document.getElementById('pinForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const ok = await unlock(pinInput.value, pendingId);
+      if (!ok) {
+        pinErr.hidden = false;
+        sessionStorage.removeItem('ramot-pin-ok');
+        return;
+      }
+      dialog.close();
+    });
+
+    loadPublic();
+  </script>
+</body>
+</html>

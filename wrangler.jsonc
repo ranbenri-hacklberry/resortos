@@ -1,0 +1,25 @@
+{
+	"name": "resortos",
+	"pages_build_output_dir": "dist",
+	"compatibility_date": "2026-08-01",
+	"kv_namespaces": [
+		{
+			"binding": "CHECKOUT_KV",
+			"id": "3fc6812e5c6c4c5a941fe53347354ec6"
+		}
+	],
+	"d1_databases": [
+		{
+			"binding": "STAY_DB",
+			"database_name": "hotelos-stay",
+			"database_id": "539e599a-2b29-40a6-8ee0-2af91e89881a",
+			"remote": true
+		},
+		{
+			"binding": "REVIEWS_DB",
+			"database_name": "resortos-reviews",
+			"database_id": "42406661-d173-4c19-9a7c-d2bb680ec396",
+			"remote": true
+		}
+	]
+}

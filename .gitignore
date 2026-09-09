@@ -14,7 +14,15 @@ server/models/
 
 # Build Output
 dist/
+dist-*/
 build/
+
+# Editor
+.cursor/
+
+# Scratch / local dumps
+scratch/
+*.pdf
 
 # Wrangler / Cloudflare
 .wrangler/
@@ -24,6 +32,34 @@ build/
 .env.local
 *.log
 
+# Attendance session cookies & screenshots
+server/session.json
+server/kinorot.session
+public/attendance/
+public/max-credits.json
+public/beinleumi-statement.json
+public/max-card-statement.json
+public/hyp-payments.json
+public/hyp-transactions-*.csv
+public/hyp-portal-raw-*.csv
+
+# Native / Play upload
+android/.gradle/
+android/app/build/
+android/build/
+android/captures/
+android/local.properties
+android/.idea/
+dist-native/
+native/keystore/
+native/.venv/
+*.jks
+*.keystore
+key.properties
+
 # OS Junk
 .DS_Store
 Thumbs.db
+print-checkouts-*.html
+print-checkins-*.html
+server/data/*.json

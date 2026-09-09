@@ -1,536 +1,567 @@
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { 
-  CheckCircle2, 
-  Calendar as CalendarIcon, 
-  CreditCard, 
-  ShieldCheck, 
-  Clock, 
-  MessageSquare,
-  Sparkles,
-  Lock
+import {
+  Calendar as CalendarIcon,
+  Clock
 } from 'lucide-react';
-import { db, useLiveBookingByToken, useLiveUnits } from '../lib/hotelos-db';
-import { pushBookingToCloud } from '../lib/cloudDb';
+import { confirmGuestCheckout, fetchGuestCheckout } from '../lib/guestCheckoutApi';
+import { useGuestBooking } from '../lib/useGuestBooking';
+import { persistDemoFormToken, persistStayToken } from '../lib/stayToken';
+import { isAndroidInAppBrowser, listenHypParentBreakout, openPaymentUrl, shouldEmbedHypPayment } from '../lib/guestPayBrowser';
+import HypPayFrame from './HypPayFrame';
+import {
+  applyGuestTheme,
+  guestThemeStyles,
+  persistGuestTheme,
+  readGuestTheme,
+  usableGuestName,
+  guestShouldSeeStayPortal
+} from '../lib/guestTheme';
+import { localizedUnitName } from '../lib/units';
+import { applyStayCabin } from '../lib/cabinParty';
+import { applyPaySplitView } from '../lib/paySplit';
+import GuestStay from './GuestStay';
+import GuestChrome from './GuestChrome';
+import GuestTicketWallet from './GuestTicketWallet';
+import BankDetailsCard from './BankDetailsCard';
 
-export default function GuestCheckout({ token, onComplete, theme = 'dark' }) {
-  const { t } = useTranslation();
+function nightsBetween(checkIn, checkOut) {
+  const start = new Date(`${checkIn}T12:00:00`);
+  const end = new Date(`${checkOut}T12:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 1;
+  return Math.max(1, Math.round((end - start) / 86400000));
+}
 
-  const booking = useLiveBookingByToken(token);
-  const units = useLiveUnits(booking?.tenant_id || '');
+function formatStayDate(iso, locale) {
+  if (!iso) return '—';
+  const date = new Date(`${iso}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return iso;
+  return new Intl.DateTimeFormat(locale || 'he-IL', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'numeric',
+    year: 'numeric'
+  }).format(date);
+}
+
+function hypPaidReturn() {
+  if (typeof window === 'undefined') return false;
+  return new URLSearchParams(window.location.search).get('hyp') === 'ok';
+}
+
+export default function GuestCheckout({ token, onComplete, theme: themeProp = 'light', previewBooking = null }) {
+  const { t, i18n } = useTranslation();
+  const [theme, setTheme] = useState(() => readGuestTheme(themeProp));
+
+  const fetched = useGuestBooking(previewBooking ? '' : token);
+  const booking = previewBooking || fetched.booking;
+  const error = previewBooking ? null : fetched.error;
+  const retry = fetched.retry;
 
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
   const [specialRequests, setSpecialRequests] = useState('');
-  const [cardNumber, setCardNumber] = useState('4580 •••• •••• 1234');
-  const [cardExpiry, setCardExpiry] = useState('08/28');
-  const [cardCvc, setCardCvc] = useState('789');
-
+  const [showRequests, setShowRequests] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [balancePref, setBalancePref] = useState('CREDIT_CARD');
+  const [payFrameUrl, setPayFrameUrl] = useState('');
+  const [freshBooking, setFreshBooking] = useState(null);
+  const paidReturn = hypPaidReturn();
+  const hypStatus = typeof window === 'undefined' ? '' : new URLSearchParams(window.location.search).get('hyp') || '';
 
-  const isLight = theme === 'light';
+  const themeStyles = guestThemeStyles(theme);
 
-  const themeStyles = {
-    wrapperBg: isLight ? '#F8FAFC' : '#0F172A',
-    cardBg: isLight ? '#FFFFFF' : '#1E293B',
-    inputBg: isLight ? '#F1F5F9' : '#111827',
-    inputBorder: isLight ? '#CBD5E1' : 'rgba(255,255,255,0.12)',
-    textPrimary: isLight ? '#0F172A' : '#F8FAFC',
-    textMuted: isLight ? '#64748B' : '#94A3B8',
-    shadow: isLight ? '0 10px 30px rgba(0,0,0,0.06)' : '0 20px 40px rgba(0,0,0,0.4)'
-  };
+  const activeBooking = freshBooking || booking;
 
-  let activeBooking = booking;
-  if (!activeBooking && token && token.startsWith('v1_')) {
-    try {
-      const rawBase64 = token.slice(3).replace(/-/g, '+').replace(/_/g, '/');
-      let decoded = '';
+  const stayReady =
+    isSubmitted ||
+    paidReturn ||
+    guestShouldSeeStayPortal(activeBooking);
+
+  useEffect(() => {
+    if (previewBooking || !token || typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('hyp')) return;
+    const ccode = params.get('CCode');
+    if (ccode == null || ccode === '') return;
+    if (!(params.get('Id') || params.get('Order'))) return;
+    window.location.replace(`/api/checkout/${encodeURIComponent(token)}/hyp${window.location.search}`);
+  }, [token, previewBooking]);
+
+  useEffect(() => listenHypParentBreakout((href) => {
+    window.location.replace(href);
+  }), []);
+
+  useEffect(() => {
+    if (!payFrameUrl || previewBooking || !token) return undefined;
+    let stop = false;
+    let inflight = false;
+    async function pullPaid() {
+      if (inflight) return;
+      inflight = true;
       try {
-        decoded = atob(rawBase64);
-      } catch (e) {
-        const padded = rawBase64 + '==='.slice((rawBase64.length + 3) % 4);
-        decoded = atob(padded);
+        const row = await fetchGuestCheckout(token);
+        if (stop || !row) return;
+        setFreshBooking(row);
+        if (guestShouldSeeStayPortal(row)) {
+          setPayFrameUrl('');
+          setIsSubmitted(true);
+        }
+      } catch (_) {
+      } finally {
+        inflight = false;
       }
-      const payload = JSON.parse(decoded);
-      const basePrices = { u1: 85000, u2: 120000, u3: 250000, u4: 90000 };
-      const basePriceAgorot = basePrices[payload.u] || 85000;
-      const totalPriceAgorot = basePriceAgorot * (payload.n || 1);
-
-      const checkIn = new Date(payload.d || Date.now());
-      const checkOut = new Date(checkIn);
-      checkOut.setDate(checkOut.getDate() + (payload.n || 1));
-      const checkOutStr = `${checkOut.getFullYear()}-${String(checkOut.getMonth() + 1).padStart(2, '0')}-${String(checkOut.getDate()).padStart(2, '0')}`;
-
-      activeBooking = {
-        id: 'b_token_' + (payload.rand || 'sync'),
-        tenant_id: payload.t || '22222222-2222-2222-2222-222222222222',
-        unit_id: payload.u || 'u3',
-        guest_name: 'הזמנה בטיפול (WhatsApp)',
-        guest_phone: payload.p || '0548076123',
-        check_in_date: payload.d || new Date().toISOString().split('T')[0],
-        check_out_date: checkOutStr,
-        adults_count: 2,
-        children_count: 0,
-        total_price_agorot: totalPriceAgorot,
-        deposit_agorot: Math.round(totalPriceAgorot * 0.25),
-        booking_status: 'PENDING',
-        payment_status: 'UNPAID',
-        payment_mode: payload.m || 'CREDIT_DEPOSIT',
-        channel_source: 'DIRECT',
-        checkout_token: token,
-        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        version: 1
-      };
-    } catch (e) {
-      console.error('[SYNC TOKEN DECODE ERROR]', e);
     }
-  }
-
-  if (!activeBooking && token) {
-    activeBooking = {
-      id: 'b_legacy_' + token,
-      tenant_id: '22222222-2222-2222-2222-222222222222',
-      unit_id: 'u3',
-      guest_name: 'הזמנה בטיפול (WhatsApp)',
-      guest_phone: '0548076123',
-      check_in_date: new Date().toISOString().split('T')[0],
-      check_out_date: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      adults_count: 2,
-      children_count: 0,
-      total_price_agorot: 500000,
-      deposit_agorot: 125000,
-      booking_status: 'PENDING',
-      payment_status: 'UNPAID',
-      payment_mode: 'CREDIT_DEPOSIT',
-      channel_source: 'DIRECT',
-      checkout_token: token,
-      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      version: 1
+    pullPaid();
+    const id = setInterval(pullPaid, 2500);
+    return () => {
+      stop = true;
+      clearInterval(id);
     };
-  }
+  }, [payFrameUrl, token, previewBooking]);
 
-  if (!activeBooking) {
-    return (
-      <div style={{
+  useEffect(() => {
+    applyGuestTheme(theme);
+    persistGuestTheme(theme);
+  }, [theme]);
+
+  useEffect(() => {
+    document.title = stayReady ? t('GUEST_STAY_DOC_TITLE') : t('GUEST_CHECKOUT_TITLE');
+  }, [stayReady, t]);
+
+  useEffect(() => {
+    if (activeBooking?.checkout_token) persistStayToken(activeBooking.checkout_token);
+    if (!activeBooking) return;
+    setGuestName((current) => current || usableGuestName(activeBooking.guest_name));
+    setGuestEmail((current) => current || activeBooking.guest_email || '');
+    setSpecialRequests((current) => current || activeBooking.special_requests || '');
+    if (activeBooking.special_requests) setShowRequests(true);
+    if (activeBooking.balance_payment_preference) {
+      setBalancePref(activeBooking.balance_payment_preference);
+    }
+  }, [activeBooking?.checkout_token, activeBooking?.guest_name, activeBooking?.guest_email, activeBooking?.special_requests]);
+
+  const shell = (children, center = null) => (
+    <div
+      style={{
         background: themeStyles.wrapperBg,
-        minHeight: '100vh',
+        minHeight: '100dvh',
+        padding: '0.45rem 0.75rem 0.7rem',
         display: 'flex',
-        alignItems: 'center',
         justifyContent: 'center',
-        padding: '1.5rem',
-        color: '#FFFFFF',
-        fontFamily: 'system-ui, -apple-system, sans-serif'
-      }}>
-        <div style={{
-          background: themeStyles.cardBg,
-          borderRadius: '16px',
-          padding: '2rem',
-          textAlign: 'center',
-          maxWidth: '400px',
-          boxShadow: themeStyles.shadow,
-          border: '1px solid rgba(255,255,255,0.1)'
-        }}>
-          <Clock size={40} color="#F59E0B" style={{ marginBottom: '1rem' }} />
-          <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#FFFFFF' }}>קישור ההזמנה אינו פעיל או פג תוקף</h3>
-          <p style={{ fontSize: '0.85rem', color: themeStyles.textMuted, marginTop: '0.5rem' }}>
-            אנא פנה לבעל הצימר לקבלת קישור הזמנה מעודכן.
-          </p>
-        </div>
+        alignItems: 'flex-start',
+        fontFamily: themeStyles.font,
+        color: themeStyles.textPrimary
+      }}
+    >
+      <div style={{ width: '100%', maxWidth: 560 }}>
+        <GuestChrome
+          theme={theme}
+          onThemeChange={setTheme}
+          themeStyles={themeStyles}
+          center={center}
+        />
+        {children}
+      </div>
+    </div>
+  );
+
+  if (booking === undefined) {
+    return shell(
+      <div style={{ textAlign: 'center', paddingTop: '2rem' }}>
+        <Clock size={40} color={themeStyles.accent} style={{ marginBottom: '1rem' }} />
+        <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>{t('GUEST_LOADING')}</h3>
       </div>
     );
   }
 
-  const DEMO_NAMES_FALLBACK = {
-    u1: 'אורנית',
-    u2: 'אלונים',
-    u3: 'כרמים',
-    u4: 'סלע'
-  };
-  const safeUnits = Array.isArray(units) ? units : [];
-  const unitRecord = safeUnits.find(u => u.id === activeBooking.unit_id);
-  const unitName = unitRecord ? t(unitRecord.id + '_short', unitRecord.name) : (DEMO_NAMES_FALLBACK[activeBooking.unit_id] || 'צימר כרמים');
+  if (!activeBooking) {
+    const network = error === 'NETWORK';
+    const missing = error === 'NOT_FOUND' || !error;
+    return shell(
+      <div style={{ textAlign: 'center', paddingTop: '2rem' }}>
+        <Clock size={40} color="#F59E0B" style={{ marginBottom: '1rem' }} />
+        <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>
+          {network ? t('GUEST_NETWORK_TITLE') : !token ? t('GUEST_LINK_MISSING_TITLE') : missing ? t('GUEST_NOT_FOUND_TITLE') : t('GUEST_EXPIRED_TITLE')}
+        </h3>
+        <p style={{ fontSize: '0.85rem', color: themeStyles.textMuted, marginTop: '0.5rem' }}>
+          {network ? t('GUEST_NETWORK_BODY') : !token ? t('GUEST_LINK_MISSING_BODY') : missing ? t('GUEST_NOT_FOUND_BODY') : t('GUEST_EXPIRED_BODY')}
+        </p>
+        {network ? (
+          <button
+            type="button"
+            onClick={retry}
+            style={{
+              marginTop: '1.25rem',
+              border: 0,
+              borderRadius: 12,
+              padding: '0.75rem 1.2rem',
+              background: themeStyles.cta,
+              color: themeStyles.ctaText,
+              fontWeight: 800,
+              fontSize: '0.95rem'
+            }}
+          >
+            {t('GUEST_RETRY')}
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
+  const unitParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('unit') : '';
+  const viewedBooking = stayReady
+    ? applyPaySplitView(applyStayCabin(activeBooking, unitParam), unitParam || activeBooking.stay?.booker_cabin_id || activeBooking.unit_id)
+    : activeBooking;
+  const unitName = localizedUnitName(viewedBooking.unit_id, t, t('GUEST_CABIN_FALLBACK'));
 
   const paymentMode = activeBooking.payment_mode || 'CREDIT_DEPOSIT';
   const totalPriceIls = Math.round((activeBooking.total_price_agorot || 0) / 100);
   const depositIls = Math.round((activeBooking.deposit_agorot || 0) / 100);
+  const payNowIls = paymentMode === 'CASH_TRUST' ? 0 : paymentMode === 'CREDIT_FULL' ? totalPriceIls : depositIls;
+  const balanceIls = Math.max(0, totalPriceIls - payNowIls);
+  const nights = Math.max(
+    1,
+    Number(activeBooking.nights_count) || nightsBetween(activeBooking.check_in_date, activeBooking.check_out_date)
+  );
+  const dateLocale = (i18n.language || 'he').startsWith('en') ? 'en-GB' : i18n.language === 'ar' ? 'ar' : i18n.language === 'th' ? 'th' : 'he-IL';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    let newPaymentStatus = 'UNPAID';
-    if (paymentMode === 'CREDIT_FULL') {
-      newPaymentStatus = 'PAID';
-    } else if (paymentMode === 'CREDIT_DEPOSIT') {
-      newPaymentStatus = 'PARTIAL';
-    } else {
-      newPaymentStatus = 'UNPAID';
-    }
-
-    const updatedBooking = {
-      ...activeBooking,
-      guest_name: guestName,
-      guest_email: guestEmail,
-      special_requests: specialRequests,
-      booking_status: 'CONFIRMED',
-      payment_status: newPaymentStatus,
-      updated_at: new Date().toISOString()
-    };
-
-    await db.bookings.put(updatedBooking);
-    await pushBookingToCloud(updatedBooking);
-    setIsSubmitted(true);
-
-    // Push real-time cloud relay so owner Mac Studio calendar auto-confirms instantly across the internet!
+    if (paying) return;
+    setPaying(true);
     try {
-      if (activeBooking.checkout_token) {
-        await fetch('https://api.restful-api.dev/objects', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: 'hotelos_confirm_' + activeBooking.checkout_token,
-            data: {
-              token: activeBooking.checkout_token,
-              guest_name: guestName,
-              guest_email: guestEmail,
-              booking_status: 'CONFIRMED',
-              payment_status: newPaymentStatus,
-              updated_at: new Date().toISOString()
-            }
-          })
-        });
+      const next = await confirmGuestCheckout(token, {
+        guest_name: guestName,
+        guest_email: guestEmail,
+        special_requests: specialRequests,
+        pay: paymentMode !== 'CASH_TRUST',
+        balance_payment_preference: balancePref
+      });
+      if (next?.payment?.pay_url || next?.payment?.iframe_url) {
+        const url = next.payment.iframe_url || next.payment.pay_url;
+        if (shouldEmbedHypPayment(next.payment)) {
+          persistDemoFormToken(token);
+          if (typeof window !== 'undefined' && token) {
+            window.history.replaceState({}, '', `/checkout/${encodeURIComponent(token)}`);
+          }
+          setPayFrameUrl(url);
+          return;
+        }
+        openPaymentUrl(url);
+        return;
       }
-    } catch (relayErr) {
-      console.warn('[REALTIME CONFIRMATION RELAY WARN]', relayErr);
+      const depositPaid = next?.payment_status === 'DEPOSIT_PAID'
+        || next?.payment_status === 'PAID'
+        || next?.stay?.hyp_deposit?.paid
+        || next?.stay?.hyp?.paid;
+      if (paymentMode !== 'CASH_TRUST' && !depositPaid) {
+        window.alert(t('GUEST_PAY_FAILED'));
+        return;
+      }
+      setIsSubmitted(true);
+    } catch (_) {
+      window.alert(t(paymentMode === 'CASH_TRUST' ? 'GUEST_CONFIRM_FAILED' : 'GUEST_PAY_FAILED'));
+    } finally {
+      setPaying(false);
     }
   };
 
-  return (
-    <div style={{
-      background: themeStyles.wrapperBg,
-      minHeight: '100vh',
-      padding: '1.5rem 1rem',
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'flex-start',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-      color: themeStyles.textPrimary
-    }}>
-      <motion.div
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
-        style={{
-          width: '100%',
-          maxWidth: '480px',
-          background: themeStyles.cardBg,
-          borderRadius: '20px',
-          padding: '1.5rem',
-          boxShadow: themeStyles.shadow,
-          border: `1px solid ${themeStyles.inputBorder}`
-        }}
-      >
-        {isSubmitted ? (
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            style={{ textAlign: 'center', padding: '2rem 1rem' }}
-          >
-            <div style={{
-              width: '64px',
-              height: '64px',
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #10B981, #059669)',
-              color: '#FFF',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginBottom: '1rem',
-              boxShadow: '0 10px 25px rgba(16, 185, 129, 0.4)'
-            }}>
-              <CheckCircle2 size={36} />
-            </div>
+  async function finishEmbeddedPay() {
+    if (!token || paying) return;
+    setPaying(true);
+    try {
+      const row = await fetchGuestCheckout(token);
+      if (row) setFreshBooking(row);
+      if (row && guestShouldSeeStayPortal(row)) {
+        setPayFrameUrl('');
+        setIsSubmitted(true);
+        return;
+      }
+      window.alert(t('GUEST_PAY_STILL_PENDING'));
+    } catch (_) {
+      window.alert(t('GUEST_PAY_FAILED'));
+    } finally {
+      setPaying(false);
+    }
+  };
 
-            <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 900, color: '#10B981' }}>
-              ההזמנה אושרה בהצלחה! 🎉
+  return shell(
+    <div>
+      {stayReady ? (
+          <GuestStay
+          booking={{ ...viewedBooking, guest_name: guestName || usableGuestName(viewedBooking.guest_name) }}
+          unitName={unitName}
+          themeStyles={themeStyles}
+          justConfirmed={isSubmitted || paidReturn}
+        />
+      ) : (
+        <>
+          <div style={{ marginBottom: '0.35rem' }}>
+            <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 900, lineHeight: 1.2 }}>
+              {t('GUEST_CHECKOUT_TITLE')}
             </h2>
+            <div style={{ fontSize: '0.68rem', color: themeStyles.textMuted, marginTop: 1 }}>
+              {t('GUEST_FORM_SUBTITLE')}
+              {String(token || activeBooking?.checkout_token || '').startsWith('tok_demo') ? (
+                <div style={{ marginTop: 4, fontWeight: 800 }}>{t('GUEST_DEMO_CHARGE_HINT')}</div>
+              ) : null}
+            </div>
+          </div>
 
-            <p style={{ fontSize: '0.9rem', color: themeStyles.textMuted, marginTop: '0.5rem', lineHeight: 1.5 }}>
-              תודה {guestName}! פרטי האישור והקבלות נשלחו לכתובת <strong>{guestEmail}</strong>.
+          <div
+            className="guest-stay-summary"
+            style={{
+              background: themeStyles.inputBg,
+              border: `1px solid ${themeStyles.inputBorder}`,
+              color: themeStyles.textPrimary
+            }}
+          >
+            <div style={{ fontWeight: 800, fontSize: '0.92rem' }}>{unitName}</div>
+            <div className="guest-stay-split">
+              <div className="guest-stay-dates" style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 8, rowGap: 4, fontSize: '0.8rem', alignItems: 'baseline' }}>
+                <span style={{ color: themeStyles.textMuted, fontWeight: 700, fontSize: '0.68rem' }}>{t('GUEST_DATE_IN')}</span>
+                <span style={{ fontWeight: 800 }}>{formatStayDate(activeBooking.check_in_date, dateLocale)}</span>
+                <span style={{ color: themeStyles.textMuted, fontWeight: 700, fontSize: '0.68rem' }}>{t('GUEST_DATE_OUT')}</span>
+                <span style={{ fontWeight: 800 }}>{formatStayDate(activeBooking.check_out_date, dateLocale)}</span>
+              </div>
+              <div className="guest-stay-pax" style={{ color: themeStyles.textPrimary }}>
+                <div style={{ fontWeight: 800, fontSize: '0.8rem' }}>
+                  {t('GUEST_PAX_ADULTS', { count: Math.max(1, Number(activeBooking.adults_count) || 2) })}
+                </div>
+                <div style={{ fontWeight: 800, fontSize: '0.8rem' }}>
+                  {t('GUEST_PAX_CHILDREN', { count: Math.max(0, Number(activeBooking.children_count) || 0) })}
+                </div>
+                {activeBooking.baby_cot_required || activeBooking.stay?.baby_cot_required ? (
+                  <div style={{ fontWeight: 700, fontSize: '0.72rem', color: themeStyles.textMuted }}>
+                    {t('GUEST_BABY_COT')}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            <div className="guest-stay-bottom">
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 800, color: themeStyles.textMuted }}>
+                <CalendarIcon size={13} color={themeStyles.accent} />
+                {t('GUEST_NIGHTS_COUNT', { count: nights })}
+              </span>
+              <span style={{ fontWeight: 900, fontSize: '0.95rem', fontVariantNumeric: 'tabular-nums' }}>
+                {t('GUEST_STAY_TOTAL_LABEL')} ₪{totalPriceIls.toLocaleString()}
+              </span>
+            </div>
+          </div>
+
+          {hypStatus === 'fail' ? (
+            <p style={{ margin: '0 0 0.6rem', color: '#B91C1C', fontWeight: 700, fontSize: '0.85rem' }}>
+              {t('GUEST_PAY_FAILED')}
             </p>
+          ) : null}
 
-            <div style={{
-              background: isLight ? '#F1F5F9' : 'rgba(255,255,255,0.03)',
-              borderRadius: '12px',
-              padding: '1rem',
-              marginTop: '1.5rem',
-              textAlign: 'right',
-              fontSize: '0.85rem'
-            }}>
-              <div style={{ fontWeight: 800, marginBottom: '0.5rem' }}>פרטי השהייה:</div>
-              <div>יחידה: <strong>{unitName}</strong></div>
-              <div>תאריכים: <strong>{activeBooking.check_in_date}</strong> עד <strong>{activeBooking.check_out_date}</strong></div>
-              <div>מספר אישור: <strong style={{ color: '#6366F1' }}>#{activeBooking.id}</strong></div>
+          {payFrameUrl ? (
+            <div style={{ margin: '0.6rem 0 1rem' }}>
+              <p style={{ margin: '0 0 0.55rem', color: themeStyles.textMuted, fontSize: '0.8rem', fontWeight: 700 }}>
+                {t('GUEST_PAY_WAITING')}
+              </p>
+              <HypPayFrame
+                url={payFrameUrl}
+                t={t}
+                themeStyles={themeStyles}
+                amountLabel={payNowIls.toLocaleString()}
+                onDone={finishEmbeddedPay}
+                doneBusy={paying}
+              />
             </div>
-          </motion.div>
-        ) : (
-          <>
-            {/* HEADER BANNER */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: '1.25rem',
-              paddingBottom: '1rem',
-              borderBottom: `1px solid ${themeStyles.inputBorder}`
-            }}>
+          ) : (
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+            <div className="guest-checkout-fields">
               <div>
-                <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <Sparkles size={20} color="#6366F1" />
-                  <span>{t('GUEST_CHECKOUT_TITLE')}</span>
-                </h2>
-                <div style={{ fontSize: '0.75rem', color: themeStyles.textMuted, marginTop: '2px' }}>
-                  טופס אישור שהייה ואבטחת תשלום
-                </div>
-              </div>
-
-              <div style={{
-                background: 'rgba(245, 158, 11, 0.15)',
-                border: '1px solid #F59E0B',
-                color: '#F59E0B',
-                borderRadius: '20px',
-                padding: '0.3rem 0.6rem',
-                fontSize: '0.7rem',
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.3rem'
-              }}>
-                <Lock size={12} />
-                <span>{t('PENDING_LOCK')}</span>
-              </div>
-            </div>
-
-            {/* BOOKING SUMMARY CARD */}
-            <div style={{
-              background: isLight ? '#F1F5F9' : '#111827',
-              borderRadius: '12px',
-              padding: '1rem',
-              marginBottom: '1.25rem',
-              border: `1px solid ${themeStyles.inputBorder}`
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                <span style={{ fontWeight: 800, fontSize: '1rem' }}>{unitName}</span>
-                <span style={{
-                  background: 'linear-gradient(135deg, #6366F1, #4F46E5)',
-                  color: '#FFF',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  padding: '2px 8px',
-                  borderRadius: '6px'
-                }}>
-                  {activeBooking.channel_source || 'DIRECT'}
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', color: themeStyles.textMuted, marginBottom: '0.75rem' }}>
-                <CalendarIcon size={14} color="#6366F1" />
-                <span>{activeBooking.check_in_date} עד {activeBooking.check_out_date}</span>
-              </div>
-
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                borderTop: `1px solid ${themeStyles.inputBorder}`,
-                paddingTop: '0.6rem',
-                fontSize: '0.9rem'
-              }}>
-                <span>סה"כ לתשלום:</span>
-                <span style={{ fontWeight: 900, fontSize: '1.15rem', color: '#10B981' }}>₪{totalPriceIls.toLocaleString()}</span>
-              </div>
-
-              {paymentMode === 'CREDIT_DEPOSIT' && (
-                <div style={{ fontSize: '0.75rem', color: '#F59E0B', textAlign: 'left', marginTop: '4px' }}>
-                  מקדמה נדרשת לחיוב עכשיו: ₪{depositIls.toLocaleString()}
-                </div>
-              )}
-            </div>
-
-            {/* GUEST DETAILS FORM */}
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: themeStyles.textMuted }}>{t('GUEST_NAME')}</label>
+                <label style={{ fontSize: '0.68rem', fontWeight: 700, color: themeStyles.textMuted }}>{t('GUEST_NAME')}</label>
                 <input
                   type="text"
                   required
-                  placeholder="ישראל ישראלי"
+                  placeholder=""
+                  autoComplete="name"
                   value={guestName}
                   onChange={(e) => setGuestName(e.target.value)}
                   style={{
                     width: '100%',
-                    padding: '0.7rem',
-                    borderRadius: '10px',
+                    padding: '0.5rem 0.65rem',
+                    borderRadius: 9,
                     background: themeStyles.inputBg,
                     border: `1px solid ${themeStyles.inputBorder}`,
                     color: themeStyles.textPrimary,
-                    fontSize: '0.95rem',
-                    marginTop: '4px'
+                    fontSize: '0.875rem',
+                    marginTop: 2
                   }}
                 />
               </div>
-
               <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: themeStyles.textMuted }}>{t('GUEST_EMAIL')}</label>
+                <label style={{ fontSize: '0.68rem', fontWeight: 700, color: themeStyles.textMuted }}>{t('GUEST_EMAIL')}</label>
                 <input
                   type="email"
-                  required
-                  placeholder="israel@example.com"
+                  placeholder=""
+                  autoComplete="email"
                   value={guestEmail}
                   onChange={(e) => setGuestEmail(e.target.value)}
                   style={{
                     width: '100%',
-                    padding: '0.7rem',
-                    borderRadius: '10px',
+                    padding: '0.5rem 0.65rem',
+                    borderRadius: 9,
                     background: themeStyles.inputBg,
                     border: `1px solid ${themeStyles.inputBorder}`,
                     color: themeStyles.textPrimary,
-                    fontSize: '0.95rem',
-                    marginTop: '4px'
+                    fontSize: '0.875rem',
+                    marginTop: 2
                   }}
                 />
+                <div className="guest-email-hint" style={{ fontSize: '0.62rem', color: themeStyles.textMuted, marginTop: 2, lineHeight: 1.25 }}>
+                  {t('GUEST_EMAIL_HINT')}
+                </div>
               </div>
-
+            </div>
+            {showRequests ? (
               <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: themeStyles.textMuted, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                  <MessageSquare size={14} color="#6366F1" />
-                  <span>{t('SPECIAL_REQUESTS')}</span>
-                </label>
                 <textarea
                   rows={2}
-                  placeholder="שעות הגעה משוערות, הצעות נישואין, טבעונות..."
+                  placeholder={t('GUEST_REQUESTS_PLACEHOLDER')}
                   value={specialRequests}
                   onChange={(e) => setSpecialRequests(e.target.value)}
                   style={{
                     width: '100%',
-                    padding: '0.7rem',
-                    borderRadius: '10px',
+                    padding: '0.45rem 0.6rem',
+                    borderRadius: 9,
                     background: themeStyles.inputBg,
                     border: `1px solid ${themeStyles.inputBorder}`,
                     color: themeStyles.textPrimary,
-                    fontSize: '0.85rem',
-                    marginTop: '4px',
+                    fontSize: '0.8rem',
                     resize: 'none'
                   }}
                 />
               </div>
-
-              {/* PAYMENT SECTION (IF CREDIT MODE) */}
-              {paymentMode !== 'CASH_TRUST' ? (
-                <div style={{
-                  background: isLight ? '#F8FAFC' : '#111827',
-                  border: '1.5px solid #10B981',
-                  borderRadius: '12px',
-                  padding: '1rem',
-                  marginTop: '0.5rem'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#10B981', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <CreditCard size={16} />
-                      <span>אבטחת אשראי PayFac (SSL 256-bit)</span>
-                    </span>
-                    <ShieldCheck size={18} color="#10B981" />
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                    <input
-                      type="text"
-                      value={cardNumber}
-                      onChange={(e) => setCardNumber(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '0.6rem',
-                        borderRadius: '8px',
-                        background: themeStyles.inputBg,
-                        border: `1px solid ${themeStyles.inputBorder}`,
-                        color: themeStyles.textPrimary,
-                        fontSize: '0.85rem'
-                      }}
-                    />
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                      <input
-                        type="text"
-                        value={cardExpiry}
-                        onChange={(e) => setCardExpiry(e.target.value)}
-                        placeholder="MM/YY"
-                        style={{
-                          width: '100%',
-                          padding: '0.6rem',
-                          borderRadius: '8px',
-                          background: themeStyles.inputBg,
-                          border: `1px solid ${themeStyles.inputBorder}`,
-                          color: themeStyles.textPrimary,
-                          fontSize: '0.85rem'
-                        }}
-                      />
-                      <input
-                        type="password"
-                        value={cardCvc}
-                        onChange={(e) => setCardCvc(e.target.value)}
-                        placeholder="CVC"
-                        style={{
-                          width: '100%',
-                          padding: '0.6rem',
-                          borderRadius: '8px',
-                          background: themeStyles.inputBg,
-                          border: `1px solid ${themeStyles.inputBorder}`,
-                          color: themeStyles.textPrimary,
-                          fontSize: '0.85rem'
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div style={{
-                  background: 'rgba(99, 102, 241, 0.12)',
-                  border: '1px solid #6366F1',
-                  borderRadius: '12px',
-                  padding: '0.8rem',
-                  fontSize: '0.8rem',
-                  color: '#6366F1',
-                  textAlign: 'center'
-                }}>
-                  🤝 תשלום במזומן בהגעה (ללא חיוב אשראי). בלחיצה אינך מתחייב בכרטיס.
-                </div>
-              )}
-
+            ) : (
               <button
-                type="submit"
+                type="button"
+                onClick={() => setShowRequests(true)}
                 style={{
-                  width: '100%',
-                  background: 'linear-gradient(135deg, #10B981, #059669)',
-                  color: '#FFF',
-                  border: 'none',
-                  borderRadius: '12px',
-                  padding: '0.9rem',
-                  fontSize: '1rem',
-                  fontWeight: 900,
-                  cursor: 'pointer',
-                  marginTop: '0.5rem',
-                  boxShadow: '0 4px 16px rgba(16, 185, 129, 0.4)'
+                  alignSelf: 'flex-start',
+                  background: 'none',
+                  border: 0,
+                  padding: 0,
+                  color: themeStyles.accent,
+                  fontWeight: 800,
+                  fontSize: '0.78rem',
+                  cursor: 'pointer'
                 }}
               >
-                {t('CONFIRM_AND_PAY')}
+                {t('GUEST_REQUESTS_ADD')}
               </button>
-            </form>
-          </>
-        )}
-      </motion.div>
-    </div>
+            )}
+            {paymentMode === 'CREDIT_DEPOSIT' && totalPriceIls > depositIls + 0.5 ? (
+              <div>
+                <div style={{ fontSize: '0.7rem', fontWeight: 800, color: themeStyles.textMuted, marginBottom: 5 }}>
+                  {t('GUEST_BALANCE_ASK')}
+                </div>
+                <div className="guest-seg" style={{ '--guest-seg-border': themeStyles.inputBorder, background: themeStyles.inputBg }}>
+                  {[
+                    { id: 'CREDIT_CARD', label: t('GUEST_BALANCE_SEG_CARD') },
+                    { id: 'BANK_TRANSFER', label: t('GUEST_BALANCE_SEG_BANK') },
+                    { id: 'CASH', label: t('GUEST_BALANCE_SEG_CASH') }
+                  ].map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      className={balancePref === opt.id ? 'is-on' : ''}
+                      onClick={() => setBalancePref(opt.id)}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                {balancePref === 'CREDIT_CARD' ? (
+                  <p style={{ margin: '4px 0 0', fontSize: '0.66rem', color: themeStyles.textMuted, fontWeight: 700, lineHeight: 1.35 }}>
+                    {t('GUEST_BALANCE_CARD_NOTICE')}
+                  </p>
+                ) : null}
+                {balancePref === 'BANK_TRANSFER' ? (
+                  <>
+                    <BankDetailsCard themeStyles={themeStyles} t={t} compact />
+                    <p style={{ margin: '4px 0 0', fontSize: '0.66rem', color: '#D97706', fontWeight: 700, lineHeight: 1.35 }}>
+                      {t('GUEST_BALANCE_BANK_NOTICE')}
+                    </p>
+                  </>
+                ) : null}
+                {balancePref === 'CASH' ? (
+                  <p style={{ margin: '4px 0 0', fontSize: '0.66rem', color: '#D97706', fontWeight: 700, lineHeight: 1.35 }}>
+                    {t('GUEST_BALANCE_CASH_NOTICE')}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            <button
+              type="submit"
+              disabled={paying}
+              style={{
+                width: '100%',
+                background: themeStyles.cta,
+                color: themeStyles.ctaText,
+                border: 'none',
+                borderRadius: 10,
+                padding: '0.7rem',
+                fontSize: '0.92rem',
+                fontWeight: 900,
+                cursor: paying ? 'wait' : 'pointer',
+                boxShadow: 'none',
+                opacity: paying ? 0.75 : 1,
+                lineHeight: 1.25
+              }}
+            >
+              {paying ? (
+                t('GUEST_PAY_REDIRECT')
+              ) : paymentMode === 'CASH_TRUST' ? (
+                t('CONFIRM_AND_PAY')
+              ) : paymentMode === 'CREDIT_FULL' ? (
+                t('CONFIRM_AND_PAY_FULL', { amount: totalPriceIls.toLocaleString() })
+              ) : (
+                <>
+                  <div>{t('CONFIRM_AND_PAY_DEPOSIT', { amount: depositIls.toLocaleString() })}</div>
+                  {balanceIls > 0.5 ? (
+                    <div style={{ fontSize: '0.72rem', fontWeight: 700, opacity: 0.88, marginTop: 3 }}>
+                      {t('GUEST_PAY_BALANCE_LINE', {
+                        amount: balanceIls.toLocaleString(),
+                        method:
+                          balancePref === 'BANK_TRANSFER'
+                            ? t('GUEST_PAY_METHOD_BANK')
+                            : balancePref === 'CASH'
+                              ? t('GUEST_PAY_METHOD_CASH')
+                              : t('GUEST_PAY_METHOD_CARD')
+                      })}
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </button>
+            <p
+              style={{
+                margin: 0,
+                textAlign: 'center',
+                fontSize: '0.64rem',
+                lineHeight: 1.35,
+                color: themeStyles.textMuted,
+                fontWeight: 600
+              }}
+            >
+              {paymentMode === 'CASH_TRUST'
+                ? t('GUEST_PAY_CASH')
+                : paymentMode === 'CREDIT_FULL'
+                  ? t('GUEST_PAY_CARD_FULL')
+                  : t('GUEST_PAY_CAPTION')}
+              {paymentMode !== 'CASH_TRUST' && isAndroidInAppBrowser() ? ` · ${t('GUEST_GPAY_OPEN_CHROME')}` : ''}
+            </p>
+          </form>
+          )}
+        </>
+      )}
+    </div>,
+    stayReady ? <GuestTicketWallet booking={activeBooking} themeStyles={themeStyles} /> : null
   );
 }

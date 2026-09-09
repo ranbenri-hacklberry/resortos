@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="spaceBg" cx="50%" cy="30%" r="80%">
+      <stop offset="0%" stop-color="#0F2B20" />
+      <stop offset="60%" stop-color="#071510" />
+      <stop offset="100%" stop-color="#020806" />
+    </radialGradient>
+    <radialGradient id="neonGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#25D366" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#25D366" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="glassBubble" x1="10%" y1="0%" x2="90%" y2="100%">
+      <stop offset="0%" stop-color="#1E3E30" stop-opacity="0.9" />
+      <stop offset="50%" stop-color="#0D231A" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#05130D" stop-opacity="1" />
+    </linearGradient>
+    <linearGradient id="borderGleam" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34D399" stop-opacity="0.8" />
+      <stop offset="40%" stop-color="#25D366" stop-opacity="0.2" />
+      <stop offset="100%" stop-color="#F59E0B" stop-opacity="0.9" />
+    </linearGradient>
+    <linearGradient id="liquidGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFBEB" />
+      <stop offset="30%" stop-color="#FDE047" />
+      <stop offset="70%" stop-color="#F59E0B" />
+      <stop offset="100%" stop-color="#B45309" />
+    </linearGradient>
+    <filter id="superGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#spaceBg)" />
+  <circle cx="256" cy="245" r="180" fill="url(#neonGlow)" filter="url(#superGlow)" />
+  <g transform="translate(0, -5)">
+    <path d="M256,105 C165,105 92,172 92,254 C92,284 102,312 120,335 C116,358 105,382 86,404 C115,406 151,392 176,375 C201,392 228,403 256,403 C347,403 420,336 420,254 C420,172 347,105 256,105 Z"
+          fill="url(#glassBubble)"
+          stroke="url(#borderGleam)"
+          stroke-width="3.5" />
+    <path d="M125,210 C150,140 220,115 285,115"
+          stroke="#34D399"
+          stroke-width="3"
+          stroke-linecap="round"
+          opacity="0.4"
+          fill="none" />
+    <g transform="translate(256, 248) rotate(12) scale(1.15)">
+      <path d="M 0,-78 L 22,-24 L 80,-17 L 37,23 L 49,80 L 0,51 L -49,80 L -37,23 L -80,-17 L -22,-24 Z"
+            fill="url(#liquidGold)"
+            filter="url(#superGlow)" />
+      <path d="M 0,-78 L 22,-24 L 0,0 L -22,-24 Z M 80,-17 L 37,23 L 0,0 L 22,-24 Z M 49,80 L 0,51 L 0,0 L 37,23 Z M -49,80 L 0,51 L 0,0 L -37,23 Z M -80,-17 L -22,-24 L 0,0 L -37,23 Z"
+            fill="#78350F"
+            opacity="0.22" />
+    </g>
+    <path d="M350,160 L354,175 L369,179 L354,183 L350,198 L346,183 L331,179 L346,175 Z" fill="#FDE047" opacity="0.85" />
+    <path d="M145,300 L148,310 L158,313 L148,316 L145,326 L142,316 L132,313 L142,310 Z" fill="#34D399" opacity="0.75" />
+  </g>
+</svg>

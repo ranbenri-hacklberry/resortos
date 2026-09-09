@@ -35,6 +35,8 @@
 *, *::before, *::after { box-sizing: border-box; }
 html, body, #root {
   height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
   background-color: var(--bg);
   color: var(--text);
@@ -42,17 +44,38 @@ html, body, #root {
   -webkit-font-smoothing: antialiased;
 }
 
+body.field-staff-page {
+  touch-action: manipulation;
+}
+
+body.field-staff-page .app-shell {
+  display: none;
+}
+
 /* ── App Shell ── */
 .app-shell {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
   overflow: hidden;
+}
+
+/* iOS Safari only. Do not use -webkit-fill-available on desktop Chrome/Safari —
+   it can compute to 0 and collapse the staff calendar to a black page. */
+@supports (-webkit-touch-callout: none) {
+  html, body, #root, .app-shell {
+    min-height: -webkit-fill-available;
+  }
 }
 
 /* ── Header ── */
 .enterprise-header {
-  height: 64px;
+  min-height: 64px;
+  height: auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -124,7 +147,223 @@ html, body, #root {
   flex: 1;
   overflow-y: auto;
   overflow-x: auto;
-  WebkitOverflowScrolling: touch;
+  -webkit-overflow-scrolling: touch;
+}
+
+.main-stage.calendar-stage {
+  flex: 1 1 auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 12rem;
+}
+
+.hotelos-ops-card {
+  width: 100%;
+}
+
+.hotelos-ops-board {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.1rem;
+  align-items: start;
+}
+
+.hotelos-ops-col {
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 16px;
+  padding: 0.7rem 0.65rem 0.75rem;
+}
+
+.hotelos-ops-col-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+  padding: 0 0.15rem;
+}
+
+.hotelos-ops-col-title {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.hotelos-ops-col-count {
+  min-width: 1.4rem;
+  height: 1.4rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.16);
+  color: #a5b4fc;
+  font-size: 0.72rem;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hotelos-ops-col-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.hotelos-ops-col-empty {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #94a3b8;
+  text-align: center;
+  padding: 1.1rem 0.4rem;
+  border: 1px dashed rgba(148, 163, 184, 0.28);
+  border-radius: 12px;
+}
+
+@media (min-width: 1100px) {
+  .hotelos-ops-board {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.85rem;
+  }
+
+  .hotelos-ops-domain-chips {
+    display: none !important;
+  }
+
+  .hotelos-ops-col .hotelos-ops-card {
+    padding: 0.7rem 0.75rem !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .main-stage.operations-stage {
+    padding-inline: 6px;
+  }
+
+  .hotelos-ops-page {
+    padding-inline: 0 !important;
+  }
+
+  .hotelos-ops-toolbar {
+    padding-inline: 2px;
+  }
+
+  .hotelos-ops-card {
+    border-radius: 8px !important;
+  }
+}
+
+.hotelos-calendar-wrapper {
+  flex: 1 1 auto;
+  min-height: 16rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.hotelos-calendar-scroll {
+  flex: 1 1 auto;
+  min-height: 12rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
+}
+
+.hotelos-calendar-unit-col {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 80;
+  opacity: 1;
+  width: 112px;
+  min-width: 112px;
+  max-width: 112px;
+  pointer-events: auto;
+  background-clip: padding-box;
+}
+
+.hotelos-calendar-board {
+  position: relative;
+}
+
+.hotelos-calendar-header {
+  background: inherit;
+}
+
+.hotelos-calendar-unit-row {
+  position: relative;
+  overflow: visible !important;
+}
+
+/* One overlay for the whole board — never a CSS-grid item, never overflow:hidden.
+   WebKit/iOS was collapsing per-row overlays to 0 width and hiding every card. */
+.hotelos-calendar-stay-layer {
+  position: absolute;
+  overflow: visible;
+  z-index: 12;
+  pointer-events: none;
+}
+
+.hotelos-calendar-scroll::after {
+  content: '';
+  display: block;
+  height: calc(2.75rem + env(safe-area-inset-bottom, 0px));
+}
+
+.hotelos-calendar-scroll:focus {
+  outline: none;
+}
+
+.hotelos-calendar-scroll:focus-visible {
+  outline: 2px solid rgba(245, 158, 11, 0.45);
+  outline-offset: -2px;
+}
+
+@keyframes hotelos-bank-wait {
+  0%, 100% { border-color: #EA580C; }
+  50% { border-color: #FDBA74; }
+}
+
+.hotelos-bank-wait {
+  animation: hotelos-bank-wait 1.05s ease-in-out infinite;
+}
+
+.hotelos-now-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-right: -1px;
+  background: #F59E0B;
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.25), 0 0 10px rgba(245, 158, 11, 0.4);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.hotelos-now-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-right: -1px;
+  background: #F59E0B;
+  pointer-events: none;
+}
+
+.hotelos-now-tick::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+  background: #F59E0B;
+  transform: translate(-50%, 0) rotate(45deg);
 }
 
 /* ── Card (White container on cream) ── */

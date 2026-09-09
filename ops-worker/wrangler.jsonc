@@ -1,0 +1,9 @@
+{
+  "name": "resortos-ops",
+  "main": "worker.js",
+  "compatibility_date": "2026-09-04",
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "ops.resortos.app", "custom_domain": true, "zone_name": "resortos.app" }
+  ]
+}

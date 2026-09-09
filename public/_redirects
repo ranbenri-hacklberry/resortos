@@ -1,0 +1,10 @@
+/demo        /portal/index.html   200
+/demo/form   /portal/index.html   200
+/stay/*      /portal/index.html   200
+/checkout/*  /portal/index.html   200
+/agent       /agent/index.html    200
+/agent/      /agent/index.html    200
+/sparkstay   /sparkstay/index.html  200
+/sparkstay/  /sparkstay/index.html  200
+/desk        /desk/index.html       200
+/desk/       /desk/index.html       200

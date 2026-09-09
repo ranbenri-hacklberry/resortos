@@ -1,0 +1,23 @@
+{
+  "appId": "il.resortos.reviews",
+  "appName": "WhaStar",
+  "webDir": "dist-reviews",
+  "backgroundColor": "#020806",
+  "android": {
+    "backgroundColor": "#020806",
+    "allowMixedContent": false,
+    "buildOptions": {
+      "releaseType": "AAB"
+    }
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 500,
+      "backgroundColor": "#020806",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "LIGHT"
+    }
+  }
+}

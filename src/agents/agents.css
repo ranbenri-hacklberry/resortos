@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+html, body, #root {
+  min-height: 100%;
+  background: #F4F1EA;
+  color: #0f172a;
+  font-family: Heebo, Assistant, system-ui, sans-serif;
+}
+
+.agent-cell-free {
+  background: #86efac;
+  color: #14532d;
+}
+
+.agent-cell-taken {
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      #6d28d9,
+      #6d28d9 5px,
+      #8b5cf6 5px,
+      #8b5cf6 10px
+    );
+  color: #f5f3ff;
+}
+
+.agent-cell-past-free {
+  background: #e2e8f0;
+  color: #64748b;
+}
+
+.agent-cell-past-taken {
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      #94a3b8,
+      #94a3b8 5px,
+      #64748b 5px,
+      #64748b 10px
+    );
+  color: #fff;
+}
+
+.agent-cell-stay {
+  background: #047857;
+  color: #ecfdf5;
+}
+
+input[type='date'],
+select,
+select option {
+  color-scheme: light;
+  background-color: #fff;
+  color: #0f172a;
+}

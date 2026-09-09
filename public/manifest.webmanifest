@@ -1,0 +1,11 @@
+{
+  "name": "ResortOS · השהייה שלי",
+  "short_name": "השהייה",
+  "dir": "rtl",
+  "lang": "he",
+  "start_url": "./",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#FDFBF7",
+  "theme_color": "#26130F"
+}

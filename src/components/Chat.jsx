@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Send, Mic, Paperclip, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { supabase } from '../lib/supabaseClient';
 import { brain } from '../lib/CoreAssistant';
 import ActionCard from './ActionCard';
 
@@ -287,10 +288,6 @@ export default function Chat({ session, context, messages, setMessages }) {
         const today = new Date().getDay(); // 0=Sunday=ראשון
         const loadSchedule = async () => {
             try {
-                const { createClient } = await import('@supabase/supabase-js');
-                const supabase = createClient('http://127.0.0.1:54321', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU');
-                
-                // Get today's suppliers
                 const { data: schedule } = await supabase
                     .from('supplier_schedule')
                     .select('supplier_name')

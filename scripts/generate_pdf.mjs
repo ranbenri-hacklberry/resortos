@@ -1,0 +1,520 @@
+import puppeteer from 'puppeteer';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const rootDir = path.join(__dirname, '..');
+
+const htmlContent = `<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>רשימת רכש והצטיידות דחופה - ResortOS</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap');
+
+    @page {
+      size: A4 portrait;
+      margin: 10mm 12mm 12mm 12mm;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    body {
+      font-family: 'Heebo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      direction: rtl;
+      text-align: right;
+      margin: 0;
+      padding: 0;
+      background-color: #FFFFFF;
+      color: #1E293B;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    /* HEADER */
+    .header-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #E2E8F0;
+      padding-bottom: 12px;
+      margin-bottom: 14px;
+    }
+
+    .brand-section {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-badge {
+      background: linear-gradient(135deg, #4F46E5 0%, #3730A3 100%);
+      color: #FFFFFF;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 18px;
+      box-shadow: 0 4px 10px rgba(79, 70, 229, 0.25);
+    }
+
+    .brand-title h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 800;
+      color: #0F172A;
+      letter-spacing: -0.5px;
+    }
+
+    .brand-title p {
+      margin: 2px 0 0 0;
+      font-size: 11px;
+      color: #64748B;
+      font-weight: 500;
+    }
+
+    .meta-info {
+      text-align: left;
+      font-size: 11px;
+      color: #64748B;
+      line-height: 1.4;
+    }
+
+    .status-badge {
+      display: inline-block;
+      background-color: #FEF3C7;
+      color: #92400E;
+      border: 1px solid #FCD34D;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 10.5px;
+      margin-top: 3px;
+    }
+
+    /* KPI CARDS */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .kpi-card {
+      background-color: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: 8px;
+      padding: 8px 10px;
+      text-align: right;
+    }
+
+    .kpi-card.highlight {
+      background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%);
+      border-color: #C7D2FE;
+    }
+
+    .kpi-label {
+      font-size: 10.5px;
+      font-weight: 600;
+      color: #64748B;
+      margin-bottom: 3px;
+    }
+
+    .kpi-value {
+      font-size: 16px;
+      font-weight: 800;
+      color: #0F172A;
+    }
+
+    .kpi-card.highlight .kpi-value {
+      color: #4338CA;
+    }
+
+    .kpi-sub {
+      font-size: 9px;
+      color: #059669;
+      font-weight: 600;
+      margin-top: 2px;
+    }
+
+    /* TABLE STYLING */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 14px;
+      font-size: 11px;
+    }
+
+    th {
+      background-color: #0F172A;
+      color: #FFFFFF;
+      font-weight: 700;
+      text-align: right;
+      padding: 7px 9px;
+      font-size: 10.5px;
+      letter-spacing: 0.2px;
+    }
+
+    th:first-child {
+      border-top-right-radius: 6px;
+    }
+
+    th:last-child {
+      border-top-left-radius: 6px;
+    }
+
+    td {
+      padding: 7px 9px;
+      border-bottom: 1px solid #E2E8F0;
+      vertical-align: middle;
+      text-align: right;
+    }
+
+    tr:nth-child(even) {
+      background-color: #F8FAFC;
+    }
+
+    .item-name {
+      font-weight: 700;
+      color: #0F172A;
+      font-size: 11.5px;
+    }
+
+    .item-desc {
+      font-size: 10px;
+      color: #334155;
+      line-height: 1.4;
+      margin-top: 2px;
+    }
+
+    .badge-urgent {
+      display: inline-block;
+      background-color: #FEE2E2;
+      color: #991B1B;
+      border: 1px solid #F87171;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 9px;
+      font-weight: 700;
+      margin-right: 3px;
+    }
+
+    .badge-pilot {
+      display: inline-block;
+      background-color: #E0E7FF;
+      color: #3730A3;
+      border: 1px solid #A5B4FC;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 9px;
+      font-weight: 700;
+      margin-right: 3px;
+    }
+
+    .badge-profit {
+      display: inline-block;
+      background-color: #D1FAE5;
+      color: #065F46;
+      border: 1px solid #34D399;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 9px;
+      font-weight: 700;
+      margin-right: 3px;
+    }
+
+    .price-col {
+      font-weight: 700;
+      color: #0F172A;
+      white-space: nowrap;
+    }
+
+    .qty-col {
+      font-weight: 600;
+      color: #475569;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    /* STRATEGIC BOX */
+    .strategy-box {
+      background-color: #F0FDF4;
+      border: 1px solid #BBF7D0;
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 14px;
+    }
+
+    .strategy-title {
+      font-weight: 800;
+      font-size: 11px;
+      color: #166534;
+      margin-bottom: 3px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .strategy-content {
+      font-size: 10.5px;
+      color: #14532D;
+      line-height: 1.4;
+    }
+
+    /* FOOTER */
+    .footer-section {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      border-top: 1px solid #E2E8F0;
+      padding-top: 10px;
+      font-size: 10px;
+      color: #64748B;
+    }
+
+    .signature-box {
+      border: 1px dashed #CBD5E1;
+      border-radius: 6px;
+      padding: 6px 14px;
+      text-align: center;
+      background-color: #FAFAFA;
+      min-width: 150px;
+    }
+
+    .signature-title {
+      font-size: 9.5px;
+      color: #94A3B8;
+      margin-bottom: 10px;
+    }
+
+    .signature-line {
+      font-weight: 700;
+      color: #0F172A;
+      font-size: 10.5px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <div class="header-container">
+    <div class="brand-section">
+      <div class="logo-badge">R</div>
+      <div class="brand-title">
+        <h1>ResortOS | מפרט רכש והצטיידות דחופה</h1>
+        <p>מתחם נופש ואירוח · רמת הגולן והגליל</p>
+      </div>
+    </div>
+    <div class="meta-info">
+      <div><strong>תאריך הפקה:</strong> 29 באוגוסט 2026</div>
+      <div><strong>יעד ביצוע:</strong> רכישה מיידית</div>
+      <div><span class="status-badge">ממתין לאישור הנהלה</span></div>
+    </div>
+  </div>
+
+  <!-- KPI SUMMARY -->
+  <div class="kpi-grid">
+    <div class="kpi-card highlight">
+      <div class="kpi-label">סה״כ תקציב נדרש</div>
+      <div class="kpi-value">₪3,823</div>
+      <div class="kpi-sub">עלות כוללת ל-8 פריטים</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">מספר פריטים דחופים</div>
+      <div class="kpi-value">8 פריטים</div>
+      <div class="kpi-sub">לסגירת פערי שירות</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">תשואה ישירה מרכב חשמלי</div>
+      <div class="kpi-value">₪50 / טעינה</div>
+      <div class="kpi-sub">אפליקציה מוכנה לגבייה</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">חיסכון שוטף (טלוויזיה)</div>
+      <div class="kpi-value">ביטול יס</div>
+      <div class="kpi-sub">+ מנוע אפסייל ישיר מהמסך</div>
+    </div>
+  </div>
+
+  <!-- ITEMS TABLE -->
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 5%; text-align: center;">#</th>
+        <th style="width: 25%;">פריט ומחלקה</th>
+        <th style="width: 8%; text-align: center;">כמות</th>
+        <th style="width: 12%;">מחיר משוער</th>
+        <th style="width: 50%;">מטרה תפעולית, אירוחית ועסקית</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="text-align: center; font-weight: bold;">1</td>
+        <td>
+          <div class="item-name">מכונות אספרסו</div>
+          <div style="margin-top: 2px;"><span class="badge-urgent">דחוף</span><span style="font-size: 9.5px; color: #64748B;">ציוד חדרים</span></div>
+        </td>
+        <td class="qty-col">7 יח׳</td>
+        <td class="price-col">₪1,750<br><span style="font-size: 9px; font-weight: normal; color: #64748B;">(₪250 ליח')</span></td>
+        <td>
+          <div class="item-desc"><strong>השלמת חוסרים ויישור קו:</strong> ברוב הבקתות במתחם כבר קיימות מכונות קפה פעילות. השלמת 7 המכונות החסרות תבטיח סטנדרט פרימיום אחיד בכל הבקתות (הדבר הראשון שהאורח בודק בהגעתו).</div>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="text-align: center; font-weight: bold;">2</td>
+        <td>
+          <div class="item-name">מטען לרכב חשמלי (Type 2)</div>
+          <div style="margin-top: 2px;"><span class="badge-profit">רווחי מהיום ה-1</span><span style="font-size: 9.5px; color: #64748B;">תשתית ואנרגיה</span></div>
+        </td>
+        <td class="qty-col">1 יח׳</td>
+        <td class="price-col">₪790</td>
+        <td>
+          <div class="item-desc"><strong>ערוץ הכנסה ישיר:</strong> קיימת כבר <strong>אפליקציית גבייה מוכנה</strong>. נתחיל לגבות תשלום מהאורח עם <strong>רווח נקי של 50 ₪ לכל טעינה</strong> (החזר השקעה מלא תוך שבועות בודדים) ומענה לצורך קריטי של מטיילים ברכב חשמלי.</div>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="text-align: center; font-weight: bold;">3</td>
+        <td>
+          <div class="item-name">סטרימר Google TV 4K</div>
+          <div style="margin-top: 2px;"><span class="badge-pilot">פיילוט אפליקציה</span><span style="font-size: 9.5px; color: #64748B;">מדיה ואירוח</span></div>
+        </td>
+        <td class="qty-col">1 יח׳</td>
+        <td class="price-col">₪400</td>
+        <td>
+          <div class="item-desc"><strong>החלפת מנויי Yes והגדלת הכנסות:</strong> בחינת <strong>אפליקציית הטלוויזיה הייעודית של ResortOS</strong> – חוסך מנויים חודשיים יקרים, מספק שידור יציב ללא תקלות, ומשמש כפלטפורמת מכירות (Upsell) להזמנת ארוחות, טיפולים ואטרקציות ישירות מהמסך.</div>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="text-align: center; font-weight: bold;">4</td>
+        <td>
+          <div class="item-name">ראוטר חיצוני COMFAST AC1200</div>
+          <div style="margin-top: 2px;"><span class="badge-urgent">דחוף</span><span style="font-size: 9.5px; color: #64748B;">רשתות ותקשורת</span></div>
+        </td>
+        <td class="qty-col">1 יח׳</td>
+        <td class="price-col">₪200</td>
+        <td>
+          <div class="item-desc"><strong>קליטת Wi-Fi מושלמת:</strong> נקודת גישה חיצונית (Outdoor AP) מוגנת מים לכיסוי אלחוטי רציף, עוצמתי ומהיר בכל היחידות, החצרות, הבריכות והמרחבים הגדולים ללא ניתוקים.</div>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="text-align: center; font-weight: bold;">5</td>
+        <td>
+          <div class="item-name">מנעול חכם לדלת (Smart Lock)</div>
+          <div style="margin-top: 2px;"><span class="badge-pilot">פיילוט משרד</span><span style="font-size: 9.5px; color: #64748B;">אבטחה וכניסה</span></div>
+        </td>
+        <td class="qty-col">1 יח׳</td>
+        <td class="price-col">₪233</td>
+        <td>
+          <div class="item-desc"><strong>בדיקה במשרד והרחבה לבקתות:</strong> פיילוט ראשוני על דלת המשרד לבדיקת יציבות, אבטחה ושליחת קודים דינמיים. לאחר הוכחת הפעילות — נרחיב לכלל הבקתות לכניסה עצמאית 24/7 ללא מפתחות.</div>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="text-align: center; font-weight: bold;">6</td>
+        <td>
+          <div class="item-name">בקרי מזגן חכמים (BroadLink RM4)</div>
+          <div style="margin-top: 2px;"><span class="badge-pilot">פיילוט טאג׳ מאהל</span><span style="font-size: 9.5px; color: #64748B;">חשמל ואקלים</span></div>
+        </td>
+        <td class="qty-col">5 יח׳</td>
+        <td class="price-col">₪250<br><span style="font-size: 9px; font-weight: normal; color: #64748B;">(לכל ה-5)</span></td>
+        <td>
+          <div class="item-desc"><strong>בקרת אקלים וחיסכון בחשמל:</strong> בדיקה במשרד ובמתחם <strong>טאג׳ מאהל</strong>. מאפשר הדלקת ומיזוג הבקתה שעה לפני הגעת האורח וכיבוי מרחוק של מזגנים שנשכחו דולקים בצ'ק-אאוט. בהמשך יורחב לשאר המתחם.</div>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="text-align: center; font-weight: bold;">7</td>
+        <td>
+          <div class="item-name">שלטים אוניברסליים Type-C לנייד</div>
+          <div style="margin-top: 2px;"><span class="badge-urgent">דחוף</span><span style="font-size: 9.5px; color: #64748B;">כלי אחזקה</span></div>
+        </td>
+        <td class="qty-col">4 יח׳</td>
+        <td class="price-col">₪100<br><span style="font-size: 9px; font-weight: normal; color: #64748B;">(לכל ה-4)</span></td>
+        <td>
+          <div class="item-desc"><strong>שליטה מיידית לצוות האחזקה:</strong> דונגל שמתחבר ישירות לסמארטפון של איש האחזקה/המשק ומאפשר שליטה מיידית בכל מכשיר בבקתה במידה ושלט אבד, נגנב או התקלקל — ללא צורך במלאי שלטים יקר.</div>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="text-align: center; font-weight: bold;">8</td>
+        <td>
+          <div class="item-name">מאפרות חיצוניות כבדות לחצר</div>
+          <div style="margin-top: 2px;"><span class="badge-pilot">פיילוט טאג׳ מאהל</span><span style="font-size: 9.5px; color: #64748B;">משק וניקיון</span></div>
+        </td>
+        <td class="qty-col">5 יח׳</td>
+        <td class="price-col">₪100<br><span style="font-size: 9px; font-weight: normal; color: #64748B;">(לכל ה-5)</span></td>
+        <td>
+          <div class="item-desc"><strong>שמירה על ניקיון החצר והדק:</strong> בחינה ראשונית במתחם <strong>טאג׳ מאהל</strong> למניעת עישון בתוך הבקתות (שגורם לנזקי ריח ליומיים) ומניעת לכלוך בדלי סיגריות בגינה. בהמשך יורחב לשאר המתחמים.</div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- STRATEGY SUMMARY BOX -->
+  <div class="strategy-box">
+    <div class="strategy-title">💡 דגשים פיננסיים ותפעוליים להנהלה:</div>
+    <div class="strategy-content">
+      • <strong>מודל פיילוטים מבוקר:</strong> מרבית מוצרי הטכנולוגיה (מנעול, בקרי מזגן, מאפרות, סטרימר) נרכשים בכמויות מדודות לבדיקה מעשית במשרד ובמתחם טאג' מאהל לפני השקעה רחבה.<br>
+      • <strong>החזר השקעה ורווחיות:</strong> ההשקעה בעמדת הטעינה (₪790) ובסטרימר (₪400) מחזירה את עצמה מיידית ומייצרת חיסכון שוטף בהוצאות יס לצד רווח נקי של ₪50 לכל טעינה.
+    </div>
+  </div>
+
+  <!-- FOOTER & SIGNATURE -->
+  <div class="footer-section">
+    <div>
+      <div>מסמך פנימי מתוך מערכת <strong>ResortOS Hospitality Management</strong></div>
+      <div>סונכרן מול בסיס הנתונים ושרת הניהול המרכזי</div>
+    </div>
+    <div class="signature-box">
+      <div class="signature-title">אישור בעלים / מנהל מתחם</div>
+      <div class="signature-line">חתימה: ___________________</div>
+    </div>
+  </div>
+
+</body>
+</html>
+`;
+
+async function run() {
+  const browser = await puppeteer.launch({
+    headless: 'new',
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  });
+
+  const page = await browser.newPage();
+  await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+
+  const pdfPath = path.join(rootDir, 'רשימת_רכש_ודרישות_דחופות_מתחם_אירוח.pdf');
+  await page.pdf({
+    path: pdfPath,
+    format: 'A4',
+    printBackground: true,
+    margin: {
+      top: '10mm',
+      right: '12mm',
+      bottom: '10mm',
+      left: '12mm'
+    }
+  });
+
+  await browser.close();
+  console.log('PDF successfully generated at:', pdfPath);
+}
+
+run().catch(err => {
+  console.error('Error generating PDF:', err);
+  process.exit(1);
+});

@@ -1,11 +1,13 @@
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'http://100.112.253.49:54322';
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'postgres';
-const WEBHOOK_SECRET = process.env.PAYFAC_WEBHOOK_SECRET || 'hotelos_payfac_secret_key_2026';
+const SUPABASE_URL = process.env.SUPABASE_URL || '';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const WEBHOOK_SECRET = process.env.PAYFAC_WEBHOOK_SECRET || '';
 
-const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+const supabaseAdmin = (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY)
+  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+  : null;
 
 /**
  * Safely converts monetary ILS inputs (e.g. 150.50) to integer Agorot (15050).
@@ -29,7 +31,7 @@ export function toAgorot(amount) {
  * Verifies HMAC-SHA256 signature of incoming credit card webhook request.
  */
 export function verifyWebhookSignature(rawBody, signatureHeader, secret = WEBHOOK_SECRET) {
-  if (!signatureHeader) return false;
+  if (!signatureHeader || !secret) return false;
 
   try {
     const computedHmac = crypto
@@ -56,16 +58,22 @@ export function verifyWebhookSignature(rawBody, signatureHeader, secret = WEBHOO
  */
 export async function handlePayFacWebhook(req, res) {
   const startTime = Date.now();
-  const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+
+  if (!WEBHOOK_SECRET || !supabaseAdmin) {
+    return res.status(503).json({
+      error: 'WEBHOOK_NOT_CONFIGURED',
+      message: 'PAYFAC_WEBHOOK_SECRET and SUPABASE_SERVICE_ROLE_KEY must be set.'
+    });
+  }
+
+  const rawBody = req.rawBody || (typeof req.body === 'string' ? req.body : null);
   const signatureHeader = req.headers['x-payfac-signature'] || req.headers['x-gateway-signature'];
 
   console.log(`[HOTELOS WEBHOOK INCOMING] Timestamp: ${new Date().toISOString()}`);
 
-  // 1. SECURITY & SIGNATURE VERIFICATION
-  const isSignatureValid = verifyWebhookSignature(rawBody, signatureHeader);
-  const skipSignatureCheck = process.env.NODE_ENV === 'development' || req.headers['x-skip-signature'] === 'true';
+  const isSignatureValid = verifyWebhookSignature(rawBody || '', signatureHeader);
 
-  if (!isSignatureValid && !skipSignatureCheck) {
+  if (!isSignatureValid) {
     console.warn('[HOTELOS WEBHOOK 401] Invalid HMAC Signature attempt.');
     return res.status(401).json({
       error: 'UNAUTHORIZED_SIGNATURE',
@@ -73,7 +81,6 @@ export async function handlePayFacWebhook(req, res) {
     });
   }
 
-  // 2. PARSE PAYLOAD & EXTRACT TRANSACTION PARAMETERS
   const payload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
   const {
     tenant_id,
@@ -171,7 +178,7 @@ export async function handlePayFacWebhook(req, res) {
       console.error('[HOTELOS WEBHOOK RPC FAILURE]', rpcError);
       return res.status(500).json({
         error: 'RPC_EXECUTION_FAILED',
-        message: rpcError.message || 'Failed executing process_payfac_transaction RPC.'
+        message: 'Failed processing payfac transaction.'
       });
     }
 
@@ -190,7 +197,7 @@ export async function handlePayFacWebhook(req, res) {
     console.error('[HOTELOS WEBHOOK FATAL EXCEPTION]', err);
     return res.status(500).json({
       error: 'SERVER_ERROR',
-      message: err.message || 'Internal server error processing webhook.'
+      message: 'Internal server error processing webhook.'
     });
   }
 }

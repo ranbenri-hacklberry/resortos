@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#FDFBF7" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="השהייה שלי" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&family=Montserrat:wght@300;600;700&display=swap" rel="stylesheet" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>השלמת הזמנה</title>
+    <style>
+      html, body, #root { margin: 0; min-height: 100%; background: #FDFBF7; color: #26130F; font-family: Heebo, Assistant, system-ui, sans-serif; }
+      .boot { text-align: center; padding: 5rem 1.25rem; font-weight: 800; }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <p class="boot">טוען את השהייה…</p>
+    </div>
+    <noscript>
+      <style>
+        .boot { display: none; }
+        .noscript-note { padding: 3rem 1.25rem; text-align: center; line-height: 1.7; }
+        .noscript-note h1 { font-size: 1.15rem; margin: 0 0 0.75rem; }
+        .noscript-note p { margin: 0 0 0.75rem; font-size: 0.95rem; color: #C9C9CF; }
+      </style>
+      <div class="noscript-note">
+        <h1>הדפדפן חוסם את הדף</h1>
+        <p>הדפדפן שלכם חוסם הרצת סקריפטים, ולכן דף השהייה נשאר בטעינה.</p>
+        <p>
+          ב-Brave: הקישו על סמל האריה שליד הכתובת, העבירו את
+          <strong>Shields</strong> למצב כבוי עבור האתר הזה, ורעננו.
+        </p>
+        <p>בכרום: הגדרות ← הגדרות אתר ← JavaScript ← אפשר.</p>
+      </div>
+    </noscript>
+    <script>
+      setTimeout(function () {
+        var root = document.getElementById('root');
+        if (!root || !root.querySelector('.boot')) return;
+        root.innerHTML =
+          '<p class="boot">הדף לא נטען בטלפון.</p>' +
+          '<p class="boot" style="padding-top:0;font-weight:600;font-size:0.95rem;line-height:1.6">' +
+          'אם אתם ב-Brave: לחצו על האריה, כבו את המגן לאתר הזה, ואז רעננו.<br>' +
+          'הקישור חייב להתחיל ב-resortos.app/stay/</p>' +
+          '<p class="boot" style="padding-top:0;font-size:0.8rem;word-break:break-all;font-weight:600">' +
+          location.href.replace(/[<>]/g, '') + '</p>' +
+          '<p class="boot" style="padding-top:0"><button type="button" onclick="location.reload()" style="font:inherit;font-weight:800;padding:0.8rem 1.2rem;border:0;border-radius:12px;background:#26130F;color:#fff">רענון</button></p>';
+      }, 8000);
+    </script>
+    <script type="module" src="/src/guest-entry.jsx"></script>
+  </body>
+</html>
