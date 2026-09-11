@@ -25,7 +25,13 @@ import {
   Info,
   Building2,
   Check,
-  KeyRound
+  KeyRound,
+  Edit3,
+  Save,
+  X,
+  User,
+  MapPin,
+  Globe
 } from 'lucide-react';
 import { ManagedProperty } from './HostPropertyEditor';
 
@@ -58,6 +64,57 @@ export const AdminFunnelDashboard: React.FC<AdminFunnelDashboardProps> = ({
 
   // Selected Property for Reference Details Modal
   const [selectedPropertyForModal, setSelectedPropertyForModal] = useState<ManagedProperty | null>(null);
+
+  // Selected Property for Business Details Edit Modal (Admin Editor)
+  const [editingBusinessProperty, setEditingBusinessProperty] = useState<ManagedProperty | null>(null);
+  const [businessFormData, setBusinessFormData] = useState<Partial<ManagedProperty>>({});
+
+  const handleOpenEditBusinessModal = (prop: ManagedProperty) => {
+    setEditingBusinessProperty(prop);
+    setBusinessFormData({
+      hebrew_name: prop.hebrew_name,
+      name: prop.name,
+      contact_name: prop.contact_name || '',
+      phone: prop.phone || '',
+      whatsapp_number: prop.whatsapp_number || '',
+      slug: prop.slug || '',
+      village: prop.village || '',
+      region: prop.region || '',
+      source_url: prop.source_url || '',
+      crm_status: prop.crm_status || 'Lead_Identified',
+      claimed_status: prop.claimed_status || 'unclaimed_seeded',
+      is_public: Boolean(prop.is_public),
+      admin_notes: prop.admin_notes || ''
+    });
+  };
+
+  const handleSaveBusinessDetails = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBusinessProperty) return;
+
+    const newSlug = businessFormData.slug?.trim() || editingBusinessProperty.slug;
+    const updated: ManagedProperty = {
+      ...editingBusinessProperty,
+      hebrew_name: businessFormData.hebrew_name?.trim() || editingBusinessProperty.hebrew_name,
+      name: businessFormData.name?.trim() || editingBusinessProperty.name,
+      contact_name: businessFormData.contact_name?.trim() || undefined,
+      phone: businessFormData.phone?.trim() || editingBusinessProperty.phone,
+      whatsapp_number: businessFormData.whatsapp_number?.trim() || editingBusinessProperty.whatsapp_number,
+      slug: newSlug,
+      village: businessFormData.village?.trim() || editingBusinessProperty.village,
+      region: businessFormData.region?.trim() || editingBusinessProperty.region,
+      source_url: businessFormData.source_url?.trim() || undefined,
+      crm_status: businessFormData.crm_status as any,
+      claimed_status: businessFormData.claimed_status as any,
+      is_public: Boolean(businessFormData.is_public),
+      admin_notes: businessFormData.admin_notes?.trim() || undefined,
+      property_public_path: `/p/${newSlug || editingBusinessProperty.id}`
+    };
+
+    onUpdateProperty(updated);
+    showToast(`פרטי העסק של "${updated.hebrew_name}" נשמרו בהצלחה! ✨`);
+    setEditingBusinessProperty(null);
+  };
 
   // Notification Toast State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -130,7 +187,11 @@ export const AdminFunnelDashboard: React.FC<AdminFunnelDashboardProps> = ({
         const matchesName = (p.hebrew_name || '').toLowerCase().includes(query) || (p.name || '').toLowerCase().includes(query);
         const matchesVillage = (p.village || '').toLowerCase().includes(query);
         const matchesPhone = (p.whatsapp_number || '').includes(query);
-        if (!matchesName && !matchesVillage && !matchesPhone) return false;
+        const matchesDirectPhone = (p.phone || '').includes(query);
+        const matchesContact = (p.contact_name || '').toLowerCase().includes(query);
+        const matchesSlug = (p.slug || '').toLowerCase().includes(query);
+        const matchesNotes = (p.admin_notes || '').toLowerCase().includes(query);
+        if (!matchesName && !matchesVillage && !matchesPhone && !matchesDirectPhone && !matchesContact && !matchesSlug && !matchesNotes) return false;
       }
 
       return true;
@@ -641,6 +702,21 @@ ${previewUrl}
                           )}
                         </div>
 
+                        {/* Contact Person Name */}
+                        {prop.contact_name && (
+                          <div className="text-[11px] text-amber-900 font-semibold flex items-center gap-1 mt-0.5">
+                            <User className="w-3 h-3 text-amber-700 shrink-0" />
+                            <span>איש קשר: <strong>{prop.contact_name}</strong></span>
+                          </div>
+                        )}
+
+                        {/* Admin Notes Preview */}
+                        {prop.admin_notes && (
+                          <div className="text-[10px] text-stone-600 bg-amber-50/70 border border-amber-200/80 px-1.5 py-0.5 rounded mt-0.5 inline-block truncate max-w-[200px]" title={prop.admin_notes}>
+                            📝 {prop.admin_notes}
+                          </div>
+                        )}
+
                         {/* Direct Scraped Source Link */}
                         {prop.source_url ? (
                           <div className="mt-1">
@@ -672,7 +748,7 @@ ${previewUrl}
                         {prop.units?.length || 1}
                       </td>
 
-                      {/* 4. WhatsApp Number */}
+                      {/* 4. WhatsApp Number & Direct Phone */}
                       <td className="py-3 px-3">
                         {prop.whatsapp_number ? (
                           <span className="font-mono text-[11px] text-stone-700 dir-ltr text-right inline-block">
@@ -680,6 +756,11 @@ ${previewUrl}
                           </span>
                         ) : (
                           <span className="text-stone-300 text-[11px]">—</span>
+                        )}
+                        {prop.phone && prop.phone !== prop.whatsapp_number && (
+                          <div className="text-[10px] text-stone-400 font-mono dir-ltr text-right mt-0.5">
+                            📞 {prop.phone}
+                          </div>
                         )}
                       </td>
 
@@ -826,12 +907,22 @@ ${previewUrl}
                             <Eye className="w-3.5 h-3.5" />
                           </button>
 
+                          {/* Admin Edit Business Details Modal Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditBusinessModal(prop)}
+                            className="p-1.5 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 transition shadow-2xs"
+                            title="עריכת פרטי עסק כ-Admin (טלפונים, שם, איש קשר, סלאג, הערות)"
+                          >
+                            <Edit3 className="w-3.5 h-3.5 text-amber-800" />
+                          </button>
+
                           {/* Admin Direct Editor Access (Bypass OTP for Ran) */}
                           {onEditPropertyAsAdmin && (
                             <button
                               type="button"
                               onClick={() => onEditPropertyAsAdmin(prop.id)}
-                              className="p-1.5 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-900 transition"
+                              className="p-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-stone-700 transition"
                               title="עריכת מתחם זה כ-Admin (ללא צורך ב-OTP של המארח)"
                             >
                               <SlidersHorizontal className="w-3.5 h-3.5" />
@@ -954,7 +1045,20 @@ ${previewUrl}
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-between items-center pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const target = selectedPropertyForModal;
+                  setSelectedPropertyForModal(null);
+                  handleOpenEditBusinessModal(target);
+                }}
+                className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-xs rounded-xl flex items-center gap-1.5 transition shadow-2xs"
+              >
+                <Edit3 className="w-3.5 h-3.5 text-amber-800" />
+                <span>עריכת פרטי עסק כ-Admin</span>
+              </button>
+
               <button
                 onClick={() => setSelectedPropertyForModal(null)}
                 className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs rounded-xl"
@@ -962,6 +1066,289 @@ ${previewUrl}
                 סגור
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Business Details Editor Modal */}
+      {editingBusinessProperty && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-5 sm:p-7 shadow-2xl border border-stone-200 my-8 animate-scaleUp text-right">
+            {/* Header */}
+            <div className="flex items-start justify-between pb-4 border-b border-stone-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#26130F] to-[#3F2C29] text-[#C5A880] flex items-center justify-center shadow">
+                  <Building2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-black text-[#26130F]">
+                      עריכת פרטי עסק (Admin)
+                    </h3>
+                    <span className="text-[10px] bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full font-bold">
+                      ניהול ישיר
+                    </span>
+                  </div>
+                  <p className="text-xs text-stone-500 font-bold">
+                    {editingBusinessProperty.hebrew_name} · {editingBusinessProperty.village}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingBusinessProperty(null)}
+                className="w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSaveBusinessDetails} className="space-y-4 pt-4 text-right">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {/* Hebrew Name */}
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                    שם המתחם (עברית) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={businessFormData.hebrew_name || ''}
+                    onChange={(e) => setBusinessFormData({ ...businessFormData, hebrew_name: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-stone-300 text-xs font-bold focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
+                    placeholder="לדוגמה: בוסתן גסט רומס"
+                  />
+                </div>
+
+                {/* English / Alternative Name */}
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                    שם באנגלית / ייחוס
+                  </label>
+                  <input
+                    type="text"
+                    value={businessFormData.name || ''}
+                    onChange={(e) => setBusinessFormData({ ...businessFormData, name: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-stone-300 text-xs focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
+                    placeholder="Bustan Guest Rooms"
+                  />
+                </div>
+
+                {/* Contact Person Name */}
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1 flex items-center gap-1">
+                    <User className="w-3.5 h-3.5 text-amber-700" />
+                    <span>שם איש קשר / בעל המתחם</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={businessFormData.contact_name || ''}
+                    onChange={(e) => setBusinessFormData({ ...businessFormData, contact_name: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-stone-300 text-xs focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
+                    placeholder="לדוגמה: משה כהן"
+                  />
+                </div>
+
+                {/* Primary Phone */}
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1 flex items-center gap-1">
+                    <Phone className="w-3.5 h-3.5 text-sky-700" />
+                    <span>טלפון ראשי לשיחות ו-SMS</span>
+                  </label>
+                  <input
+                    type="tel"
+                    value={businessFormData.phone || ''}
+                    onChange={(e) => setBusinessFormData({ ...businessFormData, phone: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-stone-300 text-xs font-mono focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
+                    placeholder="054-807-6123 או 04-685-1234"
+                  />
+                </div>
+
+                {/* WhatsApp Number */}
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1 flex items-center gap-1">
+                    <MessageCircle className="w-3.5 h-3.5 text-[#25D366]" />
+                    <span>מספר WhatsApp לאימות OTP והודעות</span>
+                  </label>
+                  <input
+                    type="tel"
+                    value={businessFormData.whatsapp_number || ''}
+                    onChange={(e) => setBusinessFormData({ ...businessFormData, whatsapp_number: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-stone-300 text-xs font-mono focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
+                    placeholder="972548076123 או 054-807-6123"
+                  />
+                  <span className="text-[10px] text-stone-400 mt-0.5 block">
+                    מספר זה משמש לאימות OTP בווטסאפ (WATI)
+                  </span>
+                </div>
+
+                {/* Slug for /p/:slug */}
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1 flex items-center gap-1">
+                    <Globe className="w-3.5 h-3.5 text-[#8C6239]" />
+                    <span>כתובת URL ייחודית (Slug)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={businessFormData.slug || ''}
+                    onChange={(e) => setBusinessFormData({ ...businessFormData, slug: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-stone-300 text-xs font-mono focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
+                    placeholder="bustan-guest-rooms"
+                  />
+                  <span className="text-[10px] text-stone-400 mt-0.5 block">
+                    קישור ציבורי: /p/{businessFormData.slug || 'slug'}
+                  </span>
+                </div>
+
+                {/* Village */}
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1 flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-stone-500" />
+                    <span>יישוב / מושב</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={businessFormData.village || ''}
+                    onChange={(e) => setBusinessFormData({ ...businessFormData, village: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-stone-300 text-xs focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
+                    placeholder="רמות, חד נס, נוב..."
+                  />
+                </div>
+
+                {/* Region */}
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                    אזור גיאוגרפי
+                  </label>
+                  <input
+                    type="text"
+                    value={businessFormData.region || ''}
+                    onChange={(e) => setBusinessFormData({ ...businessFormData, region: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-stone-300 text-xs focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
+                    placeholder="רמת הגולן, סובב כנרת, גליל עליון..."
+                  />
+                </div>
+
+                {/* CRM Status */}
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                    שלב במשפך CRM
+                  </label>
+                  <select
+                    value={businessFormData.crm_status || 'Lead_Identified'}
+                    onChange={(e) => setBusinessFormData({ ...businessFormData, crm_status: e.target.value as any })}
+                    className="w-full p-2.5 rounded-xl border border-stone-300 text-xs font-bold bg-white focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
+                  >
+                    <option value="Lead_Identified">טיוטה ראשונית (Lead_Identified)</option>
+                    <option value="Portal_Free_Active">אישור חינם (Portal_Free_Active)</option>
+                    <option value="Upsell_Pitch_Sent">פיץ׳ ₪99 (Upsell_Pitch_Sent)</option>
+                    <option value="Verified_Subscriber">⭐ מנוי משלם (Verified)</option>
+                    <option value="Opt_Out">❌ הסרה מרשימת תפוצה (Opt_Out)</option>
+                  </select>
+                </div>
+
+                {/* Claim / OTP Status */}
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1 flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>סטטוס אימות בעלות OTP</span>
+                  </label>
+                  <select
+                    value={businessFormData.claimed_status || 'unclaimed_seeded'}
+                    onChange={(e) => setBusinessFormData({ ...businessFormData, claimed_status: e.target.value as any })}
+                    className="w-full p-2.5 rounded-xl border border-stone-300 text-xs font-bold bg-white focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
+                  >
+                    <option value="unclaimed_seeded">טרם אומת (חייב אימות OTP בכניסה)</option>
+                    <option value="claim_pending">ממתין להזנת OTP</option>
+                    <option value="claimed_verified">✅ מאומת כבעל מתחם (OTP אושר)</option>
+                  </select>
+                  <span className="text-[10px] text-stone-400 mt-0.5 block">
+                    שינוי ל״טרם אומת״ מחזיר את שער ה-OTP עבור בדיקות
+                  </span>
+                </div>
+              </div>
+
+              {/* Source URL */}
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1">
+                  קישור דף מקור חיצוני (Weekend / אתר רשמי)
+                </label>
+                <input
+                  type="url"
+                  value={businessFormData.source_url || ''}
+                  onChange={(e) => setBusinessFormData({ ...businessFormData, source_url: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-stone-300 text-xs font-mono focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
+                  placeholder="https://www.weekend.co.il/..."
+                />
+              </div>
+
+              {/* Public Visibility Toggle */}
+              <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-stone-800 block">
+                    חשיפה ציבורית בקטלוג ResortOS
+                  </span>
+                  <span className="text-[11px] text-stone-500">
+                    האם להציג את כרטיס המתחם לכל הגולשים באתר ללא קישור ישיר?
+                  </span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(businessFormData.is_public)}
+                    onChange={(e) => setBusinessFormData({ ...businessFormData, is_public: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-stone-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                </label>
+              </div>
+
+              {/* Internal Admin Notes */}
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1">
+                  הערות פנימיות של מנהל (Admin Notes)
+                </label>
+                <textarea
+                  rows={3}
+                  value={businessFormData.admin_notes || ''}
+                  onChange={(e) => setBusinessFormData({ ...businessFormData, admin_notes: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-stone-300 text-xs focus:ring-2 focus:ring-[#C5A880] focus:outline-none resize-none leading-relaxed"
+                  placeholder="הערות לגבי שיחות עם הבעלים, בקשות מיוחדות, זמני התקשרות..."
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-between pt-3 border-t border-stone-100">
+                <a
+                  href={`/p/${businessFormData.slug || editingBusinessProperty.slug || editingBusinessProperty.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-bold text-[#8C6239] hover:underline flex items-center gap-1"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>פתיחת כרטיס תצוגה מקדימה (/p/{businessFormData.slug || editingBusinessProperty.slug})</span>
+                </a>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingBusinessProperty(null)}
+                    className="px-4 py-2.5 rounded-xl border border-stone-200 hover:bg-stone-100 text-stone-700 text-xs font-bold transition"
+                  >
+                    ביטול
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 rounded-xl bg-[#26130F] hover:bg-[#3F2C29] text-[#C5A880] text-xs font-bold flex items-center gap-1.5 shadow transition active:scale-95"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>שמור שינויים</span>
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
       )}

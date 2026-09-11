@@ -53,6 +53,8 @@ export interface ManagedProperty {
   address: string;
   whatsapp_number: string;
   phone: string;
+  contact_name?: string;
+  admin_notes?: string;
   email?: string;
   hero_image?: string | null;
   gallery_images: string[];

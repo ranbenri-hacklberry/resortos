@@ -227,9 +227,11 @@ export function ResortOSApp() {
     }
   });
 
+  // Track if an admin explicitly chose to bypass OTP for a single property from Admin Funnel
+  const [adminBypassPropertyId, setAdminBypassPropertyId] = useState<string | null>(null);
+
   const isPropertyOwnerVerified = (prop: ManagedProperty | PropertyItem) => {
     if (prop.id === '22222222-2222-2222-2222-222222222222') return true; // Flagship canonical demo
-    if (prop.claimed_status === 'claimed_verified') return true;
     return verifiedOwnerIds.includes(prop.id);
   };
 
@@ -360,6 +362,7 @@ export function ResortOSApp() {
       slug: p.slug,
       name: p.name,
       hebrew_name: p.hebrew_name,
+      contact_name: p.contact_name,
       village: p.village,
       region: p.region,
       whatsapp_number: p.whatsapp_number,
@@ -390,6 +393,8 @@ export function ResortOSApp() {
               ...p,
               name: updated.name,
               hebrew_name: updated.hebrew_name,
+              slug: updated.slug || p.slug,
+              contact_name: updated.contact_name,
               village: updated.village,
               region: updated.region,
               whatsapp_number: updated.whatsapp_number,
@@ -404,6 +409,28 @@ export function ResortOSApp() {
           : p
       )
     );
+
+    // Sync verifiedOwnerIds if claimed_status was altered
+    if (updated.claimed_status === 'claimed_verified') {
+      setVerifiedOwnerIds((prev) => {
+        if (!prev.includes(updated.id)) {
+          const next = [...prev, updated.id];
+          try {
+            localStorage.setItem('resortos_verified_owners', JSON.stringify(next));
+          } catch {}
+          return next;
+        }
+        return prev;
+      });
+    } else if (updated.claimed_status === 'unclaimed_seeded' || updated.claimed_status === 'claim_pending') {
+      setVerifiedOwnerIds((prev) => {
+        const next = prev.filter((id) => id !== updated.id);
+        try {
+          localStorage.setItem('resortos_verified_owners', JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+    }
   };
 
   // Target Draft Property resolution & 404 detector
@@ -611,6 +638,7 @@ export function ResortOSApp() {
       region: prop.region,
       whatsapp_number: prop.whatsapp_number,
       phone: prop.phone,
+      contact_name: prop.contact_name,
       claimed_status: prop.claimed_status,
       direct_booking_enabled: prop.direct_booking_enabled,
       min_price: (prop as any).units?.[0]?.base_price || (prop as PropertyItem).min_price || 850,
@@ -822,7 +850,7 @@ export function ResortOSApp() {
                     <button
                       type="button"
                       onClick={() => {
-                        if (!isPropertyOwnerVerified(targetDraftProperty) && !isAdminAuthenticated) {
+                        if (!isPropertyOwnerVerified(targetDraftProperty)) {
                           openClaimModal(targetDraftProperty);
                         } else {
                           setActiveManagingPropertyId(targetDraftProperty.id);
@@ -922,7 +950,7 @@ export function ResortOSApp() {
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    if (!isPropertyOwnerVerified(prop) && !isAdminAuthenticated) {
+                                    if (!isPropertyOwnerVerified(prop)) {
                                       openClaimModal(prop);
                                     } else {
                                       setActiveManagingPropertyId(prop.id);
@@ -972,7 +1000,7 @@ export function ResortOSApp() {
                           }}
                           onClaimListing={(p) => openClaimModal(p)}
                           onUploadPhotos={(p) => {
-                            if (!isPropertyOwnerVerified(p) && !isAdminAuthenticated) {
+                            if (!isPropertyOwnerVerified(p)) {
                               openClaimModal(p);
                             } else {
                               setActiveManagingPropertyId(p.id);
@@ -1010,7 +1038,7 @@ export function ResortOSApp() {
           <div className="animate-fadeIn space-y-4">
             {(() => {
               const currentProp = managedProperties.find((p) => p.id === activeManagingPropertyId) || managedProperties[0];
-              const isVerified = isPropertyOwnerVerified(currentProp) || isAdminAuthenticated;
+              const isVerified = isPropertyOwnerVerified(currentProp) || (isAdminAuthenticated && adminBypassPropertyId === currentProp.id);
 
               if (!isVerified) {
                 return (
@@ -1232,6 +1260,7 @@ export function ResortOSApp() {
             }}
             onEditPropertyAsAdmin={(propId) => {
               setIsAdminAuthenticated(true);
+              setAdminBypassPropertyId(propId);
               try {
                 localStorage.setItem('resortos_admin_session', 'true');
               } catch {}

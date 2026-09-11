@@ -10,6 +10,7 @@ export interface PropertyItem {
   region: string;
   whatsapp_number: string;
   phone?: string;
+  contact_name?: string;
   claimed_status: 'unclaimed_seeded' | 'claim_pending' | 'claimed_verified';
   direct_booking_enabled: boolean;
   min_price?: number;
