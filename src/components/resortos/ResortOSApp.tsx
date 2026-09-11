@@ -211,7 +211,9 @@ export function ResortOSApp() {
       const saved = localStorage.getItem('resortos_managed_properties');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length >= 100) return parsed;
+        if (Array.isArray(parsed) && parsed.length >= 700 && parsed.some((p: any) => p.id?.startsWith('weekend-lead-'))) {
+          return parsed;
+        }
       }
     } catch {}
 
@@ -279,7 +281,7 @@ export function ResortOSApp() {
       property_public_path: `/p/${p.slug}`
     }));
 
-    const seededLeads = generateSeededLeads(588);
+    const seededLeads = generateSeededLeads(693);
     const combined = [...flagship, ...seededLeads];
     try {
       localStorage.setItem('resortos_managed_properties', JSON.stringify(combined));

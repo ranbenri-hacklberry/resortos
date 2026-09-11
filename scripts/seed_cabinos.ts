@@ -11,6 +11,8 @@
  */
 
 import { execSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
 
 interface PropertySeed {
   slug: string;
@@ -675,6 +677,28 @@ export async function seedCabinOS() {
     `;
     runSql(guideSql);
     console.log(`  ✓ Guide Template: "${guide.title}" (${guide.step_metadata.length} comic frames)`);
+  }
+
+  // 4. Seed Real Scraped Weekend Leads if available (693 leads)
+  const weekendJsonPath = path.join(__dirname, '../data/resortos-seed-weekend.json');
+  if (fs.existsSync(weekendJsonPath)) {
+    try {
+      const rawWeekendLeads = JSON.parse(fs.readFileSync(weekendJsonPath, 'utf-8'));
+      const mapped = rawWeekendLeads.map((r: any) => ({
+        slug: r.slug,
+        name: r.slug ? r.slug.replace(/-/g, ' ').toUpperCase() : 'Resort',
+        hebrew_name: r.hebrew_name,
+        village: r.village,
+        region: r.region,
+        whatsapp_number: r.whatsapp_number || r.phone || '',
+        phone: r.phone || '',
+        reference_image_urls: r.reference_image_urls || [],
+        source_url: r._source_url || r.source_url || ''
+      }));
+      await seedScrapedLeads(mapped);
+    } catch (e) {
+      console.warn('Could not seed real Weekend leads:', e);
+    }
   }
 
   console.log('\n✨ ResortOS Flagship Seed Complete! All 12 properties, verified suppliers, and comic guides are live.\n');
