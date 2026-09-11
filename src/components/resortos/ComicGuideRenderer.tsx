@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Tv, Printer, Sparkles, CheckCircle2, RefreshCw, AlertCircle, Wifi } from 'lucide-react';
+import { Tv, Printer, Sparkles, CheckCircle2, RefreshCw, AlertCircle, Wifi, BookOpen } from 'lucide-react';
 
 export interface ComicStep {
   step: number;
@@ -239,22 +239,15 @@ export const ComicGuideRenderer: React.FC<ComicGuideRendererProps> = ({
       <div className="guide-main-container bg-white rounded-3xl p-6 sm:p-8 border border-stone-200 shadow-sm overflow-hidden">
         {/* Dedicated Clean Header for Print (Hidden on Screen) */}
         <div className="hidden print-header-block">
-          <div className="flex items-center gap-3">
-            <img
-              src={activeAvatar}
-              alt={personaName}
-              className="w-12 h-12 rounded-full border-2 border-[#C5A880] object-cover"
-            />
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold text-[#8C6239] bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                  {personaName}
-                </span>
-                <span className="text-xs font-bold text-stone-600">· {propertyName} ({unitName})</span>
-              </div>
-              <h1 className="text-lg font-black text-[#26130F] mt-0.5">{guide.title}</h1>
-              <p className="text-[9pt] text-stone-600 leading-tight">{guide.summary}</p>
+          <div>
+            <div className="flex items-center gap-2 mb-0.5">
+              <span className="text-[10px] font-bold text-[#8C6239] bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                מדריך אירוח לאורח
+              </span>
+              <span className="text-xs font-bold text-stone-600">· {propertyName} ({unitName})</span>
             </div>
+            <h1 className="text-lg font-black text-[#26130F]">{guide.title}</h1>
+            <p className="text-[9pt] text-stone-600 leading-tight">{guide.summary}</p>
           </div>
           <div className="text-left font-black text-[#26130F] text-sm tracking-tight border-r pr-3 border-stone-300">
             ResortOS<span className="text-[#C5A880] block text-[8pt] font-normal">Guest Playbook</span>
@@ -263,28 +256,16 @@ export const ComicGuideRenderer: React.FC<ComicGuideRendererProps> = ({
 
         {/* Action Header for Screen (Hidden in Print) */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-stone-200 no-print">
-          <div className="flex items-center gap-3.5">
-            <div className="relative">
-              <img
-                src={activeAvatar}
-                alt={personaName}
-                className="w-14 h-14 rounded-full border-2 border-[#C5A880] object-cover shadow-sm"
-              />
-              <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] border-2 border-white font-bold">
-                ✓
+          <div>
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-[11px] font-bold text-[#8C6239] bg-amber-50 px-2.5 py-0.5 rounded-md border border-amber-200/60 flex items-center gap-1">
+                <BookOpen className="w-3 h-3 text-[#C5A880]" />
+                <span>מדריך אירוח רשמי</span>
               </span>
+              <span className="text-xs text-stone-500 font-medium">· {propertyName} ({unitName})</span>
             </div>
-
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-bold text-[#8C6239] bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60">
-                  {personaName}
-                </span>
-                <span className="text-xs text-stone-400">· {unitName}</span>
-              </div>
-              <h2 className="text-xl sm:text-2xl font-bold text-[#26130F] mt-0.5">{guide.title}</h2>
-              <p className="text-xs sm:text-sm text-stone-500 max-w-md">{guide.summary}</p>
-            </div>
+            <h2 className="text-xl sm:text-2xl font-bold text-[#26130F]">{guide.title}</h2>
+            <p className="text-xs sm:text-sm text-stone-500 max-w-lg mt-0.5 leading-relaxed">{guide.summary}</p>
           </div>
 
           <div className="flex items-center gap-2.5 w-full sm:w-auto">

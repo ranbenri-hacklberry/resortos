@@ -46,28 +46,28 @@ const INITIAL_GUIDES: ComicGuideData[] = [
       {
         step: 1,
         title: 'הסרת הכיסוי התרמי',
-        illustrationUrl: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=600&q=80',
+        illustrationUrl: '/guides/hottub_comic_step1_uncover.jpg',
         instructions: 'שחררו את קליפסי הנעילה משני צידי הג׳קוזי וקפלו את הכיסוי התרמי לחצי לאחור בזהירות.',
         proTip: 'אל תמשכו את הכיסוי בכוח מרצועות הצד – אחיזה במרכז הכיסוי מאריכה את חיי התפרים.'
       },
       {
         step: 2,
         title: 'בדיקת טמפרטורה במסך הדיגיטלי',
-        illustrationUrl: 'https://images.unsplash.com/photo-1507652313519-d4e9174996dd?auto=format&fit=crop&w=600&q=80',
+        illustrationUrl: '/guides/hottub_comic_step2_display.jpg',
         instructions: 'הטמפרטורה המומלצת מכוונת מראש ל-38°C. להעלאה או הורדה לחצו על חיצי הטמפרטורה.',
         proTip: 'המים שומרים על חום מושלם כל עוד הכיסוי מונח. חימום מלא של מעלה אחת לוקח כ-20 דקות.'
       },
       {
         step: 3,
         title: 'הפעלת ג׳טים וזרמי מסאז׳',
-        illustrationUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=600&q=80',
+        illustrationUrl: '/guides/hottub_comic_step3_jets.jpg',
         instructions: 'לחצו פעם אחת על כפתור JETS 1 להפעלת זרם נעים, ופעם נוספת לעוצמת מסאז׳ מלאה.',
         proTip: 'המשאבה נכבית אוטומטית לאחר 20 דקות רצופות מטעמי בטיחות וחיסכון באנרגיה.'
       },
       {
         step: 4,
         title: 'יציאה והחזרת הכיסוי התרמי',
-        illustrationUrl: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=600&q=80',
+        illustrationUrl: '/guides/hottub_comic_step4_cover.jpg',
         instructions: 'בסיום הרחצה, כסו את הג׳קוזי בחזרה לחלוטין. שמירת הכיסוי מבטיחה מים רותחים וצלולים.',
         proTip: 'כיסוי סגור מונע חדירת עלים ושומר על צלילות המים לכל אורך החופשה שלכם.'
       }
@@ -1199,29 +1199,6 @@ export function ResortOSApp() {
                   </button>
                 ))}
               </div>
-
-              {/* Persona Switcher */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-stone-600">אווטאר מארח:</span>
-                <button
-                  type="button"
-                  onClick={() => setSelectedPersona('ran_and_kosta')}
-                  className={`py-1 px-2.5 rounded-lg text-xs font-bold ${
-                    selectedPersona === 'ran_and_kosta' ? 'bg-[#C5A880] text-[#26130F]' : 'bg-stone-100 text-stone-600'
-                  }`}
-                >
-                  רן וקוסטה (ברירת מחדל)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedPersona('custom_host')}
-                  className={`py-1 px-2.5 rounded-lg text-xs font-bold ${
-                    selectedPersona === 'custom_host' ? 'bg-[#C5A880] text-[#26130F]' : 'bg-stone-100 text-stone-600'
-                  }`}
-                >
-                  אווטאר מארח אישי
-                </button>
-              </div>
             </div>
 
             {/* Interactive Comic Guide Renderer */}
@@ -1234,7 +1211,6 @@ export function ResortOSApp() {
                   unitId={activeProp.units?.[0]?.id || "k687"}
                   propertyName={activeProp.hebrew_name}
                   unitName={activeProp.units?.[0]?.name || "סוויטת אירוח"}
-                  hostAvatarUrl={selectedPersona === 'custom_host' ? (activeProp.host_avatar_url || customHostAvatar) : undefined}
                   wifiSsid={activeProp.wifi_ssid || "Toscana_Guest_5G"}
                   wifiPassword={activeProp.wifi_password || "golanparadise"}
                   hostNotes={activeProp.host_welcome_notes || "ברוכים הבאים למתחם שלנו! המדריך הזה זמין לכם גם בטלוויזיה של החדר."}

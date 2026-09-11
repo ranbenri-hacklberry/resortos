@@ -1,17 +1,19 @@
 {
-  "cleanUrls": true,
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/(.*)",
-      "destination": "https://api.resortos.app/api/$1"
+      "src": "/api/(.*)",
+      "dest": "https://api.resortos.app/api/$1"
     },
     {
-      "source": "/p/(.*)",
-      "destination": "/index.html"
+      "src": "/p/(.*)",
+      "dest": "/index.html"
     },
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ]
 }
