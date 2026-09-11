@@ -5,12 +5,6 @@ import App from './App.jsx';
 import ErrorBoundary from './ErrorBoundary.jsx';
 import './index.css';
 
-if (import.meta.hot && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent || '')) {
-  import.meta.hot.on('vite:beforeUpdate', () => {
-    window.location.reload();
-  });
-}
-
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary>

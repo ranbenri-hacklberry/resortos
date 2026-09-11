@@ -170,7 +170,7 @@ export function spanBarPixels(booking, calendarStartStr, daysCount, cellPx = 72,
   const clippedEnd = cout > winEnd;
   const right = unitColPx + startIndex * cellPx + (clippedStart ? 2 : cellPx * 0.5);
   let width = visibleNights * cellPx - 4;
-  if (clippedStart && !clippedEnd) width = visibleNights * cellPx - cellPx * 0.5 - 2;
+  if (clippedStart && !clippedEnd) width = visibleNights * cellPx + cellPx * 0.5 - 2;
   if (!clippedStart && clippedEnd) width = visibleNights * cellPx - cellPx * 0.5 - 4;
   if (clippedStart && clippedEnd) width = visibleNights * cellPx - 4;
   const oneNight = visibleNights <= 1;

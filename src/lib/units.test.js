@@ -19,5 +19,8 @@ describe('calendarInventory', () => {
     const rows = calendarInventory([], [], 't');
     expect(rows.length).toBeGreaterThan(10);
     expect(rows.some((u) => u.id === 'hill-1')).toBe(true);
+    expect(rows[0].id).toBe('k826');
+    expect(rows[1].id).toBe('k827');
+    expect(rows.some((u) => u.id === 'k618')).toBe(false);
   });
 });

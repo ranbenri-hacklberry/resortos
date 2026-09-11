@@ -1,0 +1,27 @@
+name = "resortos-sms-links"
+main = "src/index.ts"
+compatibility_date = "2026-08-18"
+workers_dev = true
+
+# Public campaign number (already on the landing). Override with:
+#   npx wrangler secret put WHATSAPP_PHONE --config sms-worker/wrangler.toml
+[vars]
+WHATSAPP_PHONE = "972506102416"
+
+# Branded SMS short links. Worker routes win over Pages for these paths only.
+# resortos.co.il is not on this Cloudflare account yet.
+[[routes]]
+pattern = "resortos.app/chloe*"
+zone_name = "resortos.app"
+
+[[routes]]
+pattern = "resortos.app/w/*"
+zone_name = "resortos.app"
+
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+invocation_logs = true
+head_sampling_rate = 1

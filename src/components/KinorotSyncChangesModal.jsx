@@ -39,7 +39,7 @@ function ChangeList({ title, rows, tone, childrenFor }) {
       }}>
         {title} · {rows.length}
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 220, overflow: 'auto' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 120, overflow: 'auto' }}>
         {rows.slice(0, 40).map((row) => (
           <div
             key={row.id}
@@ -72,16 +72,11 @@ export default function KinorotSyncChangesModal({ theme = 'dark', changes, onClo
   return (
     <div
       role="presentation"
-      onClick={onClose}
       style={{
         position: 'fixed',
-        inset: 0,
+        inset: 'auto 0 0 0',
         zIndex: 80,
-        background: 'rgba(0,0,0,0.55)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 16
+        pointerEvents: 'none'
       }}
     >
       <div
@@ -89,18 +84,37 @@ export default function KinorotSyncChangesModal({ theme = 'dark', changes, onClo
         aria-label={t('KINOROT_CHANGES_TITLE')}
         onClick={(event) => event.stopPropagation()}
         style={{
-          width: 'min(520px, 100%)',
-          maxHeight: '86dvh',
+          pointerEvents: 'auto',
+          width: '100%',
+          maxHeight: '42dvh',
           overflow: 'auto',
-          background: isLight ? '#FAF8F3' : '#141416',
+          background: isLight ? '#FAF8F3' : '#1A1A1E',
           color: isLight ? '#1C1917' : '#F8FAFC',
-          borderRadius: 20,
-          padding: '1.2rem 1.15rem 1.15rem',
-          border: isLight ? '1px solid rgba(28,25,23,0.08)' : '1px solid rgba(255,255,255,0.08)'
+          borderRadius: '20px 20px 0 0',
+          padding: '0.85rem 1rem calc(0.9rem + env(safe-area-inset-bottom, 0px))',
+          borderTop: isLight ? '1px solid rgba(28,25,23,0.08)' : '1px solid rgba(255,255,255,0.12)',
+          boxShadow: '0 -12px 40px rgba(0,0,0,0.35)'
         }}
       >
-        <h2 style={{ margin: 0, fontSize: '1.2rem' }}>{t('KINOROT_CHANGES_TITLE')}</h2>
-        <p style={{ margin: '8px 0 0', color: isLight ? '#57534E' : '#94A3B8', fontWeight: 700, fontSize: '0.86rem' }}>
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            width: '100%',
+            minHeight: 48,
+            margin: '0 0 10px',
+            border: 'none',
+            borderRadius: 12,
+            background: '#6366F1',
+            color: '#FFF',
+            fontWeight: 900,
+            cursor: 'pointer'
+          }}
+        >
+          {t('KINOROT_CHANGES_ACK')}
+        </button>
+        <h2 style={{ margin: 0, fontSize: '1.05rem' }}>{t('KINOROT_CHANGES_TITLE')}</h2>
+        <p style={{ margin: '6px 0 0', color: isLight ? '#57534E' : '#94A3B8', fontWeight: 700, fontSize: '0.82rem' }}>
           {t('KINOROT_CHANGES_HINT')}
         </p>
 
@@ -121,23 +135,6 @@ export default function KinorotSyncChangesModal({ theme = 'dark', changes, onClo
         />
         <ChangeList title={t('KINOROT_CHANGES_REMOVED')} rows={removed} tone="#EF4444" />
 
-        <button
-          type="button"
-          onClick={onClose}
-          style={{
-            width: '100%',
-            minHeight: 48,
-            marginTop: 18,
-            border: 'none',
-            borderRadius: 12,
-            background: '#6366F1',
-            color: '#FFF',
-            fontWeight: 900,
-            cursor: 'pointer'
-          }}
-        >
-          {t('KINOROT_CHANGES_ACK')}
-        </button>
       </div>
     </div>
   );

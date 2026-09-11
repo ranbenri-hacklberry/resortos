@@ -109,6 +109,13 @@ export function MialeesResortApp() {
               >
                 אטרקציות וחוויות
               </button>
+              <a
+                href="/resortos.html"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#26130F] text-[#C5A880] text-xs font-bold shadow hover:bg-[#3F2C29] transition-all"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>זירת ResortOS & ספקים</span>
+              </a>
             </nav>
 
             {/* Direct Contact & CTA Button */}

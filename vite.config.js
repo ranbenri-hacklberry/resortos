@@ -1,16 +1,6 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react-swc';
-import { createRequire } from 'module';
-
-const require = createRequire(import.meta.url);
-function loadTailwindPlugin() {
-  try {
-    return require('@tailwindcss/vite');
-  } catch {
-    return () => ({ name: 'tailwind-optional' });
-  }
-}
-const tailwindcss = loadTailwindPlugin();
+import tailwindcss from '@tailwindcss/vite';
 import fs from 'fs';
 import path from 'path';
 import { createHypPaymentPage } from './functions/lib/hypPay.js';
@@ -435,11 +425,85 @@ function staffAuthPlugin(env) {
             if (!bookingData) {
               return sendJson(res, 404, { error: 'NOT_FOUND', message: 'ההזמנה לא נמצאה' });
             }
-
             return sendJson(res, 200, bookingData);
           } catch (err) {
             return sendJson(res, 500, { error: 'CHECKOUT_FAILED', message: err.message });
           }
+        }
+
+        // ResortOS Claim Listing & Push Guide endpoints
+        if (url === '/api/claim/initiate' && req.method === 'POST') {
+          const { onRequestPost } = await import('./functions/api/claim/initiate.js');
+          const body = await readJsonBody(req);
+          const fakeReq = new Request('http://localhost' + url, {
+            method: 'POST',
+            headers: req.headers,
+            body: JSON.stringify(body)
+          });
+          const response = await onRequestPost({ request: fakeReq, env: process.env });
+          const data = await response.json();
+          return sendJson(res, response.status, data);
+        }
+
+        if (url === '/api/claim/verify' && req.method === 'POST') {
+          const { onRequestPost } = await import('./functions/api/claim/verify.js');
+          const body = await readJsonBody(req);
+          const fakeReq = new Request('http://localhost' + url, {
+            method: 'POST',
+            headers: req.headers,
+            body: JSON.stringify(body)
+          });
+          const response = await onRequestPost({ request: fakeReq, env: process.env });
+          const data = await response.json();
+          return sendJson(res, response.status, data);
+        }
+
+        if (url === '/api/tv/push-guide' && req.method === 'POST') {
+          const { onRequestPost } = await import('./functions/api/tv/push-guide.js');
+          const body = await readJsonBody(req);
+          const fakeReq = new Request('http://localhost' + url, {
+            method: 'POST',
+            headers: req.headers,
+            body: JSON.stringify(body)
+          });
+          const response = await onRequestPost({ request: fakeReq, env: process.env });
+          const data = await response.json();
+        if (url.startsWith('/api/admin/properties')) {
+          const { onRequest } = await import('./functions/api/admin/properties.js');
+          let body = {};
+          if (req.method === 'PATCH' || req.method === 'POST') {
+            body = await readJsonBody(req);
+          }
+          const fakeReq = new Request('http://localhost' + req.url, {
+            method: req.method,
+            headers: req.headers,
+            body: (req.method === 'PATCH' || req.method === 'POST') ? JSON.stringify(body) : undefined
+          });
+          const response = await onRequest({ request: fakeReq, env: process.env });
+          const data = await response.json();
+          return sendJson(res, response.status, data);
+        }
+
+        if (url.startsWith('/api/admin/funnel')) {
+          const { onRequest } = await import('./functions/api/admin/funnel.js');
+          const fakeReq = new Request('http://localhost' + req.url, {
+            method: req.method,
+            headers: req.headers
+          });
+          const response = await onRequest({ request: fakeReq, env: process.env });
+          const data = await response.json();
+          return sendJson(res, response.status, data);
+        }
+
+        if (url.startsWith('/api/catalog')) {
+          const { onRequest } = await import('./functions/api/catalog.js');
+          const fakeReq = new Request('http://localhost' + req.url, {
+            method: req.method,
+            headers: req.headers
+          });
+          const response = await onRequest({ request: fakeReq, env: process.env });
+          const data = await response.json();
+          return sendJson(res, response.status, data);
         }
 
         next();
@@ -1032,6 +1096,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3001,
       host: true,
+      hmr: false,
       warmup: {
         clientFiles: [
           './src/main.jsx',

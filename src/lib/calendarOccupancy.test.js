@@ -78,6 +78,16 @@ describe('spanBarPixels', () => {
     expect(bar.right).toBe(112 + 2);
     expect(bar.width).toBeGreaterThan(50);
   });
+
+  it('extends a clipped check-in to noon on the real checkout day', () => {
+    const bar = spanBarPixels({
+      check_in_date: '2026-09-06',
+      check_out_date: '2026-09-10'
+    }, '2026-09-07', 14, 86, 112);
+    expect(bar.nights).toBe(3);
+    expect(bar.right).toBe(114);
+    expect(bar.width).toBe(3 * 86 + 43 - 2);
+  });
 });
 
 describe('stay card tone', () => {

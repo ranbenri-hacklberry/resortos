@@ -303,9 +303,12 @@ body.field-staff-page .app-shell {
    WebKit/iOS was collapsing per-row overlays to 0 width and hiding every card. */
 .hotelos-calendar-stay-layer {
   position: absolute;
+  left: 0;
+  right: 0;
   overflow: visible;
   z-index: 12;
   pointer-events: none;
+  transform: translateZ(0);
 }
 
 .hotelos-calendar-scroll::after {

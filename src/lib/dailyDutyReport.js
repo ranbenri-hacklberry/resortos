@@ -17,7 +17,7 @@ export const DUTY_PRINT_AREAS = [
   {
     id: 'ramot',
     label: 'צימרים רמות',
-    hint: 'נורית, טאג׳ מאהל, מול הנוף, נופים בלבן, טוסקנה, חצר מוסיקלית, מאיה, סייסטה'
+    hint: 'נורית, טאג׳ מאהל, מול הנוף, נופים בלבן, טוסקנה, חצר מוסיקלית, מאיה'
   }
 ];
 
@@ -41,6 +41,17 @@ export function dutyPrintAreaOf(unitId, unitName = '') {
 
 export function dutyPrintAreaLabel(area) {
   return DUTY_PRINT_AREAS.find((row) => row.id === area)?.label || '';
+}
+
+export const BOARD_AREA_FILTERS = [
+  { id: 'all', label: 'הכל' },
+  { id: 'ramot', label: 'רמות' },
+  { id: 'givat', label: 'גבעה / נוב / נאות גולן' }
+];
+
+export function unitMatchesBoardArea(unit, area) {
+  if (!area || area === 'all') return true;
+  return dutyPrintAreaOf(unit?.id, unit?.name) === area;
 }
 
 function parseDateStr(dateStr) {

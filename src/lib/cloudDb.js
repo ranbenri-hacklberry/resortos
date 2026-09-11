@@ -287,9 +287,20 @@ function mergeBookingRow(base, incoming) {
   return merged;
 }
 
+export function hasPublicGuestMailbox(booking) {
+  const token = String(booking?.checkout_token || '');
+  if (!token || token.startsWith('tok_kin_')) return false;
+  const id = String(booking?.id || '');
+  if (id.startsWith('kin_')) return false;
+  const channel = String(booking?.channel_source || '').toLowerCase();
+  if (channel === 'kinorot') return false;
+  return true;
+}
+
 export async function refreshBookingFromGuestMailbox(booking) {
   const token = booking?.checkout_token;
   if (!booking?.id || !token || booking.booking_status === 'CANCELED') return booking;
+  if (!hasPublicGuestMailbox(booking)) return booking;
   try {
     const response = await fetch(`${guestStayOrigin()}/api/checkout/${encodeURIComponent(token)}`);
     if (!response.ok) return booking;
@@ -573,14 +584,14 @@ export async function syncResortUnitsToDexie(tenantId) {
     const remoteIds = new Set();
     const puts = [];
     for (const row of data || []) {
-      if (isPhantomUnitId(row.id)) continue;
+      if (isPhantomUnitId(row.id) || isRetiredUnitId(row.id)) continue;
       remoteIds.add(row.id);
     }
     await db.transaction('rw', db.units, async () => {
       const existingRows = await db.units.bulkGet([...remoteIds]);
       const existingById = new Map(existingRows.filter(Boolean).map((unit) => [unit.id, unit]));
       for (const row of data || []) {
-        if (isPhantomUnitId(row.id)) continue;
+        if (isPhantomUnitId(row.id) || isRetiredUnitId(row.id)) continue;
         const existing = existingById.get(row.id);
         puts.push({
           unit_type: row.unit_type || existing?.unit_type || 'cabin',
@@ -653,7 +664,7 @@ export async function ensureCanonicalUnits(tenantId, options = {}) {
   });
   const now = new Date().toISOString();
   for (const unit of remote) {
-    if (isPhantomUnitId(unit.id)) continue;
+    if (isPhantomUnitId(unit.id) || isRetiredUnitId(unit.id)) continue;
     const existing = await db.units.get(unit.id);
     const canonicalName = CANONICAL_NAME_BY_ID[unit.id];
     const nextName = (FORCE_DOCUMENT_NAMES.has(unit.id) && canonicalName)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bookingGuestHeadcount, bookingHasCrib, buildDailyDutyHtml, dailyDutyCounts, dutyPrintAreaOf, guestCardFirstName } from './dailyDutyReport.js';
+import { bookingGuestHeadcount, bookingHasCrib, buildDailyDutyHtml, dailyDutyCounts, dutyPrintAreaOf, guestCardFirstName, unitMatchesBoardArea } from './dailyDutyReport.js';
 
 const units = [
   { id: 'hill-1', name: 'צימר בגבעה 1', sort_order: 1 },
@@ -39,6 +39,10 @@ describe('duty print areas', () => {
     expect(dutyPrintAreaOf('suite-green')).toBe('givat');
     expect(dutyPrintAreaOf('k826')).toBe('givat');
     expect(dutyPrintAreaOf('k671')).toBe('ramot');
+    expect(unitMatchesBoardArea({ id: 'k826' }, 'all')).toBe(true);
+    expect(unitMatchesBoardArea({ id: 'k826' }, 'givat')).toBe(true);
+    expect(unitMatchesBoardArea({ id: 'k671' }, 'givat')).toBe(false);
+    expect(unitMatchesBoardArea({ id: 'k671' }, 'ramot')).toBe(true);
   });
 
   it('filters the daily report by the selected area', () => {

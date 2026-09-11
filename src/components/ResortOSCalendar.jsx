@@ -34,10 +34,10 @@ import {
   useLivePromotions,
   useResortOSSyncStatus
 } from '../lib/resortos-db';
-import { pushBookingToCloud, pushBookingsToCloud, syncCloudBookingsToDexie, subscribeToRealtimeCloudBookings, syncUnitOpsToDexie, subscribeToRealtimeUnitOps, pushUnitToCloud, ensureCanonicalUnits, refreshBookingFromGuestMailbox } from '../lib/cloudDb';
+import { pushBookingToCloud, pushBookingsToCloud, syncCloudBookingsToDexie, subscribeToRealtimeCloudBookings, syncUnitOpsToDexie, subscribeToRealtimeUnitOps, pushUnitToCloud, ensureCanonicalUnits, refreshBookingFromGuestMailbox, hasPublicGuestMailbox } from '../lib/cloudDb';
 import { createCheckoutToken } from '../lib/checkoutToken';
 import { findOverlappingBooking, maxAvailableNights } from '../lib/bookingOverlap';
-import { barsToDrawOnCell, isActiveStay, isPaintedStay, stayCardTone, staySlicesOnCell, stayYmd } from '../lib/calendarOccupancy';
+import { barsToDrawOnCell, isActiveStay, isPaintedStay, stayCardTone, spanBarPixels, stayYmd } from '../lib/calendarOccupancy';
 import { agentLockLabel, agentLockOnNight, findOverlappingAgentLock, useAgentLocks } from '../lib/agentLocks';
 import { publishGuestMailbox, startHostCardCharge } from '../lib/guestCheckoutApi';
 import { guestStayOrigin, guestStayUrl } from '../lib/guestStayUrl';
@@ -66,7 +66,7 @@ import UnitOpsStatusSheet from './UnitOpsStatusSheet';
 import { hypAccountOf, listClearingPayments, mergeClearingPayments } from '../lib/clearingPayments';
 import { awaitingBankReview, awaitingCashCollection, dueAgorotOf, hasRecordedReceipt, isFullyPaid, kinorotSettlementKind, paidIlsOfBooking, paymentStatusAfterPaid, recordedPaidAgorot } from '../lib/bookingPaid';
 import ClearingPaymentsList from './ClearingPaymentsList';
-import { bookingGuestHeadcount, bookingHasCrib, bookingPeopleLabel, dailyDutyCounts, defaultReportDate, DUTY_PRINT_AREAS, guestCardFirstName, hebrewDateLabel, printDailyDutyReport } from '../lib/dailyDutyReport';
+import { BOARD_AREA_FILTERS, bookingGuestHeadcount, bookingHasCrib, bookingPeopleLabel, dailyDutyCounts, defaultReportDate, DUTY_PRINT_AREAS, guestCardFirstName, hebrewDateLabel, printDailyDutyReport, unitMatchesBoardArea } from '../lib/dailyDutyReport';
 import {
   evaluateStayRestrictions,
   listBookingRestrictions,
@@ -528,6 +528,13 @@ export default function ResortOSCalendar({
   });
   const [cashBusy, setCashBusy] = useState(false);
   const [boardSync, setBoardSync] = useState({ ok: true, count: null });
+  const [boardArea, setBoardArea] = useState(() => {
+    try {
+      const stored = localStorage.getItem('resortos-board-area');
+      if (stored === 'ramot' || stored === 'givat' || stored === 'all') return stored;
+    } catch (_) {}
+    return 'all';
+  });
 
   // 0ms Live Reactive Data Hooks from IndexedDB
   const rawUnits = useLiveUnits(tenantId);
@@ -535,7 +542,11 @@ export default function ResortOSCalendar({
     () => calendarInventory(rawUnits, allowedUnitIds, tenantId),
     [rawUnits, allowedUnitIds, tenantId]
   );
-  const visibleUnitIds = useMemo(() => new Set(units.map((unit) => unit.id)), [units]);
+  const areaUnits = useMemo(
+    () => units.filter((unit) => unitMatchesBoardArea(unit, boardArea)),
+    [units, boardArea]
+  );
+  const visibleUnitIds = useMemo(() => new Set(areaUnits.map((unit) => unit.id)), [areaUnits]);
   const rawBookings = useLiveBookings(tenantId);
   const bookingsRef = useRef(rawBookings);
   bookingsRef.current = rawBookings;
@@ -545,6 +556,7 @@ export default function ResortOSCalendar({
     return (rawBookings || [])
       .filter((booking) => (
         booking?.checkout_token
+        && hasPublicGuestMailbox(booking)
         && booking.booking_status !== 'CANCELED'
         && booking.booking_status !== 'CHECKED_OUT'
         && !isFullyPaid(booking)
@@ -569,12 +581,12 @@ export default function ResortOSCalendar({
     [calendarStartStr, daysCount]
   );
   const boardUnits = useMemo(
-    () => units.filter((unit) => !hideClosedOrRenovationUnit(unit, rawBookings, {
+    () => areaUnits.filter((unit) => !hideClosedOrRenovationUnit(unit, rawBookings, {
       today: todayStr,
       rangeStart: calendarStartStr,
       rangeEnd: calendarEndStr
     })),
-    [units, rawBookings, todayStr, calendarStartStr, calendarEndStr]
+    [areaUnits, rawBookings, todayStr, calendarStartStr, calendarEndStr]
   );
 
   const overdueCheckouts = useMemo(
@@ -1046,10 +1058,8 @@ export default function ResortOSCalendar({
       terminal: normalizeHypTerminal(booking.hyp_terminal || booking.stay?.hyp_terminal, booking.payment_mode),
       at: israelToday()
     });
-    const needsGuestPull = Boolean(
-      booking?.checkout_token
-      && booking.booking_status !== 'CANCELED'
-    );
+    const needsGuestPull = hasPublicGuestMailbox(booking)
+      && booking.booking_status !== 'CANCELED';
     if (needsGuestPull) {
       setPaymentProofBusy(true);
       refreshBookingFromGuestMailbox(booking)
@@ -1895,8 +1905,46 @@ export default function ResortOSCalendar({
         alignItems: 'center',
         justifyContent: 'flex-end',
         gap: '0.5rem',
-        marginBottom: '0.55rem'
+        marginBottom: '0.55rem',
+        flexWrap: 'wrap'
       }}>
+        <div style={{
+          display: 'flex',
+          flex: 1,
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'flex-start',
+          gap: '0.35rem'
+        }}>
+          {BOARD_AREA_FILTERS.map((area) => {
+            const active = boardArea === area.id;
+            return (
+              <button
+                key={area.id}
+                type="button"
+                onClick={() => {
+                  setBoardArea(area.id);
+                  try { localStorage.setItem('resortos-board-area', area.id); } catch (_) {}
+                }}
+                style={{
+                  ...buttonStyle,
+                  padding: '0.35rem 0.7rem',
+                  fontSize: '0.78rem',
+                  fontWeight: active ? 800 : 600,
+                  background: active
+                    ? (isLight ? '#312E81' : '#4F46E5')
+                    : (isLight ? '#FFFFFF' : '#1E293B'),
+                  color: active ? '#F8FAFC' : themeStyles.textPrimary,
+                  border: active
+                    ? '1px solid transparent'
+                    : `1px solid ${themeStyles.inputBorder}`
+                }}
+              >
+                {area.label}
+              </button>
+            );
+          })}
+        </div>
         {agentLocksError ? (
           <div
             title="הלוח המקומי לא מצליח למשוך נעילות סוכן מהענן. אל תניחו שחדר פנוי בטלפון בלי לבדוק."
@@ -2156,10 +2204,6 @@ export default function ResortOSCalendar({
                     isFirstColumn: colIndex === 0,
                     isToday: Boolean(col.isToday)
                   });
-                  const staySlices = staySlicesOnCell(unitStays, col.dateStr, todayStr, {
-                    calendarStartStr,
-                    calendarEndStr
-                  });
                   const blockingStay = occupying && stayYmd(occupying.check_in_date) <= col.dateStr
                     && col.dateStr < stayYmd(occupying.check_out_date)
                     ? occupying
@@ -2195,112 +2239,6 @@ export default function ResortOSCalendar({
                         cursor: blockingStay ? 'default' : (col.isPast || agentHold ? 'not-allowed' : 'pointer')
                       }}
                     >
-                      {staySlices.map((slice) => {
-                        const barBooking = slice.booking;
-                        const departed = barBooking.booking_status === 'CHECKED_OUT'
-                          && stayYmd(barBooking.check_in_date) < todayStr;
-                        const frameColor = departed ? '#94A3B8' : stayFrameColor(barBooking);
-                        const tone = stayCardTone(barBooking, { today: todayStr });
-                        const bankWait = !departed && awaitingBankReview(barBooking);
-                        const capStart = slice.role === 'checkin' || slice.showLabel;
-                        const capEnd = slice.role === 'checkout';
-                        const placement = slice.role === 'checkin'
-                          ? { insetInlineStart: '50%', insetInlineEnd: -1 }
-                          : slice.role === 'checkout'
-                          ? { insetInlineStart: 0, insetInlineEnd: '50%' }
-                          : { insetInlineStart: -1, insetInlineEnd: -1 };
-                        return (
-                          <div
-                            key={`${barBooking.id}:${slice.role}`}
-                            onClick={(e) => handleBookingClick(barBooking, e)}
-                            className={bankWait ? 'hotelos-bank-wait' : undefined}
-                            title={`${barBooking.guest_name || 'אורח'} · ${bookingPeopleLabel(barBooking)}`}
-                            style={{
-                              position: 'absolute',
-                              top: 2,
-                              bottom: 2,
-                              zIndex: slice.showLabel ? 14 : 12,
-                              ...placement,
-                              borderStartStartRadius: capStart ? 4 : 0,
-                              borderStartEndRadius: capStart ? 4 : 0,
-                              borderEndStartRadius: capEnd ? 4 : 0,
-                              borderEndEndRadius: capEnd ? 4 : 0,
-                              borderTop: departed ? `1.5px dashed ${frameColor}` : `2px solid ${frameColor}`,
-                              borderBottom: departed ? `1.5px dashed ${frameColor}` : `2px solid ${frameColor}`,
-                              borderInlineStart: capStart
-                                ? (departed ? `1.5px dashed ${frameColor}` : `2px solid ${frameColor}`)
-                                : 'none',
-                              borderInlineEnd: capEnd
-                                ? (departed ? `1.5px dashed ${frameColor}` : `2px solid ${frameColor}`)
-                                : 'none',
-                              background: departed
-                                ? (isLight ? 'rgba(241, 245, 249, 0.95)' : 'rgba(30, 41, 59, 0.55)')
-                                : tone === 'unpaid'
-                                ? (isLight ? 'rgba(254, 226, 226, 0.96)' : 'rgba(127, 29, 29, 0.55)')
-                                : tone === 'inhouse'
-                                ? (isLight ? 'rgba(237, 233, 254, 0.96)' : 'rgba(76, 29, 149, 0.5)')
-                                : tone === 'paid'
-                                ? (isLight ? 'rgba(220, 252, 231, 0.96)' : 'rgba(20, 83, 45, 0.45)')
-                                : tone === 'bank'
-                                ? (isLight ? 'rgba(255, 247, 237, 0.98)' : 'rgba(67, 20, 7, 0.72)')
-                                : (isLight ? '#FFFFFF' : '#1E293B'),
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: slice.showMeta ? 'flex-end' : 'flex-start',
-                              paddingInline: slice.showLabel || slice.showMeta ? 4 : 0,
-                              overflow: slice.showLabel ? 'visible' : 'hidden',
-                              cursor: 'pointer',
-                              boxSizing: 'border-box'
-                            }}
-                          >
-                            {slice.showLabel ? (
-                              <span style={{
-                                fontWeight: 800,
-                                fontSize: '0.62rem',
-                                color: departed ? '#94A3B8' : (isLight ? '#0F172A' : '#FFFFFF'),
-                                whiteSpace: 'nowrap',
-                                pointerEvents: 'none'
-                              }}>
-                                {guestCardFirstName(barBooking.guest_name || 'אורח')}
-                              </span>
-                            ) : null}
-                            {slice.showMeta ? (
-                              <span style={{ display: 'flex', alignItems: 'center', flexShrink: 0, gap: 3 }}>
-                                {bookingGuestHeadcount(barBooking) > 0 ? (
-                                  <span
-                                    aria-label={`${bookingGuestHeadcount(barBooking)} אורחים`}
-                                    style={{
-                                      width: 14,
-                                      height: 14,
-                                      borderRadius: '999px',
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      fontSize: 9,
-                                      fontWeight: 800,
-                                      background: departed
-                                        ? (isLight ? '#E2E8F0' : '#334155')
-                                        : (isLight ? '#0F172A' : '#F8FAFC'),
-                                      color: departed
-                                        ? (isLight ? '#475569' : '#CBD5E1')
-                                        : (isLight ? '#FFFFFF' : '#0F172A')
-                                    }}
-                                  >
-                                    {bookingGuestHeadcount(barBooking)}
-                                  </span>
-                                ) : null}
-                                {kinorotSettlementKind(barBooking) === 'voucher' ? (
-                                  <Ticket size={11} strokeWidth={2.4} aria-label="שובר" />
-                                ) : null}
-                                {!departed && awaitingCashCollection(barBooking) ? (
-                                  <Banknote size={11} strokeWidth={2.4} aria-label="מזומן בהגעה" />
-                                ) : null}
-                                {bookingHasCrib(barBooking) ? <Baby size={11} strokeWidth={2.4} aria-label="מיטת תינוק" /> : null}
-                              </span>
-                            ) : null}
-                          </div>
-                        );
-                      })}
                       {agentHold ? (
                         <div style={{
                           position: 'absolute',
@@ -2337,6 +2275,104 @@ export default function ResortOSCalendar({
               </div>
             );
           })}
+          <div
+            className="hotelos-calendar-stay-layer"
+            style={{
+              top: HEADER_H,
+              height: boardUnits.length * UNIT_ROW_PX
+            }}
+          >
+            {boardUnits.flatMap((unit, rowIndex) => (
+              (bookingsByUnit.get(unit.id) || []).map((booking) => {
+                const pix = spanBarPixels(booking, calendarStartStr, daysCount, CELL_PX, UNIT_COL_PX);
+                if (!pix) return null;
+                const departed = booking.booking_status === 'CHECKED_OUT'
+                  && stayYmd(booking.check_in_date) < todayStr;
+                const frameColor = departed ? '#94A3B8' : stayFrameColor(booking);
+                const tone = stayCardTone(booking, { today: todayStr });
+                const bankWait = !departed && awaitingBankReview(booking);
+                return (
+                  <div
+                    key={booking.id}
+                    onClick={(e) => handleBookingClick(booking, e)}
+                    className={bankWait ? 'hotelos-bank-wait' : undefined}
+                    title={`${booking.guest_name || 'אורח'} · ${bookingPeopleLabel(booking)}`}
+                    style={{
+                      position: 'absolute',
+                      top: rowIndex * UNIT_ROW_PX + 2,
+                      height: UNIT_ROW_PX - 4,
+                      right: pix.right,
+                      width: pix.width,
+                      zIndex: 12,
+                      pointerEvents: 'auto',
+                      borderRadius: 4,
+                      border: departed ? `1.5px dashed ${frameColor}` : `2px solid ${frameColor}`,
+                      background: departed
+                        ? (isLight ? 'rgba(241, 245, 249, 0.95)' : 'rgba(30, 41, 59, 0.55)')
+                        : tone === 'unpaid'
+                        ? (isLight ? 'rgba(254, 226, 226, 0.96)' : 'rgba(127, 29, 29, 0.55)')
+                        : tone === 'inhouse'
+                        ? (isLight ? 'rgba(237, 233, 254, 0.96)' : 'rgba(76, 29, 149, 0.5)')
+                        : tone === 'paid'
+                        ? (isLight ? 'rgba(220, 252, 231, 0.96)' : 'rgba(20, 83, 45, 0.45)')
+                        : tone === 'bank'
+                        ? (isLight ? 'rgba(255, 247, 237, 0.98)' : 'rgba(67, 20, 7, 0.72)')
+                        : (isLight ? '#FFFFFF' : '#1E293B'),
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'flex-start',
+                      paddingInline: 4,
+                      overflow: 'hidden',
+                      cursor: 'pointer',
+                      boxSizing: 'border-box',
+                      gap: 4
+                    }}
+                  >
+                    <span style={{
+                      fontWeight: 800,
+                      fontSize: '0.62rem',
+                      color: departed ? '#94A3B8' : (isLight ? '#0F172A' : '#FFFFFF'),
+                      whiteSpace: 'nowrap',
+                      pointerEvents: 'none'
+                    }}>
+                      {guestCardFirstName(booking.guest_name || 'אורח')}
+                    </span>
+                    {bookingGuestHeadcount(booking) > 0 ? (
+                      <span
+                        aria-label={`${bookingGuestHeadcount(booking)} אורחים`}
+                        style={{
+                          width: 14,
+                          height: 14,
+                          borderRadius: '999px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 9,
+                          fontWeight: 800,
+                          flexShrink: 0,
+                          background: departed
+                            ? (isLight ? '#E2E8F0' : '#334155')
+                            : (isLight ? '#0F172A' : '#F8FAFC'),
+                          color: departed
+                            ? (isLight ? '#475569' : '#CBD5E1')
+                            : (isLight ? '#FFFFFF' : '#0F172A')
+                        }}
+                      >
+                        {bookingGuestHeadcount(booking)}
+                      </span>
+                    ) : null}
+                    {kinorotSettlementKind(booking) === 'voucher' ? (
+                      <Ticket size={11} strokeWidth={2.4} aria-label="שובר" />
+                    ) : null}
+                    {!departed && awaitingCashCollection(booking) ? (
+                      <Banknote size={11} strokeWidth={2.4} aria-label="מזומן בהגעה" />
+                    ) : null}
+                    {bookingHasCrib(booking) ? <Baby size={11} strokeWidth={2.4} aria-label="מיטת תינוק" /> : null}
+                  </div>
+                );
+              })
+            ))}
+          </div>
           {(() => {
             const todayColIndex = dateColumns.findIndex((col) => col.isToday);
             if (todayColIndex < 0) return null;
