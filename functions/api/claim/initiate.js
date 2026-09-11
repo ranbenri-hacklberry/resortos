@@ -3,8 +3,9 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 
 const InitiateClaimSchema = z.object({
-  property_id: z.string().uuid({ message: 'מזהה מתחם לא תקין' }),
-  phone: z.string().min(9, { message: 'מספר טלפון קצר מדי' }).max(15, { message: 'מספר טלפון ארוך מדי' })
+  property_id: z.string().min(1, { message: 'מזהה מתחם לא תקין' }),
+  phone: z.string().min(9, { message: 'מספר טלפון קצר מדי' }).max(20, { message: 'מספר טלפון ארוך מדי' }),
+  channel: z.enum(['whatsapp', 'sms']).default('whatsapp')
 });
 
 function normalizePhone(raw) {
@@ -122,13 +123,48 @@ export async function onRequestPost(context) {
       return jsonResponse({ error: 'DB_INSERT_FAILED', message: 'שגיאה בשמירת קוד האימות' }, 500);
     }
 
-    // 6. Trigger WhatsApp Dispatch
+    // 6. Trigger WhatsApp (WATI) or SMS Dispatch
     const isDev = process.env.NODE_ENV !== 'production';
-    console.log(`[WhatsApp Dispatch] Sending OTP ${rawOtp} to ${normalizedInputPhone} for ${property.hebrew_name}`);
+    const channel = parseResult.data.channel || 'whatsapp';
+
+    if (channel === 'whatsapp') {
+      const watiEndpoint = context.env?.WATI_API_ENDPOINT;
+      const watiToken = context.env?.WATI_ACCESS_TOKEN;
+      if (watiEndpoint && watiToken) {
+        try {
+          const cleanDigits = normalizedInputPhone.replace(/\D/g, '');
+          const intlDigits = cleanDigits.startsWith('972') ? cleanDigits : '972' + cleanDigits.replace(/^0/, '');
+          await fetch(`${watiEndpoint.replace(/\/$/, '')}/api/v1/sendTemplateMessage?whatsappNumber=${intlDigits}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${watiToken}`
+            },
+            body: JSON.stringify({
+              template_name: 'resortos_otp',
+              broadcast_name: 'otp_verification',
+              parameters: [
+                { name: 'code', value: String(rawOtp) },
+                { name: 'property', value: property.hebrew_name || 'ResortOS' }
+              ]
+            })
+          });
+        } catch (watiErr) {
+          console.error('[WATI Dispatch Error]', watiErr);
+        }
+      } else {
+        console.log(`[WATI WhatsApp Dispatch] Sending OTP ${rawOtp} to ${normalizedInputPhone} for ${property.hebrew_name}`);
+      }
+    } else {
+      console.log(`[SMS Cellular Dispatch] Sending OTP ${rawOtp} to ${normalizedInputPhone} for ${property.hebrew_name}`);
+    }
+
+    const channelLabel = channel === 'whatsapp' ? 'בוואטסאפ (WATI)' : 'ב-SMS לנייד';
 
     return jsonResponse({
       success: true,
-      message: `קוד אימות בן 6 ספרות נשלח לוואטסאפ ${normalizedInputPhone.slice(0, 3)}-***${normalizedInputPhone.slice(-3)}. הקוד בתוקף ל-5 דקות.`,
+      channel,
+      message: `קוד אימות בן 6 ספרות נשלח ${channelLabel} ל-${normalizedInputPhone.slice(0, 3)}-***${normalizedInputPhone.slice(-3)}. הקוד בתוקף ל-5 דקות.`,
       expires_in_seconds: 300,
       preview_otp: isDev ? rawOtp : undefined
     });

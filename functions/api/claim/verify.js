@@ -3,8 +3,8 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 
 const VerifyClaimSchema = z.object({
-  property_id: z.string().uuid({ message: 'מזהה מתחם לא תקין' }),
-  phone: z.string().min(9, { message: 'מספר טלפון קצר מדי' }).max(15, { message: 'מספר טלפון ארוך מדי' }),
+  property_id: z.string().min(1, { message: 'מזהה מתחם לא תקין' }),
+  phone: z.string().min(9, { message: 'מספר טלפון קצר מדי' }).max(20, { message: 'מספר טלפון ארוך מדי' }),
   otp: z.string().length(6, { message: 'קוד אימות חייב להכיל 6 ספרות' }),
   full_name: z.string().min(2, { message: 'שם מלא חייב להכיל לפחות 2 תווים' }).optional(),
   email: z.string().email({ message: 'כתובת אימייל לא תקינה' }).optional()

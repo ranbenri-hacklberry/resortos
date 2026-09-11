@@ -24,7 +24,8 @@ import {
   SlidersHorizontal,
   Info,
   Building2,
-  Check
+  Check,
+  KeyRound
 } from 'lucide-react';
 import { ManagedProperty } from './HostPropertyEditor';
 
@@ -33,13 +34,15 @@ export interface AdminFunnelDashboardProps {
   onUpdateProperty: (updated: ManagedProperty) => void;
   onRefresh?: () => void;
   onOpenPreviewListing?: (slug: string) => void;
+  onEditPropertyAsAdmin?: (propertyId: string) => void;
 }
 
 export const AdminFunnelDashboard: React.FC<AdminFunnelDashboardProps> = ({
   properties,
   onUpdateProperty,
   onRefresh,
-  onOpenPreviewListing
+  onOpenPreviewListing,
+  onEditPropertyAsAdmin
 }) => {
   // Filter States
   const [crmStatusFilter, setCrmStatusFilter] = useState<string>('all');
@@ -188,6 +191,17 @@ ${previewUrl}
     showToast(nextPublic ? `✓ המתחם ${prop.hebrew_name} פורסם כעת במרקטפלייס` : `✓ המתחם ${prop.hebrew_name} הוסתר מהמרקטפלייס`);
   };
 
+  // 5b. Approve Draft (אישור טיוטה יחידני של רן)
+  const handleApproveProperty = (prop: ManagedProperty) => {
+    const updated: ManagedProperty = {
+      ...prop,
+      is_public: true,
+      crm_status: prop.crm_status === 'Lead_Identified' ? 'Portal_Free_Active' : prop.crm_status
+    };
+    onUpdateProperty(updated);
+    showToast(`✓ המתחם "${prop.hebrew_name || prop.name}" אושר ופורסם בהצלחה במרקטפלייס! 🎉`);
+  };
+
   // 6. Quick Status Change
   const handleChangeCrmStatus = (prop: ManagedProperty, newStatus: ManagedProperty['crm_status']) => {
     const updated: ManagedProperty = {
@@ -210,8 +224,9 @@ ${previewUrl}
       'אזור',
       'וואטסאפ',
       'סטטוס CRM',
-      'אימות בעלות',
-      'ציבורי',
+      'אימות בעלות OTP',
+      'ציבורי (מאושר)',
+      'קישור מקור גרידה Weekend',
       'תמונות ייחוס',
       'פנייה ראשונה',
       'מקור'
@@ -226,7 +241,8 @@ ${previewUrl}
       `"${p.whatsapp_number || ''}"`,
       p.crm_status || 'Lead_Identified',
       p.claimed_status || 'unclaimed_seeded',
-      p.is_public ? 'כן' : 'לא',
+      p.is_public ? 'מאושר' : 'טיוטה',
+      `"${p.source_url || ''}"`,
       p.reference_image_urls?.length || 0,
       p.first_touch_sent_at ? new Date(p.first_touch_sent_at).toLocaleDateString('he-IL') : '',
       p.source || 'weekend_scrape'
@@ -390,6 +406,70 @@ ${previewUrl}
 
       {/* Filters & Search Toolbar */}
       <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-sm space-y-3">
+        {/* Quick Filter Presets */}
+        <div className="flex flex-wrap items-center gap-2 pb-2 border-b border-stone-100">
+          <span className="text-[11px] font-bold text-stone-500">סינון מהיר:</span>
+          <button
+            type="button"
+            onClick={() => {
+              setVisibilityFilter('all');
+              setCrmStatusFilter('all');
+              setCurrentPage(1);
+            }}
+            className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
+              visibilityFilter === 'all' && crmStatusFilter === 'all'
+                ? 'bg-[#26130F] text-[#C5A880]'
+                : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+            }`}
+          >
+            כל המתחמים ({properties.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setVisibilityFilter('hidden');
+              setCrmStatusFilter('all');
+              setCurrentPage(1);
+            }}
+            className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+              visibilityFilter === 'hidden'
+                ? 'bg-amber-800 text-white shadow-sm'
+                : 'bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100'
+            }`}
+          >
+            <EyeOff className="w-3.5 h-3.5" />
+            <span>טיוטות ממתינות לאישור רן ({properties.filter((p) => !p.is_public).length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setVisibilityFilter('all');
+              setCrmStatusFilter('all');
+              setCurrentPage(1);
+            }}
+            className="px-3 py-1 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition flex items-center gap-1"
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>מאומתי OTP ({properties.filter((p) => p.claimed_status === 'claimed_verified').length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setVisibilityFilter('public');
+              setCrmStatusFilter('all');
+              setCurrentPage(1);
+            }}
+            className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
+              visibilityFilter === 'public'
+                ? 'bg-emerald-700 text-white shadow-sm'
+                : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
+            }`}
+          >
+            <Eye className="w-3.5 h-3.5" />
+            <span>מאושרים ציבוריים ({kpis.publicCount})</span>
+          </button>
+        </div>
+
         <div className="flex flex-wrap items-center gap-2">
           {/* Search Box */}
           <div className="relative flex-1 min-w-[240px]">
@@ -540,7 +620,7 @@ ${previewUrl}
                         isOptOut ? 'bg-rose-50/30 opacity-70' : ''
                       }`}
                     >
-                      {/* 1. Name & Village */}
+                      {/* 1. Name & Village + Scraped Weekend Source Link */}
                       <td className="py-3 px-4">
                         <div className="font-extrabold text-[#26130F] flex items-center gap-1.5">
                           <span>{prop.hebrew_name || prop.name}</span>
@@ -560,6 +640,24 @@ ${previewUrl}
                             <span className="text-[10px] text-stone-400 hidden sm:inline">({prop.name})</span>
                           )}
                         </div>
+
+                        {/* Direct Scraped Source Link */}
+                        {prop.source_url ? (
+                          <div className="mt-1">
+                            <a
+                              href={prop.source_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-sky-700 hover:text-sky-900 bg-sky-50 hover:bg-sky-100 border border-sky-200/80 px-2 py-0.5 rounded-md transition shadow-xs group"
+                              title={`פתיחת עמוד המקור ב-Weekend בחלון חדש: ${prop.source_url}`}
+                            >
+                              <ExternalLink className="w-3 h-3 text-sky-600 group-hover:scale-110 transition-transform shrink-0" />
+                              <span>מקור Weekend 🔗</span>
+                            </a>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-stone-400 mt-0.5 block">ללא מקור חיצוני</span>
+                        )}
                       </td>
 
                       {/* 2. Region */}
@@ -610,22 +708,28 @@ ${previewUrl}
                         </select>
                       </td>
 
-                      {/* 6. Claim Status Badge */}
+                      {/* 6. Claim / OTP Verification Status Badge */}
                       <td className="py-3 px-2 text-center">
                         <span
-                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full inline-block ${
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
                             prop.claimed_status === 'claimed_verified'
-                              ? 'bg-emerald-100 text-emerald-800'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                               : prop.claimed_status === 'claim_pending'
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-stone-100 text-stone-500'
+                              ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                              : 'bg-stone-100 text-stone-500 border border-stone-200'
                           }`}
                         >
-                          {prop.claimed_status === 'claimed_verified'
-                            ? 'מאומת'
-                            : prop.claimed_status === 'claim_pending'
-                            ? 'בהמתנה'
-                            : 'טרם'}
+                          {prop.claimed_status === 'claimed_verified' ? (
+                            <>
+                              <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                              <span>אומת ב-OTP</span>
+                            </>
+                          ) : (
+                            <>
+                              <KeyRound className="w-3 h-3 text-stone-400" />
+                              <span>ממתין ל-OTP</span>
+                            </>
+                          )}
                         </span>
                       </td>
 
@@ -673,8 +777,38 @@ ${previewUrl}
                             title="פתיחת וואטסאפ עם נוסח מותאם + רישום פנייה אוטומטי"
                           >
                             <MessageCircle className="w-3.5 h-3.5 shrink-0" />
-                            <span className="hidden lg:inline">שלח וואטסאפ</span>
+                            <span className="hidden xl:inline">וואטסאפ</span>
                           </button>
+
+                          {/* 1-Click Approve Draft Button for Ran (אשר טיוטה לפרסום) */}
+                          {!prop.is_public ? (
+                            <button
+                              type="button"
+                              onClick={() => handleApproveProperty(prop)}
+                              className="px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition active:scale-95"
+                              title="אישור טיוטה ופרסום מיידי במרקטפלייס האורחים"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                              <span>אשר טיוטה</span>
+                            </button>
+                          ) : (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200 hidden xl:inline">
+                              מאושר ✓
+                            </span>
+                          )}
+
+                          {/* Direct Weekend Source Link Button */}
+                          {prop.source_url && (
+                            <a
+                              href={prop.source_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 rounded-lg border border-sky-200 bg-sky-50 hover:bg-sky-100 text-sky-700 transition"
+                              title={`פתיחת עמוד המקור ב-Weekend בחלון חדש: ${prop.source_url}`}
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          )}
 
                           {/* Preview Link */}
                           <button
@@ -689,8 +823,20 @@ ${previewUrl}
                             className="p-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-stone-600 transition"
                             title="תצוגה מקדימה של הכרטיס"
                           >
-                            <ExternalLink className="w-3.5 h-3.5" />
+                            <Eye className="w-3.5 h-3.5" />
                           </button>
+
+                          {/* Admin Direct Editor Access (Bypass OTP for Ran) */}
+                          {onEditPropertyAsAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => onEditPropertyAsAdmin(prop.id)}
+                              className="p-1.5 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-900 transition"
+                              title="עריכת מתחם זה כ-Admin (ללא צורך ב-OTP של המארח)"
+                            >
+                              <SlidersHorizontal className="w-3.5 h-3.5" />
+                            </button>
+                          )}
 
                           {/* Reference Info Details */}
                           <button
