@@ -153,7 +153,7 @@ export const AdminFunnelDashboard: React.FC<AdminFunnelDashboardProps> = ({
     }
 
     const internationalPhone = cleanPhone.startsWith('972') ? cleanPhone : '972' + cleanPhone.replace(/^0/, '');
-    const previewUrl = `https://dist-resortos.vercel.app/?preview=true&slug=${prop.slug || prop.id}`;
+    const previewUrl = `https://dist-resortos.vercel.app/p/${prop.slug || prop.id}`;
     
     // High-converting, friendly, spam-law compliant outreach copy
     const text = `היי, כאן צוות ResortOS ✨
@@ -817,7 +817,7 @@ ${previewUrl}
                               if (onOpenPreviewListing) {
                                 onOpenPreviewListing(prop.slug || prop.id);
                               } else {
-                                window.open(`/?preview=true&slug=${prop.slug || prop.id}`, '_blank');
+                                window.open(`/p/${prop.slug || prop.id}`, '_blank');
                               }
                             }}
                             className="p-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-stone-600 transition"

@@ -20,7 +20,7 @@
     "build:reviews": "vite build --config vite.reviews.config.js && cp dist-reviews/reviews.html dist-reviews/index.html && cp resources/favicon.png resources/apple-touch-icon.png dist-reviews/",
     "deploy:reviews": "npm run build:reviews && wrangler pages deploy dist-reviews --project-name whastar --commit-dirty=true",
     "build:mialees": "node ./node_modules/vite/bin/vite.js build --config vite.mialees.config.js && cp dist-mialees/mialees.html dist-mialees/index.html && cp -R public/resorts dist-mialees/ 2>/dev/null && cp resources/favicon.png resources/apple-touch-icon.png dist-mialees/ 2>/dev/null || true",
-    "build:resortos": "node ./node_modules/vite/bin/vite.js build --config vite.resortos.config.js && cp dist-resortos/resortos.html dist-resortos/index.html && cp -R public/guides dist-resortos/ 2>/dev/null && cp -R public/resorts dist-resortos/ 2>/dev/null && cp resources/favicon.png resources/apple-touch-icon.png dist-resortos/ 2>/dev/null || true",
+    "build:resortos": "node ./node_modules/vite/bin/vite.js build --config vite.resortos.config.js && cp dist-resortos/resortos.html dist-resortos/index.html && cp vercel.json dist-resortos/vercel.json && cp -f public/_redirects dist-resortos/_redirects 2>/dev/null && cp -R public/guides dist-resortos/ 2>/dev/null && cp -R public/resorts dist-resortos/ 2>/dev/null && cp resources/favicon.png resources/apple-touch-icon.png dist-resortos/ 2>/dev/null || true",
     "deploy:mialees": "npm run build:mialees && wrangler pages deploy dist-mialees --project-name mialees-resort --commit-dirty=true",
     "native:sync": "npm run build:reviews && npx cap sync android",
     "native:aab": "npm run native:sync && node native/build-aab.js",

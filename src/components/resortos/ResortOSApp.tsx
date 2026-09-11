@@ -21,7 +21,8 @@ import {
   Sliders,
   Award,
   Camera,
-  Users
+  Users,
+  MapPinOff
 } from 'lucide-react';
 import { ListingCardCTA, PropertyItem } from './ListingCardCTA';
 import { ComicGuideRenderer, ComicGuideData } from './ComicGuideRenderer';
@@ -182,10 +183,28 @@ function formatMaskedPhone(phone?: string): string {
 }
 
 export function ResortOSApp() {
-  // URL Query Params Check for Admin Tab & Host Preview Mode
-  const urlParams = useMemo(() => new URLSearchParams(window.location.search), []);
-  const isPreviewMode = urlParams.get('preview') === 'true';
-  const previewSlug = urlParams.get('slug');
+  // 1. URL Path & Query Resolution (/p/:slug vs legacy ?preview=true&slug=...)
+  const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+  const pMatch = pathname.match(/^\/p\/([^/]+)\/?$/);
+  const routeSlug = pMatch ? decodeURIComponent(pMatch[1]) : null;
+
+  const urlParams = useMemo(() => new URLSearchParams(typeof window !== 'undefined' ? window.location.search : ''), []);
+  const querySlug = urlParams.get('slug');
+  const isQueryPreview = urlParams.get('preview') === 'true';
+
+  // Active slug target: resolved from /p/:slug route or ?slug= query
+  const previewSlug = routeSlug || querySlug;
+  const isSlugRoute = Boolean(routeSlug);
+  const isPreviewMode = isSlugRoute || isQueryPreview;
+
+  // Unify legacy ?preview=true&slug=X to /p/X in browser history (DoD #6)
+  useEffect(() => {
+    if (!routeSlug && isQueryPreview && querySlug) {
+      try {
+        window.history.replaceState(null, '', `/p/${encodeURIComponent(querySlug)}`);
+      } catch {}
+    }
+  }, [routeSlug, isQueryPreview, querySlug]);
 
   const [activeTab, setActiveTab] = useState<'marketplace' | 'host_editor' | 'deals' | 'playbook' | 'admin_funnel'>(() => {
     if (urlParams.get('tab') === 'admin' || window.location.hash === '#admin') return 'admin_funnel';
@@ -387,8 +406,26 @@ export function ResortOSApp() {
     );
   };
 
+  // Target Draft Property resolution & 404 detector
+  const targetDraftProperty = useMemo(() => {
+    if (!previewSlug) return null;
+    return propertiesState.find((p) => p.slug === previewSlug || p.id === previewSlug) || null;
+  }, [propertiesState, previewSlug]);
+
+  const isSlugNotFound = (isSlugRoute || isPreviewMode) && Boolean(previewSlug) && !targetDraftProperty;
+
+  // Auto-focus activeManagingPropertyId if viewing a specific property
+  useEffect(() => {
+    if (previewSlug && managedProperties.length > 0) {
+      const match = managedProperties.find((p) => p.slug === previewSlug || p.id === previewSlug);
+      if (match) {
+        setActiveManagingPropertyId(match.id);
+      }
+    }
+  }, [previewSlug, managedProperties]);
+
   const filteredProperties = useMemo(() => {
-    return propertiesState.filter((p) => {
+    const list = propertiesState.filter((p) => {
       // Target preview exception: if a host visits their preview URL, show their card!
       const isTargetPreview = isPreviewMode && (p.slug === previewSlug || p.id === previewSlug);
 
@@ -402,7 +439,17 @@ export function ResortOSApp() {
       if (searchTerm && !p.hebrew_name.includes(searchTerm) && !p.village.includes(searchTerm)) return false;
       return true;
     });
-  }, [propertiesState, regionFilter, searchTerm, isPreviewMode, previewSlug]);
+
+    // If target preview exists, bring it to the absolute top of the feed
+    if (targetDraftProperty && list.some((p) => p.id === targetDraftProperty.id)) {
+      return [
+        targetDraftProperty,
+        ...list.filter((p) => p.id !== targetDraftProperty.id)
+      ];
+    }
+
+    return list;
+  }, [propertiesState, regionFilter, searchTerm, isPreviewMode, previewSlug, targetDraftProperty]);
 
   // Claim Flow API Handlers with Robust Fallback for Vercel Static Deployment
   const handleInitiateClaim = async (e: React.FormEvent) => {
@@ -589,8 +636,8 @@ export function ResortOSApp() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-[#26130F] flex items-center justify-center text-[#C5A880] font-black text-lg shadow">
+            <a href="/" className="flex items-center gap-3 group cursor-pointer">
+              <div className="w-10 h-10 rounded-xl bg-[#26130F] group-hover:bg-[#3F2C29] flex items-center justify-center text-[#C5A880] font-black text-lg shadow transition">
                 R
               </div>
               <div>
@@ -604,7 +651,7 @@ export function ResortOSApp() {
                   מרקטפלייס אירוח יוקרתי ומערכת ניהול B2B
                 </span>
               </div>
-            </div>
+            </a>
 
             {/* Navigation Tabs */}
             <nav className="flex items-center gap-1 sm:gap-2 bg-stone-100 p-1 rounded-xl border border-stone-200 text-xs font-bold">
@@ -726,161 +773,234 @@ export function ResortOSApp() {
         {/* TAB 1: GUEST MARKETPLACE & DISCOVERY DIRECTORY */}
         {/* ========================================================================= */}
         {activeTab === 'marketplace' && (
-          <div className="space-y-8 animate-fadeIn">
-            {/* Hero Banner */}
-            <div className="relative rounded-3xl bg-gradient-to-r from-[#26130F] via-[#3F2C29] to-[#59454A] text-white p-6 sm:p-10 shadow-lg overflow-hidden">
-              <div className="max-w-2xl space-y-3 relative z-10">
-                <div className="inline-flex items-center gap-1.5 bg-[#C5A880]/20 text-[#C5A880] text-xs font-bold px-3 py-1 rounded-full border border-[#C5A880]/30">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>סגירה ישירה מול בעלי המתחמים ללא עמלות תיווך</span>
-                </div>
-                <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight">
-                  מתחמי הנופש והבקתות המובילים ברמת הגולן והכנרת
-                </h1>
-                <p className="text-xs sm:text-sm text-stone-300 leading-relaxed">
-                  גלו 12 מתחמי אירוח ברמות, נאות גולן, חד נס ונוב. מתחמים מחוברים מציעים יומן חי וסגירה מיידית ב-0% עמלה.
-                </p>
+          isSlugNotFound ? (
+            <div className="min-h-[55vh] flex flex-col items-center justify-center text-center p-8 bg-white rounded-3xl border border-stone-200 shadow-sm space-y-5 my-8 max-w-2xl mx-auto animate-fadeIn">
+              <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-[#8C6239] shadow-sm">
+                <MapPinOff className="w-8 h-8" />
               </div>
-            </div>
-
-            {/* Filter Pills */}
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 sm:p-4 rounded-2xl border border-stone-200 shadow-sm">
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-                {[
-                  { id: 'all', label: 'כל האזורים (12)' },
-                  { id: 'רמת הגולן', label: 'רמת הגולן' },
-                  { id: 'סובב כנרת', label: 'סובב כנרת' }
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setRegionFilter(tab.id)}
-                    className={`py-1.5 px-3 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                      regionFilter === tab.id
-                        ? 'bg-[#26130F] text-white'
-                        : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
+              <div className="space-y-1.5">
+                <span className="text-xs font-black uppercase tracking-widest text-[#8C6239] bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
+                  שגיאה 404 · מתחם לא קיים
+                </span>
+                <h2 className="text-2xl sm:text-3xl font-black text-[#26130F] pt-2">
+                  המתחם המבוקש לא נמצא
+                </h2>
               </div>
-
-              <input
-                type="text"
-                placeholder="חיפוש לפי שם מתחם או מושב..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full sm:w-64 p-2 rounded-xl border border-stone-200 bg-stone-50 text-xs focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
-              />
+              <p className="text-sm text-stone-600 max-w-md leading-relaxed">
+                לא מצאנו מתחם פעיל או טיוטה בכתובת{' '}
+                <span className="font-mono font-bold text-stone-800 bg-stone-100 px-2 py-0.5 rounded text-xs" dir="ltr">
+                  /p/{previewSlug}
+                </span>.
+                יתכן שהקישור שגוי, הוקלד לא נכון או שהמתחם הוסר מהמערכת.
+              </p>
+              <a
+                href="/"
+                className="mt-2 bg-[#26130F] hover:bg-[#3F2C29] text-[#C5A880] font-black text-xs sm:text-sm px-6 py-3.5 rounded-xl transition shadow-md flex items-center gap-2 active:scale-95"
+              >
+                <Compass className="w-4 h-4" />
+                <span>חזרה לכל מתחמי הנופש ב-ResortOS</span>
+              </a>
             </div>
-
-            {/* 12 Resorts Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredProperties.map((prop) => {
-                const catalogMatch = rawProperties.find((p) => p.slug === prop.slug);
-                const matchingManaged = managedProperties.find((mp) => mp.id === prop.id);
-                const heroImg = matchingManaged?.hero_image ?? catalogMatch?.heroImage;
-                const amenities = (matchingManaged?.amenities || catalogMatch?.amenities || []).slice(0, 3);
-                const isThisPreview = Boolean(isPreviewMode && (prop.slug === previewSlug || prop.id === previewSlug));
-
-                return (
-                  <div
-                    key={prop.id}
-                    className={`bg-white rounded-3xl overflow-hidden border shadow-sm hover:shadow-lg transition-all flex flex-col justify-between ${
-                      isThisPreview ? 'ring-2 ring-[#C5A880] border-[#C5A880]' : 'border-stone-200'
-                    }`}
-                  >
-                    <div>
-                      {/* Image & Location Badge (with luxury placeholder when no public image) */}
-                      <div className="relative h-52 overflow-hidden bg-stone-900">
-                        {heroImg ? (
-                          <img src={heroImg} alt={prop.hebrew_name} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="relative w-full h-full bg-stone-900">
-                            <img src="/resorts/placeholder_luxury.jpg" alt="העלאת תמונות מתחם" className="w-full h-full object-cover opacity-85" />
-                            <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center p-4 text-center">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (!isPropertyOwnerVerified(prop) && !isAdminAuthenticated) {
-                                    openClaimModal(prop);
-                                  } else {
-                                    setActiveManagingPropertyId(prop.id);
-                                    setActiveTab('host_editor');
-                                  }
-                                }}
-                                className="bg-[#C5A880] hover:bg-[#b09268] text-[#26130F] text-[11px] font-black px-3.5 py-1.5 rounded-lg transition shadow flex items-center gap-1 active:scale-95"
-                              >
-                                📸 העלה את תמונות המתחם שלך
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent pointer-events-none" />
-                        <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md text-white text-[11px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 border border-white/20">
-                          <MapPin className="w-3 h-3 text-[#C5A880]" />
-                          <span>{prop.village}</span>
-                        </div>
-                        <div className="absolute bottom-3 right-3 left-3 text-white pointer-events-none">
-                          <h3 className="text-lg font-bold">{prop.hebrew_name}</h3>
-                          <span className="text-[11px] text-stone-200 font-mono">החל מ-₪{prop.min_price} / לילה</span>
-                        </div>
+          ) : (
+            <div className="space-y-8 animate-fadeIn">
+              {/* Host Welcome & Draft Verification Banner (When viewing /p/:slug or preview) */}
+              {isPreviewMode && targetDraftProperty && (
+                <div className="relative rounded-3xl bg-gradient-to-r from-stone-900 via-[#26130F] to-stone-900 text-white p-6 sm:p-8 border-2 border-[#C5A880] shadow-xl overflow-hidden animate-fadeIn">
+                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
+                    <div className="space-y-2 text-right">
+                      <div className="inline-flex items-center gap-1.5 bg-[#C5A880]/20 text-[#C5A880] text-xs font-black px-3 py-1 rounded-full border border-[#C5A880]/30">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>טיוטת כרטיס מתחם – מוסתרת כרגע מהציבור</span>
                       </div>
-
-                      {/* Amenities Preview */}
-                      <div className="p-4 space-y-3">
-                        <div className="flex flex-wrap gap-1.5">
-                          {amenities.map((am, i) => (
-                            <span
-                              key={i}
-                              className="text-[10px] font-semibold bg-stone-100 text-stone-700 px-2 py-0.5 rounded-lg"
-                            >
-                              {am}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
+                      <h1 className="text-2xl sm:text-3xl font-black text-white">
+                        שלום לבעלי {targetDraftProperty.hebrew_name}! ✨
+                      </h1>
+                      <p className="text-xs sm:text-sm text-stone-300 max-w-xl leading-relaxed">
+                        הכנו עבורכם דף פרופיל דיגיטלי יוקרתי ברשת ResortOS. הדף ממתין לאימות בעלות ולהעלאת 2-3 תמונות שלכם כדי שנוכל לפתוח אותו להזמנות ישירות מולכם ב-0% עמלה!
+                      </p>
                     </div>
-
-                    {/* Dual Action CTA Component */}
-                    <div className="p-4 pt-0 space-y-2">
-                      <ListingCardCTA
-                        property={prop}
-                        isPreviewMode={isThisPreview}
-                        onOpenBookingModal={(p) => {
-                          window.location.href = `/mialees.html?property=${p.slug}`;
-                        }}
-                        onClaimListing={(p) => openClaimModal(p)}
-                        onUploadPhotos={(p) => {
-                          if (!isPropertyOwnerVerified(p) && !isAdminAuthenticated) {
-                            openClaimModal(p);
-                          } else {
-                            setActiveManagingPropertyId(p.id);
-                            setActiveTab('host_editor');
-                          }
-                        }}
-                      />
-
-                      {isPropertyOwnerVerified(prop) && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActiveManagingPropertyId(prop.id);
-                            setActiveTab('host_editor');
-                          }}
-                          className="w-full py-1.5 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 text-[#8C6239] text-[11px] font-bold flex items-center justify-center gap-1.5 border border-amber-200/80 transition-colors"
-                        >
-                          <Sliders className="w-3.5 h-3.5 text-[#8C6239]" />
-                          <span>עריכת מתחם ותמונות בדשבורד</span>
-                        </button>
-                      )}
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!isPropertyOwnerVerified(targetDraftProperty) && !isAdminAuthenticated) {
+                          openClaimModal(targetDraftProperty);
+                        } else {
+                          setActiveManagingPropertyId(targetDraftProperty.id);
+                          setActiveTab('host_editor');
+                        }
+                      }}
+                      className="bg-[#C5A880] hover:bg-[#b09268] text-[#26130F] font-black text-xs sm:text-sm px-6 py-3.5 rounded-2xl transition shadow-lg shrink-0 flex items-center gap-2 active:scale-95"
+                    >
+                      <KeyRound className="w-4 h-4 text-[#26130F]" />
+                      <span>אני בעל המתחם – אימות והעלאת תמונות</span>
+                    </button>
                   </div>
-                );
-              })}
+                </div>
+              )}
+
+              {/* Hero Banner */}
+              <div className="relative rounded-3xl bg-gradient-to-r from-[#26130F] via-[#3F2C29] to-[#59454A] text-white p-6 sm:p-10 shadow-lg overflow-hidden">
+                <div className="max-w-2xl space-y-3 relative z-10">
+                  <div className="inline-flex items-center gap-1.5 bg-[#C5A880]/20 text-[#C5A880] text-xs font-bold px-3 py-1 rounded-full border border-[#C5A880]/30">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>סגירה ישירה מול בעלי המתחמים ללא עמלות תיווך</span>
+                  </div>
+                  <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight">
+                    מתחמי הנופש והבקתות המובילים ברמת הגולן והכנרת
+                  </h1>
+                  <p className="text-xs sm:text-sm text-stone-300 leading-relaxed">
+                    גלו 12 מתחמי אירוח ברמות, נאות גולן, חד נס ונוב. מתחמים מחוברים מציעים יומן חי וסגירה מיידית ב-0% עמלה.
+                  </p>
+                </div>
+              </div>
+
+              {/* Filter Pills */}
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 sm:p-4 rounded-2xl border border-stone-200 shadow-sm">
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                  {[
+                    { id: 'all', label: 'כל האזורים (12)' },
+                    { id: 'רמת הגולן', label: 'רמת הגולן' },
+                    { id: 'סובב כנרת', label: 'סובב כנרת' }
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setRegionFilter(tab.id)}
+                      className={`py-1.5 px-3 rounded-xl text-xs font-bold transition-all shrink-0 ${
+                        regionFilter === tab.id
+                          ? 'bg-[#26130F] text-white'
+                          : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                <input
+                  type="text"
+                  placeholder="חיפוש לפי שם מתחם או מושב..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full sm:w-64 p-2 rounded-xl border border-stone-200 bg-stone-50 text-xs focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
+                />
+              </div>
+
+              {/* 12 Resorts Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredProperties.map((prop) => {
+                  const catalogMatch = rawProperties.find((p) => p.slug === prop.slug);
+                  const matchingManaged = managedProperties.find((mp) => mp.id === prop.id);
+                  // Strict placeholder enforcement for unverified drafts (DoD #3)
+                  const isClaimedOrFlagship = prop.claimed_status === 'claimed_verified' || prop.id === '22222222-2222-2222-2222-222222222222';
+                  const heroImg = isClaimedOrFlagship ? (matchingManaged?.hero_image ?? catalogMatch?.heroImage) : null;
+                  const amenities = (matchingManaged?.amenities || catalogMatch?.amenities || []).slice(0, 3);
+                  const isThisPreview = Boolean(isPreviewMode && (prop.slug === previewSlug || prop.id === previewSlug));
+
+                  return (
+                    <div
+                      key={prop.id}
+                      className={`bg-white rounded-3xl overflow-hidden border shadow-sm hover:shadow-lg transition-all flex flex-col justify-between relative ${
+                        isThisPreview ? 'ring-2 ring-[#C5A880] border-[#C5A880]' : 'border-stone-200'
+                      }`}
+                    >
+                      {isThisPreview && (
+                        <div className="absolute top-3 left-3 bg-[#C5A880] text-[#26130F] text-[10px] font-black px-2.5 py-1 rounded-full shadow-md z-20 flex items-center gap-1">
+                          <Sparkles className="w-3 h-3" />
+                          <span>כרטיס הטיוטה שלך</span>
+                        </div>
+                      )}
+                      <div>
+                        {/* Image & Location Badge (with luxury placeholder when no public image) */}
+                        <div className="relative h-52 overflow-hidden bg-stone-900">
+                          {heroImg ? (
+                            <img src={heroImg} alt={prop.hebrew_name} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="relative w-full h-full bg-stone-900">
+                              <img src="/resorts/placeholder_luxury.jpg" alt="העלאת תמונות מתחם" className="w-full h-full object-cover opacity-85" />
+                              <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center p-4 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (!isPropertyOwnerVerified(prop) && !isAdminAuthenticated) {
+                                      openClaimModal(prop);
+                                    } else {
+                                      setActiveManagingPropertyId(prop.id);
+                                      setActiveTab('host_editor');
+                                    }
+                                  }}
+                                  className="bg-[#C5A880] hover:bg-[#b09268] text-[#26130F] text-[11px] font-black px-3.5 py-1.5 rounded-lg transition shadow flex items-center gap-1 active:scale-95"
+                                >
+                                  📸 העלה את תמונות המתחם שלך
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent pointer-events-none" />
+                          <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md text-white text-[11px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 border border-white/20">
+                            <MapPin className="w-3 h-3 text-[#C5A880]" />
+                            <span>{prop.village}</span>
+                          </div>
+                          <div className="absolute bottom-3 right-3 left-3 text-white pointer-events-none">
+                            <h3 className="text-lg font-bold">{prop.hebrew_name}</h3>
+                            <span className="text-[11px] text-stone-200 font-mono">החל מ-₪{prop.min_price} / לילה</span>
+                          </div>
+                        </div>
+
+                        {/* Amenities Preview */}
+                        <div className="p-4 space-y-3">
+                          <div className="flex flex-wrap gap-1.5">
+                            {amenities.map((am, i) => (
+                              <span
+                                key={i}
+                                className="text-[10px] font-semibold bg-stone-100 text-stone-700 px-2 py-0.5 rounded-lg"
+                              >
+                                {am}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Dual Action CTA Component */}
+                      <div className="p-4 pt-0 space-y-2">
+                        <ListingCardCTA
+                          property={prop}
+                          isPreviewMode={isThisPreview}
+                          onOpenBookingModal={(p) => {
+                            window.location.href = `/mialees.html?property=${p.slug}`;
+                          }}
+                          onClaimListing={(p) => openClaimModal(p)}
+                          onUploadPhotos={(p) => {
+                            if (!isPropertyOwnerVerified(p) && !isAdminAuthenticated) {
+                              openClaimModal(p);
+                            } else {
+                              setActiveManagingPropertyId(p.id);
+                              setActiveTab('host_editor');
+                            }
+                          }}
+                        />
+
+                        {isPropertyOwnerVerified(prop) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveManagingPropertyId(prop.id);
+                              setActiveTab('host_editor');
+                            }}
+                            className="w-full py-1.5 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 text-[#8C6239] text-[11px] font-bold flex items-center justify-center gap-1.5 border border-amber-200/80 transition-colors"
+                          >
+                            <Sliders className="w-3.5 h-3.5 text-[#8C6239]" />
+                            <span>עריכת מתחם ותמונות בדשבורד</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )
         )}
 
         {/* ========================================================================= */}
@@ -1132,7 +1252,7 @@ export function ResortOSApp() {
             properties={managedProperties}
             onUpdateProperty={handleSaveProperty}
             onOpenPreviewListing={(slug) => {
-              window.location.href = `/?preview=true&slug=${slug}`;
+              window.location.href = `/p/${slug}`;
             }}
             onEditPropertyAsAdmin={(propId) => {
               setIsAdminAuthenticated(true);
