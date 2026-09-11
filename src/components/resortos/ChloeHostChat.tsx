@@ -1573,7 +1573,7 @@ export const ChloeHostChat: React.FC<ChloeHostChatProps> = ({
                 {/* Hero Photo Card */}
                 <div className="relative h-44 rounded-2xl overflow-hidden shadow-sm">
                   <img
-                    src={currentProp?.hero_image}
+                    src={currentProp?.hero_image || '/resorts/placeholder_luxury.jpg'}
                     alt={currentProp?.hebrew_name}
                     className="w-full h-full object-cover transition-all duration-700"
                   />

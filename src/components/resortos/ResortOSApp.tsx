@@ -652,21 +652,20 @@ export function ResortOSApp() {
                         {heroImg ? (
                           <img src={heroImg} alt={prop.hebrew_name} className="w-full h-full object-cover" />
                         ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-[#26130F] via-[#3F2C29] to-[#59454A] flex flex-col items-center justify-center p-4 text-center">
-                            <div className="w-11 h-11 rounded-2xl bg-[#C5A880]/20 flex items-center justify-center text-[#C5A880] mb-2 border border-[#C5A880]/30 shadow-inner">
-                              <Camera className="w-5 h-5" />
+                          <div className="relative w-full h-full bg-stone-900">
+                            <img src="/resorts/placeholder_luxury.jpg" alt="העלאת תמונות מתחם" className="w-full h-full object-cover opacity-85" />
+                            <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center p-4 text-center">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveManagingPropertyId(prop.id);
+                                  setActiveTab('host_editor');
+                                }}
+                                className="bg-[#C5A880] hover:bg-[#b09268] text-[#26130F] text-[11px] font-black px-3.5 py-1.5 rounded-lg transition shadow flex items-center gap-1 active:scale-95"
+                              >
+                                📸 העלה את תמונות המתחם שלך
+                              </button>
                             </div>
-                            <span className="text-white font-extrabold text-xs">תמונות מקוריות של המארח</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setActiveManagingPropertyId(prop.id);
-                                setActiveTab('host_editor');
-                              }}
-                              className="mt-2 bg-[#C5A880] hover:bg-[#b09268] text-[#26130F] text-[11px] font-black px-3 py-1 rounded-lg transition shadow flex items-center gap-1 active:scale-95"
-                            >
-                              📸 העלה את תמונות המתחם שלך
-                            </button>
                           </div>
                         )}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent pointer-events-none" />
