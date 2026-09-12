@@ -32,6 +32,7 @@ import { ChloeHostChat } from './ChloeHostChat';
 import { AdminFunnelDashboard } from './AdminFunnelDashboard';
 import { listAllProperties, PropertyConfig } from '../../lib/multiPropertyCatalog';
 import { generateSeededLeads, getWeekendRealLeads } from '../../lib/seededLeadsData';
+import { toIsraeliPhone, formatMaskedPhone } from './phoneUtils';
 
 // Pre-baked templates for preview
 const INITIAL_GUIDES: ComicGuideData[] = [
@@ -171,16 +172,6 @@ const INITIAL_DEALS: B2BDealItem[] = [
     requires_prime: true
   }
 ];
-
-function formatMaskedPhone(phone?: string): string {
-  if (!phone) return '05*-***-****';
-  const clean = phone.replace(/\D/g, '');
-  const local = clean.startsWith('972') ? '0' + clean.slice(3) : clean;
-  if (local.length >= 9) {
-    return `${local.slice(0, 3)}-***-${local.slice(-4)}`;
-  }
-  return local;
-}
 
 export function ResortOSApp() {
   // 1. URL Path & Query Resolution (/p/:slug vs legacy ?preview=true&slug=...)
@@ -649,7 +640,8 @@ export function ResortOSApp() {
     };
     setClaimModalProperty(item);
     setClaimChannel(preferredChannel);
-    const initialPhone = preferredChannel === 'sms' && prop.phone ? prop.phone : (prop.whatsapp_number || prop.phone || '');
+    const initialRaw = preferredChannel === 'sms' && prop.phone ? prop.phone : (prop.whatsapp_number || prop.phone || '');
+    const initialPhone = toIsraeliPhone(initialRaw);
     setClaimPhone(initialPhone);
     setClaimOtp('');
     setClaimStep('input_phone');
@@ -1066,9 +1058,9 @@ export function ResortOSApp() {
                         <Phone className="w-4 h-4 text-[#8C6239]" />
                         <span className="text-stone-600">נייד רשום לאימות:</span>
                       </div>
-                      <span className="font-mono font-bold text-sm text-[#26130F] dir-ltr">
+                      <bdi dir="ltr" className="font-mono font-bold text-sm text-[#26130F] tracking-wide">
                         {formatMaskedPhone(currentProp.whatsapp_number || currentProp.phone)}
-                      </span>
+                      </bdi>
                     </div>
 
                     {/* OTP Trigger Buttons: Choice of WhatsApp (WATI) or SMS */}
@@ -1307,13 +1299,13 @@ export function ResortOSApp() {
                   <label className="block text-xs font-bold text-stone-700 mb-1.5">
                     ערוץ לקבלת קוד האימות:
                   </label>
-                  <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => {
                         setClaimChannel('whatsapp');
                         if (claimModalProperty.whatsapp_number) {
-                          setClaimPhone(claimModalProperty.whatsapp_number);
+                          setClaimPhone(toIsraeliPhone(claimModalProperty.whatsapp_number));
                         }
                       }}
                       className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition ${
@@ -1331,7 +1323,7 @@ export function ResortOSApp() {
                       onClick={() => {
                         setClaimChannel('sms');
                         if (claimModalProperty.phone) {
-                          setClaimPhone(claimModalProperty.phone);
+                          setClaimPhone(toIsraeliPhone(claimModalProperty.phone));
                         }
                       }}
                       className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition ${
@@ -1348,36 +1340,44 @@ export function ResortOSApp() {
 
                 {/* Registered Numbers Selector if property has both */}
                 {claimModalProperty.whatsapp_number && claimModalProperty.phone && claimModalProperty.whatsapp_number !== claimModalProperty.phone && (
-                  <div className="bg-stone-50 p-2.5 rounded-xl border border-stone-200 space-y-1 text-xs">
+                  <div className="bg-stone-50 p-2.5 rounded-xl border border-stone-200 space-y-1.5 text-xs">
                     <span className="text-[11px] font-bold text-stone-500 block">מספרים רשומים במתחם:</span>
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
                         onClick={() => {
-                          setClaimPhone(claimModalProperty.whatsapp_number);
+                          setClaimPhone(toIsraeliPhone(claimModalProperty.whatsapp_number));
                           setClaimChannel('whatsapp');
                         }}
-                        className={`px-2 py-1 rounded-lg text-[11px] font-mono border transition ${
-                          claimPhone === claimModalProperty.whatsapp_number
-                            ? 'bg-[#26130F] text-[#C5A880] border-[#26130F] font-bold'
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 shadow-2xs ${
+                          claimChannel === 'whatsapp'
+                            ? 'bg-[#26130F] text-[#C5A880] border-[#26130F]'
                             : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-100'
                         }`}
                       >
-                        וואטסאפ: {formatMaskedPhone(claimModalProperty.whatsapp_number)}
+                        <MessageCircle className="w-3.5 h-3.5 text-[#25D366] shrink-0" />
+                        <span>וואטסאפ:</span>
+                        <bdi dir="ltr" className="font-mono tracking-wide font-bold">
+                          {formatMaskedPhone(claimModalProperty.whatsapp_number)}
+                        </bdi>
                       </button>
                       <button
                         type="button"
                         onClick={() => {
-                          setClaimPhone(claimModalProperty.phone || '');
+                          setClaimPhone(toIsraeliPhone(claimModalProperty.phone || ''));
                           setClaimChannel('sms');
                         }}
-                        className={`px-2 py-1 rounded-lg text-[11px] font-mono border transition ${
-                          claimPhone === claimModalProperty.phone
-                            ? 'bg-[#26130F] text-[#C5A880] border-[#26130F] font-bold'
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 shadow-2xs ${
+                          claimChannel === 'sms'
+                            ? 'bg-[#26130F] text-[#C5A880] border-[#26130F]'
                             : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-100'
                         }`}
                       >
-                        טלפון ישיר: {formatMaskedPhone(claimModalProperty.phone)}
+                        <Phone className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                        <span>טלפון ישיר:</span>
+                        <bdi dir="ltr" className="font-mono tracking-wide font-bold">
+                          {formatMaskedPhone(claimModalProperty.phone)}
+                        </bdi>
                       </button>
                     </div>
                   </div>
@@ -1389,11 +1389,12 @@ export function ResortOSApp() {
                   </label>
                   <input
                     type="tel"
+                    dir="ltr"
                     required
                     value={claimPhone}
                     onChange={(e) => setClaimPhone(e.target.value)}
-                    placeholder="054-807-6123"
-                    className="w-full p-3 rounded-xl border border-stone-300 text-xs font-mono font-bold focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
+                    placeholder="054-242-4835"
+                    className="w-full p-3 rounded-xl border border-stone-300 text-sm font-mono font-bold text-center tracking-wider focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
                   />
                   <span className="text-[10px] text-stone-400 mt-1 block">
                     המספר חייב להתאים לרישום הציבורי של המתחם למניעת התחזות.
@@ -1427,7 +1428,8 @@ export function ResortOSApp() {
                   <div>
                     קוד אימות בן 6 ספרות נשלח ב-
                     <strong>{claimChannel === 'whatsapp' ? 'וואטסאפ (WATI)' : 'מסרון SMS לנייד'}</strong> למספר{' '}
-                    <strong>{formatMaskedPhone(claimPhone)}</strong>.
+                    <bdi dir="ltr" className="font-mono font-bold">{formatMaskedPhone(claimPhone)}</bdi>
+                    <span className="text-[11px] text-amber-800/80 mr-1.5 font-bold">(תוקף הקוד: 5 דקות)</span>.
                   </div>
                   {previewOtp && (
                     <span className="block mt-1 text-[11px] font-mono text-emerald-800 font-bold">
@@ -1453,6 +1455,7 @@ export function ResortOSApp() {
                   <label className="block text-xs font-bold text-stone-700 mb-1">הזינו את קוד האימות (6 ספרות)</label>
                   <input
                     type="text"
+                    dir="ltr"
                     required
                     maxLength={6}
                     value={claimOtp}
@@ -1482,6 +1485,10 @@ export function ResortOSApp() {
                 <p className="text-xs text-stone-600">
                   {claimModalProperty.hebrew_name} מוגדר כעת כמתחם מחובר עם הזמנות ישירות ב-0% עמלה וגישה להטבות הספקים.
                 </p>
+                <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>ססיית בעלים פעילה ל-30 יום (מכשיר זה זוהה כמאומת)</span>
+                </div>
                 <div className="space-y-2 pt-2">
                   <button
                     type="button"

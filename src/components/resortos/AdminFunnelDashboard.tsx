@@ -34,6 +34,7 @@ import {
   Globe
 } from 'lucide-react';
 import { ManagedProperty } from './HostPropertyEditor';
+import { toIsraeliPhone } from './phoneUtils';
 
 export interface AdminFunnelDashboardProps {
   properties: ManagedProperty[];
@@ -751,16 +752,16 @@ ${previewUrl}
                       {/* 4. WhatsApp Number & Direct Phone */}
                       <td className="py-3 px-3">
                         {prop.whatsapp_number ? (
-                          <span className="font-mono text-[11px] text-stone-700 dir-ltr text-right inline-block">
-                            {prop.whatsapp_number}
-                          </span>
+                          <bdi dir="ltr" className="font-mono text-[11px] text-stone-800 font-bold block text-right">
+                            {toIsraeliPhone(prop.whatsapp_number)}
+                          </bdi>
                         ) : (
                           <span className="text-stone-300 text-[11px]">—</span>
                         )}
                         {prop.phone && prop.phone !== prop.whatsapp_number && (
-                          <div className="text-[10px] text-stone-400 font-mono dir-ltr text-right mt-0.5">
-                            📞 {prop.phone}
-                          </div>
+                          <bdi dir="ltr" className="text-[10px] text-stone-500 font-mono block text-right mt-0.5">
+                            📞 {toIsraeliPhone(prop.phone)}
+                          </bdi>
                         )}
                       </td>
 
@@ -1158,9 +1159,10 @@ ${previewUrl}
                   </label>
                   <input
                     type="tel"
+                    dir="ltr"
                     value={businessFormData.phone || ''}
                     onChange={(e) => setBusinessFormData({ ...businessFormData, phone: e.target.value })}
-                    className="w-full p-2.5 rounded-xl border border-stone-300 text-xs font-mono focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
+                    className="w-full p-2.5 rounded-xl border border-stone-300 text-xs font-mono text-left focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
                     placeholder="054-807-6123 או 04-685-1234"
                   />
                 </div>
@@ -1173,9 +1175,10 @@ ${previewUrl}
                   </label>
                   <input
                     type="tel"
+                    dir="ltr"
                     value={businessFormData.whatsapp_number || ''}
                     onChange={(e) => setBusinessFormData({ ...businessFormData, whatsapp_number: e.target.value })}
-                    className="w-full p-2.5 rounded-xl border border-stone-300 text-xs font-mono focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
+                    className="w-full p-2.5 rounded-xl border border-stone-300 text-xs font-mono text-left focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
                     placeholder="972548076123 או 054-807-6123"
                   />
                   <span className="text-[10px] text-stone-400 mt-0.5 block">
