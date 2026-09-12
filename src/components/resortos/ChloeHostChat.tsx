@@ -31,9 +31,9 @@ import {
   Coffee,
   Wifi,
   Waves,
-  DollarSign
 } from 'lucide-react';
 import { ManagedProperty } from './HostPropertyEditor';
+import { AIPhotoStudioModal } from '../media/AIPhotoStudioModal';
 
 export interface ChatMessage {
   id: string;
@@ -174,6 +174,10 @@ export const ChloeHostChat: React.FC<ChloeHostChatProps> = ({
   // Marketing Copywriting local state
   const [manualTagline, setManualTagline] = useState<string>(currentProp?.tagline || '');
   const [manualDescription, setManualDescription] = useState<string>(currentProp?.description || '');
+
+  // AI Photo Studio modal state
+  const [studioModalOpen, setStudioModalOpen] = useState<boolean>(false);
+  const [studioTargetImage, setStudioTargetImage] = useState<string>('');
 
   // Sync pricing and copywriting state when active property changes
   useEffect(() => {
@@ -826,15 +830,26 @@ export const ChloeHostChat: React.FC<ChloeHostChatProps> = ({
                   {/* ================================================================= */}
                   {msg.widget === 'photo_manager' && (
                     <div className="mt-3.5 space-y-3 border-t border-stone-100 pt-3">
-                      {/* Upload CTA Button */}
-                      <div className="flex items-center gap-2">
+                      {/* Upload CTA Button & AI Studio */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <button
                           type="button"
                           onClick={() => fileInputRef.current?.click()}
-                          className="w-full py-2.5 px-4 rounded-xl bg-[#26130F] hover:bg-[#3F2C29] text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition"
+                          className="py-2.5 px-3 rounded-xl bg-[#26130F] hover:bg-[#3F2C29] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition"
                         >
                           <Upload className="w-4 h-4 text-[#C5A880]" />
-                          <span>📱 העלאת תמונות חדשות מהטלפון או המחשב</span>
+                          <span>📱 העלאת תמונות מהטלפון</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStudioTargetImage(currentProp?.hero_image || (currentProp?.gallery_images?.[0] ?? ''));
+                            setStudioModalOpen(true);
+                          }}
+                          className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-stone-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-sm transition border border-amber-300"
+                        >
+                          <Sparkles className="w-4 h-4 text-stone-950" />
+                          <span>🎨 סטודיו שיפור AI (Flux)</span>
                         </button>
                       </div>
 
@@ -867,24 +882,36 @@ export const ChloeHostChat: React.FC<ChloeHostChatProps> = ({
                               )}
 
                               {/* Action Overlay */}
-                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 p-1">
+                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 p-1">
                                 {!isHero && (
                                   <button
                                     type="button"
                                     onClick={() => handleSetHeroPhoto(url)}
-                                    className="p-1.5 bg-white hover:bg-amber-400 text-stone-900 rounded-lg text-[10px] font-bold shadow transition"
+                                    className="p-1 bg-white hover:bg-amber-400 text-stone-900 rounded-lg text-[9px] font-bold shadow transition"
                                     title="קבע כתמונה ראשית"
                                   >
-                                    קבע כראשית
+                                    ראשית
                                   </button>
                                 )}
                                 <button
                                   type="button"
+                                  onClick={() => {
+                                    setStudioTargetImage(url);
+                                    setStudioModalOpen(true);
+                                  }}
+                                  className="p-1 bg-amber-400 hover:bg-amber-300 text-stone-950 rounded-lg text-[9px] font-black shadow transition flex items-center gap-0.5"
+                                  title="שפר תמונה זו ב-AI Studio"
+                                >
+                                  <Sparkles className="w-2.5 h-2.5" />
+                                  <span>AI</span>
+                                </button>
+                                <button
+                                  type="button"
                                   onClick={() => handleDeletePhoto(url)}
-                                  className="p-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-bold shadow transition"
+                                  className="p-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[9px] font-bold shadow transition"
                                   title="מחק תמונה זו"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <Trash2 className="w-3 h-3" />
                                 </button>
                               </div>
                             </div>
@@ -1490,6 +1517,17 @@ export const ChloeHostChat: React.FC<ChloeHostChatProps> = ({
             </button>
             <button
               type="button"
+              onClick={() => {
+                setStudioTargetImage(currentProp?.hero_image || (currentProp?.gallery_images?.[0] ?? ''));
+                setStudioModalOpen(true);
+              }}
+              className="py-1 px-2.5 rounded-lg bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 text-[#8C6239] text-[11px] font-black border border-amber-300 transition shrink-0 flex items-center gap-1 shadow-2xs"
+            >
+              <span>🎨</span>
+              <span>סטודיו שיפור AI (Flux)</span>
+            </button>
+            <button
+              type="button"
               onClick={() => handleSelectFlow('amenities_manager')}
               className="py-1 px-2.5 rounded-lg bg-stone-50 hover:bg-stone-100 text-stone-700 text-[11px] font-bold border border-stone-200 transition shrink-0 flex items-center gap-1"
             >
@@ -1820,6 +1858,56 @@ export const ChloeHostChat: React.FC<ChloeHostChatProps> = ({
           </div>
         </div>
       )}
+
+      {/* AI Photo Studio Modal */}
+      <AIPhotoStudioModal
+        isOpen={studioModalOpen}
+        onClose={() => setStudioModalOpen(false)}
+        initialImageUrl={studioTargetImage || currentProp?.hero_image || ''}
+        propertyName={currentProp?.hebrew_name || currentProp?.name || ''}
+        propertyVillage={currentProp?.village}
+        onSaveHeroImage={(url) => {
+          if (!currentProp) return;
+          const updated = { ...currentProp, hero_image: url };
+          onUpdateProperty(updated);
+          setStudioModalOpen(false);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `msg-${Date.now()}`,
+              sender: 'chloe',
+              text: 'שדרגתי והגדרתי את התמונה המעובדת מ-Flux Klein כתמונה הראשית של המתחם! 🎨✨',
+              timestamp: new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }),
+              actionTaken: {
+                type: 'photo',
+                summary: 'עדכון תמונה ראשית מ-AI Studio'
+              }
+            }
+          ]);
+        }}
+        onSaveToGallery={(url) => {
+          if (!currentProp) return;
+          const updated = {
+            ...currentProp,
+            gallery_images: [url, ...(currentProp.gallery_images || [])]
+          };
+          onUpdateProperty(updated);
+          setStudioModalOpen(false);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `msg-${Date.now()}`,
+              sender: 'chloe',
+              text: 'הוספתי את התמונה המעובדת מהסטודיו לגלריית המתחם בהצלחה! 🖼️✨',
+              timestamp: new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }),
+              actionTaken: {
+                type: 'photo',
+                summary: 'הוספת תמונה מ-AI Studio לגלריה'
+              }
+            }
+          ]);
+        }}
+      />
     </div>
   );
 };

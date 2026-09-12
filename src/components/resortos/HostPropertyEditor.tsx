@@ -24,8 +24,10 @@ import {
   Layers,
   ArrowRight,
   Info,
-  Tv
+  Tv,
+  Wand2
 } from 'lucide-react';
+import { AIPhotoStudioModal } from '../media/AIPhotoStudioModal';
 
 export interface ManagedUnit {
   id: string;
@@ -168,6 +170,8 @@ export const HostPropertyEditor: React.FC<HostPropertyEditorProps> = ({
   const [newPhotoUrl, setNewPhotoUrl] = useState('');
   const [newCustomAmenity, setNewCustomAmenity] = useState('');
   const [selectedUnitIndex, setSelectedUnitIndex] = useState(0);
+  const [studioModalOpen, setStudioModalOpen] = useState(false);
+  const [studioTargetImage, setStudioTargetImage] = useState('');
 
   // Sync state when activePropertyId changes
   useEffect(() => {
@@ -591,9 +595,22 @@ export const HostPropertyEditor: React.FC<HostPropertyEditorProps> = ({
 
           {/* Hero Banner Section */}
           <div className="space-y-3">
-            <label className="block text-xs font-bold text-stone-700">
-              תמונה ראשית מובילה (Hero Image)
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-stone-700">
+                תמונה ראשית מובילה (Hero Image)
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setStudioTargetImage(formData.hero_image || '');
+                  setStudioModalOpen(true);
+                }}
+                className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-stone-950 font-black text-xs px-3.5 py-1.5 rounded-xl shadow flex items-center gap-1.5 transition active:scale-95 border border-amber-300"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-stone-950" />
+                <span>סטודיו שיפור AI (Flux)</span>
+              </button>
+            </div>
             <div className="relative h-64 sm:h-80 rounded-2xl overflow-hidden border-2 border-stone-200 shadow-md group">
               <img
                 src={formData.hero_image}
@@ -698,15 +715,30 @@ export const HostPropertyEditor: React.FC<HostPropertyEditorProps> = ({
                     </div>
 
                     <div className="p-3 bg-white flex items-center justify-between gap-2 border-t border-stone-100">
-                      <button
-                        type="button"
-                        onClick={() => handleSetAsHero(imgUrl)}
-                        className="text-[11px] font-bold text-[#8C6239] hover:underline flex items-center gap-1"
-                        title="הגדר תמונה זו כתמונה הראשית של המתחם"
-                      >
-                        <Camera className="w-3.5 h-3.5 text-[#C5A880]" />
-                        <span>קבע כראשית</span>
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleSetAsHero(imgUrl)}
+                          className="text-[11px] font-bold text-[#8C6239] hover:underline flex items-center gap-1"
+                          title="הגדר תמונה זו כתמונה הראשית של המתחם"
+                        >
+                          <Camera className="w-3.5 h-3.5 text-[#C5A880]" />
+                          <span>קבע כראשית</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStudioTargetImage(imgUrl);
+                            setStudioModalOpen(true);
+                          }}
+                          className="text-[10px] font-bold text-amber-800 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded-lg border border-amber-200 flex items-center gap-1 transition shadow-2xs"
+                          title="שפר תמונה זו ב-AI Studio"
+                        >
+                          <Wand2 className="w-3 h-3 text-amber-600" />
+                          <span>ערוך ב-AI</span>
+                        </button>
+                      </div>
 
                       <button
                         type="button"
@@ -1137,6 +1169,31 @@ export const HostPropertyEditor: React.FC<HostPropertyEditorProps> = ({
           )}
         </div>
       )}
+
+      {/* AI Photo Studio Modal */}
+      <AIPhotoStudioModal
+        isOpen={studioModalOpen}
+        onClose={() => setStudioModalOpen(false)}
+        initialImageUrl={studioTargetImage || formData.hero_image || ''}
+        propertyName={formData.hebrew_name || formData.name}
+        propertyVillage={formData.village}
+        onSaveHeroImage={(url) => {
+          setFormData((prev) => ({ ...prev, hero_image: url }));
+          onSaveProperty({ ...formData, hero_image: url });
+          setIsSaved(true);
+        }}
+        onSaveToGallery={(url) => {
+          setFormData((prev) => ({
+            ...prev,
+            gallery_images: [url, ...prev.gallery_images]
+          }));
+          onSaveProperty({
+            ...formData,
+            gallery_images: [url, ...formData.gallery_images]
+          });
+          setIsSaved(true);
+        }}
+      />
     </div>
   );
 };
