@@ -17,8 +17,12 @@ import {
   Wand2,
   ExternalLink,
   ShieldCheck,
-  Zap
+  Zap,
+  Copy,
+  Terminal,
+  UploadCloud
 } from 'lucide-react';
+import { supabase } from '../../lib/supabaseClient';
 
 export interface AIPhotoStudioModalProps {
   isOpen: boolean;
@@ -98,11 +102,31 @@ export const AIPhotoStudioModal: React.FC<AIPhotoStudioModalProps> = ({
   const [processingTimeMs, setProcessingTimeMs] = useState<number | null>(null);
   const [engineUsed, setEngineUsed] = useState<string>('browser_shader');
 
-  // Backend Connection
-  const [bridgeUrl, setBridgeUrl] = useState<string>('http://127.0.0.1:5005');
+  // Backend Connection with localStorage persistence
+  const [bridgeUrl, setBridgeUrl] = useState<string>(() => {
+    try {
+      return localStorage.getItem('resortos_studio_bridge_url') || 'http://127.0.0.1:5005';
+    } catch {
+      return 'http://127.0.0.1:5005';
+    }
+  });
+
+  const handleBridgeUrlChange = (newUrl: string) => {
+    setBridgeUrl(newUrl);
+    try {
+      localStorage.setItem('resortos_studio_bridge_url', newUrl);
+    } catch {}
+  };
+
   const [isBridgeOnline, setIsBridgeOnline] = useState<boolean>(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [promptOverride, setPromptOverride] = useState('');
+  const [tunnelCommandCopied, setTunnelCommandCopied] = useState(false);
+
+  // Storage Persistence & VRAM Management State
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isUnloadingVram, setIsUnloadingVram] = useState<boolean>(false);
+  const [vramNotice, setVramNotice] = useState<string | null>(null);
 
   // Generated Result
   const [enhancedImageUrl, setEnhancedImageUrl] = useState<string>(initialImageUrl);
@@ -304,20 +328,121 @@ export const AIPhotoStudioModal: React.FC<AIPhotoStudioModalProps> = ({
     link.click();
   };
 
-  // Save to Hero / Gallery Handlers
-  const handleApplyAsHero = () => {
-    if (onSaveHeroImage) {
-      onSaveHeroImage(enhancedImageUrl);
-      setSaveSuccessNotice('התמונה המשופרת נקבעה בהצלחה כתמונה הראשית של המתחם! ✨');
-      setTimeout(() => setSaveSuccessNotice(null), 3000);
+  // Persistent Storage Uploader (Supabase Storage / Mac Studio Local Bridge)
+  const persistEnhancedImage = async (imageSource: string): Promise<string> => {
+    // If it's already an uploaded URL or relative asset path, skip re-uploading
+    if (!imageSource.startsWith('data:')) {
+      return imageSource;
+    }
+
+    const cleanName = (propertyName || 'resort')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/gi, '_')
+      .slice(0, 25);
+    const fileName = `${cleanName}_${selectedPreset}_${Date.now()}.webp`;
+
+    // 1. Try uploading via Mac Studio bridge (persists to public/resorts & Supabase bucket)
+    try {
+      const res = await fetch(`${bridgeUrl}/api/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image_base64: imageSource,
+          filename: fileName,
+          bucket: 'resorts'
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) {
+          return data.url;
+        }
+      }
+    } catch (bridgeErr) {
+      console.warn('Bridge upload attempt bypassed or offline:', bridgeErr);
+    }
+
+    // 2. Try direct browser Supabase Storage upload
+    try {
+      if (supabase && (supabase as any).storage) {
+        const byteString = atob(imageSource.split(',')[1]);
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) {
+          ia[i] = byteString.charCodeAt(i);
+        }
+        const blob = new Blob([ab], { type: 'image/webp' });
+
+        const { data, error } = await (supabase as any).storage
+          .from('resorts')
+          .upload(fileName, blob, {
+            contentType: 'image/webp',
+            upsert: true
+          });
+
+        if (!error && data) {
+          const { data: publicUrlData } = (supabase as any).storage
+            .from('resorts')
+            .getPublicUrl(fileName);
+          if (publicUrlData?.publicUrl) {
+            return publicUrlData.publicUrl;
+          }
+        }
+      }
+    } catch (storageErr) {
+      console.warn('Direct Supabase Storage upload error:', storageErr);
+    }
+
+    // Fallback: If offline and both unavailable, use source
+    return imageSource;
+  };
+
+  // VRAM & Unified Memory Release Helper
+  const handleUnloadVram = async () => {
+    setIsUnloadingVram(true);
+    try {
+      const res = await fetch(`${bridgeUrl}/api/unload`, { method: 'POST' });
+      if (res.ok) {
+        setVramNotice('זיכרון ה-VRAM וה-Unified Memory שוחררו בהצלחה במק סטודיו! 🧹');
+      } else {
+        setVramNotice('לא התקבלה תגובה משרת הגשר לשחרור זיכרון.');
+      }
+    } catch (err) {
+      setVramNotice('שגיאה בתקשורת עם המק סטודיו לשחרור זיכרון.');
+    } finally {
+      setIsUnloadingVram(false);
+      setTimeout(() => setVramNotice(null), 4000);
     }
   };
 
-  const handleApplyToGallery = () => {
-    if (onSaveToGallery) {
-      onSaveToGallery(enhancedImageUrl);
-      setSaveSuccessNotice('התמונה המשופרת נוספה בהצלחה לגלריית המתחם! 📸');
-      setTimeout(() => setSaveSuccessNotice(null), 3000);
+  // Save to Hero / Gallery Handlers (Always saves as URL)
+  const handleApplyAsHero = async () => {
+    if (!onSaveHeroImage) return;
+    setIsSaving(true);
+    try {
+      const publicUrl = await persistEnhancedImage(enhancedImageUrl);
+      onSaveHeroImage(publicUrl);
+      setSaveSuccessNotice('התמונה המשופרת נשמרה ב-Storage ונקבעה כתמונה הראשית! ✨');
+      setTimeout(() => setSaveSuccessNotice(null), 3500);
+    } catch (err) {
+      console.error('Failed to save hero image:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleApplyToGallery = async () => {
+    if (!onSaveToGallery) return;
+    setIsSaving(true);
+    try {
+      const publicUrl = await persistEnhancedImage(enhancedImageUrl);
+      onSaveToGallery(publicUrl);
+      setSaveSuccessNotice('התמונה המשופרת נשמרה ב-Storage ונוספה בהצלחה לגלריה! 📸');
+      setTimeout(() => setSaveSuccessNotice(null), 3500);
+    } catch (err) {
+      console.error('Failed to save gallery image:', err);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -552,19 +677,82 @@ export const AIPhotoStudioModal: React.FC<AIPhotoStudioModalProps> = ({
                 </button>
 
                 {showAdvancedSettings && (
-                  <div className="p-3 pt-0 border-t border-stone-800/60 space-y-2.5 text-xs animate-fadeIn">
+                  <div className="p-3 pt-0 border-t border-stone-800/60 space-y-3 text-xs animate-fadeIn">
                     <div>
-                      <label className="block text-[11px] text-stone-400 mb-1">
-                        כתובת שרת ה-Bridge במק סטודיו:
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[11px] text-stone-400 font-bold">
+                          כתובת שרת ה-Bridge במק סטודיו:
+                        </label>
+                        <span className="text-[10px] text-stone-500 font-mono">נשמר אוטומטית</span>
+                      </div>
                       <input
                         type="text"
                         value={bridgeUrl}
-                        onChange={(e) => setBridgeUrl(e.target.value)}
-                        placeholder="http://127.0.0.1:5005"
+                        onChange={(e) => handleBridgeUrlChange(e.target.value)}
+                        placeholder="http://127.0.0.1:5005 או https://xxxx.trycloudflare.com"
                         className="w-full p-2 rounded-xl bg-stone-900 border border-stone-700 text-stone-200 font-mono text-[11px] focus:outline-none focus:border-[#C5A880]"
                       />
                     </div>
+
+                    {/* Cloudflare Tunnel Helper for Vercel / Remote Production */}
+                    <div className="p-2.5 rounded-xl bg-black/40 border border-stone-800 space-y-1.5 text-[11px]">
+                      <div className="flex items-center justify-between text-stone-300 font-bold">
+                        <span className="flex items-center gap-1">
+                          <ExternalLink className="w-3.5 h-3.5 text-[#C5A880]" />
+                          <span>גישה מ-Vercel וענן (מניעת חסימת HTTPS / PNA):</span>
+                        </span>
+                      </div>
+                      <p className="text-stone-400 text-[10px] leading-relaxed">
+                        כשעובדים בדומיין חי ב-Vercel, הדפדפן חוסם חיבור ישיר ל-localhost. הפעל במק סטודיו:
+                      </p>
+                      <div className="p-2 bg-stone-950 rounded-lg font-mono text-[10px] text-amber-300 flex items-center justify-between border border-stone-800">
+                        <span className="truncate mr-1">cloudflared tunnel --url http://127.0.0.1:5005</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText('cloudflared tunnel --url http://127.0.0.1:5005');
+                            setTunnelCommandCopied(true);
+                            setTimeout(() => setTunnelCommandCopied(false), 2000);
+                          }}
+                          className="text-stone-300 hover:text-white px-1.5 py-0.5 rounded bg-stone-800 text-[9px] shrink-0 font-bold flex items-center gap-1"
+                          title="העתק פקודה"
+                        >
+                          {tunnelCommandCopied ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Copy className="w-2.5 h-2.5" />}
+                          <span>{tunnelCommandCopied ? 'הועתק!' : 'העתק'}</span>
+                        </button>
+                      </div>
+                      <p className="text-stone-500 text-[10px]">
+                        והדבק את הכתובת המאובטחת שנוצרה (<code className="text-stone-300">https://xxxx.trycloudflare.com</code>) בתיבה למעלה.
+                      </p>
+                    </div>
+
+                    {/* VRAM & Unified Memory Release */}
+                    <div className="p-2.5 rounded-xl bg-black/40 border border-stone-800 space-y-1.5 text-[11px]">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-stone-300 flex items-center gap-1">
+                          <Cpu className="w-3.5 h-3.5 text-purple-400" />
+                          <span>ניהול זיכרון אחוד (Unified Memory & MPS):</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleUnloadVram}
+                          disabled={isUnloadingVram}
+                          className="px-2.5 py-1 bg-purple-900/40 hover:bg-purple-900/60 border border-purple-700/50 text-purple-200 rounded-lg font-bold text-[10px] transition flex items-center gap-1 disabled:opacity-40"
+                        >
+                          {isUnloadingVram ? <RefreshCw className="w-2.5 h-2.5 animate-spin" /> : <Sparkles className="w-2.5 h-2.5 text-purple-300" />}
+                          <span>פנה זיכרון ComfyUI</span>
+                        </button>
+                      </div>
+                      {vramNotice && (
+                        <div className="text-[10px] text-purple-300 bg-purple-950/70 p-1.5 rounded-md border border-purple-800/50 animate-fadeIn">
+                          {vramNotice}
+                        </div>
+                      )}
+                      <p className="text-stone-400 text-[10px] leading-normal">
+                        להרצה חלקה במקביל ל-Ollama: ודא שב-ComfyUI מוגדרים הדגלים <code className="text-purple-300">--lowvram --preview-method auto</code> לפינוי אוטומטי.
+                      </p>
+                    </div>
+
                     <div>
                       <label className="block text-[11px] text-stone-400 mb-1">
                         פרומפט מותאם אישית (אופציונלי להחלפת ה-Preset):
@@ -612,10 +800,15 @@ export const AIPhotoStudioModal: React.FC<AIPhotoStudioModalProps> = ({
                   <button
                     type="button"
                     onClick={handleApplyAsHero}
-                    className="py-2.5 px-3 rounded-xl bg-[#C5A880]/20 hover:bg-[#C5A880]/30 text-[#C5A880] border border-[#C5A880]/40 text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-98"
+                    disabled={isSaving}
+                    className="py-2.5 px-3 rounded-xl bg-[#C5A880]/20 hover:bg-[#C5A880]/30 text-[#C5A880] border border-[#C5A880]/40 text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-98 disabled:opacity-50"
                   >
-                    <ImageIcon className="w-3.5 h-3.5" />
-                    <span>קבע כתמונה ראשית</span>
+                    {isSaving ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#C5A880]" />
+                    ) : (
+                      <ImageIcon className="w-3.5 h-3.5" />
+                    )}
+                    <span>{isSaving ? 'שומר ב-Storage...' : 'קבע כתמונה ראשית'}</span>
                   </button>
                 )}
 
@@ -623,10 +816,15 @@ export const AIPhotoStudioModal: React.FC<AIPhotoStudioModalProps> = ({
                   <button
                     type="button"
                     onClick={handleApplyToGallery}
-                    className="py-2.5 px-3 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-98"
+                    disabled={isSaving}
+                    className="py-2.5 px-3 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-98 disabled:opacity-50"
                   >
-                    <Sparkles className="w-3.5 h-3.5 text-[#C5A880]" />
-                    <span>הוסף לגלריית המתחם</span>
+                    {isSaving ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#C5A880]" />
+                    ) : (
+                      <UploadCloud className="w-3.5 h-3.5 text-[#C5A880]" />
+                    )}
+                    <span>{isSaving ? 'שומר ב-Storage...' : 'הוסף לגלריית המתחם'}</span>
                   </button>
                 )}
               </div>

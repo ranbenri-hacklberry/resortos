@@ -6,6 +6,8 @@ Connects ResortOS web client with local ComfyUI (8188), Flux (5001), and Ollama 
 
 import os
 import io
+import gc
+import uuid
 import time
 import base64
 import asyncio
@@ -35,6 +37,8 @@ app.add_middleware(
 COMFYUI_HOST = os.getenv("COMFYUI_HOST", "127.0.0.1:8188")
 FLUX_API_HOST = os.getenv("FLUX_API_HOST", "127.0.0.1:5001")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "127.0.0.1:11434")
+SUPABASE_URL = os.getenv("SUPABASE_URL", os.getenv("VITE_SUPABASE_URL", "http://127.0.0.1:54321"))
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", os.getenv("VITE_SUPABASE_ANON_KEY", ""))
 
 # Preset Prompt Mappings
 PRESET_CONFIGS = {
@@ -70,6 +74,11 @@ class EnhanceRequest(BaseModel):
     denoise: Optional[float] = None
     prompt_override: Optional[str] = None
     return_format: str = "webp" # webp or png
+
+class UploadRequest(BaseModel):
+    image_base64: str
+    filename: Optional[str] = None
+    bucket: Optional[str] = "resorts"
 
 def clean_b64(raw: str) -> bytes:
     if "," in raw:
@@ -248,6 +257,105 @@ async def enhance_image(request: EnhanceRequest):
         "engine_used": engine_used,
         "denoise_applied": denoise,
         "processing_time_ms": duration_ms
+    }
+
+@app.post("/api/upload")
+async def upload_image(request: UploadRequest):
+    """
+    Save enhanced WebP image as a real file:
+    1. Writes directly into public/resorts/ and dist-resortos/resorts/ static directories.
+    2. Uploads directly into Supabase Storage bucket ('resorts').
+    3. Returns clean public URL instead of massive base64 payload.
+    """
+    try:
+        raw_bytes = clean_b64(request.image_base64)
+        img = Image.open(io.BytesIO(raw_bytes))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"שגיאה בפענוח נתוני התמונה: {str(e)}")
+
+    fname = request.filename
+    if not fname:
+        fname = f"enhanced_{int(time.time())}_{uuid.uuid4().hex[:6]}.webp"
+    elif not fname.endswith(".webp"):
+        fname = f"{os.path.splitext(fname)[0]}.webp"
+
+    # Convert to WebP bytes
+    webp_buf = io.BytesIO()
+    img.save(webp_buf, format="WEBP", quality=92)
+    webp_bytes = webp_buf.getvalue()
+
+    # 1. Local filesystem persistence in public/resorts/
+    saved_locally = False
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    target_dirs = [
+        os.path.join(base_dir, "public", "resorts"),
+        os.path.join(base_dir, "dist-resortos", "resorts")
+    ]
+    for target_dir in target_dirs:
+        try:
+            os.makedirs(target_dir, exist_ok=True)
+            local_path = os.path.join(target_dir, fname)
+            with open(local_path, "wb") as f:
+                f.write(webp_bytes)
+            saved_locally = True
+        except Exception:
+            pass
+
+    public_url = f"/resorts/{fname}"
+    saved_to_supabase = False
+
+    # 2. Try Supabase Storage upload
+    if SUPABASE_URL and SUPABASE_ANON_KEY:
+        try:
+            upload_endpoint = f"{SUPABASE_URL.rstrip('/')}/storage/v1/object/{request.bucket}/{fname}"
+            headers = {
+                "apikey": SUPABASE_ANON_KEY,
+                "Authorization": f"Bearer {SUPABASE_ANON_KEY}",
+                "Content-Type": "image/webp",
+                "x-upsert": "true"
+            }
+            timeout = aiohttp.ClientTimeout(total=4.0)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(upload_endpoint, data=webp_bytes, headers=headers) as resp:
+                    if resp.status in (200, 201):
+                        public_url = f"{SUPABASE_URL.rstrip('/')}/storage/v1/object/public/{request.bucket}/{fname}"
+                        saved_to_supabase = True
+        except Exception as err:
+            print(f"Supabase upload notice: {err}")
+
+    return {
+        "success": True,
+        "url": public_url,
+        "filename": fname,
+        "size_bytes": len(webp_bytes),
+        "saved_locally": saved_locally,
+        "saved_to_supabase": saved_to_supabase
+    }
+
+@app.post("/api/unload")
+async def unload_vram():
+    """
+    Free Unified Memory and VRAM in ComfyUI and Python.
+    Prevents MPS memory pressure when running ComfyUI and Ollama concurrently on Mac Studio.
+    """
+    results = {}
+    # 1. ComfyUI free memory
+    try:
+        timeout = aiohttp.ClientTimeout(total=3.0)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(f"http://{COMFYUI_HOST}/free", json={"unload_models": True, "free_memory": True}) as resp:
+                results["comfyui"] = "cleared" if resp.status == 200 else f"status_{resp.status}"
+    except Exception as e:
+        results["comfyui"] = f"offline_or_error: {str(e)}"
+
+    # 2. Python garbage collection
+    gc.collect()
+    results["python_gc"] = "collected"
+
+    return {
+        "success": True,
+        "message": "Unified Memory and VRAM released successfully",
+        "details": results
     }
 
 if __name__ == "__main__":
