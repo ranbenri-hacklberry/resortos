@@ -139,7 +139,7 @@ function staffAuthPlugin(env) {
             const from = parsedUrl.searchParams.get('from');
             const to = parsedUrl.searchParams.get('to');
 
-            const anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
+            const anonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || '';
 
             let query = `/rest/v1/hotelos_bookings?select=unit_id,check_in_date,check_out_date,booking_status&deleted_at=is.null&booking_status=not.in.(CANCELED,CHECKED_OUT)`;
             if (unitId) {
@@ -213,7 +213,7 @@ function staffAuthPlugin(env) {
               return sendJson(res, 400, { error: 'INVALID_DATES', message: 'תאריך יציאה חייב להיות אחרי תאריך כניסה' });
             }
 
-            const anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
+            const anonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || '';
 
             // 1. Check for overlapping active bookings in Postgres
             const overlapQuery = `/rest/v1/hotelos_bookings?unit_id=eq.${encodeURIComponent(unit_id)}&deleted_at=is.null&booking_status=not.in.(CANCELED,CHECKED_OUT)&check_out_date=gt.${encodeURIComponent(check_in_date)}&check_in_date=lt.${encodeURIComponent(check_out_date)}`;
@@ -301,9 +301,9 @@ function staffAuthPlugin(env) {
             try {
               const depositShekels = Number(deposit_agorot) / 100;
               const hypEnv = {
-                HYP_B_MASOF: process.env.HYP_B_MASOF || '4502315932',
-                HYP_B_KEY: process.env.HYP_B_KEY || 'ccbe0111e5eb9cc42540d4f93e0e8fed61b230e0',
-                HYP_B_PASSP: process.env.HYP_B_PASSP || '6Z70KAXVT2'
+                HYP_B_MASOF: process.env.HYP_B_MASOF || '',
+                HYP_B_KEY: process.env.HYP_B_KEY || '',
+                HYP_B_PASSP: process.env.HYP_B_PASSP || ''
               };
               const hypResult = await createHypPaymentPage(hypEnv, {
                 purpose: 'deposit',
@@ -347,7 +347,7 @@ function staffAuthPlugin(env) {
             let bookingData = null;
             let payUrl = null;
             try {
-              const anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
+              const anonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || '';
               const bRes = await fetch(`http://127.0.0.1:54321/rest/v1/hotelos_bookings?checkout_token=eq.${encodeURIComponent(token)}&limit=1`, {
                 headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` }
               });
@@ -357,9 +357,9 @@ function staffAuthPlugin(env) {
                 if (booking) {
                   const depositShekels = (Number(booking.deposit_agorot) || (Number(booking.total_price_agorot) * 0.2)) / 100;
                   const hypEnv = {
-                    HYP_B_MASOF: process.env.HYP_B_MASOF || '4502315932',
-                    HYP_B_KEY: process.env.HYP_B_KEY || 'ccbe0111e5eb9cc42540d4f93e0e8fed61b230e0',
-                    HYP_B_PASSP: process.env.HYP_B_PASSP || '6Z70KAXVT2'
+                    HYP_B_MASOF: process.env.HYP_B_MASOF || '',
+                    HYP_B_KEY: process.env.HYP_B_KEY || '',
+                    HYP_B_PASSP: process.env.HYP_B_PASSP || ''
                   };
                   try {
                     const hypResult = await createHypPaymentPage(hypEnv, {
