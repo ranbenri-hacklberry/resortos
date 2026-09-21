@@ -107,7 +107,25 @@ async function fetchBookingsOverlapping(tenantId, fromYmd, toYmd) {
   return all;
 }
 
-async function applyIncomingBookings(rows) {
+function bookingRowsEquivalent(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const keys = [
+    'unit_id', 'guest_name', 'guest_phone', 'guest_email',
+    'check_in_date', 'check_out_date', 'booking_status', 'payment_status',
+    'payment_mode', 'special_requests', 'updated_at', 'deleted_at',
+    'adults_count', 'children_count', 'total_price_agorot', 'deposit_agorot',
+    'channel_source', 'checkout_token'
+  ];
+  for (const key of keys) {
+    if (String(a[key] ?? '') !== String(b[key] ?? '')) return false;
+  }
+  if (JSON.stringify(a.stay || null) !== JSON.stringify(b.stay || null)) return false;
+  if (JSON.stringify(a.clearing_payments || null) !== JSON.stringify(b.clearing_payments || null)) return false;
+  return true;
+}
+
+async function applyIncomingBookings(rows, { force = false } = {}) {
   const incoming = [];
   const toDelete = [];
   for (const bookingData of rows || []) {
@@ -126,8 +144,10 @@ async function applyIncomingBookings(rows) {
     for (let i = 0; i < incoming.length; i += 1) {
       const bookingData = incoming[i];
       const existing = existingRows[i];
-      if (!existing || shouldApplyIncomingBooking(existing, bookingData)) {
-        puts.push(mergeBookingRow(existing, bookingData));
+      // force=true: prefer Studio window, but skip identical rows so phones don't re-render.
+      if (force || !existing || shouldApplyIncomingBooking(existing, bookingData)) {
+        const merged = mergeBookingRow(force ? null : existing, bookingData);
+        if (!existing || !bookingRowsEquivalent(existing, merged)) puts.push(merged);
         continue;
       }
       let next = existing;
@@ -357,6 +377,11 @@ async function publishBookingStay(booking, unitOverride) {
   });
 }
 
+/** Kinorot/calendar bookings live on Studio; resortos.app only sees them after this publish. */
+export async function ensureGuestStayPublished(booking, unitOverride) {
+  return publishBookingStay(booking, unitOverride);
+}
+
 async function relatedStayBookings(unit) {
   if (!unit?.id) return [];
   const local = await db.bookings.toArray();
@@ -522,9 +547,9 @@ const FALLBACK_UNIT_NAMES = {
   'k687': 'טוסקנה · פירנצה 1',
   'k688': 'טוסקנה · פירנצה 2',
   'k689': 'טוסקנה · שאטו',
-  'k690': 'חצר מוסיקלית · חליל',
-  'k691': 'חצר מוסיקלית · מיתר',
-  'k692': 'חצר מוסיקלית · פעמון',
+  'k690': 'חצר מוסיקלית · בקתה 1',
+  'k691': 'חצר מוסיקלית · בקתה 2',
+  'k692': 'חצר מוסיקלית · בקתה 3',
   'k693': 'בקתות מאיה · בקתה 1',
   'k694': 'בקתות מאיה · בקתה 2',
   'k695': 'בקתות מאיה · בקתה 3',
@@ -803,7 +828,7 @@ export async function syncCloudBookingsToDexie(tenantId, options = {}) {
         if (liveLocal.length) return { ok: true, count: liveLocal.length, keptLocal: true };
         return { ok: false, count: 0, error: 'EMPTY_PULL' };
       }
-      await applyIncomingBookings(data);
+      await applyIncomingBookings(data, { force: Boolean(options.force) });
       saveBookingSnapshot(tenantId, data);
       return { ok: true, count: data.length };
     } catch (err) {
@@ -977,6 +1002,8 @@ function opsFieldsFromRow(row) {
   };
 }
 
+const healPushIds = new Set();
+
 async function applyOpsRowToDexie(row) {
   if (!row?.id) return;
   if (isRetiredUnitId(row.id)) {
@@ -1000,8 +1027,16 @@ async function applyOpsRowToDexie(row) {
   const existingUpdated = existing?.updated_at || '';
   const incomingUpdated = ops.updated_at || '';
   if (existing && existingUpdated && incomingUpdated && incomingUpdated < existingUpdated) {
+    if (existing.tenant_id && existing.operational_status && !healPushIds.has(existing.id)) {
+      healPushIds.add(existing.id);
+      void pushUnitToCloud(existing, { waitRemote: true, force: true, skipStayPublish: true })
+        .catch(() => {})
+        .finally(() => healPushIds.delete(existing.id));
+    }
     return;
   }
+  // Skip no-op writes — they thrash useLiveQuery and feel like a full refresh on phones.
+  if (existing && opsFieldsUnchanged(existing, ops)) return;
   await db.units.put({
     unit_type: existing?.unit_type || 'suite',
     max_occupancy: existing?.max_occupancy || 2,
@@ -1012,6 +1047,17 @@ async function applyOpsRowToDexie(row) {
     ...existing,
     ...ops
   });
+}
+
+function opsFieldsUnchanged(existing, ops) {
+  for (const key of UNIT_OPS_KEYS) {
+    if (key === 'created_at') continue;
+    const a = existing?.[key];
+    const b = ops?.[key];
+    if (a === b) continue;
+    if (JSON.stringify(a ?? null) !== JSON.stringify(b ?? null)) return false;
+  }
+  return true;
 }
 
 /**
@@ -1060,6 +1106,25 @@ export async function pushUnitToCloud(patch, options = {}) {
       }
       const row = toUnitOpsRow(next);
       if (!row || !row.tenant_id) return;
+
+      // Never let a stale browser Dexie row clobber a newer Studio/Postgres status —
+      // unless this is an explicit staff/calendar write.
+      try {
+        if (!options.force) {
+          const { data: remote } = await supabase
+            .from('unit_operations')
+            .select('*')
+            .eq('id', row.id)
+            .maybeSingle();
+          const remoteTs = Date.parse(remote?.updated_at || '') || 0;
+          const localTs = Date.parse(row.updated_at || '') || 0;
+          if (remote && remoteTs > localTs) {
+            await applyOpsRowToDexie(remote);
+            return;
+          }
+        }
+      } catch (_) {}
+
       const { error } = await supabase.from('unit_operations').upsert(row);
       if (error) {
         console.warn('[HOTELOS UNIT OPS PUSH]', error.message);

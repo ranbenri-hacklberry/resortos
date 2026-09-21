@@ -1,15 +1,11 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import { FIELD_UI_LANGUAGES } from '../lib/fieldUiLanguages';
 import { persistLanguage } from '../i18n';
 import { loginStaff } from '../lib/staffAuth';
 
-const LANGUAGES = [
-  { code: 'he', name: 'עברית', flag: '🇮🇱' },
-  { code: 'en', name: 'English', flag: '🇺🇸' },
-  { code: 'ar', name: 'العربية', flag: '🇸🇦' },
-  { code: 'th', name: 'ไทย', flag: '🇹🇭' }
-];
+const LANGUAGES = FIELD_UI_LANGUAGES;
 
 export default function Login({ theme, setTheme, onLoggedIn, mode = 'admin' }) {
   const { t, i18n } = useTranslation();
@@ -105,7 +101,12 @@ export default function Login({ theme, setTheme, onLoggedIn, mode = 'admin' }) {
         <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, marginBottom: '8px' }}>
           {t('SETTINGS_SELECT_LANG', 'בחר שפה:')}
         </label>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '1rem' }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(${LANGUAGES.length}, 1fr)`,
+          gap: '8px',
+          marginBottom: '1rem'
+        }}>
           {LANGUAGES.map((lang) => {
             const isActive = currentLang === lang.code;
             return (
@@ -128,7 +129,7 @@ export default function Login({ theme, setTheme, onLoggedIn, mode = 'admin' }) {
                 }}
               >
                 <div style={{ fontSize: '1.4rem', marginBottom: '4px' }}>{lang.flag}</div>
-                <div style={{ fontSize: '0.7rem', fontWeight: 700 }}>{lang.name}</div>
+                <div style={{ fontSize: '0.65rem', fontWeight: 700 }}>{lang.name}</div>
               </button>
             );
           })}

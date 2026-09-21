@@ -16,6 +16,8 @@ describe('kinorot stay hours', () => {
     expect(parseStayHoursFromNotes('הגעה בשעה 15:00 יציאה בשעה 17:00')).toEqual({ checkout: '17:00', checkin: '15:00' });
     expect(parseStayHoursFromNotes('כניסה ב15 יציאה במוצ"ש פלטה')).toEqual({ checkout: MOTZASH, checkin: '15:00' });
     expect(parseStayHoursFromNotes('כניסה 15 יציאה מוצאש')).toEqual({ checkout: MOTZASH, checkin: '15:00' });
+    expect(parseStayHoursFromNotes('יציאה ביום שבת ב-12:00 כניסה 15')).toEqual({ checkout: '12:00', checkin: '15:00' });
+    expect(parseStayHoursFromNotes("צ'ק אאוט 13:00 הגעה 16:00")).toEqual({ checkout: '13:00', checkin: '16:00' });
   });
 
   it('pulls the notes block out of a resview page', () => {

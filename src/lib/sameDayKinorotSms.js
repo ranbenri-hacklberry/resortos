@@ -2,7 +2,7 @@ import { toMicropayPhone } from './micropaySms.js';
 import { isUnavailableHoldBooking } from './unavailableHold.js';
 import { unitFullName } from './units.js';
 
-export const DEFAULT_SAME_DAY_SMS_PHONES = ['0506102416', '0533932462'];
+export const DEFAULT_SAME_DAY_SMS_PHONES = ['0506102416'];
 
 export function sameDayAlertPhones(env = process.env) {
   const raw = String(env.KINOROT_SAME_DAY_SMS_PHONES || '').trim();

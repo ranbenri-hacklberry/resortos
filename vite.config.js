@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react-swc';
 import tailwindcss from '@tailwindcss/vite';
 import fs from 'fs';
+import crypto from 'crypto';
 import path from 'path';
 import { createHypPaymentPage } from './functions/lib/hypPay.js';
 import { UNIT_DISPLAY_NAMES, UNIT_PROPERTY } from './functions/lib/unitNames.js';
@@ -139,7 +140,7 @@ function staffAuthPlugin(env) {
             const from = parsedUrl.searchParams.get('from');
             const to = parsedUrl.searchParams.get('to');
 
-            const anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
+            const anonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || '';
 
             let query = `/rest/v1/hotelos_bookings?select=unit_id,check_in_date,check_out_date,booking_status&deleted_at=is.null&booking_status=not.in.(CANCELED,CHECKED_OUT)`;
             if (unitId) {
@@ -213,7 +214,7 @@ function staffAuthPlugin(env) {
               return sendJson(res, 400, { error: 'INVALID_DATES', message: 'תאריך יציאה חייב להיות אחרי תאריך כניסה' });
             }
 
-            const anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
+            const anonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || '';
 
             // 1. Check for overlapping active bookings in Postgres
             const overlapQuery = `/rest/v1/hotelos_bookings?unit_id=eq.${encodeURIComponent(unit_id)}&deleted_at=is.null&booking_status=not.in.(CANCELED,CHECKED_OUT)&check_out_date=gt.${encodeURIComponent(check_in_date)}&check_in_date=lt.${encodeURIComponent(check_out_date)}`;
@@ -236,7 +237,7 @@ function staffAuthPlugin(env) {
 
             // 2. Generate Booking ID & Token
             const bookingId = 'web_' + Date.now();
-            const checkoutToken = 'tok_' + bookingId;
+            const checkoutToken = `tok_${crypto.randomBytes(32).toString('base64url')}`;
             const adultsNum = Number(adults_count) || 2;
             const childrenNum = Number(children_count) || 0;
             const babiesNum = Number(babies_count) || 0;
@@ -301,9 +302,9 @@ function staffAuthPlugin(env) {
             try {
               const depositShekels = Number(deposit_agorot) / 100;
               const hypEnv = {
-                HYP_B_MASOF: process.env.HYP_B_MASOF || '4502315932',
-                HYP_B_KEY: process.env.HYP_B_KEY || 'ccbe0111e5eb9cc42540d4f93e0e8fed61b230e0',
-                HYP_B_PASSP: process.env.HYP_B_PASSP || '6Z70KAXVT2'
+                HYP_B_MASOF: process.env.HYP_B_MASOF || '',
+                HYP_B_KEY: process.env.HYP_B_KEY || '',
+                HYP_B_PASSP: process.env.HYP_B_PASSP || ''
               };
               const hypResult = await createHypPaymentPage(hypEnv, {
                 purpose: 'deposit',
@@ -347,7 +348,7 @@ function staffAuthPlugin(env) {
             let bookingData = null;
             let payUrl = null;
             try {
-              const anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
+              const anonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || '';
               const bRes = await fetch(`http://127.0.0.1:54321/rest/v1/hotelos_bookings?checkout_token=eq.${encodeURIComponent(token)}&limit=1`, {
                 headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` }
               });
@@ -357,9 +358,9 @@ function staffAuthPlugin(env) {
                 if (booking) {
                   const depositShekels = (Number(booking.deposit_agorot) || (Number(booking.total_price_agorot) * 0.2)) / 100;
                   const hypEnv = {
-                    HYP_B_MASOF: process.env.HYP_B_MASOF || '4502315932',
-                    HYP_B_KEY: process.env.HYP_B_KEY || 'ccbe0111e5eb9cc42540d4f93e0e8fed61b230e0',
-                    HYP_B_PASSP: process.env.HYP_B_PASSP || '6Z70KAXVT2'
+                    HYP_B_MASOF: process.env.HYP_B_MASOF || '',
+                    HYP_B_KEY: process.env.HYP_B_KEY || '',
+                    HYP_B_PASSP: process.env.HYP_B_PASSP || ''
                   };
                   try {
                     const hypResult = await createHypPaymentPage(hypEnv, {
@@ -431,80 +432,6 @@ function staffAuthPlugin(env) {
           }
         }
 
-        // ResortOS Claim Listing & Push Guide endpoints
-        if (url === '/api/claim/initiate' && req.method === 'POST') {
-          const { onRequestPost } = await import('./functions/api/claim/initiate.js');
-          const body = await readJsonBody(req);
-          const fakeReq = new Request('http://localhost' + url, {
-            method: 'POST',
-            headers: req.headers,
-            body: JSON.stringify(body)
-          });
-          const response = await onRequestPost({ request: fakeReq, env: process.env });
-          const data = await response.json();
-          return sendJson(res, response.status, data);
-        }
-
-        if (url === '/api/claim/verify' && req.method === 'POST') {
-          const { onRequestPost } = await import('./functions/api/claim/verify.js');
-          const body = await readJsonBody(req);
-          const fakeReq = new Request('http://localhost' + url, {
-            method: 'POST',
-            headers: req.headers,
-            body: JSON.stringify(body)
-          });
-          const response = await onRequestPost({ request: fakeReq, env: process.env });
-          const data = await response.json();
-          return sendJson(res, response.status, data);
-        }
-
-        if (url === '/api/tv/push-guide' && req.method === 'POST') {
-          const { onRequestPost } = await import('./functions/api/tv/push-guide.js');
-          const body = await readJsonBody(req);
-          const fakeReq = new Request('http://localhost' + url, {
-            method: 'POST',
-            headers: req.headers,
-            body: JSON.stringify(body)
-          });
-          const response = await onRequestPost({ request: fakeReq, env: process.env });
-          const data = await response.json();
-        if (url.startsWith('/api/admin/properties')) {
-          const { onRequest } = await import('./functions/api/admin/properties.js');
-          let body = {};
-          if (req.method === 'PATCH' || req.method === 'POST') {
-            body = await readJsonBody(req);
-          }
-          const fakeReq = new Request('http://localhost' + req.url, {
-            method: req.method,
-            headers: req.headers,
-            body: (req.method === 'PATCH' || req.method === 'POST') ? JSON.stringify(body) : undefined
-          });
-          const response = await onRequest({ request: fakeReq, env: process.env });
-          const data = await response.json();
-          return sendJson(res, response.status, data);
-        }
-
-        if (url.startsWith('/api/admin/funnel')) {
-          const { onRequest } = await import('./functions/api/admin/funnel.js');
-          const fakeReq = new Request('http://localhost' + req.url, {
-            method: req.method,
-            headers: req.headers
-          });
-          const response = await onRequest({ request: fakeReq, env: process.env });
-          const data = await response.json();
-          return sendJson(res, response.status, data);
-        }
-
-        if (url.startsWith('/api/catalog')) {
-          const { onRequest } = await import('./functions/api/catalog.js');
-          const fakeReq = new Request('http://localhost' + req.url, {
-            method: req.method,
-            headers: req.headers
-          });
-          const response = await onRequest({ request: fakeReq, env: process.env });
-          const data = await response.json();
-          return sendJson(res, response.status, data);
-        }
 
         next();
       });
@@ -562,6 +489,13 @@ function staffAuthPlugin(env) {
             const body = await readJsonBody(req);
             return sendJson(res, 200, writeSharedTracker(body));
           }
+          if (req.method === 'GET' && path === '/api/auth/staff-directory') {
+            const token = bearerToken(req);
+            if (!token) return sendJson(res, 401, { error: 'UNAUTHORIZED' });
+            const result = await rpc('hotelos_staff_directory', { p_token: token });
+            if (result?.error) return sendStaffRpcError(res, result);
+            return sendJson(res, 200, { staff: Array.isArray(result?.staff) ? result.staff : [] });
+          }
           if (req.method === 'GET' && path === '/api/auth/staff') {
             const token = bearerToken(req);
             if (!token) return sendJson(res, 401, { error: 'UNAUTHORIZED' });
@@ -594,7 +528,9 @@ function staffAuthPlugin(env) {
               p_display_name: String(body?.display_name || ''),
               p_role: String(body?.role || ''),
               p_allow_remote_attendance: body?.allow_remote_attendance === true,
-              p_allowed_units: Array.isArray(body?.allowed_units) ? body.allowed_units : []
+              p_allowed_units: Array.isArray(body?.allowed_units) ? body.allowed_units : [],
+              p_phone: String(body?.phone || ''),
+              p_whatsapp_phone: String(body?.whatsapp_phone || '')
             });
             if (result?.error) return sendStaffRpcError(res, result);
             if (!result?.user) return sendJson(res, 500, { error: 'AUTH_FAILED' });
@@ -616,7 +552,9 @@ function staffAuthPlugin(env) {
               p_allow_remote_attendance: body?.allow_remote_attendance === true
                 ? true
                 : (body?.allow_remote_attendance === false ? false : null),
-              p_allowed_units: Array.isArray(body?.allowed_units) ? body.allowed_units : null
+              p_allowed_units: Array.isArray(body?.allowed_units) ? body.allowed_units : null,
+              p_phone: body?.phone == null ? null : String(body.phone),
+              p_whatsapp_phone: body?.whatsapp_phone == null ? null : String(body.whatsapp_phone)
             });
             if (result?.error) return sendStaffRpcError(res, result);
             if (!result?.user) return sendJson(res, 500, { error: 'AUTH_FAILED' });
@@ -930,6 +868,113 @@ function micropaySmsPlugin(env) {
   };
 }
 
+
+function guestCommsPlugin(env) {
+  for (const key of Object.keys(env)) {
+    if (/^(SUPABASE_|MICROPAY_|CHECKOUT_)/.test(key) && env[key] && process.env[key] === undefined) {
+      process.env[key] = env[key];
+    }
+  }
+  const supabaseUrl = (env.SUPABASE_URL || env.VITE_SUPABASE_URL || 'http://127.0.0.1:54321').replace(/\/$/, '');
+  const anonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || '';
+
+  async function requireStaff(req) {
+    const header = String(req.headers.authorization || '');
+    const match = header.match(/^Bearer\s+(\S+)/i);
+    const token = match ? match[1] : '';
+    if (!token || !anonKey) {
+      const err = new Error('UNAUTHORIZED');
+      err.status = 401;
+      throw err;
+    }
+    const response = await fetch(`${supabaseUrl}/rest/v1/rpc/hotelos_me`, {
+      method: 'POST',
+      headers: {
+        apikey: anonKey,
+        Authorization: `Bearer ${anonKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ p_token: token }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const user = await response.json().catch(() => null);
+    if (!response.ok || !user?.id) {
+      const err = new Error('UNAUTHORIZED');
+      err.status = 401;
+      throw err;
+    }
+    return user;
+  }
+
+  return {
+    name: 'hotelos-guest-comms',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const urlPath = requestPath(req);
+        const isList = urlPath === '/api/guest-comms' && req.method === 'GET';
+        const isSend = urlPath === '/api/guest-comms/send' && req.method === 'POST';
+        const isStatus = urlPath === '/api/ops/stay-status' && req.method === 'GET';
+        const isEffects = urlPath === '/api/guest/self-checkout-effects' && req.method === 'POST';
+        if (!isList && !isSend && !isStatus && !isEffects) {
+          next();
+          return;
+        }
+        try {
+          const comms = await import('./server/guestComms.js');
+          if (isEffects) {
+            const secret = String(process.env.CHECKOUT_MAILBOX_SECRET || env.CHECKOUT_MAILBOX_SECRET || '').trim();
+            const provided = String(req.headers['x-hotelos-mailbox'] || '').trim();
+            if (!secret || provided !== secret) {
+              return sendJson(res, 401, { error: 'UNAUTHORIZED' });
+            }
+            const body = await readJsonBody(req);
+            await comms.handleSelfCheckoutSideEffects({
+              id: body.booking_id,
+              unit_id: body.unit_id,
+              guest_phone: body.guest_phone,
+              tenant_id: body.tenant_id,
+              checkout_token: body.checkout_token,
+              checked_out_at: body.checked_out_at
+            });
+            return sendJson(res, 200, { ok: true });
+          }
+          const staff = await requireStaff(req);
+          req.staff = staff;
+          if (isList) {
+            const url = new URL(req.url || '', 'http://localhost');
+            req.query = Object.fromEntries(url.searchParams.entries());
+            return await comms.handleListGuestComms(req, {
+              status: (code) => ({ json: (body) => sendJson(res, code, body) }),
+              json: (body) => sendJson(res, 200, body)
+            });
+          }
+          if (isSend) {
+            req.body = await readJsonBody(req);
+            return await comms.handleSendGuestComm(req, {
+              status: (code) => ({ json: (body) => sendJson(res, code, body) }),
+              json: (body) => sendJson(res, 200, body)
+            });
+          }
+          if (isStatus) {
+            const url = new URL(req.url || '', 'http://localhost');
+            req.query = Object.fromEntries(url.searchParams.entries());
+            return await comms.handleStayStatus(req, {
+              status: (code) => ({ json: (body) => sendJson(res, code, body) }),
+              json: (body) => sendJson(res, 200, body)
+            });
+          }
+          return sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+        } catch (err) {
+          const status = Number(err.status) || 502;
+          if (!res.headersSent) {
+            sendJson(res, status, { error: err.message || 'COMMS_FAILED' });
+          }
+        }
+      });
+    }
+  };
+}
+
 function kinorotSyncPlugin(env) {
   const supabaseUrl = (env.SUPABASE_URL || env.VITE_SUPABASE_URL || 'http://127.0.0.1:54321').replace(/\/$/, '');
   const anonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || '';
@@ -978,7 +1023,13 @@ function kinorotSyncPlugin(env) {
             return sendJson(res, 200, control.readKinorotSyncStatus());
           }
           if (req.method === 'POST') {
-            return sendJson(res, 202, control.startKinorotSync());
+            const body = await readJsonBody(req).catch(() => ({}));
+            return sendJson(res, 202, control.startKinorotSync({
+              mode: body?.mode,
+              days: body?.days,
+              backDays: body?.backDays,
+              boardDays: body?.boardDays
+            }));
           }
           return sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
         } catch (err) {
@@ -1078,7 +1129,7 @@ function mailboxPublishPlugin(env) {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   return {
-    plugins: [react(), tailwindcss(), staffAuthPlugin(env), agentLocksPlugin(env), mailboxPublishPlugin(env), openFinancePlugin(env), kinorotSyncPlugin(env), micropaySmsPlugin(env)],
+    plugins: [react(), tailwindcss(), staffAuthPlugin(env), agentLocksPlugin(env), mailboxPublishPlugin(env), openFinancePlugin(env), kinorotSyncPlugin(env), micropaySmsPlugin(env), guestCommsPlugin(env)],
     optimizeDeps: {
       entries: ['index.html', 'src/main.jsx'],
       include: [
@@ -1096,7 +1147,25 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3001,
       host: true,
+      // Live staff (ops / phones) must never full-reload when files are touched on Studio.
+      // Local coding can opt back in with HOTELOS_VITE_WATCH=1.
       hmr: false,
+      watch: env.HOTELOS_VITE_WATCH === '1'
+        ? {
+            ignored: [
+              '**/dist/**',
+              '**/dist-landing/**',
+              '**/dist-reviews/**',
+              '**/android/**',
+              '**/.wrangler/**',
+              '**/.env',
+              '**/server/**',
+              '**/scratch/**',
+              '**/functions/**',
+              '**/public/**'
+            ]
+          }
+        : null,
       warmup: {
         clientFiles: [
           './src/main.jsx',
@@ -1109,26 +1178,26 @@ export default defineConfig(({ mode }) => {
       allowedHosts: env.VITE_ALLOWED_HOSTS
         ? env.VITE_ALLOWED_HOSTS.split(',').map((h) => h.trim()).filter(Boolean)
         : true,
-      watch: {
-        ignored: [
-          '**/dist/**',
-          '**/dist-landing/**',
-          '**/dist-reviews/**',
-          '**/android/**',
-          '**/.wrangler/**',
-          '**/.env',
-          '**/server/**',
-          '**/scratch/**',
-          '**/functions/**',
-          '**/public/**'
-        ]
-      },
       proxy: {
         '/pg': {
           target: env.SUPABASE_URL || env.VITE_SUPABASE_URL || 'http://127.0.0.1:54321',
           changeOrigin: true,
           ws: true,
           rewrite: (path) => path.replace(/^\/pg/, '')
+        },
+        '/api/translate': {
+          target: (env.VITE_TRANSLATOR_API_URL && !/localhost|127\.0\.0\.1/.test(env.VITE_TRANSLATOR_API_URL))
+            ? env.VITE_TRANSLATOR_API_URL
+            : 'http://127.0.0.1:8000',
+          changeOrigin: true,
+          timeout: 120000,
+          proxyTimeout: 120000
+        },
+        '/api/status': {
+          target: (env.VITE_TRANSLATOR_API_URL && !/localhost|127\.0\.0\.1/.test(env.VITE_TRANSLATOR_API_URL))
+            ? env.VITE_TRANSLATOR_API_URL
+            : 'http://127.0.0.1:8000',
+          changeOrigin: true
         },
         '/api/guest': {
           target: env.HOTELOS_BRIDGE_URL || 'http://127.0.0.1:4038',
@@ -1160,6 +1229,20 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           ws: true,
           rewrite: (path) => path.replace(/^\/pg/, '')
+        },
+        '/api/translate': {
+          target: (env.VITE_TRANSLATOR_API_URL && !/localhost|127\.0\.0\.1/.test(env.VITE_TRANSLATOR_API_URL))
+            ? env.VITE_TRANSLATOR_API_URL
+            : 'http://127.0.0.1:8000',
+          changeOrigin: true,
+          timeout: 120000,
+          proxyTimeout: 120000
+        },
+        '/api/status': {
+          target: (env.VITE_TRANSLATOR_API_URL && !/localhost|127\.0\.0\.1/.test(env.VITE_TRANSLATOR_API_URL))
+            ? env.VITE_TRANSLATOR_API_URL
+            : 'http://127.0.0.1:8000',
+          changeOrigin: true
         },
         '/api/guest': {
           target: env.HOTELOS_BRIDGE_URL || 'http://127.0.0.1:4038',

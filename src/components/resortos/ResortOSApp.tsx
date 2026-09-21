@@ -33,6 +33,8 @@ import { AdminFunnelDashboard } from './AdminFunnelDashboard';
 import { listAllProperties, PropertyConfig } from '../../lib/multiPropertyCatalog';
 import { generateSeededLeads, getWeekendRealLeads } from '../../lib/seededLeadsData';
 import { toIsraeliPhone, formatMaskedPhone } from './phoneUtils';
+import { supabase } from '../../lib/supabaseClient';
+import { db } from '../../lib/resortos-db';
 
 // Pre-baked templates for preview
 const INITIAL_GUIDES: ComicGuideData[] = [
@@ -173,6 +175,100 @@ const INITIAL_DEALS: B2BDealItem[] = [
   }
 ];
 
+function mapManagedToPropertyItem(
+  p: ManagedProperty,
+  isPreviewMode: boolean,
+  previewSlug: string | null
+): PropertyItem {
+  return {
+    id: p.id,
+    slug: p.slug,
+    name: p.name,
+    hebrew_name: p.hebrew_name,
+    contact_name: p.contact_name,
+    village: p.village,
+    region: p.region,
+    whatsapp_number: p.whatsapp_number,
+    phone: p.phone,
+    claimed_status: p.claimed_status,
+    direct_booking_enabled: p.direct_booking_enabled,
+    min_price: p.units?.[0]?.base_price || 850,
+    hero_image: p.hero_image,
+    is_public: p.is_public ?? (p.claimed_status === 'claimed_verified'),
+    crm_status: p.crm_status || 'Lead_Identified',
+    isPreviewMode: Boolean(isPreviewMode && (p.slug === previewSlug || p.id === previewSlug))
+  };
+}
+
+function buildDefaultProperties(rawProperties: PropertyConfig[]): ManagedProperty[] {
+  const flagship: ManagedProperty[] = rawProperties.map((p, idx) => ({
+    id: p.id === 'mialees' ? '22222222-2222-2222-2222-222222222222' : `p-${idx + 1}`,
+    slug: p.slug,
+    name: p.name,
+    hebrew_name: p.hebrewName,
+    tagline: p.tagline || 'מתחם אירוח כפרי יוקרתי ברמת הגולן והכנרת',
+    description: p.subTitle || 'חוויית נופש יוקרתית מול נוף פתוח לכנרת ולהרי הגולן, עם בריכה פרטית, ג׳קוזי ספא ופרטיות מושלמת.',
+    village: p.village,
+    region: p.region.includes('גולן') ? 'רמת הגולן' : 'סובב כנרת',
+    address: `מושב ${p.village}`,
+    whatsapp_number: p.whatsappNumber || '972548076123',
+    phone: p.phone || '054-807-6123',
+    email: p.email || 'info@resortos.app',
+    hero_image: p.heroImage || '/resorts/mialees.jpg',
+    gallery_images: [
+      'https://images.unsplash.com/photo-1510798831971-661eb04b3739?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1587061949409-02df41d5e562?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=800&q=80'
+    ],
+    amenities: p.amenities && p.amenities.length > 0 ? p.amenities : [
+      'בריכה פרטית',
+      'ג׳קוזי ספא ענק',
+      'מכונת אספרסו נספרסו',
+      'אינטרנט Wi-Fi מהיר',
+      'עמדת מנגל BBQ פרטית'
+    ],
+    units: (p.units && p.units.length > 0)
+      ? p.units.map((u, uIdx) => ({
+          id: u.id || `u-${idx + 1}-${uIdx + 1}`,
+          name: u.name || `יחידת אירוח ${uIdx + 1}`,
+          type: (u.type || 'cabin') as any,
+          bedrooms: u.bedrooms || 1,
+          bathrooms: u.bathrooms || 1,
+          max_occupancy: u.maxOccupancy || 4,
+          base_price: u.basePrice || 850,
+          weekend_price: u.weekendPrice || 1100,
+          size_m2: u.sizeM2 || 45,
+          features: u.features || ['ג׳קוזי ספא מול הנוף', 'מרפסת דק פרטית']
+        }))
+      : [
+          {
+            id: `u-${idx + 1}-1`,
+            name: `${p.hebrewName} · יחידה ראשית`,
+            type: 'cabin',
+            bedrooms: 1,
+            bathrooms: 1,
+            max_occupancy: 4,
+            base_price: 850,
+            weekend_price: 1100,
+            size_m2: 45,
+            features: ['ג׳קוזי ספא מול הנוף', 'מרפסת דק פרטית']
+          }
+        ],
+    wifi_ssid: p.wifiSsid || 'Resort_Guest_5G',
+    wifi_password: p.wifiPassword || 'golanparadise',
+    host_welcome_notes: 'ברוכים הבאים לחופשה שלכם! אנו עומדים לרשותכם לכל שאלה או בקשה.',
+    claimed_status: (p.id === 'mialees' ? 'claimed_verified' : 'unclaimed_seeded') as any,
+    direct_booking_enabled: p.id === 'mialees',
+    crm_status: (p.id === 'mialees' ? 'Verified_Subscriber' : 'Portal_Free_Active') as any,
+    is_public: true,
+    source: 'flagship_canonical',
+    property_public_path: `/p/${p.slug}`
+  }));
+
+  const seededLeads = generateSeededLeads(693);
+  return [...flagship, ...seededLeads];
+}
+
 export function ResortOSApp() {
   // 1. URL Path & Query Resolution (/p/:slug vs legacy ?preview=true&slug=...)
   const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
@@ -248,158 +344,193 @@ export function ResortOSApp() {
   // 12 Flagship Resorts + ~588 Seeded Leads (~600 total leads)
   const rawProperties = useMemo(() => listAllProperties(), []);
 
-  const [managedProperties, setManagedProperties] = useState<ManagedProperty[]>(() => {
-    const realLeads = getWeekendRealLeads();
-    const realMap = new Map(realLeads.map((l) => [l.id, l]));
-
-    try {
-      const saved = localStorage.getItem('resortos_managed_properties');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length >= 700 && parsed.some((p: any) => p.id?.startsWith('weekend-lead-'))) {
-          return parsed.map((p: any) => {
-            if (p.id?.startsWith('weekend-lead-')) {
-              const r = realMap.get(p.id);
-              return {
-                ...p,
-                source_url: p.source_url || r?.source_url || 'https://www.weekend.co.il',
-                reference_image_urls: (p.reference_image_urls && p.reference_image_urls.length > 0) ? p.reference_image_urls : (r?.reference_image_urls || []),
-                // All 693 imported properties default strictly to draft (is_public: false) unless explicitly approved
-                is_public: Boolean(p.is_approved ? true : (p.is_public ?? false)),
-                crm_status: p.crm_status || 'Lead_Identified'
-              };
-            }
-            return p;
-          });
-        }
-      }
-    } catch {}
-
-    const flagship: ManagedProperty[] = rawProperties.map((p, idx) => ({
-      id: p.id === 'mialees' ? '22222222-2222-2222-2222-222222222222' : `p-${idx + 1}`,
-      slug: p.slug,
-      name: p.name,
-      hebrew_name: p.hebrewName,
-      tagline: p.tagline || 'מתחם אירוח כפרי יוקרתי ברמת הגולן והכנרת',
-      description: p.subTitle || 'חוויית נופש יוקרתית מול נוף פתוח לכנרת ולהרי הגולן, עם בריכה פרטית, ג׳קוזי ספא ופרטיות מושלמת.',
-      village: p.village,
-      region: p.region.includes('גולן') ? 'רמת הגולן' : 'סובב כנרת',
-      address: `מושב ${p.village}`,
-      whatsapp_number: p.whatsappNumber || '972548076123',
-      phone: p.phone || '054-807-6123',
-      email: p.email || 'info@resortos.app',
-      hero_image: p.heroImage || '/resorts/mialees.jpg',
-      gallery_images: [
-        'https://images.unsplash.com/photo-1510798831971-661eb04b3739?auto=format&fit=crop&w=800&q=80',
-        'https://images.unsplash.com/photo-1587061949409-02df41d5e562?auto=format&fit=crop&w=800&q=80',
-        'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=800&q=80'
-      ],
-      amenities: p.amenities && p.amenities.length > 0 ? p.amenities : [
-        'בריכה פרטית',
-        'ג׳קוזי ספא ענק',
-        'מכונת אספרסו נספרסו',
-        'אינטרנט Wi-Fi מהיר',
-        'עמדת מנגל BBQ פרטית'
-      ],
-      units: (p.units && p.units.length > 0)
-        ? p.units.map((u, uIdx) => ({
-            id: u.id || `u-${idx + 1}-${uIdx + 1}`,
-            name: u.name || `יחידת אירוח ${uIdx + 1}`,
-            type: (u.type || 'cabin') as any,
-            bedrooms: u.bedrooms || 1,
-            bathrooms: u.bathrooms || 1,
-            max_occupancy: u.maxOccupancy || 4,
-            base_price: u.basePrice || 850,
-            weekend_price: u.weekendPrice || 1100,
-            size_m2: u.sizeM2 || 45,
-            features: u.features || ['ג׳קוזי ספא מול הנוף', 'מרפסת דק פרטית']
-          }))
-        : [
-            {
-              id: `u-${idx + 1}-1`,
-              name: `${p.hebrewName} · יחידה ראשית`,
-              type: 'cabin',
-              bedrooms: 1,
-              bathrooms: 1,
-              max_occupancy: 4,
-              base_price: 850,
-              weekend_price: 1100,
-              size_m2: 45,
-              features: ['ג׳קוזי ספא מול הנוף', 'מרפסת דק פרטית']
-            }
-          ],
-      wifi_ssid: p.wifiSsid || 'Resort_Guest_5G',
-      wifi_password: p.wifiPassword || 'golanparadise',
-      host_welcome_notes: 'ברוכים הבאים לחופשה שלכם! אנו עומדים לרשותכם לכל שאלה או בקשה.',
-      claimed_status: (p.id === 'mialees' ? 'claimed_verified' : 'unclaimed_seeded') as any,
-      direct_booking_enabled: p.id === 'mialees',
-      crm_status: (p.id === 'mialees' ? 'Verified_Subscriber' : 'Portal_Free_Active') as any,
-      is_public: true,
-      source: 'flagship_canonical',
-      property_public_path: `/p/${p.slug}`
-    }));
-
-    const seededLeads = generateSeededLeads(693);
-    const combined = [...flagship, ...seededLeads];
-    try {
-      localStorage.setItem('resortos_managed_properties', JSON.stringify(combined));
-    } catch {}
-    return combined;
-  });
-
-  const [propertiesState, setPropertiesState] = useState<PropertyItem[]>(() =>
-    managedProperties.map((p) => ({
-      id: p.id,
-      slug: p.slug,
-      name: p.name,
-      hebrew_name: p.hebrew_name,
-      contact_name: p.contact_name,
-      village: p.village,
-      region: p.region,
-      whatsapp_number: p.whatsapp_number,
-      phone: p.phone,
-      claimed_status: p.claimed_status,
-      direct_booking_enabled: p.direct_booking_enabled,
-      min_price: p.units?.[0]?.base_price || 850,
-      hero_image: p.hero_image,
-      is_public: p.is_public ?? (p.claimed_status === 'claimed_verified'),
-      crm_status: p.crm_status || 'Lead_Identified',
-      isPreviewMode: Boolean(isPreviewMode && (p.slug === previewSlug || p.id === previewSlug))
-    }))
+  const [managedProperties, setManagedProperties] = useState<ManagedProperty[]>(() =>
+    buildDefaultProperties(rawProperties)
   );
 
-  const handleSaveProperty = (updated: ManagedProperty) => {
-    setManagedProperties((prev) => {
-      const next = prev.map((p) => (p.id === updated.id ? updated : p));
-      try {
-        localStorage.setItem('resortos_managed_properties', JSON.stringify(next));
-      } catch {}
-      return next;
-    });
+  const [propertiesState, setPropertiesState] = useState<PropertyItem[]>(() =>
+    managedProperties.map((p) => mapManagedToPropertyItem(p, isPreviewMode, previewSlug))
+  );
 
+  // Hydration from Dexie (local zero-quota IndexedDB) & Supabase Cloud (realtime cloud sync)
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function hydrateProperties() {
+      // 1. Instant hydration from Dexie IndexedDB
+      try {
+        const localProps = await db.properties.toArray();
+        if (!isCancelled && localProps && localProps.length >= 700) {
+          const typed = localProps as unknown as ManagedProperty[];
+          setManagedProperties(typed);
+          setPropertiesState(typed.map((p) => mapManagedToPropertyItem(p, isPreviewMode, previewSlug)));
+        } else if (!localProps || localProps.length === 0) {
+          // Seed Dexie initially with default properties so offline mode works instantly
+          const defaults = buildDefaultProperties(rawProperties);
+          await db.properties.bulkPut(defaults as any);
+        }
+      } catch (err) {
+        console.warn('[ResortOS] Dexie hydration warning:', err);
+      }
+
+      // 2. Fresh fetch from Supabase Cloud
+      try {
+        const { data: cloudProps, error } = await supabase
+          .from('properties')
+          .select('*, units(*)');
+
+        if (!error && cloudProps && cloudProps.length > 0) {
+          const mappedCloud: ManagedProperty[] = cloudProps.map((cp: any) => ({
+            id: cp.id,
+            slug: cp.slug,
+            name: cp.name,
+            hebrew_name: cp.hebrew_name,
+            tagline: cp.tagline || '',
+            description: cp.description || '',
+            village: cp.village,
+            region: cp.region,
+            address: cp.address || `מושב ${cp.village}`,
+            whatsapp_number: cp.whatsapp_number,
+            phone: cp.phone || '',
+            contact_name: cp.contact_name,
+            email: cp.email || 'info@resortos.app',
+            hero_image: cp.hero_image,
+            hero_video_url: cp.hero_video_url,
+            gallery_images: Array.isArray(cp.gallery_images) ? cp.gallery_images : [],
+            amenities: Array.isArray(cp.amenities) ? cp.amenities : [],
+            units: Array.isArray(cp.units) && cp.units.length > 0
+              ? cp.units.map((u: any) => ({
+                  id: u.id,
+                  name: u.name,
+                  type: u.type || 'cabin',
+                  bedrooms: u.bedrooms || 1,
+                  bathrooms: u.bathrooms || 1,
+                  max_occupancy: u.max_occupancy || 2,
+                  base_price: u.base_price_cents ? Math.round(u.base_price_cents / 100) : 850,
+                  weekend_price: u.weekend_price_cents ? Math.round(u.weekend_price_cents / 100) : 1100,
+                  size_m2: u.size_m2 || 45,
+                  features: Array.isArray(u.features) ? u.features : []
+                }))
+              : [
+                  {
+                    id: `u-${cp.id}-1`,
+                    name: `${cp.hebrew_name} · יחידה ראשית`,
+                    type: 'cabin' as const,
+                    bedrooms: 1,
+                    bathrooms: 1,
+                    max_occupancy: 4,
+                    base_price: 850,
+                    weekend_price: 1100,
+                    size_m2: 45,
+                    features: ['ג׳קוזי ספא מול הנוף', 'מרפסת דק פרטית']
+                  }
+                ],
+            claimed_status: cp.claimed_status,
+            direct_booking_enabled: Boolean(cp.direct_booking_enabled),
+            crm_status: cp.crm_status || 'Lead_Identified',
+            is_public: Boolean(cp.is_public),
+            reference_image_urls: Array.isArray(cp.reference_image_urls) ? cp.reference_image_urls : [],
+            source: cp.source || 'weekend_scrape',
+            source_url: cp.source_url,
+            property_public_path: cp.property_public_path || `/p/${cp.slug}`
+          }));
+
+          if (!isCancelled) {
+            setManagedProperties(mappedCloud);
+            setPropertiesState(mappedCloud.map((p) => mapManagedToPropertyItem(p, isPreviewMode, previewSlug)));
+          }
+
+          // Update Dexie cache in background (IndexedDB quota is in GBs)
+          await db.properties.bulkPut(mappedCloud as any);
+        }
+      } catch (cloudErr) {
+        console.warn('[ResortOS] Supabase Cloud fetch info:', cloudErr);
+      }
+    }
+
+    hydrateProperties();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [rawProperties, isPreviewMode, previewSlug]);
+
+  const handleSaveProperty = (updated: ManagedProperty) => {
+    // 1. Update React state immediately
+    setManagedProperties((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
     setPropertiesState((prev) =>
-      prev.map((p) =>
-        p.id === updated.id
-          ? {
-              ...p,
-              name: updated.name,
-              hebrew_name: updated.hebrew_name,
-              slug: updated.slug || p.slug,
-              contact_name: updated.contact_name,
-              village: updated.village,
-              region: updated.region,
-              whatsapp_number: updated.whatsapp_number,
-              phone: updated.phone,
-              claimed_status: updated.claimed_status,
-              direct_booking_enabled: updated.direct_booking_enabled,
-              min_price: updated.units?.[0]?.base_price || p.min_price,
-              hero_image: updated.hero_image,
-              is_public: updated.is_public,
-              crm_status: updated.crm_status
-            }
-          : p
+      prev.map((item) =>
+        item.id === updated.id
+          ? mapManagedToPropertyItem(updated, isPreviewMode, previewSlug)
+          : item
       )
     );
+
+    // 2. Persist to Dexie IndexedDB (NO localStorage QuotaExceededError!)
+    db.properties.put(updated as any).catch((err) => {
+      console.warn('[ResortOS] Dexie put warning:', err);
+    });
+
+    // 3. Persist to Supabase Cloud
+    const { units, ...propFields } = updated;
+    supabase
+      .from('properties')
+      .upsert({
+        id: propFields.id,
+        slug: propFields.slug,
+        name: propFields.name,
+        hebrew_name: propFields.hebrew_name,
+        tagline: propFields.tagline || '',
+        description: propFields.description || '',
+        region: propFields.region,
+        village: propFields.village,
+        address: propFields.address,
+        whatsapp_number: propFields.whatsapp_number,
+        phone: propFields.phone,
+        email: propFields.email,
+        hero_image: propFields.hero_image,
+        hero_video_url: propFields.hero_video_url,
+        gallery_images: propFields.gallery_images || [],
+        amenities: propFields.amenities || [],
+        claimed_status: propFields.claimed_status,
+        direct_booking_enabled: propFields.direct_booking_enabled,
+        is_public: Boolean(propFields.is_public),
+        crm_status: propFields.crm_status,
+        reference_image_urls: propFields.reference_image_urls || [],
+        source: propFields.source,
+        source_url: propFields.source_url,
+        property_public_path: propFields.property_public_path,
+        updated_at: new Date().toISOString()
+      })
+      .then(({ error }) => {
+        if (error) console.warn('[Supabase Cloud] Property upsert notice:', error.message);
+      })
+      .catch((err) => console.warn('[Supabase Cloud] Property network warning:', err));
+
+    if (units && units.length > 0) {
+      const unitRows = units.map((u) => ({
+        id: u.id,
+        property_id: updated.id,
+        name: u.name,
+        type: u.type || 'cabin',
+        bedrooms: u.bedrooms || 1,
+        bathrooms: u.bathrooms || 1,
+        max_occupancy: u.max_occupancy || 2,
+        base_price_cents: Math.round((u.base_price || 850) * 100),
+        weekend_price_cents: Math.round((u.weekend_price || 1100) * 100),
+        size_m2: u.size_m2 || 45,
+        features: u.features || [],
+        updated_at: new Date().toISOString()
+      }));
+      supabase
+        .from('units')
+        .upsert(unitRows)
+        .then(({ error }) => {
+          if (error) console.warn('[Supabase Cloud] Units upsert notice:', error.message);
+        })
+        .catch((err) => console.warn('[Supabase Cloud] Units network warning:', err));
+    }
+
 
     // Sync verifiedOwnerIds if claimed_status was altered
     if (updated.claimed_status === 'claimed_verified') {
@@ -592,24 +723,45 @@ export function ResortOSApp() {
         )
       );
 
-      // Transition managedProperties and save to persistent storage
+      // Transition managedProperties and save to persistent Dexie and Supabase Cloud
+      let updatedVerifiedProp: ManagedProperty | null = null;
       setManagedProperties((prev) => {
-        const next = prev.map((p) =>
-          p.id === claimModalProperty.id
-            ? {
-                ...p,
-                claimed_status: 'claimed_verified' as const,
-                direct_booking_enabled: true,
-                verified_at: verifiedAt,
-                crm_status: p.crm_status === 'Lead_Identified' ? 'Portal_Free_Active' : p.crm_status
-              }
-            : p
-        );
-        try {
-          localStorage.setItem('resortos_managed_properties', JSON.stringify(next));
-        } catch {}
+        const next = prev.map((p) => {
+          if (p.id === claimModalProperty.id) {
+            const updated = {
+              ...p,
+              claimed_status: 'claimed_verified' as const,
+              direct_booking_enabled: true,
+              verified_at: verifiedAt,
+              crm_status: (p.crm_status === 'Lead_Identified' ? 'Portal_Free_Active' : p.crm_status) as any
+            };
+            updatedVerifiedProp = updated;
+            return updated;
+          }
+          return p;
+        });
         return next;
       });
+
+      if (updatedVerifiedProp) {
+        db.properties.put(updatedVerifiedProp as any).catch((err) => {
+          console.warn('[ResortOS] Dexie put claim error:', err);
+        });
+        supabase
+          .from('properties')
+          .update({
+            claimed_status: 'claimed_verified',
+            direct_booking_enabled: true,
+            crm_status: 'Portal_Free_Active',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', claimModalProperty.id)
+          .then(({ error }) => {
+            if (error) console.warn('[Supabase Cloud] Claim status sync notice:', error.message);
+          })
+          .catch(console.warn);
+      }
+
 
       setClaimStep('success');
     } catch (err: any) {

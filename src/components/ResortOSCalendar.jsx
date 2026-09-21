@@ -25,6 +25,7 @@ import {
   Sparkles,
   Info,
   Printer,
+  ClipboardCheck,
   CreditCard
 } from 'lucide-react';
 import { 
@@ -37,7 +38,8 @@ import {
 import { pushBookingToCloud, pushBookingsToCloud, syncCloudBookingsToDexie, subscribeToRealtimeCloudBookings, syncUnitOpsToDexie, subscribeToRealtimeUnitOps, pushUnitToCloud, ensureCanonicalUnits, refreshBookingFromGuestMailbox, hasPublicGuestMailbox } from '../lib/cloudDb';
 import { createCheckoutToken } from '../lib/checkoutToken';
 import { findOverlappingBooking, maxAvailableNights } from '../lib/bookingOverlap';
-import { barsToDrawOnCell, isActiveStay, isPaintedStay, stayCardTone, spanBarPixels, stayYmd } from '../lib/calendarOccupancy';
+import { barsToDrawOnCell, isActiveStay, isCalendarBarBooking, isPaintedStay, stayCardTone, spanBarPixels, stayYmd } from '../lib/calendarOccupancy';
+import { formatStayHourLabel, stayHoursFromBooking } from '../lib/kinorotStayHours';
 import { agentLockLabel, agentLockOnNight, findOverlappingAgentLock, useAgentLocks } from '../lib/agentLocks';
 import { publishGuestMailbox, startHostCardCharge } from '../lib/guestCheckoutApi';
 import { guestStayOrigin, guestStayUrl } from '../lib/guestStayUrl';
@@ -59,14 +61,33 @@ import {
 } from '../lib/checkoutDuty';
 import { israelToday } from '../lib/cabinAccess';
 import { calendarInventory, unitCalendarLines, unitMaxOccupancy, whatsAppUnitName } from '../lib/units';
-import { applyCalendarOccupancy, applyCalendarUnitStatus, ensureTurnoverCleaning, openTurnoverAfterCheckout } from '../lib/housekeepingCycle';
-import { hideClosedOrRenovationUnit } from '../lib/unavailableHold';
-import { bookingsMarkingNight, isCurrentlyInHouse, reviveVacatedArrival, staffOccupancyOf, unitDisplayStatus, unitNameFrame, vacateBookingOnDate } from '../lib/unitStatus';
+import { fieldUnitDisplayName } from '../lib/fieldUnitCatalog';
+import { lockboxCodeForUnit } from '../lib/guestProfileSeed';
+import { applyCalendarOccupancy, applyCalendarUnitStatus, applyAssignedStaff, ensureTurnoverCleaning, openTurnoverAfterCheckout, persistRoomCompletions } from '../lib/housekeepingCycle';
+import { coveringUnavailableHold, isUnavailableHoldBooking, unavailableHoldLabel } from '../lib/unavailableHold';
+import {
+  bookingsMarkingNight,
+  holdNightHatch,
+  isCurrentlyInHouse,
+  isOccupyAskDismissedToday,
+  listArrivalsAwaitingOccupy,
+  reviveVacatedArrival,
+  setOccupyAskDismissedToday,
+  staffOccupancyOf,
+  unitDisplayStatus,
+  unitNameFrame,
+  unitsWithStaleVacantFlag,
+  vacateBookingOnDate
+} from '../lib/unitStatus';
 import UnitOpsStatusSheet from './UnitOpsStatusSheet';
 import { hypAccountOf, listClearingPayments, mergeClearingPayments } from '../lib/clearingPayments';
 import { awaitingBankReview, awaitingCashCollection, dueAgorotOf, hasRecordedReceipt, isFullyPaid, kinorotSettlementKind, paidIlsOfBooking, paymentStatusAfterPaid, recordedPaidAgorot } from '../lib/bookingPaid';
+import GuestCommsPanel, { PresenceDot } from './GuestCommsPanel';
 import ClearingPaymentsList from './ClearingPaymentsList';
-import { BOARD_AREA_FILTERS, bookingGuestHeadcount, bookingHasCrib, bookingPeopleLabel, dailyDutyCounts, defaultReportDate, DUTY_PRINT_AREAS, guestCardFirstName, hebrewDateLabel, printDailyDutyReport, unitMatchesBoardArea } from '../lib/dailyDutyReport';
+import CleaningChecklistModal from './CleaningChecklistModal';
+import { getStoredToken } from '../lib/staffAuth';
+import { BOARD_AREA_FILTERS, bookingGuestHeadcount, bookingHasCrib, bookingPeopleLabel, buildHousekeepingWhatsAppText, dailyDutyCounts, defaultReportDate, DUTY_PRINT_AREAS, guestCardFirstName, hebrewDateLabel, printDailyDutyReport, shareHousekeepingWhatsApp, unitMatchesBoardArea } from '../lib/dailyDutyReport';
+import { jewishHolidayMarker } from '../lib/jewishHolidays';
 import {
   evaluateStayRestrictions,
   listBookingRestrictions,
@@ -81,8 +102,8 @@ import { ilsToAgorot, nightlyFromTotalIls, nightlyIlsFromUnit, pricedStay } from
 const DEMO_TENANT_ID = '22222222-2222-2222-2222-222222222222';
 const UNIT_COL_PX = 112;
 const CELL_PX = 86;
-const UNIT_ROW_PX = 26;
-const HEADER_H = 36;
+const UNIT_ROW_PX = 34;
+const HEADER_H = 40;
 
 /**
  * Put “today” flush against the sticky unit names. Past days stay on the board
@@ -478,6 +499,7 @@ export default function ResortOSCalendar({
   const [editingBooking, setEditingBooking] = useState(null);
   const [payDetailsOpen, setPayDetailsOpen] = useState(false);
   const [isEditingBookingDetails, setIsEditingBookingDetails] = useState(false);
+  const [bookingModalTab, setBookingModalTab] = useState('details');
   const [daySummaryModalData, setDaySummaryModalData] = useState(null);
   const [sendingGuestLink, setSendingGuestLink] = useState(false);
   const [chargingCard, setChargingCard] = useState(false);
@@ -488,9 +510,13 @@ export default function ResortOSCalendar({
   const [dutyDismissed, setDutyDismissed] = useState(() => isCheckoutDutyDismissedToday());
   const [dutyBusyId, setDutyBusyId] = useState(null);
   const [dutySelectedIds, setDutySelectedIds] = useState(() => new Set());
+  const [occupyAskOpen, setOccupyAskOpen] = useState(false);
+  const [occupyAskDismissed, setOccupyAskDismissed] = useState(() => isOccupyAskDismissedToday());
+  const [occupyAskBusy, setOccupyAskBusy] = useState(false);
   const [dutyReportOpen, setDutyReportOpen] = useState(false);
   const [dutyReportDate, setDutyReportDate] = useState(() => defaultReportDate());
   const [dutyReportArea, setDutyReportArea] = useState('all');
+  const [cleaningChecklistOpen, setCleaningChecklistOpen] = useState(false);
   const [opsUnitId, setOpsUnitId] = useState(null);
   const [opsStatusBusy, setOpsStatusBusy] = useState(false);
   const opsReopenGuard = useRef(0);
@@ -581,17 +607,18 @@ export default function ResortOSCalendar({
     [calendarStartStr, daysCount]
   );
   const boardUnits = useMemo(
-    () => areaUnits.filter((unit) => !hideClosedOrRenovationUnit(unit, rawBookings, {
-      today: todayStr,
-      rangeStart: calendarStartStr,
-      rangeEnd: calendarEndStr
-    })),
-    [areaUnits, rawBookings, todayStr, calendarStartStr, calendarEndStr]
+    () => areaUnits,
+    [areaUnits]
   );
 
   const overdueCheckouts = useMemo(
     () => listOverdueCheckouts(rawBookings, dutyNow).filter((booking) => visibleUnitIds.has(booking.unit_id)),
     [rawBookings, dutyNow, visibleUnitIds]
+  );
+  const arrivalsAwaitingOccupy = useMemo(
+    () => listArrivalsAwaitingOccupy(rawUnits, rawBookings, todayStr, dutyNow)
+      .filter((row) => visibleUnitIds.has(row.unit?.id || row.booking?.unit_id)),
+    [rawUnits, rawBookings, todayStr, dutyNow, visibleUnitIds]
   );
   const overdueIds = useMemo(
     () => new Set(overdueCheckouts.map((booking) => booking.id)),
@@ -600,7 +627,7 @@ export default function ResortOSCalendar({
   const bookingsByUnit = useMemo(() => {
     const map = new Map();
     for (const booking of rawBookings || []) {
-      if (!isPaintedStay(booking)) continue;
+      if (!isCalendarBarBooking(booking)) continue;
       const cin = stayYmd(booking.check_in_date);
       const cout = stayYmd(booking.check_out_date);
       // Keep any stay that overlaps the visible calendar window (incl. recent checkouts).
@@ -711,6 +738,7 @@ export default function ResortOSCalendar({
     if (day === dutyDayRef.current) return;
     dutyDayRef.current = day;
     setDutyDismissed(isCheckoutDutyDismissedToday(day));
+    setOccupyAskDismissed(isOccupyAskDismissedToday(day));
   }, [dutyNow]);
 
   useEffect(() => {
@@ -719,6 +747,33 @@ export default function ResortOSCalendar({
       setDutyOpen(false);
     }
   }, [overdueCheckouts.length, dutyDismissed]);
+
+  useEffect(() => {
+    if (arrivalsAwaitingOccupy.length && !occupyAskDismissed) setOccupyAskOpen(true);
+    if (!arrivalsAwaitingOccupy.length) setOccupyAskOpen(false);
+  }, [arrivalsAwaitingOccupy.length, occupyAskDismissed]);
+
+  const staleVacantHealRef = useRef(false);
+  useEffect(() => {
+    if (staleVacantHealRef.current || !tenantId) return;
+    const stale = unitsWithStaleVacantFlag(rawUnits, rawBookings, todayStr);
+    if (!stale.length) return;
+    staleVacantHealRef.current = true;
+    (async () => {
+      try {
+        await Promise.all(stale.map((unit) => applyCalendarOccupancy({
+          tenantId,
+          unit,
+          occupancy: 'OCCUPIED',
+          pushUnitToCloud: (patch, options) => pushUnitToCloud(patch, { ...options, skipStayPublish: true })
+        })));
+      } finally {
+        staleVacantHealRef.current = false;
+      }
+    })().catch(() => {
+      staleVacantHealRef.current = false;
+    });
+  }, [rawUnits, rawBookings, todayStr, tenantId]);
 
   const dutySelectInitRef = useRef(false);
   useEffect(() => {
@@ -764,7 +819,7 @@ export default function ResortOSCalendar({
     });
   }, [rawBookings]);
 
-  const modalOpen = Boolean(isNewModalOpen || dispatchModalData || editingBooking || daySummaryModalData || dutyOpen || dutyReportOpen || opsUnitId);
+  const modalOpen = Boolean(isNewModalOpen || dispatchModalData || editingBooking || daySummaryModalData || dutyOpen || dutyReportOpen || cleaningChecklistOpen || occupyAskOpen || opsUnitId);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -934,6 +989,7 @@ export default function ResortOSCalendar({
         dateStr,
         dayName: dayNameLocalized,
         formattedDate,
+        holiday: jewishHolidayMarker(dateStr),
         isToday: dateStr === todayStr,
         isPast: dateStr < todayStr,
         isWeekend: d.getDay() === 5 || d.getDay() === 6
@@ -1042,6 +1098,7 @@ export default function ResortOSCalendar({
   const handleBookingClick = (booking, e) => {
     e.stopPropagation();
     setIsEditingBookingDetails(false);
+    setBookingModalTab('details');
     setPayDetailsOpen(false);
     setEditingBooking(booking);
     setEditFormData(buildEditFormData(booking));
@@ -1125,6 +1182,16 @@ export default function ResortOSCalendar({
       bookings: rawBookings,
       units
     });
+  };
+
+  const sendCleanersWhatsApp = () => {
+    const text = buildHousekeepingWhatsAppText({
+      bookings: rawBookings,
+      units,
+      dateStr: dutyReportDate,
+      area: dutyReportArea
+    });
+    shareHousekeepingWhatsApp(text);
   };
 
   const dutyReportCounts = useMemo(
@@ -1437,10 +1504,28 @@ export default function ResortOSCalendar({
       setEditingBooking(nextBooking);
       const checkoutUrl = guestStayUrl(token);
       if (channel === 'sms') {
-        await sendStaffSms({
-          phone: rawPhone,
-          message: guestStaySmsText({ unitName, checkInDate, checkoutUrl })
+        const message = guestStaySmsText({ unitName, checkInDate, checkoutUrl });
+        const tokenHdr = getStoredToken();
+        const response = await fetch('/api/guest-comms/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            ...(tokenHdr ? { Authorization: `Bearer ${tokenHdr}` } : {})
+          },
+          body: JSON.stringify({
+            booking_id: nextBooking.id,
+            message,
+            channel: 'sms',
+            kind: 'stay_link'
+          })
         });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const err = new Error(data.error || 'SMS_FAILED');
+          err.body = data;
+          throw err;
+        }
         window.alert('הסמס נשלח.');
       } else {
         openWhatsAppChat(
@@ -1707,8 +1792,30 @@ export default function ResortOSCalendar({
   const applyUnitOpsFromSheet = async (status) => {
     const unit = units.find((row) => row.id === opsUnitId) || rawUnits.find((row) => row.id === opsUnitId);
     if (!unit || opsStatusBusy) return;
-    closeOpsSheet();
-    await applyCalendarUnitStatus({ tenantId, unit, status, pushUnitToCloud: pushOpsQuiet });
+    if (status !== 'NEEDS_COMPLETIONS') closeOpsSheet();
+    await applyCalendarUnitStatus({
+      tenantId,
+      unit,
+      status,
+      pushUnitToCloud: (patch, options) => pushUnitToCloud(patch, { waitRemote: true, skipStayPublish: true, force: true, ...options })
+    });
+  };
+
+  const applyCompletionsFromSheet = async (items) => {
+    const unit = units.find((row) => row.id === opsUnitId) || rawUnits.find((row) => row.id === opsUnitId);
+    if (!unit) return;
+    await persistRoomCompletions({
+      tenantId,
+      unit,
+      items,
+      pushUnitToCloud: (patch, options) => pushUnitToCloud(patch, { waitRemote: true, skipStayPublish: true, force: true, ...options })
+    });
+  };
+
+  const applyAssigneeFromSheet = async (assignedStaff) => {
+    const unit = units.find((row) => row.id === opsUnitId) || rawUnits.find((row) => row.id === opsUnitId);
+    if (!unit) return;
+    await applyAssignedStaff({ tenantId, unit, assignedStaff, pushUnitToCloud: pushOpsQuiet });
   };
 
   const applyOccupancyFromSheet = async (occupancy) => {
@@ -1728,6 +1835,37 @@ export default function ResortOSCalendar({
       void pushBookingToCloud(next, { allowOverlap: true }).catch(() => {});
       void publishGuestMailbox(next).catch(() => {});
     }));
+  };
+
+  const markArrivalOccupied = async (unit) => {
+    if (!unit?.id || occupyAskBusy) return;
+    setOccupyAskBusy(true);
+    try {
+      await applyCalendarOccupancy({
+        tenantId,
+        unit,
+        occupancy: 'OCCUPIED',
+        pushUnitToCloud: pushOpsQuiet
+      });
+    } finally {
+      setOccupyAskBusy(false);
+    }
+  };
+
+  const markAllArrivalsOccupied = async () => {
+    if (occupyAskBusy || !arrivalsAwaitingOccupy.length) return;
+    setOccupyAskBusy(true);
+    try {
+      await Promise.all(arrivalsAwaitingOccupy.map((row) => applyCalendarOccupancy({
+        tenantId,
+        unit: row.unit,
+        occupancy: 'OCCUPIED',
+        pushUnitToCloud: pushOpsQuiet
+      })));
+      setOccupyAskOpen(false);
+    } finally {
+      setOccupyAskBusy(false);
+    }
   };
 
   const checkoutBooking = async (booking) => {
@@ -1835,6 +1973,7 @@ export default function ResortOSCalendar({
     if (tone === 'inhouse') return '#8B5CF6';
     if (tone === 'paid') return '#22C55E';
     if (tone === 'bank') return '#F97316';
+    if (tone === 'hold') return '#D6D3D1';
     return '#EF4444';
   };
 
@@ -1896,6 +2035,33 @@ export default function ResortOSCalendar({
         >
           <Clock size={16} />
           {overdueCheckouts.length} אורחים לא ביצעו צ׳ק־אאוט — לטיפול
+        </button>
+      ) : null}
+
+      {arrivalsAwaitingOccupy.length > 0 && !occupyAskOpen ? (
+        <button
+          type="button"
+          onClick={() => { setOccupyAskDismissedToday(false); setOccupyAskDismissed(false); setOccupyAskOpen(true); }}
+          style={{
+            width: '100%',
+            marginBottom: '0.75rem',
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.45rem',
+            border: '1px solid rgba(139, 92, 246, 0.45)',
+            background: 'rgba(139, 92, 246, 0.12)',
+            color: '#C4B5FD',
+            borderRadius: '12px',
+            padding: '0.65rem 0.8rem',
+            fontWeight: 800,
+            fontSize: '0.88rem',
+            cursor: 'pointer'
+          }}
+        >
+          <Clock size={16} />
+          {arrivalsAwaitingOccupy.length} הזמנות היום עדיין לא סומנו תפוס
         </button>
       ) : null}
 
@@ -1991,6 +2157,40 @@ export default function ResortOSCalendar({
           <Printer size={15} />
           דוח יומי
         </button>
+        <button
+          type="button"
+          onClick={() => setCleaningChecklistOpen(true)}
+          style={{
+            ...buttonStyle,
+            background: isLight ? '#F0FDFA' : '#134E4A',
+            color: isLight ? '#0F766E' : '#99F6E4',
+            border: `1px solid ${isLight ? '#99F6E4' : '#0F766E'}`
+          }}
+        >
+          <ClipboardCheck size={15} />
+          צ׳קליסט ניקיון
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const text = buildHousekeepingWhatsAppText({
+              bookings: rawBookings,
+              units,
+              dateStr: defaultReportDate(),
+              area: boardArea
+            });
+            shareHousekeepingWhatsApp(text);
+          }}
+          style={{
+            ...buttonStyle,
+            background: '#25D366',
+            color: '#052e16',
+            border: 'none'
+          }}
+        >
+          <MessageSquare size={15} />
+          וואטסאפ למנקים
+        </button>
         {boardSync.ok === false || (boardSync.count === 0 && !(rawBookings || []).some(isPaintedStay)) ? (
           <button
             type="button"
@@ -2073,14 +2273,14 @@ export default function ResortOSCalendar({
               key={col.dateStr}
               data-today-col={col.isToday ? 'true' : undefined}
               onClick={() => openDaySummaryModal(col.dateStr)}
-              title="לחץ לסיכום נתוני יום"
+              title={col.holiday ? `${col.holiday.title} · לחץ לסיכום נתוני יום` : 'לחץ לסיכום נתוני יום'}
               style={{
                 height: HEADER_H,
                 boxSizing: 'border-box',
                 background: col.isToday 
                   ? (isLight ? '#EEF2FF' : '#312E81') 
                   : themeStyles.gridHeaderBg,
-                padding: '0.15rem 0.2rem',
+                padding: '0.12rem 0.15rem',
                 textAlign: 'center',
                 borderBottom: `1px solid ${themeStyles.cellBorder}`,
                 borderLeft: `1px solid ${themeStyles.cellBorder}`,
@@ -2096,18 +2296,34 @@ export default function ResortOSCalendar({
                   title={nowLineLabel}
                 />
               ) : null}
-              <div style={{ fontSize: '0.62rem', fontWeight: 600, opacity: 0.8, lineHeight: 1.1 }}>{col.dayName}</div>
-              <div style={{ fontSize: '0.78rem', fontWeight: 800, lineHeight: 1.1 }}>{col.formattedDate}</div>
+              <div style={{ fontSize: '0.58rem', fontWeight: 600, opacity: 0.85, lineHeight: 1.05, whiteSpace: 'nowrap' }}>
+                {col.dayName}
+                {col.holiday ? (
+                  <span
+                    style={{
+                      fontWeight: 800,
+                      fontSize: '0.48rem',
+                      marginRight: 2,
+                      color: col.isToday ? '#C4B5FD' : (isLight ? '#B45309' : '#FBBF24'),
+                      opacity: 1
+                    }}
+                  >
+                    ({col.holiday.short})
+                  </span>
+                ) : null}
+              </div>
+              <div style={{ fontSize: '0.76rem', fontWeight: 800, lineHeight: 1.05 }}>{col.formattedDate}</div>
             </div>
           ))}
           </div>
 
           {/* UNIT ROWS & BOOKING CARDS */}
           {boardUnits.map(unit => {
-            const fullUnitName = t(unit.id + '_name', unit.name);
+            const fullUnitName = fieldUnitDisplayName(unit, t(unit.id + '_name', unit.name));
             const { primary: unitPrefix, secondary: unitDetail } = unitCalendarLines(fullUnitName);
             const ops = unitDisplayStatus(unit, rawBookings, todayStr, dutyNow);
             const cube = unitNameFrame(ops.key, isLight);
+            const lockbox = lockboxCodeForUnit(unit);
 
             return (
               <div
@@ -2133,7 +2349,7 @@ export default function ResortOSCalendar({
                 <div
                   role="button"
                   tabIndex={0}
-                  title="לחץ לשינוי סטטוס תפעול"
+                  title={lockbox ? `${fullUnitName} · כספת ${lockbox}` : 'לחץ לשינוי סטטוס תפעול'}
                   onClick={(event) => {
                     event.stopPropagation();
                     openOpsSheet(unit.id);
@@ -2146,14 +2362,14 @@ export default function ResortOSCalendar({
                   }}
                   className="hotelos-calendar-unit-col"
                   style={{
-                  backgroundColor: cube.bg,
+                  backgroundColor: cube.fill || cube.bg,
                   background: cube.bg,
                   opacity: 1,
                   zIndex: 80,
                   padding: '0.1rem 0.12rem',
-                  borderBottom: `1px solid ${cube.border}`,
-                  borderLeft: `1.5px solid ${cube.border}`,
-                  boxShadow: `-12px 0 0 ${cube.bg}, 8px 0 0 ${cube.bg}, -1px 0 0 ${cube.border}`,
+                  borderBottom: cube.dashed ? `1.5px dashed ${cube.border}` : `1px solid ${cube.border}`,
+                  borderLeft: cube.dashed ? `1.5px dashed ${cube.border}` : `1.5px solid ${cube.border}`,
+                  boxShadow: `-12px 0 0 ${cube.fill || cube.bg}, 8px 0 0 ${cube.fill || cube.bg}, -1px 0 0 ${cube.border}`,
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
@@ -2163,13 +2379,14 @@ export default function ResortOSCalendar({
                   height: `${UNIT_ROW_PX}px`,
                   boxSizing: 'border-box',
                   cursor: 'pointer',
-                  pointerEvents: 'auto'
+                  pointerEvents: 'auto',
+                  gap: 1
                 }}>
                   {unitPrefix ? (
                     <div style={{
                       fontWeight: 800,
-                      fontSize: '0.62rem',
-                      lineHeight: 1,
+                      fontSize: '0.6rem',
+                      lineHeight: 1.05,
                       color: cube?.prefix || themeStyles.textPrimary,
                       opacity: 1,
                       maxWidth: `${UNIT_COL_PX - 8}px`,
@@ -2183,7 +2400,7 @@ export default function ResortOSCalendar({
                   {unitDetail ? (
                   <div style={{
                     fontWeight: 800,
-                    fontSize: '0.58rem',
+                    fontSize: '0.54rem',
                     lineHeight: 1,
                     color: cube?.name || themeStyles.textPrimary,
                     opacity: 1,
@@ -2195,11 +2412,28 @@ export default function ResortOSCalendar({
                     {unitDetail}
                   </div>
                   ) : null}
+                  {lockbox ? (
+                    <div style={{
+                      fontWeight: 800,
+                      fontSize: '0.54rem',
+                      lineHeight: 1,
+                      letterSpacing: '0.04em',
+                      color: isLight ? '#57534E' : '#94A3B8',
+                      fontVariantNumeric: 'tabular-nums',
+                      maxWidth: `${UNIT_COL_PX - 8}px`,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}>
+                      {lockbox}
+                    </div>
+                  ) : null}
                 </div>
 
                 {/* DAY CELLS GRID */}
                 {dateColumns.map((col, colIndex) => {
                   const unitStays = bookingsByUnit.get(unit.id) || [];
+                  const holdNight = coveringUnavailableHold(rawBookings, unit.id, col.dateStr);
                   const { occupying } = barsToDrawOnCell(unitStays, col.dateStr, todayStr, {
                     isFirstColumn: colIndex === 0,
                     isToday: Boolean(col.isToday)
@@ -2208,21 +2442,25 @@ export default function ResortOSCalendar({
                     && col.dateStr < stayYmd(occupying.check_out_date)
                     ? occupying
                     : null;
-                  const agentHold = !blockingStay && !col.isPast
+                  const agentHold = !blockingStay && !holdNight && !col.isPast
                     ? agentLockOnNight(agentLocks, unit.id, col.dateStr)
                     : null;
 
                   return (
                     <div
                       key={col.dateStr}
-                      onClick={() => !blockingStay && !col.isPast && handleCellClick(unit, col.dateStr)}
+                      onClick={() => !blockingStay && !holdNight && !col.isPast && handleCellClick(unit, col.dateStr)}
                       title={
-                        agentHold
+                        holdNight
+                          ? (unavailableHoldLabel(holdNight.guest_name) || 'סגור')
+                          : agentHold
                           ? agentLockLabel(agentHold)
                           : (col.isPast && !blockingStay ? 'לא ניתן לפתוח הזמנה חדשה על יום שעבר' : undefined)
                       }
                       style={{
-                        background: agentHold
+                        background: holdNight
+                          ? holdNightHatch(isLight)
+                          : agentHold
                           ? (isLight ? 'rgba(249, 115, 22, 0.16)' : 'rgba(249, 115, 22, 0.22)')
                           : (col.isToday
                           ? (isLight ? 'rgba(245, 158, 11, 0.04)' : 'rgba(245, 158, 11, 0.08)') 
@@ -2230,13 +2468,15 @@ export default function ResortOSCalendar({
                             ? (isLight ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.03)')
                             : (colIndex % 2 === 0 ? 'transparent' : (isLight ? 'rgba(0,0,0,0.01)' : 'rgba(255,255,255,0.01)')))),
                         borderBottom: `1px solid ${themeStyles.cellBorder}`,
-                        borderLeft: agentHold
+                        borderLeft: holdNight
+                          ? `1px dashed ${isLight ? 'rgba(168,162,158,0.55)' : 'rgba(214,211,209,0.35)'}`
+                          : agentHold
                           ? '1px solid rgba(249, 115, 22, 0.45)'
                           : `1px solid ${themeStyles.cellBorder}`,
                         position: 'relative',
                         overflow: 'visible',
                         height: `${UNIT_ROW_PX}px`,
-                        cursor: blockingStay ? 'default' : (col.isPast || agentHold ? 'not-allowed' : 'pointer')
+                        cursor: blockingStay || holdNight ? 'default' : (col.isPast || agentHold ? 'not-allowed' : 'pointer')
                       }}
                     >
                       {agentHold ? (
@@ -2286,28 +2526,36 @@ export default function ResortOSCalendar({
               (bookingsByUnit.get(unit.id) || []).map((booking) => {
                 const pix = spanBarPixels(booking, calendarStartStr, daysCount, CELL_PX, UNIT_COL_PX);
                 if (!pix) return null;
-                const departed = booking.booking_status === 'CHECKED_OUT'
+                const hold = isUnavailableHoldBooking(booking);
+                const holdLabel = hold ? (unavailableHoldLabel(booking.guest_name) || 'סגור') : '';
+                const departed = !hold && booking.booking_status === 'CHECKED_OUT'
                   && stayYmd(booking.check_in_date) < todayStr;
-                const frameColor = departed ? '#94A3B8' : stayFrameColor(booking);
+                const frameColor = hold ? '#D6D3D1' : (departed ? '#94A3B8' : stayFrameColor(booking));
                 const tone = stayCardTone(booking, { today: todayStr });
-                const bankWait = !departed && awaitingBankReview(booking);
+                const bankWait = !hold && !departed && awaitingBankReview(booking);
+                const hours = hold ? { checkout: '', checkin: '' } : stayHoursFromBooking(booking);
+                const outHour = formatStayHourLabel(hours.checkout);
+                const inHour = formatStayHourLabel(hours.checkin);
+                const hourHint = [inHour ? `כניסה ${inHour}` : '', outHour ? `יציאה ${outHour}` : ''].filter(Boolean).join(' · ');
                 return (
                   <div
                     key={booking.id}
                     onClick={(e) => handleBookingClick(booking, e)}
                     className={bankWait ? 'hotelos-bank-wait' : undefined}
-                    title={`${booking.guest_name || 'אורח'} · ${bookingPeopleLabel(booking)}`}
+                    title={hold ? holdLabel : `${booking.guest_name || 'אורח'} · ${bookingPeopleLabel(booking)}${hourHint ? ` · ${hourHint}` : ''}`}
                     style={{
                       position: 'absolute',
                       top: rowIndex * UNIT_ROW_PX + 2,
                       height: UNIT_ROW_PX - 4,
                       right: pix.right,
                       width: pix.width,
-                      zIndex: 12,
+                      zIndex: hold ? 8 : 12,
                       pointerEvents: 'auto',
                       borderRadius: 4,
-                      border: departed ? `1.5px dashed ${frameColor}` : `2px solid ${frameColor}`,
-                      background: departed
+                      border: hold || departed ? `1.5px dashed ${frameColor}` : `2px solid ${frameColor}`,
+                      background: hold
+                        ? holdNightHatch(isLight)
+                        : departed
                         ? (isLight ? 'rgba(241, 245, 249, 0.95)' : 'rgba(30, 41, 59, 0.55)')
                         : tone === 'unpaid'
                         ? (isLight ? 'rgba(254, 226, 226, 0.96)' : 'rgba(127, 29, 29, 0.55)')
@@ -2331,13 +2579,13 @@ export default function ResortOSCalendar({
                     <span style={{
                       fontWeight: 800,
                       fontSize: '0.62rem',
-                      color: departed ? '#94A3B8' : (isLight ? '#0F172A' : '#FFFFFF'),
+                      color: hold || departed ? (isLight ? '#78716C' : '#D6D3D1') : (isLight ? '#0F172A' : '#FFFFFF'),
                       whiteSpace: 'nowrap',
                       pointerEvents: 'none'
                     }}>
-                      {guestCardFirstName(booking.guest_name || 'אורח')}
+                      {hold ? holdLabel : guestCardFirstName(booking.guest_name || 'אורח')}
                     </span>
-                    {bookingGuestHeadcount(booking) > 0 ? (
+                    {!hold && bookingGuestHeadcount(booking) > 0 ? (
                       <span
                         aria-label={`${bookingGuestHeadcount(booking)} אורחים`}
                         style={{
@@ -2361,13 +2609,27 @@ export default function ResortOSCalendar({
                         {bookingGuestHeadcount(booking)}
                       </span>
                     ) : null}
-                    {kinorotSettlementKind(booking) === 'voucher' ? (
+                    {!hold && outHour ? (
+                      <span
+                        aria-label={`יציאה ${outHour}`}
+                        style={{
+                          fontSize: 9,
+                          fontWeight: 800,
+                          flexShrink: 0,
+                          color: hold || departed ? (isLight ? '#78716C' : '#D6D3D1') : (isLight ? '#5B21B6' : '#DDD6FE'),
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        ←{outHour}
+                      </span>
+                    ) : null}
+                    {!hold && kinorotSettlementKind(booking) === 'voucher' ? (
                       <Ticket size={11} strokeWidth={2.4} aria-label="שובר" />
                     ) : null}
-                    {!departed && awaitingCashCollection(booking) ? (
+                    {!hold && !departed && awaitingCashCollection(booking) ? (
                       <Banknote size={11} strokeWidth={2.4} aria-label="מזומן בהגעה" />
                     ) : null}
-                    {bookingHasCrib(booking) ? <Baby size={11} strokeWidth={2.4} aria-label="מיטת תינוק" /> : null}
+                    {!hold && bookingHasCrib(booking) ? <Baby size={11} strokeWidth={2.4} aria-label="מיטת תינוק" /> : null}
                   </div>
                 );
               })
@@ -2542,6 +2804,144 @@ export default function ResortOSCalendar({
                           הארך לילה
                         </button>
                       </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          </div>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {occupyAskOpen && arrivalsAwaitingOccupy.length > 0 ? (
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 131,
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem'
+          }}>
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              style={{
+                background: themeStyles.wrapperBg,
+                border: '1.5px solid rgba(139, 92, 246, 0.45)',
+                borderRadius: '20px',
+                width: '100%',
+                maxWidth: '460px',
+                maxHeight: '92vh',
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+                padding: '1.4rem',
+                boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
+                color: themeStyles.textPrimary
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
+                <div>
+                  <div style={{ color: '#C4B5FD', fontSize: '0.75rem', fontWeight: 800, letterSpacing: '0.06em' }}>אחרי 20:00</div>
+                  <h3 style={{ margin: '0.35rem 0 0', fontSize: '1.2rem' }}>הזמנות שעדיין לא סומנו תפוס</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOccupyAskDismissedToday(true);
+                    setOccupyAskDismissed(true);
+                    setOccupyAskOpen(false);
+                  }}
+                  style={{ background: 'none', border: 'none', color: themeStyles.textMuted, cursor: 'pointer', padding: 4 }}
+                  aria-label="סגור"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <p style={{ color: themeStyles.textMuted, fontSize: '0.88rem', lineHeight: 1.55, margin: '0.7rem 0 0.85rem' }}>
+                לפי היומן יש כניסה היום, אבל היחידה עדיין לא סומנה כתפוסה. סמנו מי כבר הגיע.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.85rem' }}>
+                <button
+                  type="button"
+                  disabled={occupyAskBusy}
+                  onClick={() => markAllArrivalsOccupied()}
+                  style={{
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #8B5CF6, #6D28D9)',
+                    color: '#FFF',
+                    borderRadius: '10px',
+                    padding: '0.6rem',
+                    fontWeight: 800,
+                    cursor: occupyAskBusy ? 'wait' : 'pointer'
+                  }}
+                >
+                  {occupyAskBusy ? 'מעדכן…' : `סמן הכל תפוס (${arrivalsAwaitingOccupy.length})`}
+                </button>
+                <button
+                  type="button"
+                  disabled={occupyAskBusy}
+                  onClick={() => {
+                    setOccupyAskDismissedToday(true);
+                    setOccupyAskDismissed(true);
+                    setOccupyAskOpen(false);
+                  }}
+                  style={{
+                    border: `1px solid ${themeStyles.inputBorder}`,
+                    background: isLight ? '#EAE5DD' : '#1E293B',
+                    color: themeStyles.textPrimary,
+                    borderRadius: '10px',
+                    padding: '0.6rem',
+                    fontWeight: 800,
+                    cursor: 'pointer'
+                  }}
+                >
+                  אחר כך
+                </button>
+              </div>
+              <div style={{ display: 'grid', gap: '0.7rem', flex: 1, minHeight: 0, overflowY: 'auto', paddingLeft: '2px' }}>
+                {arrivalsAwaitingOccupy.map(({ unit, booking }) => {
+                  const unitName = unit ? whatsAppUnitName(unit, t) : (booking.unit_id || '');
+                  return (
+                    <div
+                      key={booking.id || unit?.id}
+                      style={{
+                        border: `1px solid ${themeStyles.inputBorder}`,
+                        borderRadius: '14px',
+                        padding: '0.85rem',
+                        background: isLight ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.03)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '0.75rem'
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 800 }}>{booking.guest_name || 'אורח'}</div>
+                        <div style={{ fontSize: '0.8rem', color: themeStyles.textMuted }}>{unitName}</div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={occupyAskBusy}
+                        onClick={() => markArrivalOccupied(unit)}
+                        style={{
+                          border: 'none',
+                          cursor: occupyAskBusy ? 'wait' : 'pointer',
+                          borderRadius: '10px',
+                          padding: '0.55rem 0.85rem',
+                          fontWeight: 800,
+                          background: 'linear-gradient(135deg, #8B5CF6, #6D28D9)',
+                          color: '#FFF',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        תפוס
+                      </button>
                     </div>
                   );
                 })}
@@ -3019,7 +3419,7 @@ export default function ResortOSCalendar({
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {(() => {
                       const unit = rawUnits.find((u) => u.id === editFormData.unit_id);
-                      const cabin = unit ? t(unit.id + '_short', unit.name) : '';
+                      const cabin = unit ? fieldUnitDisplayName(unit, t(unit.id + '_short', unit.name)) : '';
                       if (isEditingBookingDetails) return cabin ? `עריכה · ${cabin}` : 'עריכת הזמנה';
                       return cabin || 'פרטי הזמנה';
                     })()}
@@ -3063,12 +3463,35 @@ export default function ResortOSCalendar({
               {!isEditingBookingDetails ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
                   <div>
-                    <div style={{ fontSize: '1.12rem', fontWeight: 900, lineHeight: 1.25 }}>
-                      {editFormData.guest_name || '—'}
+                    <div style={{ fontSize: '1.12rem', fontWeight: 900, lineHeight: 1.25, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <span>{editFormData.guest_name || '—'}</span>
+                      <PresenceDot booking={editingBooking} />
                     </div>
-                    <div style={{ fontSize: '0.88rem', fontWeight: 700, marginTop: '0.12rem', letterSpacing: '0.02em', unicodeBidi: 'isolate', color: themeStyles.textMuted }} dir="ltr">
-                      {editFormData.guest_phone || '—'}
-                    </div>
+                    {editFormData.guest_phone ? (
+                      <a
+                        href={`tel:${toDialPhone(editFormData.guest_phone)}`}
+                        dir="ltr"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          marginTop: '0.2rem',
+                          fontSize: '0.95rem',
+                          fontWeight: 800,
+                          letterSpacing: '0.02em',
+                          unicodeBidi: 'isolate',
+                          color: '#818CF8',
+                          textDecoration: 'none'
+                        }}
+                      >
+                        <Phone size={14} />
+                        {editFormData.guest_phone}
+                      </a>
+                    ) : (
+                      <div style={{ fontSize: '0.88rem', fontWeight: 700, marginTop: '0.12rem', color: themeStyles.textMuted }}>
+                        —
+                      </div>
+                    )}
                     <div style={{ marginTop: '0.28rem', fontSize: '0.84rem', fontWeight: 800 }}>
                       {formatDisplayDate(editFormData.check_in_date)} → {formatDisplayDate(editFormData.check_out_date)}
                       <span style={{ color: themeStyles.textMuted, fontWeight: 700 }}>
@@ -3084,102 +3507,56 @@ export default function ResortOSCalendar({
                     </div>
                   </div>
 
-                  {editFormData.guest_phone ? (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.45rem' }}>
-                      <a
-                        href={`tel:${toDialPhone(editFormData.guest_phone)}`}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '0.4rem',
-                          textDecoration: 'none',
-                          background: 'linear-gradient(135deg, #6366F1, #4F46E5)',
-                          color: '#FFF',
-                          borderRadius: '10px',
-                          padding: '0.55rem',
-                          fontWeight: 800,
-                          fontSize: '0.82rem',
-                          boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)'
-                        }}
-                      >
-                        <Phone size={15} />
-                        התקשר
-                      </a>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const phone = toWhatsAppPhone(editFormData.guest_phone);
-                          if (!phone) return;
-                          const unit = rawUnits.find((u) => u.id === editFormData.unit_id);
-                          const unitName = unit ? whatsAppUnitName(unit, t) : '';
-                          const text = encodeURIComponent(
-                            `שלום ${editFormData.guest_name || ''}, כאן לגבי ההזמנה ב-${unitName} (${formatDisplayDate(editFormData.check_in_date)}–${formatDisplayDate(editFormData.check_out_date)})`
-                          );
-                          openWhatsAppChat(phone, text);
-                        }}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '0.4rem',
-                          border: 'none',
-                          cursor: 'pointer',
-                          background: 'linear-gradient(135deg, #25D366, #128C7E)',
-                          color: '#FFF',
-                          borderRadius: '10px',
-                          padding: '0.55rem',
-                          fontWeight: 800,
-                          fontSize: '0.82rem',
-                          boxShadow: '0 4px 14px rgba(37, 211, 102, 0.35)'
-                        }}
-                      >
-                        <Send size={15} />
-                        WhatsApp
-                      </button>
-                      <button
-                        type="button"
-                        disabled={sendingSms}
-                        onClick={async () => {
-                          if (sendingSms) return;
-                          const unit = rawUnits.find((u) => u.id === editFormData.unit_id);
-                          const unitName = unit ? whatsAppUnitName(unit, t) : '';
-                          setSendingSms(true);
-                          try {
-                            await sendStaffSms({
-                              phone: editFormData.guest_phone,
-                              message: `שלום ${editFormData.guest_name || ''}, כאן לגבי ההזמנה ב-${unitName} (${formatDisplayDate(editFormData.check_in_date)}–${formatDisplayDate(editFormData.check_out_date)})`
-                            });
-                            window.alert('הסמס נשלח.');
-                          } catch (err) {
-                            window.alert(smsErrorText(err));
-                          } finally {
-                            setSendingSms(false);
-                          }
-                        }}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '0.3rem',
-                          border: 'none',
-                          cursor: sendingSms ? 'wait' : 'pointer',
-                          background: 'linear-gradient(135deg, #0EA5E9, #0369A1)',
-                          color: '#FFF',
-                          borderRadius: '10px',
-                          padding: '0.55rem',
-                          fontWeight: 800,
-                          fontSize: '0.78rem',
-                          boxShadow: '0 4px 14px rgba(14, 165, 233, 0.35)',
-                          opacity: sendingSms ? 0.75 : 1
-                        }}
-                      >
-                        <MessageSquare size={15} />
-                        סמס
-                      </button>
+                  {editingBooking?.booking_status !== 'CANCELED' ? (
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: 6,
+                      padding: 4,
+                      borderRadius: 12,
+                      background: isLight ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.05)',
+                      border: `1px solid ${themeStyles.inputBorder}`
+                    }}>
+                      {[
+                        { id: 'details', label: 'פרטים' },
+                        { id: 'messages', label: 'הודעות' }
+                      ].map((tab) => {
+                        const active = bookingModalTab === tab.id;
+                        return (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setBookingModalTab(tab.id)}
+                            style={{
+                              border: 'none',
+                              borderRadius: 10,
+                              padding: '0.55rem 0.4rem',
+                              fontWeight: 900,
+                              fontSize: '0.82rem',
+                              cursor: 'pointer',
+                              background: active
+                                ? (isLight ? '#312E81' : '#4F46E5')
+                                : 'transparent',
+                              color: active ? '#F8FAFC' : themeStyles.textMuted
+                            }}
+                          >
+                            {tab.label}
+                          </button>
+                        );
+                      })}
                     </div>
                   ) : null}
 
+                  {bookingModalTab === 'messages' && editingBooking?.booking_status !== 'CANCELED' ? (
+                    <GuestCommsPanel
+                      booking={editingBooking}
+                      themeStyles={themeStyles}
+                      isLight={isLight}
+                    />
+                  ) : null}
+
+                  {bookingModalTab !== 'messages' ? (
+                  <>
                   {canSeePayments && editingBooking?.booking_status !== 'CANCELED' && editingBooking?.payment_mode !== 'CASH_TRUST' && !isFullyPaid(editingBooking) ? (
                     <HypTerminalField
                       locked={Boolean(editingBooking.hyp_terminal || editingBooking.stay?.hyp_terminal)}
@@ -3666,6 +4043,8 @@ export default function ResortOSCalendar({
                       <Trash2 size={14} />
                       ביטול הזמנה
                     </button>
+                  ) : null}
+                  </>
                   ) : null}
                 </div>
               ) : (
@@ -4427,9 +4806,40 @@ export default function ResortOSCalendar({
                   <Printer size={15} />
                   שניהם
                 </button>
+                <button
+                  type="button"
+                  onClick={sendCleanersWhatsApp}
+                  style={{
+                    ...buttonStyle,
+                    width: '100%',
+                    padding: '0.75rem',
+                    justifyContent: 'center',
+                    background: '#25D366',
+                    color: '#052e16',
+                    border: 'none'
+                  }}
+                >
+                  <MessageSquare size={15} />
+                  וואטסאפ למנקים
+                </button>
               </div>
             </motion.div>
           </div>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {cleaningChecklistOpen ? (
+          <CleaningChecklistModal
+            open={cleaningChecklistOpen}
+            onClose={() => setCleaningChecklistOpen(false)}
+            bookings={rawBookings}
+            units={units}
+            themeStyles={themeStyles}
+            buttonStyle={buttonStyle}
+            initialArea={dutyReportArea || boardArea || 'all'}
+            initialDate={defaultReportDate()}
+          />
         ) : null}
       </AnimatePresence>
 
@@ -4625,13 +5035,15 @@ export default function ResortOSCalendar({
           bookings={rawBookings}
           unitName={(() => {
             const unit = units.find((row) => row.id === opsUnitId) || rawUnits.find((row) => row.id === opsUnitId);
-            return unit ? t(unit.id + '_name', unit.name) : '';
+            return unit ? fieldUnitDisplayName(unit, t(unit.id + '_name', unit.name)) : '';
           })()}
           isLight={isLight}
           themeStyles={themeStyles}
           onClose={closeOpsSheet}
           onPick={applyUnitOpsFromSheet}
           onOccupancy={applyOccupancyFromSheet}
+          onAssign={applyAssigneeFromSheet}
+          onCompletions={applyCompletionsFromSheet}
         />
       ) : null}
     </div>

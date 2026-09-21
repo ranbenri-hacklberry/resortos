@@ -3,7 +3,7 @@ import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { createStaff, deactivateAgent, deactivateStaff, getAttendanceSettings, getSharedTrackerDoc, getStaffMe, listAgents, listStaff, loginStaff, logoutStaff, requireManagerStaff, requireStaff, revealStaffPassword, saveSharedTrackerDoc, setAttendanceSettings, updateStaff, upsertAgent } from './auth.js';
+import { createStaff, deactivateAgent, deactivateStaff, getAttendanceSettings, getSharedTrackerDoc, getStaffMe, listAgents, listStaff, listStaffDirectory, loginStaff, logoutStaff, requireManagerStaff, requireStaff, revealStaffPassword, saveSharedTrackerDoc, setAttendanceSettings, updateStaff, upsertAgent } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -104,6 +104,7 @@ app.post('/api/auth/login', loginStaff);
 app.get('/api/auth/me', getStaffMe);
 app.post('/api/auth/logout', logoutStaff);
 app.get('/api/auth/staff', listStaff);
+app.get('/api/auth/staff-directory', listStaffDirectory);
 app.get('/api/auth/tracker', getSharedTrackerDoc);
 app.put('/api/auth/tracker', saveSharedTrackerDoc);
 app.get('/api/auth/staff/:id/password', revealStaffPassword);
@@ -202,6 +203,46 @@ app.post('/api/sms/send', requireStaff, async (req, res) => {
   }
 });
 
+app.get('/api/guest-comms', requireStaff, async (req, res) => {
+  const { handleListGuestComms } = await import('./guestComms.js');
+  return handleListGuestComms(req, res);
+});
+
+app.post('/api/guest-comms/send', requireStaff, async (req, res) => {
+  const { handleSendGuestComm } = await import('./guestComms.js');
+  return handleSendGuestComm(req, res);
+});
+
+app.get('/api/ops/stay-status', requireStaff, async (req, res) => {
+  const { handleStayStatus } = await import('./guestComms.js');
+  return handleStayStatus(req, res);
+});
+
+app.post('/api/guest/self-checkout-effects', async (req, res) => {
+  try {
+    const secret = String(process.env.CHECKOUT_MAILBOX_SECRET || '').trim();
+    const provided = String(req.headers['x-hotelos-mailbox'] || '').trim();
+    if (!secret || provided !== secret) {
+      return res.status(401).json({ error: 'UNAUTHORIZED' });
+    }
+    const booking = {
+      id: req.body?.booking_id,
+      unit_id: req.body?.unit_id,
+      guest_phone: req.body?.guest_phone,
+      tenant_id: req.body?.tenant_id,
+      checkout_token: req.body?.checkout_token,
+      checked_out_at: req.body?.checked_out_at
+    };
+    if (!booking.id) return res.status(400).json({ error: 'BOOKING_REQUIRED' });
+    const { handleSelfCheckoutSideEffects } = await import('./guestComms.js');
+    await handleSelfCheckoutSideEffects(booking);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[self-checkout-effects]', err.message);
+    return res.status(err.status || 500).json({ error: err.message || 'EFFECTS_FAILED' });
+  }
+});
+
 app.get('/api/kinorot/sync', requireManagerStaff, async (req, res) => {
   try {
     const { readKinorotSyncStatus } = await import('./kinorotSyncControl.js');
@@ -214,7 +255,12 @@ app.get('/api/kinorot/sync', requireManagerStaff, async (req, res) => {
 app.post('/api/kinorot/sync', requireManagerStaff, async (req, res) => {
   try {
     const { startKinorotSync } = await import('./kinorotSyncControl.js');
-    res.status(202).json(startKinorotSync());
+    res.status(202).json(startKinorotSync({
+      mode: req.body?.mode,
+      days: req.body?.days,
+      backDays: req.body?.backDays,
+      boardDays: req.body?.boardDays
+    }));
   } catch (err) {
     res.status(502).json({ error: err.message || 'KINOROT_SYNC_FAILED' });
   }

@@ -1,9 +1,11 @@
 import { israelToday } from './cabinAccess';
-import { bookingGuestCounts } from './dailyDutyReport';
+import { bookingGuestCounts, bookingHasCrib, bookingPeopleLabel } from './dailyDutyReport';
+import { housekeepingTaskCopy, isGenericTurnoverReason } from './housekeepingTaskMeta';
 import { lockboxCodeForUnit } from './guestProfileSeed';
 import { stayYmd } from './calendarOccupancy';
 import { hideHousekeepingTaskWhileOccupied, isAwaitingManagerInspect } from './unitStatus';
 import { unitFullName, visibleInventory } from './units';
+import { fieldUnitDisplayName } from './fieldUnitCatalog';
 
 export const FIELD_STAFF_PATHS = new Set(['/staff', '/ops']);
 export const FIELD_STAFF_HOSTS = new Set(['ops.resortos.app', 'ops.resortos.co.il']);
@@ -50,6 +52,7 @@ export const FIELD_REASON_KEYS = [
   { value: 'טופל', key: 'FIELD_REASON_DONE' },
   { value: 'חוסר בציוד', key: 'FIELD_REASON_SHORTAGE_DEFAULT' },
   { value: 'ממתין לביקורת מנהל', key: 'FIELD_REASON_INSPECT' },
+  { value: 'נקי · השלמות', key: 'FIELD_REASON_COMPLETIONS' },
   { value: 'ניקוי לאחר יציאה והכנה לכניסה', key: 'FIELD_REASON_TURNOVER' }
 ];
 
@@ -115,6 +118,7 @@ export function fieldTaskKind(unit) {
   const ops = unit?.operational_status || 'READY';
   if (ops === 'MAINTENANCE_ALERT') return 'maintenance';
   if (ops === 'GARDENING') return 'gardening';
+  if (ops === 'NEEDS_COMPLETIONS') return 'completions';
   if (ops === 'DIRTY' || ops === 'IN_PROGRESS') return 'open';
   if (ops === 'READY' && String(unit.custom_reason || '').includes('טופל')) return 'done';
   if (isAwaitingManagerInspect(unit)) return 'inspect';
@@ -140,7 +144,7 @@ export function listFieldStaffTasks(units, bookings = [], today = israelToday(),
   return visibleInventory(units, allowedUnitIds).flatMap((unit) => {
     const kind = fieldTaskKind(unit);
     if (!kind) return [];
-    const cleaning = kind === 'open' || kind === 'inspect';
+    const cleaning = kind === 'open' || kind === 'inspect' || kind === 'completions';
     if (cleaning && hideHousekeepingTaskWhileOccupied(unit, bookings, today)) return [];
     const unitBookings = (bookings || []).filter((row) => (
       row.unit_id === unit.id && !row.deleted_at && row.booking_status !== 'CANCELED'
@@ -148,15 +152,19 @@ export function listFieldStaffTasks(units, bookings = [], today = israelToday(),
     const checkout = unitBookings.find((row) => stayYmd(row.check_out_date) === today);
     const checkin = unitBookings.find((row) => stayYmd(row.check_in_date) === today);
     const { stay, stayKind } = stayForCleaningCard(unitBookings, today);
-    const guests = bookingGuestCounts(stay);
-    const reason = unit.custom_reason
-      || (kind === 'maintenance'
-        ? 'תקלת אחזקה פתוחה'
-        : (kind === 'inspect' ? 'ממתין לביקורת מנהל' : 'ניקוי לאחר יציאה והכנה לכניסה'));
+    const stayForCounts = checkin || stay || checkout;
+    const guests = bookingGuestCounts(stayForCounts);
+    const copy = cleaning ? housekeepingTaskCopy({ unit, bookings, today }) : { reason: '', lockbox: '' };
+    const reason = (!cleaning || (unit.custom_reason && !isGenericTurnoverReason(unit.custom_reason)))
+      ? (unit.custom_reason
+        || (kind === 'maintenance'
+          ? 'תקלת אחזקה פתוחה'
+          : (kind === 'inspect' ? 'ממתין לביקורת מנהל' : (kind === 'completions' ? 'נקי · השלמות' : 'ניקוי לאחר יציאה והכנה לכניסה'))))
+      : (copy.reason || 'פנוי');
     return [{
       id: unit.id,
       unit,
-      name: unitFullName(unit),
+      name: fieldUnitDisplayName(unit, unitFullName(unit)),
       reason,
       kind,
       cleaning,
@@ -167,7 +175,9 @@ export function listFieldStaffTasks(units, bookings = [], today = israelToday(),
         ? `יציאה היום${checkout.guest_name ? ` · ${checkout.guest_name}` : ''}`
         : (checkin ? `כניסה היום${checkin.guest_name ? ` · ${checkin.guest_name}` : ''}` : ''),
       guests,
-      lockbox: cleaning ? lockboxCodeForUnit(unit) : ''
+      peopleLabel: bookingPeopleLabel(stayForCounts),
+      needsCrib: bookingHasCrib(stayForCounts),
+      lockbox: cleaning ? (copy.lockbox || lockboxCodeForUnit(unit)) : ''
     }];
   });
 }

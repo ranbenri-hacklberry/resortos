@@ -166,12 +166,20 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
   const bankWaiting = Boolean(stay?.payment_proof)
     && (stay?.payment_choice === 'BANK_TRANSFER' || booking.payment_status === 'PENDING_BANK')
     && !guestCheckedIn;
-  const showCheckin = onStayDates
+  const roomOpen = Boolean(stay?.room_open) || String(stay?.operational_status || '') === 'READY';
+  const showPayCheckin = onStayDates
     && phase !== 'pre'
     && !guestCheckedIn
     && !bankWaiting
     && stay?.self_checked_out_at == null
     && !paidForCheckin;
+  const showPaidCheckin = onStayDates
+    && !guestCheckedIn
+    && !bankWaiting
+    && stay?.self_checked_out_at == null
+    && paidForCheckin
+    && roomOpen;
+  const showCheckin = showPayCheckin || showPaidCheckin;
   const showInStay = cabinReady && guestCheckedIn && stay?.self_checked_out_at == null;
   const showWaiting = !guestCheckedIn ? (phase !== 'pre' && !cabinReady && !showCheckin && !bankWaiting) : (!cabinReady);
 
@@ -439,7 +447,9 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
             {t('INSTAY_CHECKIN_TITLE')}
           </div>
           <p style={{ margin: '0 0 0.85rem', color: themeStyles.textMuted, lineHeight: 1.55, fontSize: '0.88rem' }}>
-            {t('INSTAY_CHECKIN_CHOOSE_HINT')}
+            {showPaidCheckin
+              ? t('INSTAY_CHECKIN_READY_HINT', 'החדר מוכן ונקי. אפשר לבצע צ׳ק-אין ולקבל את קוד הכניסה.')
+              : t('INSTAY_CHECKIN_CHOOSE_HINT')}
           </p>
           {checkinError ? (
             <p style={{ margin: '0 0 0.75rem', color: '#F87171', fontWeight: 700, fontSize: '0.82rem' }}>{checkinError}</p>
@@ -449,6 +459,10 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
             disabled={Boolean(checkinBusy)}
             onClick={() => {
               setCheckinError('');
+              if (showPaidCheckin) {
+                runCheckin('guest_checkin_complete');
+                return;
+              }
               setCashPin('');
               setCheckinStep(tabFromPreference(
                 booking.balance_payment_preference || stay?.balance_payment_preference,
@@ -467,7 +481,11 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
               cursor: 'pointer'
             }}
           >
-            {checkinBusy ? t('INSTAY_CHECKIN_PAYING') : t('INSTAY_CHECKIN_CTA')}
+            {checkinBusy
+              ? t('INSTAY_CHECKIN_PAYING')
+              : (showPaidCheckin
+                ? t('INSTAY_CHECKIN_ENTER', 'צ׳ק-אין עכשיו')
+                : t('INSTAY_CHECKIN_CTA'))}
           </button>
         </div>
       ) : null}

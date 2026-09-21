@@ -11,6 +11,7 @@ import { KINOROT_COMPLEXES, KINOROT_PLACE_TO_UNIT, TENANT_ID } from './kinorotPl
 import { parseResviewPayment } from '../functions/lib/kinorotZcredit.js';
 import { moneyFromKinorotPayment } from '../src/lib/kinorotNotePayments.js';
 import { appendStayHoursToken, notesFromResviewHtml, parseStayHoursFromNotes } from '../src/lib/kinorotStayHours.js';
+import { channelFromKinorotGuest } from '../src/lib/kinorotChannel.js';
 import { writeKinorotSyncStatus } from './kinorotSyncControl.js';
 import { summarizeKinorotDiff } from './kinorotSyncDiff.js';
 import { notifySameDayKinorotBookings } from './kinorotSameDaySms.js';
@@ -18,9 +19,25 @@ import { notifySameDayKinorotBookings } from './kinorotSameDaySms.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
 const BASE = 'https://app.kinorotgo.co.il';
-const DAYS = Number(process.env.KINOROT_DAYS || 45);
-const BACK_DAYS = Number(process.env.KINOROT_BACK_DAYS || 31);
 const COOKIE_FILE = path.join(ROOT, 'server', 'kinorot.session');
+
+function syncHorizon() {
+  const mode = String(process.env.KINOROT_MODE || 'full').toLowerCase();
+  const duty = mode === 'duty';
+  const days = Number(process.env.KINOROT_DAYS ?? (duty ? 1 : 45));
+  const backDays = Number(process.env.KINOROT_BACK_DAYS ?? (duty ? 1 : 31));
+  const boardDays = Number(
+    process.env.KINOROT_BOARD_DAYS
+    ?? (duty || (days <= 2 && backDays <= 2) ? Math.max(1, days || 1) : 14)
+  );
+  return {
+    mode: duty ? 'duty' : 'full',
+    days: Math.max(0, Number.isFinite(days) ? days : (duty ? 1 : 45)),
+    backDays: Math.max(0, Number.isFinite(backDays) ? backDays : (duty ? 1 : 31)),
+    boardDays: Math.max(1, Number.isFinite(boardDays) ? boardDays : 14),
+    skipEnrich: duty || process.env.KINOROT_SKIP_ENRICH === '1'
+  };
+}
 
 function loadEnvFile() {
   const envPath = path.join(ROOT, '.env');
@@ -297,6 +314,7 @@ async function enrichGuestContacts(rows, jar) {
         ...parseResviewGuest(page.text),
         payment: parseResviewPayment(page.text),
         pax: parsePaxFromText(stripToText(page.text)),
+        notes: notesFromResviewHtml(page.text),
         hours: parseStayHoursFromNotes(notesFromResviewHtml(page.text))
       });
     } catch (err) {
@@ -322,6 +340,7 @@ async function enrichGuestContacts(rows, jar) {
     }
     if (detail.payment) row.payment = detail.payment;
     if (detail.hours) row.hours = detail.hours;
+    if (detail.notes) row.notes = detail.notes;
   }
   console.log(`[kinorot] phones found ${withPhone}/${rows.length}`);
   return jar;
@@ -332,28 +351,38 @@ function bookingStatus(st, cin, cout, today, paymentStatus) {
   return 'CONFIRMED';
 }
 
-function channelSource(resid) {
-  return String(resid).length > 10 ? 'airbnb' : 'kinorot';
-}
-
 function sqlString(value) {
   return `'${String(value || '').replace(/'/g, "''")}'`;
 }
 
 function appendPayToken(req, money) {
-  const cleaned = String(req || '').replace(/\|pay:(?:voucher|comp)\b/g, '');
+  const cleaned = String(req || '').replace(/\|pay:(?:voucher|comp|booking)\b/g, '');
   if (money?.payment_mode === 'VOUCHER') return `${cleaned}|pay:voucher`;
   if (money?.payment_mode === 'COMP') return `${cleaned}|pay:comp`;
+  if (money?.payment_mode === 'BOOKING') return `${cleaned}|pay:booking`;
   return cleaned;
 }
 
-function moneyFromResview(payment, resid) {
-  return moneyFromKinorotPayment(payment, resid);
+function moneyFromResview(payment, resid, { bookingCom = false } = {}) {
+  const money = moneyFromKinorotPayment(payment, resid);
+  if (!bookingCom) return money;
+  return {
+    ...money,
+    payment_status: 'PAID',
+    payment_mode: 'BOOKING',
+    clearing_payments: Array.isArray(money.clearing_payments) ? money.clearing_payments : []
+  };
 }
 
 function bookingRow(row, today) {
   const id = `kin_${row.place}_${row.resid}`;
-  const money = moneyFromResview(row.payment, row.resid);
+  const channel = channelFromKinorotGuest({
+    resid: row.resid,
+    email: row.email,
+    notes: row.notes
+  });
+  const bookingCom = channel === 'booking_com';
+  const money = moneyFromResview(row.payment, row.resid, { bookingCom });
   const status = bookingStatus(row.st, row.cin, row.cout, today, money.payment_status);
   return {
     id,
@@ -366,7 +395,7 @@ function bookingRow(row, today) {
     adults_count: row.adults,
     children_count: row.children,
     booking_status: status,
-    channel_source: channelSource(row.resid),
+    channel_source: channel,
     special_requests: appendPayToken(
       appendStayHoursToken(
         `kinorot:${row.resid}|pax:${Number(row.adults) || 0}+${Number(row.children) || 0}+${Number(row.infants) || 0}`,
@@ -562,7 +591,7 @@ ON CONFLICT (id) DO UPDATE SET
   payment_status = CASE
     WHEN public.hotelos_bookings.payment_status IN ('PENDING_CASH', 'PENDING_BANK')
       THEN public.hotelos_bookings.payment_status
-    WHEN EXCLUDED.payment_mode IN ('VOUCHER', 'COMP') THEN 'PAID'
+    WHEN EXCLUDED.payment_mode IN ('VOUCHER', 'COMP', 'BOOKING') THEN 'PAID'
     WHEN EXCLUDED.clearing_payments <> '[]'::jsonb AND EXCLUDED.payment_status IN ('PAID', 'DEPOSIT_PAID', 'PARTIAL')
       THEN EXCLUDED.payment_status
     WHEN COALESCE(public.hotelos_bookings.clearing_payments, '[]'::jsonb) = '[]'::jsonb
@@ -684,24 +713,25 @@ function headerTdate(html) {
   return (String(html || '').match(/id="headerTdate"\s+value="([^"]+)"/) || [])[1] || '';
 }
 
-function boardWindows(today) {
+function boardWindows(today, horizon = syncHorizon()) {
   const windows = [];
-  const latest = addDaysIso(today, Math.max(0, DAYS));
+  const chunk = horizon.boardDays;
+  const latest = addDaysIso(today, Math.max(0, horizon.days));
   let cursor = today;
   while (cursor <= latest) {
-    windows.push({ tdate: cursor, days: 14 });
-    cursor = addDaysIso(cursor, 14);
+    windows.push({ tdate: cursor, days: chunk });
+    cursor = addDaysIso(cursor, chunk);
   }
-  const earliest = addDaysIso(today, -Math.max(0, BACK_DAYS));
+  const earliest = addDaysIso(today, -Math.max(0, horizon.backDays));
   cursor = earliest;
   while (cursor < today) {
-    windows.push({ tdate: cursor, days: 14 });
-    cursor = addDaysIso(cursor, 14);
+    windows.push({ tdate: cursor, days: chunk });
+    cursor = addDaysIso(cursor, chunk);
   }
   return windows;
 }
 
-export async function scrapeKinorotBoards() {
+export async function scrapeKinorotBoards(horizon = syncHorizon()) {
   let jar = loadJar();
   let probe = await request(`${BASE}/boardhp.php?days=1`, jar);
   if (!looksLoggedIn(probe.text)) {
@@ -712,8 +742,8 @@ export async function scrapeKinorotBoards() {
   const all = new Map();
   const unmapped = new Map();
   const today = todayIso();
-  const windows = boardWindows(today);
-  console.log(`[kinorot] windows ${windows.map((win) => `${win.tdate}/${win.days}d`).join(' · ')}`);
+  const windows = boardWindows(today, horizon);
+  console.log(`[kinorot] mode=${horizon.mode} windows ${windows.map((win) => `${win.tdate}/${win.days}d`).join(' · ')}`);
   for (const complex of KINOROT_COMPLEXES) {
     for (const win of windows) {
       const url = `${BASE}/boardhp.php?complex=${complex}&days=${win.days}&tdate=${win.tdate}`;
@@ -752,12 +782,12 @@ export async function scrapeKinorotBoards() {
     }
   }
   saveJar(jar);
-  return { rows: [...all.values()], unmapped: [...unmapped.values()], jar, today };
+  return { rows: [...all.values()], unmapped: [...unmapped.values()], jar, today, horizon };
 }
 
-export async function scrapeKinorot() {
-  const { rows, jar } = await scrapeKinorotBoards();
-  if (process.env.KINOROT_SKIP_ENRICH === '1') return rows;
+export async function scrapeKinorot(horizon = syncHorizon()) {
+  const { rows, jar } = await scrapeKinorotBoards(horizon);
+  if (horizon.skipEnrich || process.env.KINOROT_SKIP_ENRICH === '1') return rows;
   const nextJar = await enrichGuestContacts(rows, jar);
   saveJar(nextJar);
   return rows;
@@ -785,9 +815,9 @@ function fetchJsonSql(sql) {
   return JSON.parse(raw);
 }
 
-function loadExistingKinRows(incoming, today) {
-  const from = addDaysIso(today, -BACK_DAYS);
-  const to = addDaysIso(today, DAYS);
+function loadExistingKinRows(incoming, today, horizon = syncHorizon()) {
+  const from = addDaysIso(today, -horizon.backDays);
+  const to = addDaysIso(today, horizon.days);
   const ids = incoming.map((row) => sqlString(row.id));
   const idFilter = ids.length ? `id IN (${ids.join(',')}) OR` : '';
   return fetchJsonSql(`
@@ -830,52 +860,66 @@ function countLiveKinFuture(today) {
 
 export async function main() {
   const today = todayIso();
-  writeKinorotSyncStatus({ running: true, lastAttemptAt: new Date().toISOString(), lastError: null });
-  console.log(`[kinorot] scrape days=${DAYS} back=${BACK_DAYS} today=${today}`);
-  const scraped = await scrapeKinorot();
+  const horizon = syncHorizon();
+  writeKinorotSyncStatus({
+    running: true,
+    mode: horizon.mode,
+    lastAttemptAt: new Date().toISOString(),
+    lastError: null
+  });
+  console.log(`[kinorot] scrape mode=${horizon.mode} days=${horizon.days} back=${horizon.backDays} board=${horizon.boardDays} today=${today}`);
+  const scraped = await scrapeKinorot(horizon);
   const rows = dedupeIncomingOverlaps(scraped.map((row) => bookingRow(row, today)));
   const cins = rows.map((row) => row.check_in_date).filter(Boolean).sort();
   console.log(`[kinorot] parsed ${rows.length} stays range ${cins[0] || '—'} → ${cins.at(-1) || '—'}`);
   if (!rows.length) throw new Error('No Kinorot stays parsed');
   const liveFuture = countLiveKinFuture(today);
-  const allowVanish = process.env.KINOROT_ALLOW_VANISH === '1'
+  // Never vanish on duty scrapes — window is intentionally small.
+  const allowVanish = horizon.mode !== 'duty'
+    && process.env.KINOROT_ALLOW_VANISH === '1'
     && rows.length >= 200
     && liveFuture > 0
     && rows.length >= liveFuture * 0.98;
   if (!allowVanish) {
     console.warn(`[kinorot] skip vanish scraped=${rows.length} liveFuture=${liveFuture}`);
   }
-  const existing = loadExistingKinRows(rows, today);
+  const existing = loadExistingKinRows(rows, today, horizon);
   const changes = summarizeKinorotDiff({ incoming: rows, existing, today });
   console.log(`[kinorot] diff new=${changes.created.length} updated=${changes.updated.length} removed=${changes.removed.length}`);
   const sql = buildSql(rows, today, { allowVanish });
   const out = runSql(sql);
   console.log(out.trim().split('\n').slice(-8).join('\n'));
   console.log(`[kinorot] upserted ${rows.length} rows`);
-  try {
-    const sms = await notifySameDayKinorotBookings(changes.created, today);
-    if (sms.rows) {
-      console.log(`[kinorot] same-day sms rows=${sms.rows} sent=${sms.sent} errors=${sms.errors?.length || 0}`);
-      if (sms.errors?.length) console.warn('[kinorot] same-day sms', sms.errors.map((item) => item.error).join(' · '));
+  if (horizon.mode !== 'duty') {
+    try {
+      const sms = await notifySameDayKinorotBookings(changes.created, today);
+      if (sms.rows) {
+        console.log(`[kinorot] same-day sms rows=${sms.rows} sent=${sms.sent} errors=${sms.errors?.length || 0}`);
+        if (sms.errors?.length) console.warn('[kinorot] same-day sms', sms.errors.map((item) => item.error).join(' · '));
+      }
+    } catch (err) {
+      console.warn(`[kinorot] same-day sms failed: ${err.message || err}`);
     }
-  } catch (err) {
-    console.warn(`[kinorot] same-day sms failed: ${err.message || err}`);
   }
   fetch(process.env.HOTELOS_BRIDGE_URL ? `${String(process.env.HOTELOS_BRIDGE_URL).replace(/\/$/, '')}/api/guest-context-push` : 'http://127.0.0.1:4038/api/guest-context-push', {
     method: 'POST'
   }).catch(() => {});
+  const okAt = new Date().toISOString();
   writeKinorotSyncStatus({
     running: false,
-    lastOkAt: new Date().toISOString(),
+    mode: horizon.mode,
+    lastOkAt: okAt,
     lastError: null,
     rows: rows.length,
     ...(changes.total ? {
-      changeId: new Date().toISOString(),
+      changeId: okAt,
       changes: {
         created: changes.created,
         updated: changes.updated,
-        removed: changes.removed,
-        total: changes.total
+        removed: horizon.mode === 'duty' ? [] : changes.removed,
+        total: horizon.mode === 'duty'
+          ? (changes.created.length + changes.updated.length)
+          : changes.total
       }
     } : {})
   });
@@ -887,6 +931,7 @@ if (isDirect) {
     console.error(`[kinorot] ${err.message || err}`);
     writeKinorotSyncStatus({
       running: false,
+      mode: String(process.env.KINOROT_MODE || 'full').toLowerCase() === 'duty' ? 'duty' : 'full',
       lastAttemptAt: new Date().toISOString(),
       lastError: String(err.message || err)
     });

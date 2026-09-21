@@ -1,4 +1,5 @@
 import { normalizeAllowedUnitIds } from './units';
+import { normalizeStaffPhone } from './staffPhones';
 
 const TOKEN_KEY = 'hotelos-session-token';
 
@@ -84,19 +85,51 @@ export async function logoutStaff() {
   setStoredToken('');
 }
 
+export function staffDisplayName(user) {
+  return String(user?.display_name || user?.username || '').trim();
+}
+
+export function staffWhatsapp(user) {
+  return normalizeStaffPhone(user?.whatsapp_phone || user?.phone);
+}
+
 export async function listStaff() {
   const result = await authFetch('/staff');
   const list = Array.isArray(result?.staff) ? result.staff : [];
   return list.map(withAllowedUnits);
 }
 
+export async function listAssignableStaff() {
+  try {
+    const result = await authFetch('/staff-directory');
+    const list = Array.isArray(result?.staff) ? result.staff : [];
+    return list.map(withAllowedUnits).filter((row) => row?.id && row.is_active !== false);
+  } catch {
+    try {
+      return (await listStaff()).filter((row) => row?.id && row.is_active !== false);
+    } catch {
+      return [];
+    }
+  }
+}
+
+export async function listStaffDirectory() {
+  return listAssignableStaff();
+}
+
+function withStaffPhones(payload) {
+  return {
+    ...payload,
+    allowed_units: normalizeAllowedUnitIds(payload?.allowed_units),
+    phone: normalizeStaffPhone(payload?.phone),
+    whatsapp_phone: normalizeStaffPhone(payload?.whatsapp_phone)
+  };
+}
+
 export async function createStaffAccount(payload) {
   const result = await authFetch('/staff', {
     method: 'POST',
-    body: JSON.stringify({
-      ...payload,
-      allowed_units: normalizeAllowedUnitIds(payload?.allowed_units)
-    })
+    body: JSON.stringify(withStaffPhones(payload))
   });
   if (result?.user) result.user = withAllowedUnits(result.user);
   return result;
@@ -117,10 +150,7 @@ export async function saveAttendanceSettings(payload) {
 export async function updateStaffAccount(id, payload) {
   const result = await authFetch(`/staff/${encodeURIComponent(id)}`, {
     method: 'PATCH',
-    body: JSON.stringify({
-      ...payload,
-      allowed_units: normalizeAllowedUnitIds(payload?.allowed_units)
-    })
+    body: JSON.stringify(withStaffPhones(payload))
   });
   if (result?.user) result.user = withAllowedUnits(result.user);
   return result;

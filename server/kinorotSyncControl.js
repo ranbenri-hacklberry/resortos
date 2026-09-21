@@ -11,6 +11,7 @@ const SCRIPT = path.join(ROOT, 'server', 'syncKinorotCalendar.js');
 function emptyStatus() {
   return {
     running: false,
+    mode: 'full',
     lastOkAt: null,
     lastAttemptAt: null,
     lastError: null,
@@ -55,17 +56,26 @@ function lastKinJournalIso() {
   return value && value !== '\\N' ? value : null;
 }
 
-export function startKinorotSync() {
+export function startKinorotSync(options = {}) {
   const current = readKinorotSyncStatus();
   if (current.running) return current;
+  const mode = String(options.mode || 'full').toLowerCase() === 'duty' ? 'duty' : 'full';
+  const env = { ...process.env, KINOROT_MODE: mode };
+  if (mode === 'duty') {
+    env.KINOROT_DAYS = String(options.days ?? 1);
+    env.KINOROT_BACK_DAYS = String(options.backDays ?? 1);
+    env.KINOROT_BOARD_DAYS = String(options.boardDays ?? 1);
+    env.KINOROT_SKIP_ENRICH = '1';
+  }
   writeKinorotSyncStatus({
     running: true,
+    mode,
     lastAttemptAt: new Date().toISOString(),
     lastError: null
   });
   const child = spawn(process.execPath, [SCRIPT], {
     cwd: ROOT,
-    env: process.env,
+    env,
     detached: true,
     stdio: 'ignore'
   });

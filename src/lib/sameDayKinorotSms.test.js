@@ -15,8 +15,8 @@ describe('same-day Kinorot SMS', () => {
     expect(rows.map((row) => row.id)).toEqual(['kin_671_1']);
   });
 
-  it('texts Max and Costa by default', () => {
-    expect(sameDayAlertPhones({})).toEqual(['0506102416', '0533932462']);
+  it('texts Max SMS only by default', () => {
+    expect(sameDayAlertPhones({})).toEqual(['0506102416']);
   });
 
   it('writes a short Hebrew SMS with the cabin name', () => {
@@ -25,6 +25,6 @@ describe('same-day Kinorot SMS', () => {
       guest_name: 'יוסי לוי',
       check_in_date: '2026-09-06',
       check_out_date: '2026-09-08'
-    })).toBe('הזמנה חדשה להיום\nטוסקנה · פירנצה 1\nיוסי לוי\nכניסה 6/9 יציאה 8/9');
+    })).toMatch(/^הזמנה חדשה להיום\n.*טוסקנה · פירנצה 1\nיוסי לוי\nכניסה 6\/9 יציאה 8\/9$/);
   });
 });

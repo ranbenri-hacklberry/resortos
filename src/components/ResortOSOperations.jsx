@@ -39,6 +39,57 @@ function reopenStatusForDomain(domain) {
   return 'DIRTY';
 }
 
+const SCOPED_TASKS_KEY = 'hotelos-scoped-ops-tasks-v1';
+const ALL_COMPLEXES = 'all';
+
+function isScopedTaskId(id) {
+  return String(id || '').startsWith('scope:');
+}
+
+function readScopedTasks() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SCOPED_TASKS_KEY) || '[]');
+    return Array.isArray(raw) ? raw.filter((row) => row && isScopedTaskId(row.id)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeScopedTasks(list) {
+  try {
+    localStorage.setItem(SCOPED_TASKS_KEY, JSON.stringify((list || []).filter((row) => isScopedTaskId(row?.id))));
+  } catch (_) {}
+}
+
+function shouldSyncUnit(taskId) {
+  return Boolean(taskId) && !isScopedTaskId(taskId);
+}
+
+function newScopedTaskId(propertyId) {
+  const stamp = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
+  return `scope:${propertyId || ALL_COMPLEXES}:${stamp}`;
+}
+
+function stripTitleI18n(map) {
+  if (!map || typeof map !== 'object') return map;
+  const out = {};
+  for (const [key, value] of Object.entries(map)) {
+    out[key] = typeof value === 'string' ? stripLegendPlotNumber(value) : value;
+  }
+  return out;
+}
+
+function emptyTicket() {
+  return {
+    unitId: '',
+    propertyId: '',
+    domain: 'HOUSEKEEPING',
+    title: '',
+    description: '',
+    photos: []
+  };
+}
+
 function mergeTaskOverlay(prev, next) {
   const prevAt = prev.lastInspection?.at || '';
   const nextAt = next.lastInspection?.at || '';
@@ -95,11 +146,17 @@ import {
   ensureCanonicalUnits,
   retirePhantomUnits
 } from '../lib/cloudDb';
-import { ensureTurnoverCleaning, isManagerInspection, markCabinCleanedForInspection } from '../lib/housekeepingCycle';
+import { ensureTurnoverCleaning, isManagerInspection, markCabinCleanedForInspection, passedManagerInspection, persistRoomCompletions } from '../lib/housekeepingCycle';
+import { completionsFromUnit, NEEDS_COMPLETIONS } from '../lib/roomCompletions';
+import RoomCompletionsEditor from './RoomCompletionsEditor';
 import { unitAccessGroup, visibleInventory } from '../lib/units';
 import { operationsViewRole } from '../lib/staffRoles';
 import { israelToday } from '../lib/cabinAccess';
-import { hideHousekeepingTaskWhileOccupied } from '../lib/unitStatus';
+import { hideHousekeepingTaskWhileOccupied, isAwaitingManagerInspect, isEffectivelyOccupied } from '../lib/unitStatus';
+import { housekeepingTaskCopy, isGenericTurnoverReason, taskNeedsRoomLockbox } from '../lib/housekeepingTaskMeta';
+import { lockboxCodeForUnit } from '../lib/guestProfileSeed';
+import { unitMatchesBoardArea } from '../lib/dailyDutyReport';
+import { fieldUnitDisplayName, listFieldComplexes, propertyIdForUnit, stripLegendPlotNumber } from '../lib/fieldUnitCatalog';
 import {
   DEFAULT_SOP_TEMPLATES,
   ensureTaskSop,
@@ -116,14 +173,19 @@ export default function ResortOSOperations({
   tenantId = DEMO_TENANT_ID,
   sessionRole = 'MANAGER',
   canSwitchRole = false,
-  allowedUnitIds = []
+  allowedUnitIds = [],
+  boardArea = 'all'
 }) {
   // Live Dexie IndexedDB Hooks
   const rawUnits = useLiveUnits(tenantId);
-  const units = useMemo(() => visibleInventory(rawUnits, allowedUnitIds), [rawUnits, allowedUnitIds]);
+  const units = useMemo(() => {
+    const inventory = visibleInventory(rawUnits, allowedUnitIds);
+    if (!boardArea || boardArea === 'all') return inventory;
+    return inventory.filter((unit) => unitMatchesBoardArea(unit, boardArea));
+  }, [rawUnits, allowedUnitIds, boardArea]);
   const rawBookings = useLiveBookings(tenantId);
 
-  // Real-time Cloud Sync
+  // Real-time Cloud Sync — soft poll; skip no-op Dexie writes in syncUnitOpsToDexie.
   useEffect(() => {
     syncCloudBookingsToDexie(tenantId);
     syncUnitOpsToDexie(tenantId);
@@ -132,7 +194,7 @@ export default function ResortOSOperations({
     const unsubscribeOps = subscribeToRealtimeUnitOps(tenantId);
     const pollId = setInterval(() => {
       syncUnitOpsToDexie(tenantId);
-    }, 4000);
+    }, 30000);
     return () => {
       clearInterval(pollId);
       if (typeof unsubscribeBookings === 'function') unsubscribeBookings();
@@ -163,7 +225,17 @@ export default function ResortOSOperations({
           t.id === taskId ? { ...t, name_i18n, reason_i18n, text_source_lang: sourceLang } : t
         )
       );
-      await db.units.update(taskId, { name_i18n, reason_i18n, text_source_lang: sourceLang });
+      if (shouldSyncUnit(taskId)) {
+        await db.units.update(taskId, { name_i18n, reason_i18n, text_source_lang: sourceLang });
+        pushUnitToCloud({
+          id: taskId,
+          tenant_id: tenantId,
+          name_i18n,
+          reason_i18n,
+          text_source_lang: sourceLang,
+          updated_at: new Date().toISOString()
+        });
+      }
     } catch (err) {
       console.warn('[TASK I18N WARN]', err);
     }
@@ -176,12 +248,30 @@ export default function ResortOSOperations({
   }, [sessionRole]);
   const [activeKPI, setActiveKPI] = useState('ALL');
   const [domainFilter, setDomainFilter] = useState('ALL');
+  const [wideBoard, setWideBoard] = useState(() => (
+    typeof window !== 'undefined' && window.matchMedia('(min-width: 1100px)').matches
+  ));
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined;
+    const mq = window.matchMedia('(min-width: 1100px)');
+    const onChange = () => setWideBoard(mq.matches);
+    onChange();
+    if (typeof mq.addEventListener === 'function') {
+      mq.addEventListener('change', onChange);
+      return () => mq.removeEventListener('change', onChange);
+    }
+    mq.addListener(onChange);
+    return () => mq.removeListener(onChange);
+  }, []);
 
   // Component Memory Custom Tasks array for 0ms instant reactivity
-  const [customTickets, setCustomTickets] = useState([]);
+  const [customTickets, setCustomTickets] = useState(() => readScopedTasks());
+  const fieldComplexes = useMemo(() => listFieldComplexes(), []);
 
   // Task Feedbacks State
   const [taskFeedbacks, setTaskFeedbacks] = useState({});
+  const [clearedInspectIds, setClearedInspectIds] = useState(() => new Set());
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
@@ -195,15 +285,10 @@ export default function ResortOSOperations({
   // Selected Task States
   const [selectedTaskForDetail, setSelectedTaskForDetail] = useState(null);
   const [selectedTaskForFeedback, setSelectedTaskForFeedback] = useState(null);
-  const [detailDraft, setDetailDraft] = useState({ description: '', photos: [] });
+  const [detailDraft, setDetailDraft] = useState({ title: '', description: '', photos: [] });
 
   // New Ticket Form State (with photos attachment support)
-  const [newTicket, setNewTicket] = useState({
-    unitId: '',
-    domain: 'HOUSEKEEPING',
-    description: '',
-    photos: []
-  });
+  const [newTicket, setNewTicket] = useState(emptyTicket);
 
   // Quality Inspection Feedback Form State
   const [feedbackForm, setFeedbackForm] = useState({
@@ -235,22 +320,38 @@ export default function ResortOSOperations({
           : '');
 
       const status = unit.operational_status || (hasSameDayCheckin ? 'DIRTY' : 'READY');
-      const domain = unit.operational_domain || (status === 'MAINTENANCE_ALERT' ? 'MAINTENANCE' : (status === 'GARDENING' ? 'GARDENING' : 'HOUSEKEEPING'));
-      const urgency = unit.is_escalated ? 'CRITICAL' : (hasSameDayCheckin ? 'HIGH' : (status === 'READY' ? 'READY' : 'ROUTINE'));
       const inspections = Array.isArray(unit.quality_inspections) ? unit.quality_inspections : [];
       const lastInspection = inspections.length ? inspections[inspections.length - 1] : null;
+      let domain = unit.operational_domain || (status === 'MAINTENANCE_ALERT' ? 'MAINTENANCE' : (status === 'GARDENING' ? 'GARDENING' : 'HOUSEKEEPING'));
+      // Pending manager inspect lives in the managers column, not housekeeping.
+      if (isAwaitingManagerInspect(unit)) domain = 'MANAGER';
+      const urgency = unit.is_escalated ? 'CRITICAL' : (hasSameDayCheckin ? 'HIGH' : (status === 'READY' ? 'READY' : 'ROUTINE'));
+      const housekeepingOpen = status === 'DIRTY' || status === 'IN_PROGRESS' || status === NEEDS_COMPLETIONS;
+      const displayName = fieldUnitDisplayName(unit);
+      const hkCopy = housekeepingOpen
+        ? housekeepingTaskCopy({ unit, bookings: rawBookings, today: todayStr })
+        : { reason: '', status: '', lockbox: lockboxCodeForUnit(unit) };
+      const needsLockbox = taskNeedsRoomLockbox({ id: unit.id, domain, scoped: false });
 
-      const computedReason = unit.custom_reason || unit.task_description || 
-        (status === 'MAINTENANCE_ALERT' ? 'תקלת אחזקה פתוחה ביחידה - נדרש תיקון מיידי' : 
-        (status === 'DIRTY' ? 'ניקוי לאחר יציאה והכנה לכניסה' :
-        (status === 'READY' && !isManagerInspection(lastInspection) ? 'ממתין לביקורת מנהל' : 'היחידה נקייה ומוכנה לחלוטין')));
+      const computedReason = housekeepingOpen
+        ? (status === NEEDS_COMPLETIONS ? (unit.custom_reason || 'נקי · השלמות') : hkCopy.reason)
+        : (unit.custom_reason || unit.task_description ||
+          (status === 'MAINTENANCE_ALERT' ? 'תקלת אחזקה פתוחה ביחידה - נדרש תיקון מיידי' :
+          (status === 'READY' && !isManagerInspection(lastInspection) ? 'ממתין לביקורת מנהל' : 'היחידה נקייה ומוכנה לחלוטין')));
 
-      if (hideHousekeepingTaskWhileOccupied(unit, rawBookings, todayStr)) return null;
+      if (housekeepingOpen) {
+        if (isEffectivelyOccupied(unit, rawBookings, todayStr)) return null;
+      } else if (hideHousekeepingTaskWhileOccupied(unit, rawBookings, todayStr)) {
+        return null;
+      }
+      // Fully cleared / inspected-ready units don't stay on the board.
+      if (clearedInspectIds.has(unit.id) || (status === 'READY' && passedManagerInspection(unit))) return null;
+      if (status === 'READY' && !isAwaitingManagerInspect(unit) && !unit.custom_reason) return null;
 
       return {
         id: unit.id,
-        titleKey: unit.name,
-        customTitle: unit.name,
+        titleKey: displayName,
+        customTitle: displayName,
         domain: domain,
         status: status,
         urgency: urgency,
@@ -258,7 +359,7 @@ export default function ResortOSOperations({
         reasonKey: computedReason,
         customReason: computedReason,
         photos: unit.image_urls || [],
-        name_i18n: unit.name_i18n,
+        name_i18n: stripTitleI18n(unit.name_i18n),
         reason_i18n: unit.reason_i18n,
         text_source_lang: unit.text_source_lang || 'he',
         reworkCount: unit.rework_count || 0,
@@ -270,7 +371,10 @@ export default function ResortOSOperations({
         complexName: unitAccessGroup(unit.id),
         stayLine,
         checkoutGuest: checkoutToday?.guest_name || '',
-        checkinGuest: checkinToday?.guest_name || ''
+        checkinGuest: checkinToday?.guest_name || '',
+        lockbox: needsLockbox ? (hkCopy.lockbox || '') : '',
+        roomStatus: hkCopy.status || '',
+        completions: completionsFromUnit(unit)
       };
     }).filter(Boolean);
 
@@ -285,14 +389,27 @@ export default function ResortOSOperations({
       }
       uniqueMap.set(t.id, mergeTaskOverlay(prev, t));
     });
-    return Array.from(uniqueMap.values());
-  }, [units, rawBookings, customTickets]);
+    return Array.from(uniqueMap.values()).filter((task) => (
+      !clearedInspectIds.has(task.id) && !passedManagerInspection(task)
+    )).map((task) => {
+      if (task.scoped || (task.status !== 'DIRTY' && task.status !== 'IN_PROGRESS' && task.status !== NEEDS_COMPLETIONS)) return task;
+      const unit = (units || []).find((row) => row.id === task.id);
+      if (!unit) return task;
+      const copy = housekeepingTaskCopy({ unit, bookings: rawBookings, today: todayStr });
+      const keepCustom = task.customReason && !isGenericTurnoverReason(task.customReason);
+      return {
+        ...task,
+        reasonKey: keepCustom ? task.customReason : copy.reason,
+        customReason: keepCustom ? task.customReason : copy.reason,
+        lockbox: taskNeedsRoomLockbox(task) ? (copy.lockbox || task.lockbox || '') : '',
+        roomStatus: copy.status || task.roomStatus || ''
+      };
+    });
+  }, [units, rawBookings, customTickets, clearedInspectIds]);
 
   useEffect(() => {
-    if (!newTicket.unitId && units[0]?.id) {
-      setNewTicket((prev) => ({ ...prev, unitId: units[0].id }));
-    }
-  }, [units, newTicket.unitId]);
+    writeScopedTasks(customTickets);
+  }, [customTickets]);
 
   useEffect(() => {
     if (!tenantId || !units.length) return;
@@ -311,26 +428,81 @@ export default function ResortOSOperations({
     return () => clearInterval(id);
   }, [tasks]);
 
-  // Submit New Operations Ticket to Dexie IndexedDB & Memory State & Cloud Sync
   const handleCreateTicketSubmit = async (e) => {
     e.preventDefault();
-    const unit = units.find((row) => row.id === newTicket.unitId) || units[0];
-    if (!unit) return;
+    const domain = newTicket.domain;
+    const propertyId = newTicket.propertyId;
+    if (!propertyId) {
+      window.alert(t('MODAL_PICK_COMPLEX', 'בחרו מתחם'));
+      return;
+    }
 
-    const nowIso = new Date().toISOString();
-    const newStatus = newTicket.domain === 'MAINTENANCE' ? 'MAINTENANCE_ALERT' : 'DIRTY';
-    const urgencyLevel = newTicket.domain === 'MAINTENANCE' ? 'CRITICAL' : 'HIGH';
-    const taskReasonText = newTicket.description.trim() || (newStatus === 'MAINTENANCE_ALERT' ? 'תקלת אחזקה דחופה נפתחה' : 'ניקוי לאחר יציאה והכנה לכניסה');
+    const needsCabin = domain === 'HOUSEKEEPING' || domain === 'MAINTENANCE';
+    if (needsCabin && !newTicket.unitId) {
+      window.alert(t('MODAL_PICK_UNIT', 'בחרו יחידה'));
+      return;
+    }
+
+    const title = (newTicket.title || '').trim();
+    const description = (newTicket.description || '').trim();
+    if (!title && !description) {
+      window.alert(t('MODAL_NEED_TITLE_OR_DESC', 'כתבו שם או תיאור למשימה'));
+      return;
+    }
+
+    const complexLabel = propertyId === ALL_COMPLEXES
+      ? t('MODAL_ALL_COMPLEXES', 'כל המתחמים')
+      : (fieldComplexes.find((row) => row.id === propertyId)?.label || propertyId);
     const ticketPhotos = [...newTicket.photos];
     const sourceLang = normalizeLang(i18n.language);
-    const name_i18n = { ...(unit.name_i18n || {}), [sourceLang]: unit.name };
+    const nowIso = new Date().toISOString();
+
+    if (domain === 'GARDENING' || domain === 'MANAGER') {
+      const taskTitle = title || (domain === 'GARDENING'
+        ? `${t('FILTER_GARDENING', 'חצרות')} · ${complexLabel}`
+        : `${t('FILTER_MANAGER', 'מנהלים')} · ${complexLabel}`);
+      const taskReasonText = description || taskTitle;
+      const taskId = newScopedTaskId(propertyId);
+      const newTicketItem = {
+        id: taskId,
+        titleKey: taskTitle,
+        customTitle: taskTitle,
+        domain,
+        status: domain === 'GARDENING' ? 'GARDENING' : 'DIRTY',
+        urgency: 'HIGH',
+        assignedTo: 'צוות תפעול',
+        reasonKey: taskReasonText,
+        customReason: taskReasonText,
+        photos: ticketPhotos,
+        name_i18n: { [sourceLang]: taskTitle },
+        reason_i18n: { [sourceLang]: taskReasonText },
+        text_source_lang: sourceLang,
+        scoped: true,
+        propertyId,
+        complexName: complexLabel
+      };
+      setCustomTickets((prev) => [newTicketItem, ...prev]);
+      setNewTicket(emptyTicket());
+      setShowAddModal(false);
+      fillTaskTranslations(taskId, taskTitle, taskReasonText);
+      return;
+    }
+
+    const unit = units.find((row) => row.id === newTicket.unitId);
+    if (!unit) return;
+
+    const newStatus = domain === 'MAINTENANCE' ? 'MAINTENANCE_ALERT' : 'DIRTY';
+    const urgencyLevel = domain === 'MAINTENANCE' ? 'CRITICAL' : 'HIGH';
+    const taskReasonText = description || (newStatus === 'MAINTENANCE_ALERT' ? 'תקלת אחזקה דחופה נפתחה' : 'ניקוי לאחר יציאה והכנה לכניסה');
+    const taskTitle = title || fieldUnitDisplayName(unit);
+    const name_i18n = { ...(unit.name_i18n || {}), [sourceLang]: taskTitle };
     const reason_i18n = { [sourceLang]: taskReasonText };
 
     const newTicketItem = {
       id: unit.id,
-      titleKey: unit.name,
-      customTitle: unit.name,
-      domain: newTicket.domain,
+      titleKey: taskTitle,
+      customTitle: taskTitle,
+      domain,
       status: newStatus,
       urgency: urgencyLevel,
       assignedTo: unit.assigned_staff || 'צוות תפעול',
@@ -339,7 +511,9 @@ export default function ResortOSOperations({
       photos: ticketPhotos.length ? ticketPhotos : (unit.image_urls || []),
       name_i18n,
       reason_i18n,
-      text_source_lang: sourceLang
+      text_source_lang: sourceLang,
+      propertyId,
+      complexName: complexLabel
     };
 
     setCustomTickets((prev) => [newTicketItem, ...prev.filter((row) => row.id !== unit.id)]);
@@ -348,12 +522,11 @@ export default function ResortOSOperations({
       await db.units.put({
         ...unit,
         operational_status: newStatus,
-        operational_domain: newTicket.domain,
+        operational_domain: domain,
         custom_reason: taskReasonText,
         assigned_staff: unit.assigned_staff || 'צוות תפעול',
-        is_escalated: newTicket.domain === 'MAINTENANCE',
+        is_escalated: domain === 'MAINTENANCE',
         image_urls: ticketPhotos.length ? ticketPhotos : (unit.image_urls || []),
-        name_i18n,
         reason_i18n,
         text_source_lang: sourceLang,
         updated_at: nowIso
@@ -367,26 +540,30 @@ export default function ResortOSOperations({
       tenant_id: tenantId,
       name: unit.name,
       operational_status: newStatus,
-      operational_domain: newTicket.domain,
+      operational_domain: domain,
       custom_reason: taskReasonText,
       assigned_staff: unit.assigned_staff || 'צוות תפעול',
-      is_escalated: newTicket.domain === 'MAINTENANCE',
+      is_escalated: domain === 'MAINTENANCE',
       image_urls: ticketPhotos.length ? ticketPhotos : (unit.image_urls || []),
-      name_i18n,
       reason_i18n,
       text_source_lang: sourceLang,
       updated_at: nowIso
     });
 
-    setNewTicket({ unitId: unit.id, domain: 'HOUSEKEEPING', description: '', photos: [] });
+    setNewTicket(emptyTicket());
     setShowAddModal(false);
-    fillTaskTranslations(unit.id, unit.name, taskReasonText);
+    fillTaskTranslations(unit.id, taskTitle, taskReasonText);
   };
 
   // Single-Tap Task Action Handlers
   const persistSopProgress = useCallback(async (task, sopProgress) => {
     const nowIso = new Date().toISOString();
-    const next = normalizeSopProgress(sopProgress);
+    const next = {
+      ...normalizeSopProgress(sopProgress),
+      completions: Array.isArray(sopProgress?.completions)
+        ? sopProgress.completions
+        : (Array.isArray(task?.sopProgress?.completions) ? task.sopProgress.completions : [])
+    };
     setCustomTickets((prev) => {
       const overlay = { ...task, sopProgress: next };
       const exists = prev.some((row) => row.id === task.id);
@@ -396,6 +573,7 @@ export default function ResortOSOperations({
     if (selectedTaskForSop?.id === task.id) {
       setSelectedTaskForSop((prev) => (prev ? { ...prev, sopProgress: next } : prev));
     }
+    if (!shouldSyncUnit(task.id)) return;
     try {
       await db.units.update(task.id, { sop_progress: next, updated_at: nowIso });
     } catch (_) {}
@@ -427,6 +605,8 @@ export default function ResortOSOperations({
       return [overlay, ...prev];
     });
 
+    if (!shouldSyncUnit(taskId)) return;
+
     try {
       await db.units.update(taskId, {
         operational_status: 'IN_PROGRESS',
@@ -449,8 +629,19 @@ export default function ResortOSOperations({
   const handleFinishTask = useCallback(async (taskId) => {
     setShowSopModal(false);
     setSelectedTaskForSop(null);
+    const overlayTask = tasks.find((row) => row.id === taskId);
+    if (!shouldSyncUnit(taskId)) {
+      setCustomTickets((prev) => prev.map((row) => (row.id === taskId ? {
+        ...row,
+        status: 'READY',
+        urgency: 'READY',
+        customReason: 'טופל',
+        reasonKey: 'טופל'
+      } : row)));
+      return;
+    }
     const unit = units.find((row) => row.id === taskId) || await db.units.get(taskId);
-    const domain = unit?.operational_domain || (unit?.operational_status === 'MAINTENANCE_ALERT' ? 'MAINTENANCE' : 'HOUSEKEEPING');
+    const domain = overlayTask?.domain || unit?.operational_domain || (unit?.operational_status === 'MAINTENANCE_ALERT' ? 'MAINTENANCE' : 'HOUSEKEEPING');
     const waitingInspect = domain === 'HOUSEKEEPING';
     setCustomTickets(prev => prev.map(t => t.id === taskId ? {
       ...t,
@@ -474,8 +665,8 @@ export default function ResortOSOperations({
       is_escalated: false,
       cleaning_started_at: null,
       updated_at: nowIso
-    });
-  }, [tenantId, units]);
+    }, { waitRemote: true, force: true });
+  }, [tenantId, units, tasks]);
 
   const handleSaveFeedback = useCallback(async () => {
     if (!selectedTaskForFeedback) return;
@@ -502,75 +693,106 @@ export default function ResortOSOperations({
     };
 
     let prevInspections = task.qualityInspections || [];
-    try {
-      const existing = await db.units.get(task.id);
-      if (Array.isArray(existing?.quality_inspections) && existing.quality_inspections.length >= prevInspections.length) {
-        prevInspections = existing.quality_inspections;
-      }
-    } catch (_) {}
+    if (shouldSyncUnit(task.id)) {
+      try {
+        const existing = await db.units.get(task.id);
+        if (Array.isArray(existing?.quality_inspections) && existing.quality_inspections.length >= prevInspections.length) {
+          prevInspections = existing.quality_inspections;
+        }
+      } catch (_) {}
+    }
     const qualityInspections = [...prevInspections, inspection];
 
     setTaskFeedbacks((prev) => ({ ...prev, [task.id]: { ...feedbackForm } }));
-    setCustomTickets((prev) => {
-      const next = {
-        ...task,
-        status: nextStatus,
-        urgency: nextUrgency,
-        reworkCount: nextReworkCount,
-        lastFailedFields: reopened ? failedFields : [],
-        lastInspection: inspection,
-        qualityInspections
-      };
-      const exists = prev.some((item) => item.id === task.id);
-      if (exists) return prev.map((item) => (item.id === task.id ? { ...item, ...next } : item));
-      return [next, ...prev];
-    });
+    if (reopened) {
+      setClearedInspectIds((prev) => {
+        if (!prev.has(task.id)) return prev;
+        const next = new Set(prev);
+        next.delete(task.id);
+        return next;
+      });
+      setCustomTickets((prev) => {
+        const next = {
+          ...task,
+          status: nextStatus,
+          urgency: nextUrgency,
+          reworkCount: nextReworkCount,
+          lastFailedFields: failedFields,
+          lastInspection: inspection,
+          qualityInspections
+        };
+        const exists = prev.some((item) => item.id === task.id);
+        if (exists) return prev.map((item) => (item.id === task.id ? { ...item, ...next } : item));
+        return [next, ...prev];
+      });
+    } else {
+      setCustomTickets((prev) => prev.filter((item) => item.id !== task.id));
+      setClearedInspectIds((prev) => {
+        const next = new Set(prev);
+        next.add(task.id);
+        return next;
+      });
+    }
+
+    const passedReason = '';
+    const nextReason = reopened ? (task.customReason || task.reasonKey) : passedReason;
+    const nextDomain = reopened ? task.domain : (task.domain === 'MANAGER' ? 'HOUSEKEEPING' : task.domain);
 
     try {
-      const existing = await db.units.get(task.id);
-      const unitPatch = {
-        operational_status: nextStatus,
-        is_escalated: Boolean(reopened && minScore <= 2),
-        quality_inspections: qualityInspections,
-        rework_count: nextReworkCount,
-        last_failed_fields: reopened ? failedFields : [],
-        updated_at: nowIso
-      };
-      if (reopened) unitPatch.cleaning_started_at = null;
-      if (existing) {
-        await db.units.put({ ...existing, ...unitPatch });
-      } else {
-        await db.units.update(task.id, unitPatch);
+      if (shouldSyncUnit(task.id)) {
+        const existing = await db.units.get(task.id);
+        const unitPatch = {
+          operational_status: nextStatus,
+          operational_domain: nextDomain,
+          custom_reason: nextReason,
+          is_escalated: Boolean(reopened && minScore <= 2),
+          quality_inspections: qualityInspections,
+          rework_count: nextReworkCount,
+          last_failed_fields: reopened ? failedFields : [],
+          updated_at: nowIso
+        };
+        if (reopened) unitPatch.cleaning_started_at = null;
+        if (existing) {
+          await db.units.put({ ...existing, ...unitPatch });
+        } else {
+          await db.units.update(task.id, unitPatch);
+        }
       }
     } catch (err) {
       console.warn('[DEXIE INSPECT PUT WARN]', err);
     }
 
-    pushUnitToCloud({
-      id: task.id,
-      tenant_id: tenantId,
-      name: task.customTitle || task.titleKey,
-      operational_status: nextStatus,
-      operational_domain: task.domain,
-      custom_reason: task.customReason || task.reasonKey,
-      is_escalated: Boolean(reopened && minScore <= 2),
-      cleaning_started_at: reopened ? null : undefined,
-      quality_inspections: qualityInspections,
-      rework_count: nextReworkCount,
-      last_failed_fields: reopened ? failedFields : [],
-      image_urls: task.photos || [],
-      name_i18n: task.name_i18n,
-      reason_i18n: task.reason_i18n,
-      text_source_lang: task.text_source_lang,
-      updated_at: nowIso
-    });
+    if (shouldSyncUnit(task.id)) {
+      pushUnitToCloud({
+        id: task.id,
+        tenant_id: tenantId,
+        name: units.find((row) => row.id === task.id)?.name || task.titleKey,
+        operational_status: nextStatus,
+        operational_domain: nextDomain,
+        custom_reason: nextReason,
+        is_escalated: Boolean(reopened && minScore <= 2),
+        cleaning_started_at: reopened ? null : undefined,
+        quality_inspections: qualityInspections,
+        rework_count: nextReworkCount,
+        last_failed_fields: reopened ? failedFields : [],
+        image_urls: task.photos || [],
+        reason_i18n: task.reason_i18n,
+        text_source_lang: task.text_source_lang,
+        updated_at: nowIso
+      });
+    }
 
     setShowFeedbackModal(false);
-  }, [selectedTaskForFeedback, feedbackForm, tenantId]);
+    if (!reopened && selectedTaskForDetail?.id === task.id) {
+      setShowDetailModal(false);
+      setSelectedTaskForDetail(null);
+    }
+  }, [selectedTaskForFeedback, selectedTaskForDetail, feedbackForm, tenantId, units]);
 
   const openTaskDetail = (room) => {
     setSelectedTaskForDetail(room);
     setDetailDraft({
+      title: fieldUnitDisplayName(room.id, stripLegendPlotNumber(room.customTitle || room.titleKey || '')),
       description: room.customReason || room.reasonKey || '',
       photos: Array.isArray(room.photos) ? [...room.photos] : []
     });
@@ -578,13 +800,13 @@ export default function ResortOSOperations({
   };
 
   const boardColumns = useMemo(() => ([
-    { id: 'HOUSEKEEPING', label: t('FILTER_HOUSEKEEPING', '🧹 משק בית'), Icon: Sparkles, color: '#F59E0B' },
-    { id: 'MAINTENANCE', label: t('FILTER_MAINTENANCE', '🔧 אחזקה'), Icon: Wrench, color: '#EF4444' },
-    { id: 'GARDENING', label: t('FILTER_GARDENING', '🌱 חצרנות'), Icon: Leaf, color: '#10B981' },
-    { id: 'MANAGER', label: t('FILTER_MANAGER', '👑 מנהלים'), Icon: Crown, color: '#F59E0B' }
+    { id: 'HOUSEKEEPING', label: t('FILTER_HOUSEKEEPING', 'חדרנות'), Icon: Sparkles, color: '#F59E0B' },
+    { id: 'MAINTENANCE', label: t('FILTER_MAINTENANCE', 'אחזקה'), Icon: Wrench, color: '#EF4444' },
+    { id: 'GARDENING', label: t('FILTER_GARDENING', 'חצרות'), Icon: Leaf, color: '#10B981' },
+    { id: 'MANAGER', label: t('FILTER_MANAGER', 'מנהלים'), Icon: Crown, color: '#F59E0B' }
   ]), [t]);
 
-  const showOpsBoard = userRole === 'MANAGER' && domainFilter === 'ALL';
+  const showOpsBoard = userRole === 'MANAGER' && domainFilter === 'ALL' && wideBoard;
 
   const appendDetailPhotos = (fileList) => {
     Array.from(fileList || []).forEach((file) => {
@@ -605,6 +827,7 @@ export default function ResortOSOperations({
       return;
     }
 
+    const title = (detailDraft.title || '').trim() || selectedTaskForDetail.customTitle || selectedTaskForDetail.titleKey;
     const description = detailDraft.description.trim() || selectedTaskForDetail.reasonKey;
     const photos = detailDraft.photos;
     const taskId = selectedTaskForDetail.id;
@@ -613,6 +836,8 @@ export default function ResortOSOperations({
     setCustomTickets((prev) => {
       const next = {
         ...selectedTaskForDetail,
+        customTitle: title,
+        titleKey: title,
         customReason: description,
         reasonKey: description,
         photos
@@ -624,28 +849,26 @@ export default function ResortOSOperations({
       return [next, ...prev];
     });
 
-    try {
-      await db.units.update(taskId, {
+    if (shouldSyncUnit(taskId)) {
+      try {
+        await db.units.update(taskId, {
+          custom_reason: description,
+          image_urls: photos,
+          updated_at: nowIso
+        });
+      } catch (_) {}
+
+      pushUnitToCloud({
+        id: taskId,
+        tenant_id: tenantId,
         custom_reason: description,
         image_urls: photos,
         updated_at: nowIso
       });
-    } catch (_) {}
-
-    pushUnitToCloud({
-      id: taskId,
-      tenant_id: tenantId,
-      custom_reason: description,
-      image_urls: photos,
-      updated_at: nowIso
-    });
+    }
 
     setShowDetailModal(false);
-    fillTaskTranslations(
-      taskId,
-      selectedTaskForDetail.customTitle || selectedTaskForDetail.titleKey,
-      description
-    );
+    fillTaskTranslations(taskId, title, description);
   };
 
   // Filter Tasks Logic
@@ -662,8 +885,13 @@ export default function ResortOSOperations({
 
       return true;
     }).sort((a, b) => {
-      const priorityOrder = { CRITICAL: 1, HIGH: 2, ROUTINE: 3, READY: 4 };
-      return (priorityOrder[a.urgency] || 99) - (priorityOrder[b.urgency] || 99);
+      const rank = (task) => {
+        if (task.status === 'READY') return 80;
+        if (task.status === NEEDS_COMPLETIONS) return 45;
+        const priorityOrder = { CRITICAL: 1, HIGH: 2, ROUTINE: 3, READY: 4 };
+        return priorityOrder[task.urgency] || 50;
+      };
+      return rank(a) - rank(b);
     });
   }, [tasks, userRole, domainFilter, activeKPI]);
 
@@ -685,8 +913,9 @@ export default function ResortOSOperations({
             const isHigh = room.urgency === 'HIGH';
             const isInProgress = room.status === 'IN_PROGRESS';
             const isReady = room.status === 'READY';
+            const needsCompletions = room.status === NEEDS_COMPLETIONS;
 
-            const titleText = room.customTitle || room.titleKey;
+            const titleText = fieldUnitDisplayName(room.id, stripLegendPlotNumber(room.customTitle || room.titleKey));
             const reasonText = room.customReason || room.reasonKey;
             const lastInspection = room.lastInspection;
             const hasFeedback = Boolean(isReady && isManagerInspection(lastInspection));
@@ -704,8 +933,16 @@ export default function ResortOSOperations({
               .join(', ');
 
             const hasPhotos = room.photos && room.photos.length > 0;
-            const borderColor = isCritical ? '#EF4444' : (isHigh ? '#F59E0B' : (isReady ? '#10B981' : '#60A5FA'));
-            const bgOverlay = isCritical ? (isDark ? 'rgba(239, 68, 68, 0.12)' : '#FEF2F2') : (isHigh ? (isDark ? 'rgba(245, 158, 11, 0.12)' : '#FFFBEB') : (isReady ? (isDark ? 'rgba(16, 185, 129, 0.12)' : '#ECFDF5') : colors.cardBg));
+            const borderColor = isCritical ? '#EF4444' : (isHigh ? '#F59E0B' : (isReady ? '#34D399' : (needsCompletions ? '#14B8A6' : '#60A5FA')));
+            const bgOverlay = isCritical
+              ? (isDark ? 'rgba(239, 68, 68, 0.12)' : '#FEF2F2')
+              : (isHigh
+                ? (isDark ? 'rgba(245, 158, 11, 0.12)' : '#FFFBEB')
+                : (isReady
+                  ? (isDark ? 'rgba(16, 185, 129, 0.22)' : '#D1FAE5')
+                  : (needsCompletions
+                    ? (isDark ? 'rgba(20, 184, 166, 0.16)' : '#CCFBF1')
+                    : colors.cardBg)));
 
             const openInspect = (event) => {
               event?.stopPropagation?.();
@@ -734,7 +971,7 @@ export default function ResortOSOperations({
                   borderRadius: '16px',
                   padding: '0.85rem 1rem',
                   display: 'flex',
-                  alignItems: 'center',
+                  alignItems: needsCompletions ? 'flex-start' : 'center',
                   justifyContent: 'space-between',
                   gap: '0.75rem',
                   width: '100%',
@@ -750,9 +987,30 @@ export default function ResortOSOperations({
                     {room.domain === 'MAINTENANCE' && <Wrench size={15} color="#EF4444" />}
                     {room.domain === 'GARDENING' && <Leaf size={15} color="#10B981" />}
                     <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 900, color: colors.textMain, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      <DynamicText text={titleText} translations={room.name_i18n} sourceLang={room.text_source_lang} />
+                      <DynamicText
+                        text={titleText}
+                        translations={Object.fromEntries(Object.entries(stripTitleI18n(room.name_i18n) || {}).map(([lang, value]) => [lang, fieldUnitDisplayName(room.id, value)]))}
+                        sourceLang={room.text_source_lang}
+                      />
                     </h3>
                   </div>
+                  {room.lockbox ? (
+                    <div style={{
+                      marginTop: '3px',
+                      fontSize: '0.82rem',
+                      fontWeight: 900,
+                      color: '#D97706',
+                      letterSpacing: '0.08em',
+                      fontVariantNumeric: 'tabular-nums'
+                    }}>
+                      כספת {room.lockbox}
+                    </div>
+                  ) : null}
+                  {room.scoped && room.complexName ? (
+                    <div style={{ fontSize: '0.7rem', fontWeight: 800, color: colors.textMuted, marginTop: '2px' }}>
+                      {stripLegendPlotNumber(room.complexName)}
+                    </div>
+                  ) : null}
                   <div style={{ fontSize: '0.75rem', color: colors.textMuted, marginTop: '3px', display: 'flex', alignItems: 'center', gap: '0.4rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     <span style={{ opacity: 0.85, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       <DynamicText text={reasonText} translations={room.reason_i18n} sourceLang={room.text_source_lang} />
@@ -779,6 +1037,20 @@ export default function ResortOSOperations({
                         : `${t('BADGE_REOPENED', 'נפתח מחדש')}${failedLabels ? ` · ${failedLabels}` : ''}`}
                       {room.reworkCount > 1 ? ` ×${room.reworkCount}` : ''}
                     </div>
+                  ) : null}
+                  {needsCompletions ? (
+                    <RoomCompletionsEditor
+                      items={room.completions || []}
+                      isLight={!isDark}
+                      textColor={colors.textMain}
+                      mutedColor={colors.textMuted}
+                      lineColor={colors.cardBorder}
+                      onChange={(items) => {
+                        const unit = (units || []).find((row) => row.id === room.id);
+                        if (!unit) return;
+                        persistRoomCompletions({ tenantId, unit, items, pushUnitToCloud });
+                      }}
+                    />
                   ) : null}
                 </div>
 
@@ -912,7 +1184,10 @@ export default function ResortOSOperations({
         )}
 
         <button
-          onClick={() => setShowAddModal(true)}
+          onClick={() => {
+            setNewTicket(emptyTicket());
+            setShowAddModal(true);
+          }}
           style={{
             height: '38px',
             background: 'linear-gradient(135deg, #6366F1, #4F46E5)',
@@ -992,10 +1267,10 @@ export default function ResortOSOperations({
         <div className="hotelos-ops-toolbar hotelos-ops-domain-chips" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', overflowX: 'auto', paddingBottom: '0.4rem', marginBottom: '1.25rem' }}>
           {[
             { id: 'ALL', label: t('FILTER_ALL', 'הכל') },
-            { id: 'HOUSEKEEPING', label: t('FILTER_HOUSEKEEPING', '🧹 משק בית') },
-            { id: 'MAINTENANCE', label: t('FILTER_MAINTENANCE', '🔧 אחזקה') },
-            { id: 'GARDENING', label: t('FILTER_GARDENING', '🌱 חצרנות') },
-            { id: 'MANAGER', label: t('FILTER_MANAGER', '👑 מנהלים') }
+            { id: 'HOUSEKEEPING', label: t('FILTER_HOUSEKEEPING', 'חדרנות') },
+            { id: 'MAINTENANCE', label: t('FILTER_MAINTENANCE', 'אחזקה') },
+            { id: 'GARDENING', label: t('FILTER_GARDENING', 'חצרות') },
+            { id: 'MANAGER', label: t('FILTER_MANAGER', 'מנהלים') }
           ].map(chip => (
             <button
               key={chip.id}
@@ -1074,31 +1349,23 @@ export default function ResortOSOperations({
 
               <form onSubmit={handleCreateTicketSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                 <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, color: colors.textMuted, display: 'block', marginBottom: '0.3rem' }}>{t('MODAL_UNIT_TITLE', 'בחר יחידה / סוויטה *')}</label>
-                  <select
-                    value={newTicket.unitId}
-                    onChange={(e) => setNewTicket({ ...newTicket, unitId: e.target.value })}
-                    style={{ width: '100%', padding: '0.6rem', borderRadius: '10px', background: colors.inputBg, border: `1px solid ${colors.inputBorder}`, color: colors.textMain, fontSize: '0.82rem', fontWeight: 800, boxSizing: 'border-box' }}
-                  >
-                    {units.map((u) => (
-                      <option key={u.id} value={u.id}>{u.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
                   <label style={{ fontSize: '0.78rem', fontWeight: 800, color: colors.textMuted, display: 'block', marginBottom: '0.3rem' }}>{t('MODAL_DOMAIN_TITLE', 'תחום טיפול *')}</label>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
                     {[
-                      { id: 'MANAGER', label: t('FILTER_MANAGER', '👑 מנהלים'), icon: '👑' },
-                      { id: 'HOUSEKEEPING', label: t('FILTER_HOUSEKEEPING', '🧹 משק בית'), icon: '🧹' },
-                      { id: 'MAINTENANCE', label: t('FILTER_MAINTENANCE', '🔧 אחזקה'), icon: '🔧' },
-                      { id: 'GARDENING', label: t('FILTER_GARDENING', '🌱 חצרנות'), icon: '🌱' }
+                      { id: 'MANAGER', label: t('FILTER_MANAGER', 'מנהלים'), icon: '👑' },
+                      { id: 'HOUSEKEEPING', label: t('FILTER_HOUSEKEEPING', 'חדרנות'), icon: '🧹' },
+                      { id: 'MAINTENANCE', label: t('FILTER_MAINTENANCE', 'אחזקה'), icon: '🔧' },
+                      { id: 'GARDENING', label: t('FILTER_GARDENING', 'חצרות'), icon: '🌱' }
                     ].map(tile => (
                       <button
                         key={tile.id}
                         type="button"
-                        onClick={() => setNewTicket({ ...newTicket, domain: tile.id })}
+                        onClick={() => setNewTicket((prev) => ({
+                          ...prev,
+                          domain: tile.id,
+                          unitId: (tile.id === 'HOUSEKEEPING' || tile.id === 'MAINTENANCE') ? prev.unitId : '',
+                          propertyId: (tile.id !== 'MANAGER' && prev.propertyId === ALL_COMPLEXES) ? '' : prev.propertyId
+                        }))}
                         style={{
                           padding: '0.5rem',
                           borderRadius: '10px',
@@ -1122,7 +1389,56 @@ export default function ResortOSOperations({
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, color: colors.textMuted, display: 'block', marginBottom: '0.3rem' }}>{t('MODAL_DESC_TITLE', 'תיאור הקריאה והמשימה *')}</label>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, color: colors.textMuted, display: 'block', marginBottom: '0.3rem' }}>{t('MODAL_COMPLEX_TITLE', 'מתחם *')}</label>
+                  <select
+                    required
+                    value={newTicket.propertyId}
+                    onChange={(e) => setNewTicket({ ...newTicket, propertyId: e.target.value, unitId: '' })}
+                    style={{ width: '100%', padding: '0.6rem', borderRadius: '10px', background: colors.inputBg, border: `1px solid ${colors.inputBorder}`, color: colors.textMain, fontSize: '0.82rem', fontWeight: 800, boxSizing: 'border-box' }}
+                  >
+                    <option value="">{t('MODAL_PICK_COMPLEX', 'בחרו מתחם')}</option>
+                    {newTicket.domain === 'MANAGER' && (
+                      <option value={ALL_COMPLEXES}>{t('MODAL_ALL_COMPLEXES', 'כל המתחמים')}</option>
+                    )}
+                    {fieldComplexes.map((row) => (
+                      <option key={row.id} value={row.id}>{row.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {(newTicket.domain === 'HOUSEKEEPING' || newTicket.domain === 'MAINTENANCE') && (
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 800, color: colors.textMuted, display: 'block', marginBottom: '0.3rem' }}>{t('MODAL_UNIT_TITLE', 'בחר יחידה / סוויטה *')}</label>
+                    <select
+                      required
+                      value={newTicket.unitId}
+                      onChange={(e) => setNewTicket({ ...newTicket, unitId: e.target.value })}
+                      disabled={!newTicket.propertyId}
+                      style={{ width: '100%', padding: '0.6rem', borderRadius: '10px', background: colors.inputBg, border: `1px solid ${colors.inputBorder}`, color: colors.textMain, fontSize: '0.82rem', fontWeight: 800, boxSizing: 'border-box' }}
+                    >
+                      <option value="">{t('MODAL_PICK_UNIT', 'בחרו יחידה')}</option>
+                      {units
+                        .filter((u) => newTicket.propertyId && propertyIdForUnit(u.id) === newTicket.propertyId)
+                        .map((u) => (
+                          <option key={u.id} value={u.id}>{fieldUnitDisplayName(u)}</option>
+                        ))}
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, color: colors.textMuted, display: 'block', marginBottom: '0.3rem' }}>{t('MODAL_TASK_NAME', 'שם המשימה')}</label>
+                  <input
+                    type="text"
+                    value={newTicket.title}
+                    onChange={(e) => setNewTicket({ ...newTicket, title: e.target.value })}
+                    placeholder={t('MODAL_TASK_NAME_PLACEHOLDER', 'למשל: כיסוח דשא / ביקורת בטיחות')}
+                    style={{ width: '100%', padding: '0.6rem', borderRadius: '10px', background: colors.inputBg, border: `1px solid ${colors.inputBorder}`, color: colors.textMain, fontSize: '0.82rem', fontWeight: 800, boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, color: colors.textMuted, display: 'block', marginBottom: '0.3rem' }}>{t('MODAL_DESC_TITLE', 'תיאור הקריאה והמשימה')}</label>
                   <textarea
                     rows={3}
                     value={newTicket.description}
@@ -1223,15 +1539,29 @@ export default function ResortOSOperations({
               style={{ width: '100%', maxWidth: '360px', background: isDark ? '#1E293B' : '#FFFFFF', borderRadius: '20px', padding: '1.25rem', border: `1px solid ${colors.cardBorder}`, boxShadow: '0 20px 40px rgba(0,0,0,0.5)', color: colors.textMain }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem', paddingBottom: '0.5rem', borderBottom: `1px solid ${colors.cardBorder}` }}>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 900 }}>
-                    <DynamicText
-                      text={selectedTaskForDetail.customTitle || selectedTaskForDetail.titleKey}
-                      translations={selectedTaskForDetail.name_i18n}
-                      sourceLang={selectedTaskForDetail.text_source_lang}
+                <div style={{ flex: 1, minWidth: 0, paddingInlineEnd: '0.5rem' }}>
+                  {userRole === 'MANAGER' ? (
+                    <input
+                      type="text"
+                      value={detailDraft.title}
+                      onChange={(e) => setDetailDraft((prev) => ({ ...prev, title: e.target.value }))}
+                      style={{ width: '100%', margin: 0, padding: '0.35rem 0.5rem', borderRadius: '8px', background: colors.inputBg, border: `1px solid ${colors.inputBorder}`, color: colors.textMain, fontSize: '0.95rem', fontWeight: 900, boxSizing: 'border-box' }}
                     />
-                  </h3>
-                  <div style={{ fontSize: '0.72rem', color: colors.textMuted }}>{t('LABEL_ASSIGNED_TO', 'אחראי בצוות')}: {selectedTaskForDetail.assignedTo}</div>
+                  ) : (
+                    <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 900 }}>
+                      <DynamicText
+                        text={fieldUnitDisplayName(selectedTaskForDetail.id, stripLegendPlotNumber(selectedTaskForDetail.customTitle || selectedTaskForDetail.titleKey))}
+                        translations={Object.fromEntries(Object.entries(stripTitleI18n(selectedTaskForDetail.name_i18n) || {}).map(([lang, value]) => [lang, fieldUnitDisplayName(selectedTaskForDetail.id, value)]))}
+                        sourceLang={selectedTaskForDetail.text_source_lang}
+                      />
+                    </h3>
+                  )}
+                  <div style={{ fontSize: '0.72rem', color: colors.textMuted, marginTop: '0.25rem' }}>{t('LABEL_ASSIGNED_TO', 'אחראי בצוות')}: {selectedTaskForDetail.assignedTo}</div>
+                  {selectedTaskForDetail.lockbox ? (
+                    <div style={{ fontSize: '0.85rem', fontWeight: 900, color: '#D97706', marginTop: '0.3rem', letterSpacing: '0.08em', fontVariantNumeric: 'tabular-nums' }}>
+                      כספת {selectedTaskForDetail.lockbox}
+                    </div>
+                  ) : null}
                 </div>
                 <button onClick={() => setShowDetailModal(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: colors.textMuted }}>
                   <X size={18} />
@@ -1510,7 +1840,7 @@ export default function ResortOSOperations({
                           <button
                             key={n}
                             type="button"
-                            onClick={() => setFeedbackForm({ ...feedbackForm, [item.id]: n })}
+                            onClick={() => setFeedbackForm((prev) => ({ ...prev, [item.id]: n }))}
                             style={{
                               height: '26px',
                               border: 'none',

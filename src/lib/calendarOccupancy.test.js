@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { barsToDrawOnCell, coveringStayOnDate, spanBarPixels, stayCardTone, stayCellSlice, staySlicesOnCell } from './calendarOccupancy.js';
+import { barsToDrawOnCell, coveringStayOnDate, isCalendarBarBooking, spanBarPixels, stayCardTone, stayCellSlice, staySlicesOnCell } from './calendarOccupancy.js';
 
 const today = '2026-09-03';
 const leaver = {
@@ -109,5 +109,27 @@ describe('stay card tone', () => {
       payment_status: 'PAID',
       stay: { hyp: { paid: true } }
     }, { today: '2026-09-04' })).toBe('paid');
+    expect(stayCardTone({
+      id: 'kin_689_1',
+      guest_name: 'סגור',
+      check_in_date: '2026-09-17',
+      check_out_date: '2026-09-20',
+      booking_status: 'CONFIRMED'
+    }, { today: '2026-09-17' })).toBe('hold');
+    expect(stayCardTone({
+      guest_email: 'anisel.430897@guest.booking.com',
+      channel_source: 'kinorot',
+      check_in_date: '2026-09-18',
+      check_out_date: '2026-09-21',
+      booking_status: 'CONFIRMED',
+      payment_status: 'UNPAID'
+    }, { today: '2026-09-17' })).toBe('inhouse');
+    expect(isCalendarBarBooking({
+      id: 'kin_689_1',
+      guest_name: 'סגור',
+      check_in_date: '2026-09-17',
+      check_out_date: '2026-09-20',
+      booking_status: 'CONFIRMED'
+    })).toBe(true);
   });
 });

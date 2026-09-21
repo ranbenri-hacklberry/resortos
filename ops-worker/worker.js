@@ -1,4 +1,4 @@
-const ORIGIN = 'https://favors-relations-quality-friday.trycloudflare.com';
+const ORIGIN = 'https://building-counsel-latitude-throws.trycloudflare.com';
 
 export default {
   async fetch(request) {

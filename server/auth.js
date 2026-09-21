@@ -264,6 +264,18 @@ export async function listStaff(req, res) {
   }
 }
 
+export async function listStaffDirectory(req, res) {
+  try {
+    const token = bearerToken(req);
+    if (!token) return res.status(401).json({ error: 'UNAUTHORIZED' });
+    const result = await rpc('hotelos_staff_directory', { p_token: token });
+    if (result?.error) return mapStaffError(result, res);
+    return res.json({ staff: Array.isArray(result?.staff) ? result.staff : [] });
+  } catch (err) {
+    return sendError(res, err);
+  }
+}
+
 export async function createStaff(req, res) {
   try {
     const token = bearerToken(req);
@@ -275,7 +287,9 @@ export async function createStaff(req, res) {
       p_display_name: String(req.body?.display_name || ''),
       p_role: String(req.body?.role || ''),
       p_allow_remote_attendance: req.body?.allow_remote_attendance === true,
-      p_allowed_units: Array.isArray(req.body?.allowed_units) ? req.body.allowed_units : []
+      p_allowed_units: Array.isArray(req.body?.allowed_units) ? req.body.allowed_units : [],
+      p_phone: String(req.body?.phone || ''),
+      p_whatsapp_phone: String(req.body?.whatsapp_phone || '')
     });
     if (result?.error) return mapStaffError(result, res);
     if (!result?.user) return res.status(500).json({ error: 'AUTH_FAILED' });
@@ -300,7 +314,9 @@ export async function updateStaff(req, res) {
       p_allow_remote_attendance: req.body?.allow_remote_attendance === true
         ? true
         : (req.body?.allow_remote_attendance === false ? false : null),
-      p_allowed_units: Array.isArray(req.body?.allowed_units) ? req.body.allowed_units : null
+      p_allowed_units: Array.isArray(req.body?.allowed_units) ? req.body.allowed_units : null,
+      p_phone: req.body?.phone == null ? null : String(req.body.phone),
+      p_whatsapp_phone: req.body?.whatsapp_phone == null ? null : String(req.body.whatsapp_phone)
     });
     if (result?.error) return mapStaffError(result, res);
     if (!result?.user) return res.status(500).json({ error: 'AUTH_FAILED' });

@@ -25,7 +25,9 @@ import {
   ArrowRight,
   Info,
   Tv,
-  Wand2
+  Wand2,
+  Film,
+  Video
 } from 'lucide-react';
 import { AIPhotoStudioModal } from '../media/AIPhotoStudioModal';
 
@@ -59,6 +61,7 @@ export interface ManagedProperty {
   admin_notes?: string;
   email?: string;
   hero_image?: string | null;
+  hero_video_url?: string | null;
   gallery_images: string[];
   amenities: string[];
   units: ManagedUnit[];
@@ -596,9 +599,17 @@ export const HostPropertyEditor: React.FC<HostPropertyEditorProps> = ({
           {/* Hero Banner Section */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <label className="block text-xs font-bold text-stone-700">
-                תמונה ראשית מובילה (Hero Image)
-              </label>
+              <div className="flex items-center gap-2">
+                <label className="block text-xs font-bold text-stone-700">
+                  מדיה ראשית מובילה (Hero Media)
+                </label>
+                {formData.hero_video_url && (
+                  <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <Film className="w-3 h-3 text-amber-700" />
+                    <span>וידאו ראשי פעיל</span>
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => {
@@ -608,27 +619,59 @@ export const HostPropertyEditor: React.FC<HostPropertyEditorProps> = ({
                 className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-stone-950 font-black text-xs px-3.5 py-1.5 rounded-xl shadow flex items-center gap-1.5 transition active:scale-95 border border-amber-300"
               >
                 <Sparkles className="w-3.5 h-3.5 text-stone-950" />
-                <span>סטודיו שיפור AI (Flux)</span>
+                <span>סטודיו שיפור תמונה ווידאו AI</span>
               </button>
             </div>
-            <div className="relative h-64 sm:h-80 rounded-2xl overflow-hidden border-2 border-stone-200 shadow-md group">
-              <img
-                src={formData.hero_image}
-                alt="תמונה ראשית של המתחם"
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-end justify-between p-6">
-                <div>
-                  <span className="bg-[#C5A880] text-[#26130F] text-[10px] font-black px-2.5 py-1 rounded-md uppercase">
-                    תמונה ראשית נוכחית
-                  </span>
-                  <h4 className="text-white font-extrabold text-lg mt-1">{formData.hebrew_name}</h4>
-                  <p className="text-stone-300 text-xs">{formData.village}</p>
-                </div>
-                <div className="text-white text-xs font-mono bg-black/60 px-3 py-1.5 rounded-lg border border-white/20 truncate max-w-xs">
-                  {formData.hero_image}
-                </div>
-              </div>
+
+            <div className="relative h-64 sm:h-80 rounded-2xl overflow-hidden border-2 border-stone-200 shadow-md group bg-black">
+              {formData.hero_video_url ? (
+                <>
+                  <video
+                    src={formData.hero_video_url}
+                    controls
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute top-3 left-3 bg-black/70 backdrop-blur-md text-[#C5A880] border border-white/20 text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1.5 pointer-events-none">
+                    <Film className="w-3 h-3" />
+                    <span>וידאו ראשי פעיל (Hero Video)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleChange('hero_video_url', null);
+                      onSaveProperty({ ...formData, hero_video_url: null });
+                    }}
+                    className="absolute top-3 right-3 bg-black/75 hover:bg-red-900/80 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg border border-white/20 transition flex items-center gap-1"
+                    title="הסר וידאו וחזור לתמונה"
+                  >
+                    <span>הסר וידאו</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <img
+                    src={formData.hero_image}
+                    alt="תמונה ראשית של המתחם"
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-end justify-between p-6">
+                    <div>
+                      <span className="bg-[#C5A880] text-[#26130F] text-[10px] font-black px-2.5 py-1 rounded-md uppercase">
+                        תמונה ראשית נוכחית
+                      </span>
+                      <h4 className="text-white font-extrabold text-lg mt-1">{formData.hebrew_name}</h4>
+                      <p className="text-stone-300 text-xs">{formData.village}</p>
+                    </div>
+                    <div className="text-white text-xs font-mono bg-black/60 px-3 py-1.5 rounded-lg border border-white/20 truncate max-w-xs">
+                      {formData.hero_image}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="flex gap-2">
@@ -1183,15 +1226,32 @@ export const HostPropertyEditor: React.FC<HostPropertyEditorProps> = ({
           setIsSaved(true);
         }}
         onSaveToGallery={(url) => {
-          setFormData((prev) => ({
-            ...prev,
-            gallery_images: [url, ...prev.gallery_images]
-          }));
+          setFormData((prev) => {
+            const deduped = Array.from(new Set([url, ...prev.gallery_images]));
+            return {
+              ...prev,
+              gallery_images: deduped
+            };
+          });
+          const deduped = Array.from(new Set([url, ...formData.gallery_images]));
           onSaveProperty({
             ...formData,
-            gallery_images: [url, ...formData.gallery_images]
+            gallery_images: deduped
           });
           setIsSaved(true);
+        }}
+        onSaveHeroVideo={(videoUrl) => {
+          setFormData((prev) => ({ ...prev, hero_video_url: videoUrl }));
+          onSaveProperty({ ...formData, hero_video_url: videoUrl });
+          setIsSaved(true);
+        }}
+        onSaveToScreensaver={(videoUrl) => {
+          try {
+            const current = JSON.parse(localStorage.getItem('resortos_screensaver_playlist') || '[]');
+            if (!current.includes(videoUrl)) {
+              localStorage.setItem('resortos_screensaver_playlist', JSON.stringify([videoUrl, ...current]));
+            }
+          } catch {}
         }}
       />
     </div>

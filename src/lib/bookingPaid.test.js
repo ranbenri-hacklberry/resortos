@@ -42,6 +42,15 @@ describe('status-only PAID without a receipt', () => {
     })).toBe(true);
   });
 
+  it('treats Booking.com OTA as paid without a Kinorot clearing row', () => {
+    expect(isFullyPaid({
+      ...jackie,
+      payment_mode: 'BOOKING',
+      channel_source: 'booking_com',
+      guest_email: 'guest@guest.booking.com'
+    })).toBe(true);
+  });
+
   it('trusts a clearing row', () => {
     const paid = {
       ...jackie,

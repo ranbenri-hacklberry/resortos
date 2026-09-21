@@ -1,7 +1,10 @@
 import { israelToday } from './cabinAccess';
-import { formatStayHourLabel, stayHoursFromBooking } from './kinorotStayHours';
+import { stripLegendBadge, getUnitSign } from './fieldUnitCatalog';
+import { lockboxCodeForUnit } from './guestProfileSeed';
+import { formatStayHourLabel, parseStayHoursFromNotes, stayHoursFromBooking } from './kinorotStayHours';
 import { unitFullName } from './units';
 import { isUnavailableHoldBooking } from './unavailableHold';
+import { isEffectivelyOccupied } from './unitStatus';
 
 export const DUTY_PRINT_AREAS = [
   {
@@ -46,7 +49,7 @@ export function dutyPrintAreaLabel(area) {
 export const BOARD_AREA_FILTERS = [
   { id: 'all', label: 'הכל' },
   { id: 'ramot', label: 'רמות' },
-  { id: 'givat', label: 'גבעה / נוב / נאות גולן' }
+  { id: 'givat', label: 'גבעת יואב / נאות גולן / נוב' }
 ];
 
 export function unitMatchesBoardArea(unit, area) {
@@ -113,6 +116,10 @@ function esc(value) {
   }[char]));
 }
 
+export function dutyUnitGroup(unitId, unitName) {
+  return unitGroup(unitId, unitName);
+}
+
 function unitGroup(unitId, unitName) {
   const id = String(unitId || '');
   if (id.startsWith('hill-') || id.startsWith('dome-') || id === 'mialis-villa' || id.startsWith('suite-')) {
@@ -156,10 +163,24 @@ function bookingDay(value) {
   return String(value || '').slice(0, 10);
 }
 
+function dutyStayHours(booking) {
+  const fromToken = stayHoursFromBooking(booking);
+  const fromNotes = parseStayHoursFromNotes(
+    `${booking?.special_requests || ''} ${booking?.stay?.special_requests || ''}`
+  );
+  return {
+    checkout: formatStayHourLabel(fromToken.checkout || fromNotes.checkout) || '11:00',
+    checkin: formatStayHourLabel(fromToken.checkin || fromNotes.checkin) || '15:00'
+  };
+}
+
 function toDutyRow(booking, unitsById, otherDate) {
   const unit = unitsById.get(booking.unit_id);
   const unitName = unit?.name || unitFullName(booking.unit_id, booking.unit_id);
+  const people = guestPeople(booking);
+  const hours = dutyStayHours(booking);
   return {
+    bookingId: booking.id,
     unitId: booking.unit_id,
     unitName,
     area: dutyPrintAreaOf(booking.unit_id, unitName),
@@ -168,10 +189,19 @@ function toDutyRow(booking, unitsById, otherDate) {
     phone: formatPhone(booking.guest_phone),
     otherDate: shortDate(otherDate),
     nights: nightsBetween(booking.check_in_date, booking.check_out_date),
-    people: guestPeople(booking),
+    people,
+    peopleLabel: people.label,
+    guestTotal: people.total,
+    needsCrib: Boolean(
+      booking?.baby_cot_required
+      || booking?.stay?.baby_cot_required
+      || people.infants > 0
+      || /תינוק|לול|crib|cot|infant/i.test(`${booking?.special_requests || ''} ${booking?.stay?.special_requests || ''}`)
+    ),
     peopleKey: String(booking.id || '').replace(/^kin_[^_]+_/, '') || booking.id,
-    checkoutHour: formatStayHourLabel(stayHoursFromBooking(booking).checkout),
-    checkinHour: formatStayHourLabel(stayHoursFromBooking(booking).checkin)
+    checkoutHour: hours.checkout,
+    checkinHour: hours.checkin,
+    bookingStatus: booking.booking_status || ''
   };
 }
 
@@ -179,7 +209,7 @@ function inPrintArea(row, area) {
   return !area || area === 'all' || row.area === area;
 }
 
-function collectRows(bookings, units, dateStr, field, area = '') {
+export function collectRows(bookings, units, dateStr, field, area = '') {
   const unitsById = new Map((units || []).map((unit) => [unit.id, unit]));
   const day = bookingDay(dateStr);
   return (bookings || [])
@@ -193,7 +223,7 @@ function collectRows(bookings, units, dateStr, field, area = '') {
     .sort((a, b) => a.sort - b.sort || a.unitName.localeCompare(b.unitName, 'he'));
 }
 
-function occupiesCalendarDay(booking, dateStr) {
+export function occupiesCalendarDay(booking, dateStr) {
   if (!isListedBooking(booking) || booking.booking_status === 'CHECKED_OUT') return false;
   const day = bookingDay(dateStr);
   const cin = bookingDay(booking.check_in_date);
@@ -201,13 +231,364 @@ function occupiesCalendarDay(booking, dateStr) {
   return Boolean(cin && cout && day >= cin && day < cout);
 }
 
-function collectOccupying(bookings, units, dateStr, area = '') {
+export function collectOccupying(bookings, units, dateStr, area = '') {
   const unitsById = new Map((units || []).map((unit) => [unit.id, unit]));
   return (bookings || [])
     .filter((booking) => occupiesCalendarDay(booking, dateStr))
     .map((booking) => toDutyRow(booking, unitsById, booking.check_out_date))
     .filter((row) => inPrintArea(row, area))
     .sort((a, b) => a.sort - b.sort || a.unitName.localeCompare(b.unitName, 'he'));
+}
+
+/** Field duty board rows: checkouts | checkins | occupied | vacant. */
+export function listDutyBoardRows({ bookings, units, dateStr, tab }) {
+  const unitsById = new Map((units || []).map((unit) => [unit.id, unit]));
+
+  if (tab === 'checkouts') {
+    const turnaround = turnaroundUnitIds(bookings, dateStr);
+    return collectRows(bookings, units, dateStr, 'check_out_date')
+      .filter((row) => !turnaround.has(row.unitId));
+  }
+
+  if (tab === 'checkins') {
+    // Today's arrivals stay on כניסות for the whole day — even after staff marks תפוס.
+    return collectRows(bookings, units, dateStr, 'check_in_date');
+  }
+
+  if (tab === 'vacant') {
+    const day = bookingDay(dateStr);
+    const arrivingUnits = new Set(
+      (bookings || [])
+        .filter((booking) => isListedBooking(booking) && bookingDay(booking.check_in_date) === day)
+        .map((booking) => booking.unit_id)
+    );
+    return (units || [])
+      .filter((unit) => (
+        unit?.id
+        && !isEffectivelyOccupied(unit, bookings, dateStr)
+        && !arrivingUnits.has(unit.id)
+      ))
+      .map((unit) => {
+        const unitName = unit.name || unitFullName(unit.id, unit.id);
+        return {
+          bookingId: `vacant:${unit.id}`,
+          unitId: unit.id,
+          unitName,
+          area: dutyPrintAreaOf(unit.id, unitName),
+          sort: Number.isFinite(Number(unit.sort_order)) ? Number(unit.sort_order) : 999,
+          guest: 'פנוי',
+          phone: '',
+          otherDate: '',
+          nights: 0,
+          people: { adults: 0, children: 0, infants: 0, total: 0, label: '' },
+          peopleLabel: '',
+          guestTotal: 0,
+          needsCrib: false,
+          peopleKey: unit.id,
+          checkoutHour: '',
+          checkinHour: '',
+          vacant: true
+        };
+      })
+      .sort((a, b) => a.sort - b.sort || a.unitName.localeCompare(b.unitName, 'he'));
+  }
+
+  // occupied (alias: midstays) — everyone currently in the unit.
+  return collectOccupiedDutyRows(bookings, units, dateStr);
+}
+
+/** Dirty / in-progress first, completions next, ready last — so clean cabins drop to the bottom. */
+export function dutyOpsSortRank(statusKey) {
+  const key = String(statusKey || '').toUpperCase();
+  if (key === 'DIRTY' || key === 'IN_PROGRESS' || key === 'LEAVING') return 0;
+  if (key === 'MAINTENANCE_ALERT' || key === 'GARDENING') return 1;
+  if (key === 'NEEDS_COMPLETIONS') return 2;
+  if (key === 'UNAVAILABLE') return 3;
+  if (key === 'OCCUPIED') return 4;
+  if (key === 'READY') return 9;
+  return 5;
+}
+
+export function sortDutyBoardRows(rows, statusKeyOf) {
+  return [...(rows || [])].sort((a, b) => {
+    const delta = dutyOpsSortRank(statusKeyOf?.(a)) - dutyOpsSortRank(statusKeyOf?.(b));
+    if (delta) return delta;
+    return (Number(a.sort) || 0) - (Number(b.sort) || 0)
+      || String(a.unitName || '').localeCompare(String(b.unitName || ''), 'he');
+  });
+}
+
+function preferredOccupiedBooking(unitBookings, dateStr) {
+  const day = bookingDay(dateStr);
+  // Mid-stays only — arrival-day guests belong on the check-ins tab.
+  return unitBookings.find((booking) => (
+    occupiesCalendarDay(booking, dateStr)
+    && bookingDay(booking.check_in_date) !== day
+    && bookingDay(booking.check_out_date) !== day
+  )) || null;
+}
+
+export function collectOccupiedDutyRows(bookings, units, dateStr) {
+  const unitsById = new Map((units || []).map((unit) => [unit.id, unit]));
+  const day = bookingDay(dateStr);
+  const active = (bookings || []).filter((booking) => (
+    isListedBooking(booking) && booking.booking_status !== 'CHECKED_OUT'
+  ));
+  const arrivingToday = new Set(
+    active
+      .filter((booking) => bookingDay(booking.check_in_date) === day)
+      .map((booking) => booking.unit_id)
+  );
+  const rows = [];
+  for (const unit of (units || [])) {
+    if (!unit?.id || !isEffectivelyOccupied(unit, bookings, dateStr)) continue;
+    // Arrival-day units stay on כניסות — don't also list them under מאוכלסים.
+    if (arrivingToday.has(unit.id)) continue;
+    const unitBookings = active.filter((booking) => booking.unit_id === unit.id);
+    const booking = preferredOccupiedBooking(unitBookings, dateStr);
+    if (booking) {
+      rows.push(toDutyRow(booking, unitsById, booking.check_out_date));
+      continue;
+    }
+    // Staff marked occupied without a matching booking row.
+    const unitName = unit.name || unitFullName(unit.id, unit.id);
+    rows.push({
+      bookingId: `occupied:${unit.id}`,
+      unitId: unit.id,
+      unitName,
+      area: dutyPrintAreaOf(unit.id, unitName),
+      sort: Number.isFinite(Number(unit.sort_order)) ? Number(unit.sort_order) : 999,
+      guest: 'מאוכלס',
+      phone: '',
+      otherDate: '',
+      nights: 0,
+      people: { adults: 0, children: 0, infants: 0, total: 0, label: '' },
+      peopleLabel: '',
+      guestTotal: 0,
+      needsCrib: false,
+      peopleKey: unit.id,
+      checkoutHour: '',
+      checkinHour: '',
+      occupied: true
+    });
+  }
+  return rows.sort((a, b) => a.sort - b.sort || a.unitName.localeCompare(b.unitName, 'he'));
+}
+
+/** Unit ids with both a checkout and a check-in on the same calendar day. */
+export function turnaroundUnitIds(bookings, dateStr) {
+  const leaving = new Set(collectRows(bookings, [], dateStr, 'check_out_date').map((row) => row.unitId));
+  const arriving = new Set(collectRows(bookings, [], dateStr, 'check_in_date').map((row) => row.unitId));
+  return new Set([...leaving].filter((id) => arriving.has(id)));
+}
+
+function inAssignedUnits(unitId, unitIds) {
+  if (!Array.isArray(unitIds) || !unitIds.length) return true;
+  return unitIds.includes(unitId);
+}
+
+function isDirtyVacant(unit, bookings, dateStr) {
+  const ops = String(unit?.operational_status || '').toUpperCase();
+  if (ops !== 'DIRTY' && ops !== 'IN_PROGRESS') return false;
+  return !isEffectivelyOccupied(unit, bookings, dateStr);
+}
+
+function cabinShortName(unitId, unitName) {
+  const sign = getUnitSign(unitId);
+  if (sign?.he) return stripLegendBadge(sign.he);
+  const full = stripLegendBadge(unitName || unitFullName(unitId, unitId));
+  const parts = full.split('·').map((part) => part.trim()).filter(Boolean);
+  return parts[parts.length - 1] || full;
+}
+
+const COMPLEX_ORDER = [
+  'גבעת יואב / מיאליס',
+  'קאסה נובה · נוב',
+  'בתי נורית · רמות',
+  "טאג' מאהל · רמות",
+  'מול הנוף · רמות',
+  'נופים בלבן · רמות',
+  'בקתות טוסקנה · רמות',
+  'החצר המוסיקלית · רמות',
+  'בקתות מאיה · רמות',
+  'סייסטה · רמות',
+  'יחידות נוספות'
+];
+
+function groupJobsByComplex(jobs) {
+  const buckets = new Map();
+  for (const job of jobs) {
+    const title = job.group || 'יחידות נוספות';
+    if (!buckets.has(title)) buckets.set(title, []);
+    buckets.get(title).push(job);
+  }
+  const kindRank = { leftover_in: 0, leftover: 1, turnover: 2, checkout: 3, checkin: 4 };
+  for (const rows of buckets.values()) {
+    rows.sort((a, b) => (
+      (kindRank[a.kind] - kindRank[b.kind])
+      || a.sort - b.sort
+      || a.cabinName.localeCompare(b.cabinName, 'he')
+    ));
+  }
+  const urgency = (title) => {
+    const rows = buckets.get(title) || [];
+    if (rows.some((job) => job.kind === 'leftover_in')) return 0;
+    if (rows.some((job) => job.kind === 'leftover')) return 1;
+    return 2;
+  };
+  const titles = [...buckets.keys()].sort((a, b) => {
+    const ua = urgency(a);
+    const ub = urgency(b);
+    if (ua !== ub) return ua - ub;
+    const ia = COMPLEX_ORDER.indexOf(a);
+    const ib = COMPLEX_ORDER.indexOf(b);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b, 'he');
+  });
+  return titles.map((title) => ({ title, rows: buckets.get(title) }));
+}
+
+/**
+ * One cleaning job per cabin. Leftover dirty+vacant with a check-in today comes first.
+ * `unitIds` is the future team assignment — empty means the whole roster.
+ */
+export function collectHousekeepingDutyJobs({ bookings, units, dateStr, area = 'all', unitIds } = {}) {
+  const unitsById = new Map((units || []).map((unit) => [unit.id, unit]));
+  const checkouts = collectRows(bookings, units, dateStr, 'check_out_date', area)
+    .filter((row) => inAssignedUnits(row.unitId, unitIds));
+  const checkins = collectRows(bookings, units, dateStr, 'check_in_date', area)
+    .filter((row) => inAssignedUnits(row.unitId, unitIds));
+  const outByUnit = new Map(checkouts.map((row) => [row.unitId, row]));
+  const inByUnit = new Map(checkins.map((row) => [row.unitId, row]));
+  const jobs = [];
+  const seen = new Set();
+
+  const pushJob = (unitId, kind, leaving, arriving, unit) => {
+    if (!unitId || seen.has(unitId)) return;
+    const unitName = stripLegendBadge(unit?.name || leaving?.unitName || arriving?.unitName || unitFullName(unitId, unitId));
+    if (!inPrintArea({ unitId, unitName, area: dutyPrintAreaOf(unitId, unitName) }, area)) return;
+    seen.add(unitId);
+    jobs.push({
+      unitId,
+      unitName,
+      cabinName: cabinShortName(unitId, unitName),
+      group: unitGroup(unitId, unitName),
+      sort: Number.isFinite(Number(unit?.sort_order)) ? Number(unit.sort_order) : (leaving?.sort || arriving?.sort || 999),
+      lockbox: lockboxCodeForUnit(unit || { id: unitId }),
+      kind,
+      checkoutHour: leaving?.checkoutHour || '',
+      checkinHour: arriving?.checkinHour || '',
+      leftover: kind === 'leftover_in' || kind === 'leftover',
+      people: (arriving || leaving)?.people || { adults: 0, children: 0, infants: 0, total: 0, label: '' },
+      needsCrib: Boolean(arriving?.needsCrib || (!arriving && leaving?.needsCrib))
+    });
+  };
+
+  for (const unit of (units || [])) {
+    if (!unit?.id || !inAssignedUnits(unit.id, unitIds)) continue;
+    if (!isDirtyVacant(unit, bookings, dateStr)) continue;
+    const leaving = outByUnit.get(unit.id) || null;
+    if (leaving) continue;
+    const arriving = inByUnit.get(unit.id) || null;
+    pushJob(unit.id, arriving ? 'leftover_in' : 'leftover', null, arriving, unit);
+  }
+
+  for (const row of [...checkouts, ...checkins]) {
+    if (seen.has(row.unitId)) continue;
+    const leaving = outByUnit.get(row.unitId) || null;
+    const arriving = inByUnit.get(row.unitId) || null;
+    const unit = unitsById.get(row.unitId) || { id: row.unitId, name: row.unitName };
+    if (!leaving && arriving) {
+      const ops = String(unit.operational_status || '').toUpperCase();
+      if (ops === 'READY') continue;
+    }
+    const kind = leaving && arriving ? 'turnover' : (leaving ? 'checkout' : 'checkin');
+    pushJob(row.unitId, kind, leaving, arriving, unit);
+  }
+
+  const kindRank = { leftover_in: 0, leftover: 1, turnover: 2, checkout: 3, checkin: 4 };
+  return jobs.sort((a, b) => (
+    (kindRank[a.kind] - kindRank[b.kind])
+    || a.sort - b.sort
+    || a.cabinName.localeCompare(b.cabinName, 'he')
+  ));
+}
+
+function lockboxLine(job) {
+  return job.lockbox ? `כספת מפתח ${job.lockbox}` : 'כספת מפתח חסרה';
+}
+
+function checkoutHourLabel(hour) {
+  const raw = String(hour || '11:00').trim() || '11:00';
+  return raw.replace(/^0/, '').replace(/:00$/, '') || '11';
+}
+
+function peopleLine(job) {
+  const people = job.people || {};
+  const parts = [];
+  if (people.adults > 0) parts.push(hebrewCount(people.adults, 'מבוגר', 'מבוגרים'));
+  if (people.children > 0) parts.push(hebrewCount(people.children, 'ילד', 'ילדים'));
+  if (people.infants > 0) parts.push(hebrewCount(people.infants, 'תינוק', 'תינוקות'));
+  if (job.needsCrib) parts.push('מיטת תינוק');
+  return parts.join(' · ');
+}
+
+function formatHousekeepingJob(job, index) {
+  const lines = [`${index}. ${job.cabinName || job.unitName}`];
+  const bits = [];
+  if (job.kind === 'checkout' || job.kind === 'turnover') {
+    bits.push(`יציאה ב-${checkoutHourLabel(job.checkoutHour)}`);
+  }
+  if (job.kind === 'leftover_in' || job.kind === 'leftover') {
+    bits.push('מלוכלך ופנוי');
+  }
+  bits.push(lockboxLine(job));
+  lines.push(bits.join(' · '));
+  const guests = peopleLine(job);
+  if (guests) lines.push(guests);
+  return lines.join('\n');
+}
+
+function formatComplexBlocks(jobs) {
+  return groupJobsByComplex(jobs).map((group) => (
+    `*${group.title}*\n${group.rows.map((job, i) => formatHousekeepingJob(job, i + 1)).join('\n\n')}`
+  )).join('\n\n');
+}
+
+export function buildHousekeepingWhatsAppText({
+  bookings,
+  units,
+  dateStr,
+  area = 'all',
+  unitIds,
+  teamName = ''
+} = {}) {
+  const jobs = collectHousekeepingDutyJobs({ bookings, units, dateStr, area, unitIds });
+  const dateLabel = hebrewDateLabel(dateStr);
+  const areaLabel = area && area !== 'all' ? dutyPrintAreaLabel(area) : '';
+  const headerBits = ['ניקיון היום', dateLabel, areaLabel, teamName].filter(Boolean);
+  if (!jobs.length) {
+    return `${headerBits.join(' · ')}\nאין בקתות לניקיון.`;
+  }
+  return `${headerBits.join(' · ')}\nסה״כ ${jobs.length} בקתות לניקיון\n\n${formatComplexBlocks(jobs)}`;
+}
+
+export async function shareHousekeepingWhatsApp(text) {
+  const message = String(text || '').trim();
+  if (!message) return { ok: false, copied: false };
+  const encoded = encodeURIComponent(message);
+  let copied = false;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(message);
+      copied = true;
+    }
+  } catch {
+    copied = false;
+  }
+  const url = `https://api.whatsapp.com/send/?text=${encoded}`;
+  const popup = window.open(url, '_blank', 'noopener,noreferrer');
+  if (!popup) window.location.assign(url);
+  return { ok: true, copied };
 }
 
 function hebrewCount(count, one, many) {

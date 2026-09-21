@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Settings as Gear, Eye, EyeOff } from 'lucide-react';
+import { FIELD_UI_LANGUAGES } from '../lib/fieldUiLanguages';
 import { persistLanguage } from '../i18n';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -8,22 +9,20 @@ import { DEFAULT_SOP_TEMPLATES, fetchSopTemplates, saveSopTemplate, stepLabel } 
 import { useLiveUnits } from '../lib/resortos-db';
 import { DEFAULT_RESORT_UNITS, groupedInventoryUnits, inventoryUnits, normalizeAllowedUnitIds } from '../lib/units';
 import { isOpsLead, isOwnerManager, STAFF_ROLES } from '../lib/staffRoles';
+import { staffPhoneLabel } from '../lib/staffPhones';
 import { agentPortalUrl, normalizeGuestOrigin } from '../lib/guestStayUrl';
 import { fetchSmsCredit } from '../lib/staffSmsApi';
 import BookingRestrictionsSettings from './BookingRestrictionsSettings';
 
-const LANGUAGES = [
-  { code: 'he', name: 'עברית', flag: '🇮🇱' },
-  { code: 'en', name: 'English', flag: '🇺🇸' },
-  { code: 'ar', name: 'العربية', flag: '🇸🇦' },
-  { code: 'th', name: 'ไทย', flag: '🇹🇭' }
-];
+const LANGUAGES = FIELD_UI_LANGUAGES;
 
 const EMPTY_FORM = {
   display_name: '',
   username: '',
   password: '',
   role: 'HOUSEKEEPING',
+  phone: '',
+  whatsapp_phone: '',
   allow_remote_attendance: false,
   allowed_units: [],
   agent_access: false,
@@ -106,6 +105,8 @@ export default function Settings({ theme, setTheme, sessionUser, onSessionUserUp
         username: sessionUser.username || '',
         password: '',
         role: sessionUser.role,
+        phone: sessionUser.phone || '',
+        whatsapp_phone: sessionUser.whatsapp_phone || '',
         allow_remote_attendance: Boolean(sessionUser.allow_remote_attendance),
         allowed_units: normalizeAllowedUnitIds(sessionUser.allowed_units),
         ...agentFieldsFromList(agents, sessionUser.id)
@@ -197,6 +198,8 @@ export default function Settings({ theme, setTheme, sessionUser, onSessionUserUp
       username: person.username || '',
       password: '',
       role: person.role || 'HOUSEKEEPING',
+      phone: person.phone || '',
+      whatsapp_phone: person.whatsapp_phone || '',
       allow_remote_attendance: Boolean(person.allow_remote_attendance),
       allowed_units: normalizeAllowedUnitIds(person.allowed_units),
       ...agentFieldsFromList(agents, person.id)
@@ -578,7 +581,7 @@ export default function Settings({ theme, setTheme, sessionUser, onSessionUserUp
                     <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 'bold', marginBottom: '8px' }}>
                       {t('SETTINGS_SELECT_LANG', 'בחר שפה:')}
                     </label>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${LANGUAGES.length}, 1fr)`, gap: '8px' }}>
                       {LANGUAGES.map((lang) => {
                         const isActive = currentLang === lang.code;
                         return (
@@ -826,6 +829,7 @@ function StaffTab({
                 </div>
                 <div style={{ fontSize: '0.7rem', color: '#94A3B8' }}>
                   {person.username} · {t(`ROLE_${person.role}`, person.role)}
+                  {staffPhoneLabel(person) ? ` · ${staffPhoneLabel(person)}` : ''}
                   {normalizeAllowedUnitIds(person.allowed_units).length
                     ? ` · ${normalizeAllowedUnitIds(person.allowed_units).length} ${t('SETTINGS_STAFF_UNITS_COUNT', 'יחידות')}`
                     : ` · ${t('SETTINGS_STAFF_UNITS_ALL', 'כל היחידות')}`}
@@ -1082,6 +1086,24 @@ function StaffForm({ isLight, isManager, canOpenAgents = false, isNew, staffForm
         onChange={(e) => setStaffForm((prev) => ({ ...prev, username: e.target.value }))}
         style={{ ...staffInputStyle(isLight), marginTop: '6px' }}
       />
+      <input
+        placeholder={t('SETTINGS_STAFF_PHONE', 'טלפון')}
+        inputMode="tel"
+        autoComplete="tel"
+        value={staffForm.phone || ''}
+        onChange={(e) => setStaffForm((prev) => ({ ...prev, phone: e.target.value }))}
+        style={{ ...staffInputStyle(isLight), marginTop: '6px' }}
+      />
+      <input
+        placeholder={t('SETTINGS_STAFF_WHATSAPP', 'וואטסאפ')}
+        inputMode="tel"
+        value={staffForm.whatsapp_phone || ''}
+        onChange={(e) => setStaffForm((prev) => ({ ...prev, whatsapp_phone: e.target.value }))}
+        style={{ ...staffInputStyle(isLight), marginTop: '6px' }}
+      />
+      <p style={{ fontSize: '0.72rem', color: '#94A3B8', margin: '4px 0 0', lineHeight: 1.4 }}>
+        {t('SETTINGS_STAFF_PHONES_HELP', 'אם יש שני מספרים — טלפון רגיל בנפרד מוואטסאפ. אם יש רק אחד, אפשר למלא רק וואטסאפ.')}
+      </p>
       <div style={{ display: 'flex', gap: '6px', marginTop: '6px', alignItems: 'center' }}>
         <input
           type={showTypedPassword ? 'text' : 'password'}

@@ -30,13 +30,17 @@ export function parseStayHoursFromNotes(notes) {
   const text = String(notes || '');
   let checkout = '';
   let checkin = '';
-  if (/יציאה.{0,24}מוצ["״׳']?ש|יציאה\s*מוצאש/.test(text)) {
+  if (/יציאה.{0,40}מוצ["״׳']?ש|יציאה\s*מוצאש|מוצ["״׳']?ש.{0,12}יציאה/.test(text)) {
     checkout = MOTZASH;
   } else {
-    const out = text.match(/יציאה\s*:?\s*(?:ב(?:שעה)?\s*)?(\d{1,2})(?::(\d{2}))?/);
+    const out = text.match(
+      /(?:יציאה|צ['׳']?ק[\s-]?אאוט|checkout)\s*(?:ב(?:יום\s*)?שבת)?\s*:?\s*(?:ב(?:שעה)?\s*|עד\s*)?(\d{1,2})(?::(\d{2}))?/i
+    ) || text.match(/יציאה.{0,36}?(\d{1,2})(?::(\d{2}))?/);
     checkout = clockFromMatch(out);
   }
-  const inn = text.match(/(?:כניסה|הגעה)\s*:?\s*(?:ב(?:שעה)?\s*)?(\d{1,2})(?::(\d{2}))?/);
+  const inn = text.match(
+    /(?:כניסה|הגעה|צ['׳']?ק[\s-]?אין|check[\s-]?in)\s*:?\s*(?:ב(?:שעה)?\s*)?(\d{1,2})(?::(\d{2}))?/i
+  );
   checkin = clockFromMatch(inn);
   return { checkout, checkin };
 }

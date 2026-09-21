@@ -11,7 +11,7 @@ import { Calendar as CalendarIcon, DollarSign, ShieldCheck, Activity, Zap, Refre
 import './App.css';
 import './index.css';
 
-const FieldStaffView = lazy(() => import('./components/FieldStaffView'));
+const FieldOpsShell = lazy(() => import('./components/FieldOpsShell'));
 const ResortOSCalendar = lazy(() => import('./components/ResortOSCalendar'));
 const ResortOSOperations = lazy(() => import('./components/ResortOSOperations'));
 const FinancialSummary = lazy(() => import('./components/FinancialSummary'));
@@ -150,10 +150,11 @@ function App() {
     }
     return (
       <Suspense fallback={lazyFallback}>
-        <FieldStaffView
+        <FieldOpsShell
           theme={theme}
           setTheme={setTheme}
           sessionUser={sessionUser}
+          onSessionUserUpdate={setSessionUser}
           onLogout={async () => {
             await logoutStaff();
             setSessionUser(null);
@@ -559,7 +560,10 @@ function App() {
 
       <main
         className={`main-stage${visibleTab === 'calendar' ? ' calendar-stage' : ''}${visibleTab === 'operations' ? ' operations-stage' : ''}`}
-        style={{ padding: visibleTab === 'calendar' ? '0.75rem' : (visibleTab === 'operations' ? '0.5rem 0' : '1rem') }}
+        style={{
+          padding: visibleTab === 'calendar' ? '0.75rem' : (visibleTab === 'operations' ? undefined : '1rem'),
+          paddingBlock: visibleTab === 'operations' ? '0.5rem' : undefined
+        }}
       >
         <Suspense fallback={lazyFallback}>
           {visibleTab === 'calendar' ? (

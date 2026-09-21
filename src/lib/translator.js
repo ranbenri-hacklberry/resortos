@@ -2,7 +2,7 @@ import Dexie from 'dexie';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
-export const TASK_I18N_LANGS = ['he', 'en', 'ar', 'th'];
+export const TASK_I18N_LANGS = ['he', 'en', 'ar', 'th', 'ru'];
 
 class TranslationCacheDB extends Dexie {
   constructor() {

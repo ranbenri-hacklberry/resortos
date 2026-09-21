@@ -283,34 +283,38 @@ function requestUnitId(row, body, request) {
 
 function publicBooking(row) {
   if (!row) return null;
+  const inStay = row.booking_status === 'CHECKED_IN' || row.booking_status === 'CHECKED_OUT';
+  const firstName = String(row.guest_name || '').trim().split(/\s+/)[0] || '';
   return {
     id: row.id,
     tenant_id: row.tenant_id,
     unit_id: row.unit_id,
-    guest_name: row.guest_name,
-    guest_email: row.guest_email,
-    guest_phone: row.guest_phone,
+    guest_name: inStay ? firstName : row.guest_name,
+    guest_email: inStay ? null : row.guest_email,
+    guest_phone: inStay ? null : row.guest_phone,
     check_in_date: row.check_in_date,
     check_out_date: row.check_out_date,
     adults_count: row.adults_count,
     children_count: row.children_count,
     baby_cot_required: Boolean(row.baby_cot_required || row.stay?.baby_cot_required),
     link_sent_at: row.link_sent_at || row.stay?.link_sent_at || row.created_at || null,
-    total_price_agorot: row.total_price_agorot,
-    deposit_agorot: row.deposit_agorot,
+    total_price_agorot: inStay ? null : row.total_price_agorot,
+    deposit_agorot: inStay ? null : row.deposit_agorot,
     booking_status: row.booking_status,
     payment_status: row.payment_status,
     payment_mode: row.payment_mode,
-    clearing_payments: Array.isArray(row.clearing_payments) ? row.clearing_payments : [],
+    clearing_payments: inStay ? [] : (Array.isArray(row.clearing_payments) ? row.clearing_payments : []),
     balance_payment_preference: row.balance_payment_preference || row.stay?.balance_payment_preference || 'CREDIT_CARD',
     balance_paid: Boolean(row.balance_paid || row.stay?.balance_paid),
     balance_payment_method: row.balance_payment_method || row.stay?.balance_payment_method || null,
     hyp_terminal: row.hyp_terminal || row.stay?.hyp_terminal || row.stay?.hyp_intent?.terminal || null,
     channel_source: row.channel_source,
     checkout_token: row.checkout_token,
-    special_requests: row.special_requests,
-    payment: publicPayment(row),
+    special_requests: inStay ? null : row.special_requests,
+    payment: inStay ? null : publicPayment(row),
     expires_at: row.expires_at,
+    checked_out_at: row.checked_out_at || row.stay?.self_checked_out_at || null,
+    checkout_status: row.checkout_status || row.stay?.checkout_status || 'staying',
     created_at: row.created_at,
     updated_at: row.updated_at,
     stay: publicStay(row.stay, row)
@@ -331,12 +335,15 @@ function publicPayment(row) {
 function publicStay(stay, row) {
   const allowed = Boolean(row) && stayFullyPaid(row) && row.booking_status === 'CHECKED_IN';
   if (!stay || typeof stay !== 'object') {
-    return { cabin_ready: false, operational_status: 'DIRTY', folio: [], checkout_time: '11:00' };
+    return { cabin_ready: false, room_open: false, operational_status: 'DIRTY', folio: [], checkout_time: '11:00' };
   }
   if (allowed && stay.cabin_ready) return stripCardSecrets({ ...stay, cabin_ready: true });
   return stripCardSecrets({
     ...stay,
     cabin_ready: false,
+    // Keep room_open so paid guests can check in when the unit is READY + vacant.
+    room_open: Boolean(stay.room_open),
+    operational_status: stay.operational_status || 'DIRTY',
     door_pin: null,
     gate_code: null,
     wifi_ssid: null,
@@ -767,11 +774,44 @@ async function handleCheckout(context) {
         at: new Date().toISOString()
       });
     } else if (action === 'self_checkout') {
-      stay.self_checked_out_at = new Date().toISOString();
+      const outAt = new Date().toISOString();
+      stay.self_checked_out_at = outAt;
+      stay.checkout_status = 'self_departed';
+      stay.pending_farewell_sms = true;
+      stay.pending_router_webhook = true;
       if (body.stars != null && body.stars !== '') {
         stay.feedback_stars = Math.min(5, Math.max(1, Number(body.stars)));
       }
       row.booking_status = 'CHECKED_OUT';
+      row.checked_out_at = outAt;
+      row.checkout_status = 'self_departed';
+      // Notify Studio (Micropay farewell SMS + optional router webhook) when configured.
+      const studioFx = String(env.RESORTOS_STUDIO_EFFECTS_URL || env.CHECKOUT_SIDE_EFFECTS_URL || '').trim();
+      const mailboxSecret = env.CHECKOUT_MAILBOX_SECRET;
+      if (studioFx && mailboxSecret) {
+        try {
+          await fetch(studioFx, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-hotelos-mailbox': mailboxSecret
+            },
+            body: JSON.stringify({
+              event: 'self_checkout',
+              booking_id: row.id,
+              unit_id: row.unit_id,
+              guest_phone: row.guest_phone,
+              tenant_id: row.tenant_id,
+              checkout_token: token,
+              checked_out_at: outAt
+            }),
+            signal: AbortSignal.timeout(8000)
+          });
+          stay.pending_farewell_sms = false;
+        } catch (err) {
+          console.warn('[self_checkout effects]', String(err?.message || err));
+        }
+      }
     } else if (action === 'guest_feedback') {
       if (body.stars != null && body.stars !== '') {
         stay.feedback_stars = Math.min(5, Math.max(1, Number(body.stars)));

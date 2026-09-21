@@ -1,4 +1,5 @@
-import { awaitingBankReview, isFullyPaid } from './bookingPaid';
+import { awaitingBankReview, isFullyPaid, kinorotSettlementKind } from './bookingPaid';
+import { isBookingComBooking } from './kinorotChannel';
 import { isUnavailableHoldBooking } from './unavailableHold';
 
 export function stayYmd(value) {
@@ -38,15 +39,24 @@ export function isStayInHouseNow(booking, today) {
   return Boolean(cin && cout && today && cin <= today && today < cout);
 }
 
-/** Payment first; paid guests who are in-house now are purple. */
+/** Payment first; paid guests who are in-house now are purple. Booking.com OTA stays are always purple + paid. */
 export function stayCardTone(booking, { today } = {}) {
+  if (isUnavailableHoldBooking(booking)) return 'hold';
   const cin = stayYmd(booking?.check_in_date);
   const departed = booking?.booking_status === 'CHECKED_OUT' && cin && today && cin < today;
   if (departed) return 'past';
+  if (isBookingComBooking(booking) || kinorotSettlementKind(booking) === 'booking') return 'inhouse';
   if (isFullyPaid(booking) && isStayInHouseNow(booking, today)) return 'inhouse';
   if (isFullyPaid(booking)) return 'paid';
   if (awaitingBankReview(booking)) return 'bank';
   return 'unpaid';
+}
+
+/** Guest stays plus סגור / שיפוץ blocks that should appear on the occupancy board. */
+export function isCalendarBarBooking(booking) {
+  if (!booking || booking.deleted_at || booking.booking_status === 'CANCELED') return false;
+  if (!stayYmd(booking.check_in_date) || !stayYmd(booking.check_out_date)) return false;
+  return isPaintedStay(booking) || isUnavailableHoldBooking(booking);
 }
 
 /** Non-canceled stay with valid dates (includes past checkouts for calendar paint). */

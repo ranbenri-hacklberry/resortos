@@ -162,6 +162,10 @@ body.field-staff-page .app-shell {
   width: 100%;
 }
 
+.main-stage.operations-stage {
+  padding-inline: 0.9rem;
+}
+
 .hotelos-ops-board {
   display: grid;
   grid-template-columns: 1fr;
@@ -241,19 +245,19 @@ body.field-staff-page .app-shell {
 
 @media (max-width: 720px) {
   .main-stage.operations-stage {
-    padding-inline: 6px;
+    padding-inline: max(0.9rem, env(safe-area-inset-left, 0px)) max(0.9rem, env(safe-area-inset-right, 0px));
   }
 
   .hotelos-ops-page {
-    padding-inline: 0 !important;
+    padding-inline: 0.15rem !important;
   }
 
   .hotelos-ops-toolbar {
-    padding-inline: 2px;
+    padding-inline: 0;
   }
 
   .hotelos-ops-card {
-    border-radius: 8px !important;
+    border-radius: 14px !important;
   }
 }
 

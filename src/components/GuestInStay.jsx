@@ -33,6 +33,7 @@ import {
 import { guidesFromContent } from '../lib/guestProfile';
 import { guestCabinStoreEnabled } from '../lib/guestFeatures';
 import { stayAction } from '../lib/guestCheckoutApi';
+import { selfCheckoutWindow } from '../lib/guestComms';
 import { googleReviewUrl, guestHostWhatsAppHref } from '../lib/stayProperty';
 import GuestAreaGuide from './GuestAreaGuide';
 
@@ -123,6 +124,7 @@ export default function GuestInStay({ booking, unitName, stay, themeStyles, onSt
   const nextGuest = Boolean(stay?.has_next_guest_today);
   const lateOptions = nextGuest ? LATE_NEXT_GUEST : LATE_FREE_DAY;
   const done = Boolean(stay?.self_checked_out_at);
+  const checkoutWindow = selfCheckoutWindow(booking, stay);
   const checkoutDay = isCheckoutDay(booking, stay);
   const lateOpen = isLateWindow(booking);
   const networks = wifiNetworks(stay);
@@ -467,7 +469,7 @@ export default function GuestInStay({ booking, unitName, stay, themeStyles, onSt
         <span style={{ color: '#F59E0B', fontWeight: 900, fontSize: '1.05rem' }}>{ils(folioTotal)}</span>
       </button>
 
-      {checkoutDay ? (
+      {checkoutWindow.open ? (
         <button
           type="button"
           onClick={() => setCheckoutOpen(true)}
@@ -489,6 +491,10 @@ export default function GuestInStay({ booking, unitName, stay, themeStyles, onSt
           <LogOut size={18} />
           {t('INSTAY_SELF_CHECKOUT')}
         </button>
+      ) : checkoutDay ? (
+        <div style={{ ...card, color: themeStyles.textMuted, fontWeight: 700, fontSize: '0.85rem', textAlign: 'center' }}>
+          {t('INSTAY_CHECKOUT_FROM_0800')}
+        </div>
       ) : (
         <div style={{ ...card, color: themeStyles.textMuted, fontWeight: 700, fontSize: '0.85rem', textAlign: 'center' }}>
           {t('INSTAY_CHECKOUT_OPENS', { date: displayDate(effectiveCheckoutDate(booking, stay)) })}
@@ -512,9 +518,20 @@ export default function GuestInStay({ booking, unitName, stay, themeStyles, onSt
 
       {checkoutOpen ? (
         <Modal themeStyles={themeStyles} onClose={() => setCheckoutOpen(false)} title={t('INSTAY_CHECKOUT_CONFIRM_TITLE')}>
-          <p style={{ margin: '0 0 1.1rem', color: themeStyles.textMuted, lineHeight: 1.55, fontSize: '0.9rem' }}>
-            {t('INSTAY_CHECKOUT_CONFIRM_BODY')}
-          </p>
+          <div style={{
+            borderRadius: 16,
+            padding: '1rem',
+            marginBottom: '1rem',
+            background: 'linear-gradient(160deg, rgba(251,191,36,0.18), rgba(217,119,6,0.08))',
+            border: '1px solid rgba(245,158,11,0.35)'
+          }}>
+            <div style={{ fontWeight: 900, fontSize: '1.05rem', marginBottom: 8, color: themeStyles.textPrimary }}>
+              {t('INSTAY_CHECKOUT_CONFIRM_HEAD', 'מאשרים שעזבתם את הבקתה?')}
+            </div>
+            <p style={{ margin: 0, color: themeStyles.textMuted, lineHeight: 1.55, fontSize: '0.9rem' }}>
+              {t('INSTAY_CHECKOUT_CONFIRM_BODY')}
+            </p>
+          </div>
           <button
             type="button"
             disabled={Boolean(busy)}
@@ -522,13 +539,14 @@ export default function GuestInStay({ booking, unitName, stay, themeStyles, onSt
             style={{
               width: '100%',
               border: 'none',
-              borderRadius: 12,
-              padding: '0.85rem',
+              borderRadius: 14,
+              padding: '0.95rem',
               fontWeight: 900,
-              background: '#F59E0B',
+              background: 'linear-gradient(135deg, #FBBF24, #D97706)',
               color: '#1C1917',
               cursor: 'pointer',
-              marginBottom: 8
+              marginBottom: 8,
+              boxShadow: '0 8px 20px rgba(217,119,6,0.28)'
             }}
           >
             {t('INSTAY_CHECKOUT_YES')}
@@ -538,9 +556,9 @@ export default function GuestInStay({ booking, unitName, stay, themeStyles, onSt
             onClick={() => setCheckoutOpen(false)}
             style={{
               width: '100%',
-              border: 'none',
-              borderRadius: 12,
-              padding: '0.75rem',
+              border: `1px solid ${themeStyles.inputBorder}`,
+              borderRadius: 14,
+              padding: '0.8rem',
               fontWeight: 800,
               background: 'transparent',
               color: themeStyles.textMuted,

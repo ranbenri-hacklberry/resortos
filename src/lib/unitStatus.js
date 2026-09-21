@@ -6,6 +6,7 @@ import { coveringUnavailableHold, isUnavailableHoldBooking, unavailableHoldLabel
 export const UNIT_STATUS_BADGES = {
   OCCUPIED: { key: 'OCCUPIED', label: 'מאוכלס', color: '#6D28D9', bg: '#EDE9FE' },
   READY: { key: 'READY', label: 'מוכן', color: '#047857', bg: '#D1FAE5' },
+  NEEDS_COMPLETIONS: { key: 'NEEDS_COMPLETIONS', label: 'השלמות', color: '#0F766E', bg: '#CCFBF1' },
   DIRTY: { key: 'DIRTY', label: 'לניקוי', color: '#C2410C', bg: '#FFEDD5' },
   IN_PROGRESS: { key: 'IN_PROGRESS', label: 'בניקיון', color: '#3730A3', bg: '#E0E7FF' },
   MAINTENANCE_ALERT: { key: 'MAINTENANCE_ALERT', label: 'תקלה', color: '#B91C1C', bg: '#FEE2E2' },
@@ -21,6 +22,13 @@ const UNIT_NAME_FRAMES = {
     bgDark: '#16382A',
     textLight: '#14532D',
     textDark: '#BBF7D0'
+  },
+  NEEDS_COMPLETIONS: {
+    border: '#2DD4BF',
+    bgLight: '#CCFBF1',
+    bgDark: '#134E4A',
+    textLight: '#115E59',
+    textDark: '#99F6E4'
   },
   DIRTY: {
     border: '#FB923C',
@@ -65,10 +73,10 @@ const UNIT_NAME_FRAMES = {
     textDark: '#BAE6FD'
   },
   UNAVAILABLE: {
-    border: '#A8A29E',
-    bgLight: '#E7E5E4',
-    bgDark: '#292524',
-    textLight: '#44403C',
+    border: '#D6D3D1',
+    bgLight: '#F5F5F4',
+    bgDark: '#2A2725',
+    textLight: '#78716C',
     textDark: '#D6D3D1'
   }
 };
@@ -76,12 +84,25 @@ const UNIT_NAME_FRAMES = {
 export function unitNameFrame(statusKey, isLight) {
   const frame = UNIT_NAME_FRAMES[statusKey] || UNIT_NAME_FRAMES.READY;
   const text = isLight ? frame.textLight : frame.textDark;
+  const hatch = statusKey === 'UNAVAILABLE'
+    ? (isLight
+      ? 'repeating-linear-gradient(-45deg, rgba(168,162,158,0.22) 0 5px, rgba(250,250,249,0.7) 5px 10px)'
+      : 'repeating-linear-gradient(-45deg, rgba(168,162,158,0.2) 0 5px, rgba(41,37,36,0.55) 5px 10px)')
+    : '';
   return {
-    bg: isLight ? frame.bgLight : frame.bgDark,
+    bg: hatch || (isLight ? frame.bgLight : frame.bgDark),
+    fill: isLight ? frame.bgLight : frame.bgDark,
     border: frame.border,
     prefix: text,
-    name: text
+    name: text,
+    dashed: statusKey === 'UNAVAILABLE'
   };
+}
+
+export function holdNightHatch(isLight) {
+  return isLight
+    ? 'repeating-linear-gradient(-45deg, rgba(168,162,158,0.2) 0 5px, rgba(250,250,249,0.45) 5px 10px)'
+    : 'repeating-linear-gradient(-45deg, rgba(168,162,158,0.18) 0 5px, rgba(28,25,23,0.4) 5px 10px)';
 }
 
 export function staffOccupancyOf(unit) {
@@ -92,15 +113,79 @@ export function staffOccupancyOf(unit) {
 
 export function isEffectivelyOccupied(unit, bookings, today = israelToday()) {
   if (coveringUnavailableHold(bookings, unit?.id, today)) return false;
-  if (staffOccupancyOf(unit) === 'VACANT') return false;
   if (staffOccupancyOf(unit) === 'OCCUPIED') return true;
-  return isUnitOccupied(bookings, unit?.id, today);
+  // Mid-stay from the calendar always wins over a stale VACANT flip.
+  if (isUnitOccupied(bookings, unit?.id, today)) return true;
+  if (staffOccupancyOf(unit) === 'VACANT') return false;
+  return false;
+}
+
+/** Arrival-day stays still waiting for a manual תפוס mark (after hour, default 20:00). */
+export function listArrivalsAwaitingOccupy(units, bookings, today = israelToday(), now = new Date(), afterHour = 20) {
+  const hourStr = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Jerusalem',
+    hour: '2-digit',
+    hourCycle: 'h23'
+  }).format(now);
+  const hour = Number(hourStr);
+  if (!Number.isFinite(hour) || hour < afterHour) return [];
+
+  const byId = new Map((units || []).map((unit) => [unit.id, unit]));
+  const seen = new Set();
+  const rows = [];
+  for (const booking of bookings || []) {
+    if (!booking || booking.deleted_at) continue;
+    if (isUnavailableHoldBooking(booking)) continue;
+    if (booking.booking_status === 'CANCELED' || booking.booking_status === 'CHECKED_OUT') continue;
+    if (stayYmd(booking.check_in_date) !== today) continue;
+    if (!booking.check_out_date || stayYmd(booking.check_out_date) <= today) continue;
+    const unitId = booking.unit_id;
+    if (!unitId || seen.has(unitId)) continue;
+    const unit = byId.get(unitId) || { id: unitId };
+    if (staffOccupancyOf(unit) === 'OCCUPIED') continue;
+    if (isEffectivelyOccupied(unit, bookings, today)) continue;
+    seen.add(unitId);
+    rows.push({ unit, booking });
+  }
+  return rows;
+}
+
+/** Stale VACANT while a guest is mid-stay — clear so UI matches the calendar. */
+export function unitsWithStaleVacantFlag(units, bookings, today = israelToday()) {
+  return (units || []).filter((unit) => (
+    staffOccupancyOf(unit) === 'VACANT' && isUnitOccupied(bookings, unit?.id, today)
+  ));
+}
+
+const OCCUPY_ASK_DISMISS_PREFIX = 'resortos-occupy-ask-dismissed-';
+
+export function occupyAskDismissKey(today = israelToday()) {
+  return `${OCCUPY_ASK_DISMISS_PREFIX}${today}`;
+}
+
+export function isOccupyAskDismissedToday(today = israelToday()) {
+  try {
+    return localStorage.getItem(occupyAskDismissKey(today)) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function setOccupyAskDismissedToday(dismissed, today = israelToday()) {
+  try {
+    const key = occupyAskDismissKey(today);
+    if (dismissed) localStorage.setItem(key, '1');
+    else localStorage.removeItem(key);
+  } catch {
+    /* ignore */
+  }
 }
 
 /** Field-settable ops statuses. Occupied/vacant is a separate staff toggle. */
 export const UNIT_OPS_CHOICES = [
   { key: 'DIRTY', domain: 'HOUSEKEEPING', reason: 'ניקוי לאחר יציאה והכנה לכניסה', hint: 'ממתין למשק בית' },
   { key: 'IN_PROGRESS', domain: 'HOUSEKEEPING', reason: 'ניקיון בביצוע', hint: 'הצוות בפנים' },
+  { key: 'NEEDS_COMPLETIONS', domain: 'HOUSEKEEPING', reason: 'נקי · השלמות', hint: 'נקי, חסר ציוד' },
   { key: 'READY', domain: 'HOUSEKEEPING', reason: 'ממתין לביקורת מנהל', hint: 'נקי — אפשר כניסה' },
   { key: 'MAINTENANCE_ALERT', domain: 'MAINTENANCE', reason: 'תקלת אחזקה פתוחה ביחידה', hint: 'לא מוכן לאורח' },
   { key: 'GARDENING', domain: 'GARDENING', reason: 'עבודת גינון פתוחה', hint: 'חצר / בריכה' }
@@ -224,6 +309,7 @@ export function unitDisplayStatus(unit, bookings, today = israelToday(), now = n
   if (occupied) return UNIT_STATUS_BADGES.OCCUPIED;
   if (ops === 'IN_PROGRESS') return UNIT_STATUS_BADGES.IN_PROGRESS;
   if (ops === 'DIRTY') return UNIT_STATUS_BADGES.DIRTY;
+  if (ops === 'NEEDS_COMPLETIONS') return UNIT_STATUS_BADGES.NEEDS_COMPLETIONS;
   if (leavingToday) return UNIT_STATUS_BADGES.LEAVING;
   if (ops === 'READY') return UNIT_STATUS_BADGES.READY;
   return tonight ? UNIT_STATUS_BADGES.READY : UNIT_STATUS_BADGES.DIRTY;
@@ -267,6 +353,7 @@ export function hideHousekeepingTaskWhileOccupied(unit, bookings, today = israel
   if (ops === 'DIRTY' || ops === 'IN_PROGRESS') {
     return !checkoutToday && !arrivalToday;
   }
+  if (ops === 'NEEDS_COMPLETIONS') return false;
   if (ops === 'READY' && isExpiredPendingInspect(unit, today)) return true;
   if (ops === 'READY' && isAwaitingManagerInspect(unit) && checkoutToday) return false;
   return true;

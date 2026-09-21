@@ -148,6 +148,7 @@ function PaymentSheet({ booking, busy, hyp, error, payUrl, onClose, onSubmit, on
   const locked = busy === booking.id;
   const payments = booking.payments || [];
   const recordNow = received || method === 'bank';
+  const fullyPaid = Boolean(booking.recorded_paid) || (totalIls > 0 && paid + 0.5 >= totalIls);
 
   function editTotal(value) {
     const next = value.replace(/[^\d.]/g, '');
@@ -176,21 +177,37 @@ function PaymentSheet({ booking, busy, hyp, error, payUrl, onClose, onSubmit, on
         <div className="desk-money-row desk-money-row-3">
           <label>
             סה״כ הזמנה
-            <input inputMode="decimal" value={total} placeholder="0" onChange={(event) => editTotal(event.target.value)} />
+            <input
+              inputMode="decimal"
+              value={total}
+              placeholder="0"
+              disabled={fullyPaid}
+              onChange={(event) => editTotal(event.target.value)}
+            />
           </label>
           <label>
             יתרה
-            <input inputMode="decimal" value={due} placeholder="0" onChange={(event) => setDue(event.target.value.replace(/[^\d.]/g, ''))} />
+            <input
+              inputMode="decimal"
+              value={fullyPaid ? '0' : due}
+              placeholder="0"
+              disabled={fullyPaid}
+              onChange={(event) => setDue(event.target.value.replace(/[^\d.]/g, ''))}
+            />
           </label>
-          <button
-            type="button"
-            className={`desk-received${received ? ' on' : ''}`}
-            onClick={() => setReceived((value) => !value)}
-          >
-            היתרה שולמה
-          </button>
+          {!fullyPaid ? (
+            <button
+              type="button"
+              className={`desk-received${received ? ' on' : ''}`}
+              onClick={() => setReceived((value) => !value)}
+            >
+              היתרה שולמה
+            </button>
+          ) : (
+            <div className="desk-received on" aria-live="polite">שולם במלואה</div>
+          )}
         </div>
-        <p className="desk-muted">שולם ₪{paid} · נשאר ₪{Math.max(0, Math.round((totalIls - paid) * 100) / 100)}</p>
+        <p className="desk-muted">שולם ₪{paid} · נשאר ₪{fullyPaid ? 0 : Math.max(0, Math.round((totalIls - paid) * 100) / 100)}</p>
 
         {payments.length ? (
           <ul className="desk-pay-list">
@@ -207,38 +224,17 @@ function PaymentSheet({ booking, busy, hyp, error, payUrl, onClose, onSubmit, on
           </ul>
         ) : null}
 
-        <p className="desk-label">{recordNow ? 'איך שולמה היתרה' : 'איך תשולם היתרה'}</p>
-        <div className="desk-filters">
-          <button type="button" className={method === 'card' ? 'on' : ''} onClick={() => chooseMethod('card')}>אשראי</button>
-          <button type="button" className={method === 'cash' ? 'on' : ''} onClick={() => chooseMethod('cash')}>מזומן</button>
-          <button type="button" className={method === 'bank' ? 'on' : ''} onClick={() => chooseMethod('bank')}>העברה בנקאית</button>
-          <button type="button" className={method === 'voucher' ? 'on' : ''} onClick={() => chooseMethod('voucher')}>שובר</button>
-        </div>
+        {!fullyPaid ? (
+          <>
+            <p className="desk-label">{recordNow ? 'איך שולמה היתרה' : 'איך תשולם היתרה'}</p>
+            <div className="desk-filters">
+              <button type="button" className={method === 'card' ? 'on' : ''} onClick={() => chooseMethod('card')}>אשראי</button>
+              <button type="button" className={method === 'cash' ? 'on' : ''} onClick={() => chooseMethod('cash')}>מזומן</button>
+              <button type="button" className={method === 'bank' ? 'on' : ''} onClick={() => chooseMethod('bank')}>העברה בנקאית</button>
+              <button type="button" className={method === 'voucher' ? 'on' : ''} onClick={() => chooseMethod('voucher')}>שובר</button>
+            </div>
 
-        {method === 'card' && !recordNow ? (
-          <div className="desk-filters desk-terminals">
-            <button type="button" className={terminal === 'A' ? 'on' : ''} disabled={!hyp.a} onClick={() => setTerminal('A')}>
-              A יתרות · {HYP_TERMINAL_A}
-            </button>
-            <button type="button" className={terminal === 'B' ? 'on' : ''} disabled={!hyp.b} onClick={() => setTerminal('B')}>
-              B מקדמות · {HYP_TERMINAL_B}
-            </button>
-          </div>
-        ) : null}
-
-        {recordNow && method !== 'voucher' && method !== 'bank' ? (
-          <div className="desk-received-fields">
-            <label>
-              תאריך ושעה ששולם
-              <input type="datetime-local" value={paidAt} onChange={(event) => setPaidAt(event.target.value)} />
-            </label>
-            {method === 'card' ? (
-              <label>
-                מספר אישור / אסמכתא
-                <input value={ref} placeholder="מספר אישור" onChange={(event) => setRef(event.target.value)} />
-              </label>
-            ) : null}
-            {method === 'card' ? (
+            {method === 'card' && !recordNow ? (
               <div className="desk-filters desk-terminals">
                 <button type="button" className={terminal === 'A' ? 'on' : ''} disabled={!hyp.a} onClick={() => setTerminal('A')}>
                   A יתרות · {HYP_TERMINAL_A}
@@ -248,75 +244,127 @@ function PaymentSheet({ booking, busy, hyp, error, payUrl, onClose, onSubmit, on
                 </button>
               </div>
             ) : null}
-          </div>
-        ) : null}
 
-        {method === 'voucher' || method === 'bank' ? (
-          <div className="desk-voucher">
-            {photo ? <img src={photo} alt={method === 'bank' ? 'אישור העברה' : 'צילום שובר'} /> : null}
-            <label className="desk-file">
-              <Upload size={14} />
-              {photo ? 'החלפת צילום' : (method === 'bank' ? 'צירוף אישור העברה' : 'צירוף צילום שובר')}
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                disabled={locked}
-                onChange={async (event) => {
-                  const file = event.target.files?.[0];
-                  event.target.value = '';
-                  if (!file) return;
-                  setPhoto(await compressPhoto(file));
-                }}
-              />
-            </label>
-            {method === 'voucher' ? (
-              <label className="desk-check">
-                <input
-                  type="checkbox"
-                  checked={companyRedeemed}
-                  disabled={locked}
-                  onChange={(event) => setCompanyRedeemed(event.target.checked)}
-                />
-                נפדה בחברת השוברים
-              </label>
+            {recordNow && method !== 'voucher' && method !== 'bank' ? (
+              <div className="desk-received-fields">
+                <label>
+                  תאריך ושעה ששולם
+                  <input type="datetime-local" value={paidAt} onChange={(event) => setPaidAt(event.target.value)} />
+                </label>
+                {method === 'card' ? (
+                  <label>
+                    מספר אישור / אסמכתא
+                    <input value={ref} placeholder="מספר אישור" onChange={(event) => setRef(event.target.value)} />
+                  </label>
+                ) : null}
+                {method === 'card' ? (
+                  <div className="desk-filters desk-terminals">
+                    <button type="button" className={terminal === 'A' ? 'on' : ''} disabled={!hyp.a} onClick={() => setTerminal('A')}>
+                      A יתרות · {HYP_TERMINAL_A}
+                    </button>
+                    <button type="button" className={terminal === 'B' ? 'on' : ''} disabled={!hyp.b} onClick={() => setTerminal('B')}>
+                      B מקדמות · {HYP_TERMINAL_B}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             ) : null}
-          </div>
-        ) : null}
 
-        {error ? <p className="desk-error">{error}</p> : null}
+            {method === 'bank' ? (
+              <div className="desk-voucher">
+                <label>
+                  מספר אסמכתא
+                  <input value={ref} placeholder="אופציונלי אם יש צילום" onChange={(event) => setRef(event.target.value)} />
+                </label>
+                <p className="desk-muted">אסמכתא או צילום מסך של ההעברה</p>
+                {photo ? <img src={photo} alt="אישור העברה" /> : null}
+                <label className="desk-file">
+                  <Upload size={14} />
+                  {photo ? 'החלפת צילום' : 'צירוף צילום מסך'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    disabled={locked}
+                    onChange={async (event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = '';
+                      if (!file) return;
+                      setPhoto(await compressPhoto(file));
+                    }}
+                  />
+                </label>
+              </div>
+            ) : null}
 
-        {payUrl && !recordNow ? (
-          <a className="desk-go" href={payUrl} target="_self" rel="noreferrer">
-            המשיכו לסליקה
-          </a>
+            {method === 'voucher' ? (
+              <div className="desk-voucher">
+                {photo ? <img src={photo} alt="צילום שובר" /> : null}
+                <label className="desk-file">
+                  <Upload size={14} />
+                  {photo ? 'החלפת צילום' : 'צירוף צילום שובר'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    disabled={locked}
+                    onChange={async (event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = '';
+                      if (!file) return;
+                      setPhoto(await compressPhoto(file));
+                    }}
+                  />
+                </label>
+                <label className="desk-check">
+                  <input
+                    type="checkbox"
+                    checked={companyRedeemed}
+                    disabled={locked}
+                    onChange={(event) => setCompanyRedeemed(event.target.checked)}
+                  />
+                  נפדה בחברת השוברים
+                </label>
+              </div>
+            ) : null}
+
+            {error ? <p className="desk-error">{error}</p> : null}
+
+            {payUrl && !recordNow ? (
+              <a className="desk-go" href={payUrl} target="_self" rel="noreferrer">
+                המשיכו לסליקה
+              </a>
+            ) : (
+              <button
+                type="button"
+                className="desk-go"
+                disabled={locked || (method === 'card' && !recordNow && ((terminal === 'A' && !hyp.a) || (terminal === 'B' && !hyp.b)))}
+                onClick={() => onSubmit({
+                  totalIls,
+                  remainder,
+                  method,
+                  terminal,
+                  photo,
+                  companyRedeemed,
+                  received: recordNow,
+                  paidAt,
+                  ref
+                })}
+              >
+                {locked
+                  ? 'שומר…'
+                  : recordNow
+                    ? 'רשום תשלום שהתקבל'
+                    : method === 'card'
+                      ? 'פתח סליקה'
+                      : method === 'cash'
+                        ? 'שולם מזומן'
+                        : 'שמור שובר'}
+              </button>
+            )}
+          </>
         ) : (
-          <button
-            type="button"
-            className="desk-go"
-            disabled={locked || (method === 'card' && !recordNow && ((terminal === 'A' && !hyp.a) || (terminal === 'B' && !hyp.b)))}
-            onClick={() => onSubmit({
-              totalIls,
-              remainder,
-              method,
-              terminal,
-              photo,
-              companyRedeemed,
-              received: recordNow,
-              paidAt,
-              ref
-            })}
-          >
-            {locked
-              ? 'שומר…'
-              : recordNow
-                ? 'רשום תשלום שהתקבל'
-                : method === 'card'
-                  ? 'פתח סליקה'
-                  : method === 'cash'
-                    ? 'שולם מזומן'
-                    : 'שמור שובר'}
-          </button>
+          error ? <p className="desk-error">{error}</p> : null
         )}
       </div>
     </div>
@@ -451,8 +499,10 @@ export default function DeskApp() {
         return;
       }
       if (draft.method === 'cash' || draft.method === 'bank' || draft.method === 'card') {
-        if (draft.method === 'bank' && !(draft.photo || '').startsWith('data:image/')) {
-          throw new Error('צרפו צילום אישור העברה.');
+        if (draft.method === 'bank') {
+          const hasPhoto = (draft.photo || '').startsWith('data:image/');
+          const hasRef = Boolean(String(draft.ref || '').trim());
+          if (!hasPhoto && !hasRef) throw new Error('צרפו אסמכתא או צילום אישור העברה.');
         }
         if (draft.remainder <= 0.5) throw new Error('מלאו סכום לתשלום.');
         const data = await deskFetch('mark', {
@@ -465,7 +515,7 @@ export default function DeskApp() {
             method: draft.method === 'cash' ? 'CASH' : draft.method === 'bank' ? 'BANK' : 'CARD',
             photo: draft.method === 'bank' ? (draft.photo || '') : undefined,
             at: draft.method === 'bank' ? '' : (draft.paidAt || ''),
-            ref: draft.method === 'bank' ? '' : (draft.ref || '')
+            ref: String(draft.ref || '').trim()
           }
         });
         await refreshPaying(data.booking);

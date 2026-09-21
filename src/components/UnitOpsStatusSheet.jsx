@@ -1,7 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { UNIT_OPS_CHOICES, UNIT_STATUS_BADGES, isEffectivelyOccupied, unitDisplayStatus } from '../lib/unitStatus';
+import { listAssignableStaff } from '../lib/staffAuth';
+import { staffOptionName } from '../lib/staffPhones';
+import { completionsFromUnit, NEEDS_COMPLETIONS } from '../lib/roomCompletions';
+import RoomCompletionsEditor from './RoomCompletionsEditor';
 
 export default function UnitOpsStatusSheet({
   unit,
@@ -11,12 +15,40 @@ export default function UnitOpsStatusSheet({
   themeStyles,
   onClose,
   onPick,
-  onOccupancy
+  onOccupancy,
+  onAssign,
+  onCompletions
 }) {
+  const [staff, setStaff] = useState([]);
+  const [assignee, setAssignee] = useState(unit?.assigned_staff || '');
+
+  useEffect(() => {
+    setAssignee(unit?.assigned_staff || '');
+  }, [unit?.id, unit?.assigned_staff]);
+
+  useEffect(() => {
+    let cancelled = false;
+    listAssignableStaff()
+      .then((rows) => {
+        if (!cancelled) setStaff(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => {
+        if (!cancelled) setStaff([]);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
   if (!unit || typeof document === 'undefined') return null;
   const occupied = isEffectivelyOccupied(unit, bookings);
   const shown = unitDisplayStatus(unit, bookings);
   const current = unit.operational_status || 'READY';
+  const knownNames = new Set(staff.map((row) => staffOptionName(row)).filter(Boolean));
+  const extraAssignee = assignee && !knownNames.has(assignee) ? assignee : '';
+
+  const pickAssignee = (name) => {
+    setAssignee(name);
+    if (typeof onAssign === 'function') onAssign(name);
+  };
 
   const sheet = (
     <div
@@ -62,6 +94,72 @@ export default function UnitOpsStatusSheet({
           </button>
         </div>
 
+        {current === NEEDS_COMPLETIONS ? (
+          <>
+            <div style={{
+              marginTop: 12,
+              fontSize: '0.72rem',
+              fontWeight: 800,
+              color: '#0F766E',
+              background: '#CCFBF1',
+              borderRadius: 999,
+              padding: '4px 10px',
+              display: 'inline-block'
+            }}>
+              השלמות
+            </div>
+            <RoomCompletionsEditor
+              items={completionsFromUnit(unit)}
+              isLight={isLight}
+              textColor={themeStyles.textPrimary}
+              mutedColor={themeStyles.textMuted}
+              lineColor={themeStyles.inputBorder}
+              onChange={(items) => onCompletions?.(items)}
+            />
+            <div style={{
+              marginTop: 16,
+              marginBottom: 6,
+              fontSize: '0.72rem',
+              fontWeight: 800,
+              color: themeStyles.textMuted
+            }}>
+              שנה סטטוס
+            </div>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 8
+            }}>
+              {UNIT_OPS_CHOICES.filter((choice) => choice.key !== NEEDS_COMPLETIONS).map((choice) => {
+                const badge = UNIT_STATUS_BADGES[choice.key];
+                return (
+                  <button
+                    key={choice.key}
+                    type="button"
+                    onClick={() => onPick(choice.key)}
+                    style={{
+                      minHeight: 56,
+                      textAlign: 'right',
+                      borderRadius: 14,
+                      border: `1px solid ${themeStyles.inputBorder}`,
+                      background: isLight ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.04)',
+                      color: themeStyles.textPrimary,
+                      cursor: 'pointer',
+                      padding: '0.55rem 0.75rem',
+                      fontWeight: 800
+                    }}
+                  >
+                    <div style={{ fontSize: '0.95rem', color: badge.color }}>{badge.label}</div>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: themeStyles.textMuted, marginTop: 2 }}>
+                      {choice.hint}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <>
         <div style={{ marginTop: 10 }}>
           <span style={{
             fontSize: '0.72rem',
@@ -127,6 +225,44 @@ export default function UnitOpsStatusSheet({
           fontWeight: 800,
           color: themeStyles.textMuted
         }}>
+          אחראי על היחידה
+        </div>
+        <select
+          value={assignee}
+          onChange={(event) => pickAssignee(event.target.value)}
+          style={{
+            width: '100%',
+            minHeight: 46,
+            borderRadius: 12,
+            border: `1px solid ${themeStyles.inputBorder}`,
+            background: isLight ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.04)',
+            color: themeStyles.textPrimary,
+            fontWeight: 800,
+            fontSize: '0.88rem',
+            padding: '0 0.75rem',
+            boxSizing: 'border-box'
+          }}
+        >
+          <option value="">לא נבחר</option>
+          {extraAssignee ? <option value={extraAssignee}>{extraAssignee}</option> : null}
+          {staff.map((row) => {
+            const name = staffOptionName(row);
+            if (!name) return null;
+            return (
+              <option key={row.id || name} value={name}>
+                {name}
+              </option>
+            );
+          })}
+        </select>
+
+        <div style={{
+          marginTop: 14,
+          marginBottom: 6,
+          fontSize: '0.72rem',
+          fontWeight: 800,
+          color: themeStyles.textMuted
+        }}>
           ניקיון ותקלות
         </div>
         <div style={{
@@ -164,6 +300,8 @@ export default function UnitOpsStatusSheet({
             );
           })}
         </div>
+          </>
+        )}
       </div>
     </div>
   );

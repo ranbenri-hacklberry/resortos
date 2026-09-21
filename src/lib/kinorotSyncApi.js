@@ -1,14 +1,19 @@
 import { getStoredToken } from './staffAuth';
 
-async function kinorotFetch(method) {
+async function kinorotFetch(method, body) {
   const headers = { Accept: 'application/json' };
   const token = getStoredToken();
   if (token) headers.Authorization = `Bearer ${token}`;
-  const response = await fetch('/api/kinorot/sync', {
+  const init = {
     method,
     headers,
     signal: AbortSignal.timeout(20000)
-  });
+  };
+  if (method !== 'GET' && body && typeof body === 'object') {
+    headers['Content-Type'] = 'application/json';
+    init.body = JSON.stringify(body);
+  }
+  const response = await fetch('/api/kinorot/sync', init);
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const err = new Error(data.error || 'KINOROT_SYNC_FAILED');
@@ -22,8 +27,9 @@ export function fetchKinorotSyncStatus() {
   return kinorotFetch('GET');
 }
 
-export function startKinorotSync() {
-  return kinorotFetch('POST');
+/** @param {{ mode?: 'duty'|'full', days?: number, backDays?: number, boardDays?: number }} [options] */
+export function startKinorotSync(options = {}) {
+  return kinorotFetch('POST', options);
 }
 
 const SEEN_CHANGE_KEY = 'hotelos-kinorot-seen-change';
@@ -133,19 +139,45 @@ export function hasUnseenKinorotChanges(status) {
   return unseenKinorotChanges(status.changes).total > 0;
 }
 
-export function formatKinorotSyncLabel(status) {
-  if (!status) return 'אין רישום סנכרון';
-  if (status.running) return 'מסנכרן עכשיו…';
-  const stamp = status.lastOkAt || status.journalUpdatedAt;
-  if (!stamp) return 'עדיין לא סונכרן';
-  const label = new Date(stamp).toLocaleString('he-IL', {
+/** Exact Israel clock time for ops / duty banner, e.g. 15:28:06 */
+export function formatKinorotSyncClock(iso) {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString('he-IL', {
+    timeZone: 'Asia/Jerusalem',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+}
+
+export function formatKinorotSyncStamp(iso) {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('he-IL', {
     timeZone: 'Asia/Jerusalem',
     day: 'numeric',
     month: 'numeric',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
   });
-  if (status.lastError) return `נכשל · יומן ${label}`;
-  if (status.lastOkAt) return `סונכרן ${label}`;
+}
+
+export function formatKinorotSyncLabel(status) {
+  if (!status) return 'אין רישום סנכרון';
+  if (status.running) {
+    return status.mode === 'duty' ? 'מסנכרן יום (כינורות)…' : 'מסנכרן עכשיו…';
+  }
+  const stamp = status.lastOkAt || status.journalUpdatedAt;
+  if (!stamp) return 'עדיין לא סונכרן';
+  const label = formatKinorotSyncStamp(stamp);
+  const modeTag = status.mode === 'duty' ? 'יום · ' : '';
+  if (status.lastError) return `נכשל · ${modeTag}${label}`;
+  if (status.lastOkAt) return `סונכרן ${modeTag}${label}`;
   return `עדכון ביומן ${label}`;
 }

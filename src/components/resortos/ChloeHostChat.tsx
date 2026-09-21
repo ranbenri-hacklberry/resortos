@@ -31,6 +31,8 @@ import {
   Coffee,
   Wifi,
   Waves,
+  AlertTriangle,
+  DollarSign,
 } from 'lucide-react';
 import { ManagedProperty } from './HostPropertyEditor';
 import { AIPhotoStudioModal } from '../media/AIPhotoStudioModal';
@@ -345,6 +347,53 @@ export const ChloeHostChat: React.FC<ChloeHostChatProps> = ({
     setMessages((prev) => [...prev, chloeMsg]);
   };
 
+  const handleDeleteGalleryItemByIndex = (indexToRemove: number) => {
+    if (!currentProp) return;
+
+    const newGallery = (currentProp.gallery_images || []).filter((_, idx) => idx !== indexToRemove);
+    const updated = {
+      ...currentProp,
+      gallery_images: newGallery
+    };
+
+    onUpdateProperty(updated);
+    triggerPreviewPulse();
+
+    const chloeMsg: ChatMessage = {
+      id: `msg-del-idx-${Date.now()}`,
+      sender: 'chloe',
+      text: `התמונה הוסרה מהגלריה בהצלחה. 🗑️`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      actionTaken: { type: 'photo', summary: 'תמונה הוסרה מהגלריה' }
+    };
+    setMessages((prev) => [...prev, chloeMsg]);
+  };
+
+  const handleCleanAllDuplicates = () => {
+    if (!currentProp) return;
+    const currentList = currentProp.gallery_images || [];
+    const deduped = Array.from(new Set(currentList));
+    const removedCount = currentList.length - deduped.length;
+    if (removedCount <= 0) return;
+
+    const updated = {
+      ...currentProp,
+      gallery_images: deduped
+    };
+
+    onUpdateProperty(updated);
+    triggerPreviewPulse();
+
+    const chloeMsg: ChatMessage = {
+      id: `msg-clean-dup-${Date.now()}`,
+      sender: 'chloe',
+      text: `הסרתי בהצלחה ${removedCount} תמונות כפולות מהגלריה של "${currentProp.hebrew_name}"! כעת יש ${deduped.length} תמונות ייחודיות וחדות במתחם. ✨`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      actionTaken: { type: 'photo', summary: `נוקו ${removedCount} תמונות כפולות` }
+    };
+    setMessages((prev) => [...prev, chloeMsg]);
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || !currentProp) return;
@@ -486,12 +535,91 @@ export const ChloeHostChat: React.FC<ChloeHostChatProps> = ({
 
     const lower = text.toLowerCase();
 
-    // Check if user naturally asked for a section
+    // 1. Check if user is asking how to save photo without making it hero
+    const isSaveWithoutHeroIntent =
+      (lower.includes('איך שומרים') || lower.includes('איך לשמור') || lower.includes('לשמור תמונה') || lower.includes('שמירה') || lower.includes('איך לשמור תמונה')) &&
+      (lower.includes('בלי להפוך') || lower.includes('בלי ראשית') || lower.includes('ללא שינוי') || lower.includes('רק לגלריה') || lower.includes('לגלריה בלבד') || lower.includes('מבלי להחליף'));
+
+    if (isSaveWithoutHeroIntent) {
+      setTimeout(() => {
+        const chloeMsg: ChatMessage = {
+          id: `msg-chloe-${Date.now()}`,
+          sender: 'chloe',
+          text: `שאלה מעולה! הנה בדיוק איך שומרים תמונה לגלריה בלי להחליף את התמונה הראשית:\n\nבסטודיו ה-AI (וגם בסרגל התחתון הקבוע) יש כפתור ייעודי:\n📸 **"הוסף לגלריית המתחם (ללא שינוי התמונה הראשית)"**.\n\nבלחיצה עליו, התמונה המעובדת מתווספת ישירות לגלריית התמונות של "${currentProp.hebrew_name}", בעוד שתמונת השער (Hero) נשמרת בדיוק כפי שהיא.\nרק אם תלחץ על הכפתור המוזהב **"⭐ קבע כתמונה ראשית"**, היא תחליף את תמונת השער.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          widget: 'photo_manager'
+        };
+        setMessages((prev) => [...prev, chloeMsg]);
+        setIsTyping(false);
+      }, 400);
+      return;
+    }
+
+    // 2. Check if user is asking about duplicates, deletions, or excess photos
+    const isDuplicateIntent =
+      lower.includes('פעמיים') ||
+      lower.includes('כפולה') ||
+      lower.includes('כפול') ||
+      lower.includes('כפילויות') ||
+      lower.includes('שמופיעה פעמיים') ||
+      lower.includes('מופיעה פעמיים') ||
+      lower.includes('אותה תמונה') ||
+      lower.includes('תמונה כפולה') ||
+      lower.includes('תמונות כפולות');
+
+    const isDeletePhotoIntent =
+      lower.includes('למחוק') ||
+      lower.includes('תמחק') ||
+      lower.includes('להסיר') ||
+      lower.includes('תסיר') ||
+      lower.includes('מיותר') ||
+      lower.includes('מיותרת') ||
+      lower.includes('מיותרות') ||
+      lower.includes('מחיקה');
+
+    if (isDuplicateIntent || (isDeletePhotoIntent && (lower.includes('תמונה') || lower.includes('תמונות') || lower.includes('גלריה')))) {
+      const gallery = currentProp.gallery_images || [];
+      const urlCounts: Record<string, number> = {};
+      gallery.forEach((url) => {
+        urlCounts[url] = (urlCounts[url] || 0) + 1;
+      });
+      const duplicates = Object.entries(urlCounts).filter(([_, count]) => count > 1);
+      const duplicateCount = duplicates.reduce((sum, [_, count]) => sum + (count - 1), 0);
+
+      setTimeout(() => {
+        let msgText = '';
+        if (duplicateCount > 0) {
+          msgText = `שמתי לב מיד! בדקתי את הגלריה של "${currentProp.hebrew_name}" ומצאתי ${duplicateCount === 1 ? 'תמונה שמופיעה פעמיים' : `${duplicateCount} תמונות שמופיעות יותר מפעם אחת`} (סה"כ ${gallery.length} תמונות בגלריה).\n\nהנה כל התמונות שלך מטה – תוכל ללחוץ על הכפתור "🧹 נקה כפילויות" בראש הרשימה כדי שאסיר אוטומטית את כל העותקים הכפולים, או ללחוץ על כפתור ✕ מחק האדום על כל עותק שתרצה להסיר ידנית:`;
+        } else {
+          msgText = `הבנתי אותך לגמרי! בדקתי את כל ${gallery.length} התמונות בגלריה של "${currentProp.hebrew_name}".\nהנה כל התמונות מוצגות לפניך – על כל תמונה הוספתי כפתור אדום ברור "✕ מחק". פשוט לחץ עליו על התמונה שנראית לך מיותרת ואסיר אותה מיד מהמתחם:`;
+        }
+
+        const chloeMsg: ChatMessage = {
+          id: `msg-chloe-${Date.now()}`,
+          sender: 'chloe',
+          text: msgText,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          widget: 'photo_manager'
+        };
+        setMessages((prev) => [...prev, chloeMsg]);
+        setIsTyping(false);
+      }, 400);
+      return;
+    }
+
+    // 3. General Photo Intent
     if (lower.includes('תמונה') || lower.includes('תמונות') || lower.includes('גלריה')) {
       setTimeout(() => {
-        handleSelectFlow('photo_manager');
+        const chloeMsg: ChatMessage = {
+          id: `msg-chloe-${Date.now()}`,
+          sender: 'chloe',
+          text: `בשמחה! הנה כל התמונות הקיימות כרגע במתחם "${currentProp.hebrew_name}" (${currentProp.gallery_images?.length || 0} בגלריה + תמונה ראשית).\nתוכל לקבוע מה התמונה הראשית (Hero), לפתוח את סטודיו ה-AI לשיפור תאורה ואיור, להעלות תמונות חדשות או למחוק תמונות מיותרות בלחיצה:`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          widget: 'photo_manager'
+        };
+        setMessages((prev) => [...prev, chloeMsg]);
         setIsTyping(false);
-      }, 500);
+      }, 400);
       return;
     }
 
@@ -853,71 +981,157 @@ export const ChloeHostChat: React.FC<ChloeHostChatProps> = ({
                         </button>
                       </div>
 
-                      {/* Photo Grid */}
-                      <span className="text-[11px] font-bold text-stone-600 block">
-                        כל התמונות במתחם ({allCurrentPhotos.length}):
-                      </span>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-72 overflow-y-auto p-1">
-                        {allCurrentPhotos.map((url, pIdx) => {
-                          const isHero = url === currentProp.hero_image;
-                          return (
-                            <div
-                              key={pIdx}
-                              className={`relative group rounded-xl overflow-hidden border-2 bg-stone-100 transition-all ${
-                                isHero ? 'border-amber-500 ring-2 ring-amber-400/40 shadow-md' : 'border-stone-200'
-                              }`}
-                            >
-                              <img
-                                src={url}
-                                alt={`תמונה ${pIdx + 1}`}
-                                className="w-full h-24 object-cover"
-                              />
+                      {/* Photo Grid & Duplicate Management */}
+                      {(() => {
+                        const galleryList = currentProp.gallery_images || [];
+                        const galleryCounts: Record<string, number> = {};
+                        galleryList.forEach((u) => {
+                          galleryCounts[u] = (galleryCounts[u] || 0) + 1;
+                        });
+                        const duplicateCount = Object.values(galleryCounts).reduce(
+                          (acc, c) => acc + (c > 1 ? c - 1 : 0),
+                          0
+                        );
 
-                              {/* Hero Badge */}
-                              {isHero && (
-                                <div className="absolute top-1.5 right-1.5 bg-amber-500 text-stone-950 font-black text-[9px] px-2 py-0.5 rounded-full shadow flex items-center gap-1">
-                                  <Star className="w-2.5 h-2.5 fill-current" />
-                                  <span>ראשית</span>
+                        return (
+                          <div className="space-y-2.5">
+                            {/* Duplicate Alert Banner */}
+                            {duplicateCount > 0 && (
+                              <div className="p-3 bg-amber-50 border border-amber-300 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-amber-950 shadow-2xs animate-fadeIn">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-8 h-8 rounded-xl bg-amber-200 text-amber-900 flex items-center justify-center shrink-0">
+                                    <AlertTriangle className="w-4 h-4 text-amber-700" />
+                                  </div>
+                                  <div>
+                                    <span className="font-black text-xs block">
+                                      זוהו {duplicateCount} תמונות כפולות בגלריה
+                                    </span>
+                                    <span className="text-[11px] text-amber-800 block">
+                                      באפשרותך לנקות את כל הכפילויות ברגע, או להסיר ידנית עותק מיותר מטה.
+                                    </span>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={handleCleanAllDuplicates}
+                                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black shadow-sm flex items-center justify-center gap-1.5 transition active:scale-98 shrink-0"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>🧹 נקה כפילויות ({duplicateCount})</span>
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Section Header */}
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-stone-600 block">
+                                כל התמונות במתחם ({galleryList.length + (currentProp.hero_image ? 1 : 0)}):
+                              </span>
+                              {duplicateCount > 0 && (
+                                <span className="text-[10px] text-amber-700 font-bold bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200">
+                                  ⚠️ {duplicateCount} כפולות מסומנות למטה
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Photo Grid */}
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-72 overflow-y-auto p-1">
+                              {/* Hero Photo Card */}
+                              {currentProp.hero_image && (
+                                <div className="relative group rounded-xl overflow-hidden border-2 bg-stone-100 border-amber-500 ring-2 ring-amber-400/40 shadow-md">
+                                  <img
+                                    src={currentProp.hero_image}
+                                    alt="תמונה ראשית"
+                                    className="w-full h-24 object-cover"
+                                  />
+                                  <div className="absolute top-1.5 right-1.5 bg-amber-500 text-stone-950 font-black text-[9px] px-2 py-0.5 rounded-full shadow flex items-center gap-1 z-10">
+                                    <Star className="w-2.5 h-2.5 fill-current" />
+                                    <span>ראשית (Hero)</span>
+                                  </div>
+
+                                  <div className="absolute top-1.5 left-1.5 z-10">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setStudioTargetImage(currentProp.hero_image!);
+                                        setStudioModalOpen(true);
+                                      }}
+                                      className="p-1 px-1.5 bg-amber-400 hover:bg-amber-300 text-stone-950 rounded-lg text-[9px] font-black shadow transition flex items-center gap-0.5"
+                                      title="שפר תמונה זו ב-AI Studio"
+                                    >
+                                      <Sparkles className="w-2.5 h-2.5" />
+                                      <span>AI</span>
+                                    </button>
+                                  </div>
                                 </div>
                               )}
 
-                              {/* Action Overlay */}
-                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 p-1">
-                                {!isHero && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleSetHeroPhoto(url)}
-                                    className="p-1 bg-white hover:bg-amber-400 text-stone-900 rounded-lg text-[9px] font-bold shadow transition"
-                                    title="קבע כתמונה ראשית"
+                              {/* Gallery Photos Cards (Mapped by index to handle duplicates) */}
+                              {galleryList.map((url, gIdx) => {
+                                const isDuplicate = (galleryCounts[url] || 0) > 1;
+                                return (
+                                  <div
+                                    key={gIdx}
+                                    className={`relative group rounded-xl overflow-hidden border-2 bg-stone-100 transition-all ${
+                                      isDuplicate
+                                        ? 'border-amber-400 ring-2 ring-amber-400/30'
+                                        : 'border-stone-200'
+                                    }`}
                                   >
-                                    ראשית
-                                  </button>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setStudioTargetImage(url);
-                                    setStudioModalOpen(true);
-                                  }}
-                                  className="p-1 bg-amber-400 hover:bg-amber-300 text-stone-950 rounded-lg text-[9px] font-black shadow transition flex items-center gap-0.5"
-                                  title="שפר תמונה זו ב-AI Studio"
-                                >
-                                  <Sparkles className="w-2.5 h-2.5" />
-                                  <span>AI</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeletePhoto(url)}
-                                  className="p-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[9px] font-bold shadow transition"
-                                  title="מחק תמונה זו"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
+                                    <img
+                                      src={url}
+                                      alt={`תמונה ${gIdx + 1}`}
+                                      className="w-full h-24 object-cover"
+                                    />
+
+                                    {/* Duplicate Badge */}
+                                    {isDuplicate && (
+                                      <div className="absolute top-1.5 right-1.5 bg-amber-500 text-stone-950 font-black text-[9px] px-1.5 py-0.5 rounded-full shadow flex items-center gap-0.5 z-10">
+                                        <span>⚠️ כפולה</span>
+                                      </div>
+                                    )}
+
+                                    {/* Prominent Always-Visible Delete Button */}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteGalleryItemByIndex(gIdx)}
+                                      className="absolute top-1.5 left-1.5 bg-rose-600/90 hover:bg-rose-700 text-white rounded-lg px-2 py-0.5 text-[10px] font-bold shadow flex items-center gap-1 transition active:scale-95 z-10"
+                                      title="מחק עותק זה מהגלריה"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                      <span>מחק</span>
+                                    </button>
+
+                                    {/* Action Overlay for Additional Actions */}
+                                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 p-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSetHeroPhoto(url)}
+                                        className="p-1 bg-white hover:bg-amber-400 text-stone-900 rounded-lg text-[9px] font-bold shadow transition"
+                                        title="קבע כתמונה ראשית"
+                                      >
+                                        ראשית
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setStudioTargetImage(url);
+                                          setStudioModalOpen(true);
+                                        }}
+                                        className="p-1 bg-amber-400 hover:bg-amber-300 text-stone-950 rounded-lg text-[9px] font-black shadow transition flex items-center gap-0.5"
+                                        title="שפר תמונה זו ב-AI Studio"
+                                      >
+                                        <Sparkles className="w-2.5 h-2.5" />
+                                        <span>AI</span>
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
-                          );
-                        })}
-                      </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* Preset High-Res Photo Recommendations */}
                       <div className="p-2.5 bg-stone-50 rounded-xl border border-stone-200 space-y-1.5">
@@ -1810,7 +2024,10 @@ export const ChloeHostChat: React.FC<ChloeHostChatProps> = ({
 2. סגנון שיחה ותקשורת:
    - עברית טבעית, שירותית, חמה, מקצועית וממוקדת.
    - בלי מונחים טכניים מסובכים — לתת לבעל הצימר הרגשה של מנהלת אירוח אישית שמטפלת בהכל.
-3. מבנה פלט חובה:
+3. צ׳ק-אאוט דיגיטלי:
+   - שעת צ׳ק-אאוט רגילה 11:00. אורחים מסמנים עזיבה בדף האירוח החל מ-08:00 ביום העזיבה.
+   - אפשר לבדוק סטטוס עם get_stay_status ולשלוח SMS מאושר עם send_guest_notification.
+4. מבנה פלט חובה:
    בכל פעם שבעל המתחם מבקש עדכון, יש לתת מענה שירותי בעברית ובסוף ההודעה להוסיף תמיד בלוק JSON יחיד ומדויק מסוג \`\`\`json ... \`\`\` עם הפעולה המבוקשת.`
                       );
                       setCopiedGuidelines(true);
@@ -1826,7 +2043,8 @@ export const ChloeHostChat: React.FC<ChloeHostChatProps> = ({
 {`את קלואי (Chloe), סוכנת ה-AI המבצעית ועוזרת הניהול של בעלי מתחמי הנופש ב-ResortOS.
 0. חובה לאמת בעלות מול טלפון מורשה / OTP בוואטסאפ או SMS לפני כל ביצוע שינוי.
 1. תפקידך: לעדכן מחירים, תמונות, מתקנים, תיאורים ו-Wi-Fi.
-2. לענות בעברית חמה ושירותית, ולפלוט בסוף בלוק JSON עם action ו-data.`}
+2. צ׳ק-אאוט: יציאה רגילה 11:00; אורחים מסמנים עזיבה בדף האירוח מ-08:00 (get_stay_status / send_guest_notification).
+3. לענות בעברית חמה ושירותית, ולפלוט בסוף בלוק JSON עם action ו-data.`}
                 </div>
               </div>
 
@@ -1887,9 +2105,10 @@ export const ChloeHostChat: React.FC<ChloeHostChatProps> = ({
         }}
         onSaveToGallery={(url) => {
           if (!currentProp) return;
+          const deduped = Array.from(new Set([url, ...(currentProp.gallery_images || [])]));
           const updated = {
             ...currentProp,
-            gallery_images: [url, ...(currentProp.gallery_images || [])]
+            gallery_images: deduped
           };
           onUpdateProperty(updated);
           setStudioModalOpen(false);
@@ -1898,11 +2117,30 @@ export const ChloeHostChat: React.FC<ChloeHostChatProps> = ({
             {
               id: `msg-${Date.now()}`,
               sender: 'chloe',
-              text: 'הוספתי את התמונה המעובדת מהסטודיו לגלריית המתחם בהצלחה! 🖼️✨',
+              text: 'הוספתי את התמונה המעובדת מהסטודיו לגלריית המתחם בהצלחה (התמונה הראשית נשמרה ללא שינוי)! 📸✨',
               timestamp: new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }),
               actionTaken: {
                 type: 'photo',
-                summary: 'הוספת תמונה מ-AI Studio לגלריה'
+                summary: 'הוספת תמונה מ-AI Studio לגלריה (ללא שינוי ראשית)'
+              }
+            }
+          ]);
+        }}
+        onSaveHeroVideo={(videoUrl) => {
+          if (!currentProp) return;
+          const updated = { ...currentProp, hero_video_url: videoUrl };
+          onUpdateProperty(updated);
+          setStudioModalOpen(false);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `msg-${Date.now()}`,
+              sender: 'chloe',
+              text: 'קבעתי את הווידאו הסינמטי שהפקת כסרטון הראשי (Hero Video) של המתחם! 🎬✨',
+              timestamp: new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }),
+              actionTaken: {
+                type: 'photo',
+                summary: 'הגדרת סרטון ראשי מ-Motion Studio'
               }
             }
           ]);

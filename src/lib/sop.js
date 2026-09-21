@@ -57,19 +57,21 @@ export function sopIdForDomain(domain) {
 }
 
 export function emptySopProgress() {
-  return { templateId: null, steps: [], doneIds: [] };
+  return { templateId: null, steps: [], doneIds: [], completions: [] };
 }
 
 export function normalizeSopProgress(raw) {
   if (!raw || typeof raw !== 'object') return emptySopProgress();
+  const completions = Array.isArray(raw.completions) ? raw.completions : [];
   return {
     templateId: raw.templateId || raw.template_id || null,
     steps: Array.isArray(raw.steps) ? raw.steps : [],
-    doneIds: Array.isArray(raw.doneIds) ? raw.doneIds : (Array.isArray(raw.done_ids) ? raw.done_ids : [])
+    doneIds: Array.isArray(raw.doneIds) ? raw.doneIds : (Array.isArray(raw.done_ids) ? raw.done_ids : []),
+    completions
   };
 }
 
-export function snapshotFromTemplate(template) {
+export function snapshotFromTemplate(template, extras = {}) {
   if (!template) return emptySopProgress();
   return {
     templateId: template.id,
@@ -77,7 +79,8 @@ export function snapshotFromTemplate(template) {
       id: step.id,
       label: step.label || { he: step.id }
     })),
-    doneIds: []
+    doneIds: [],
+    completions: Array.isArray(extras.completions) ? extras.completions : []
   };
 }
 
@@ -104,7 +107,7 @@ export function mergeTemplateSteps(seed, stored) {
 export function mergeSopProgress(progress, template) {
   const current = normalizeSopProgress(progress);
   if (!template) return current;
-  if (!current.steps.length) return snapshotFromTemplate(template);
+  if (!current.steps.length) return snapshotFromTemplate(template, { completions: current.completions });
   const have = new Set(current.steps.map((step) => step.id));
   const extra = (template.steps || []).filter((step) => !have.has(step.id));
   if (!extra.length) return current;

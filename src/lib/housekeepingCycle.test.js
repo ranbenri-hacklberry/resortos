@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { applyCalendarOccupancy, applyCalendarUnitStatus, isStaleHousekeeping, turnoverNeed } from './housekeepingCycle.js';
+import { applyAssignedStaff, applyCalendarOccupancy, applyCalendarUnitStatus, isStaleHousekeeping, passedManagerInspection, persistRoomCompletions, turnoverNeed } from './housekeepingCycle.js';
 import { hideHousekeepingTaskWhileOccupied, isExpiredPendingInspect } from './unitStatus.js';
 
 const unit = { id: 'k671', name: 'נורית 1', is_active: true, operational_status: 'READY' };
@@ -69,6 +69,58 @@ describe('today-only turnover tasks', () => {
     }];
     expect(turnoverNeed({ ...unit, operational_status: 'GARDENING' }, bookings, '2026-08-25')).toBeNull();
   });
+
+  it('does not overwrite a same-day staff clean mark or a completions list', () => {
+    const bookings = [{
+      id: 'today',
+      unit_id: 'k671',
+      check_in_date: '2026-08-25',
+      check_out_date: '2026-08-27',
+      booking_status: 'CONFIRMED'
+    }];
+    expect(turnoverNeed({
+      ...unit,
+      operational_status: 'READY',
+      updated_at: '2026-08-25T09:20:00.000Z',
+      quality_inspections: [{ at: '2026-08-25T09:20:00.000Z', source: 'calendar', reopened: false }]
+    }, bookings, '2026-08-25')).toBeNull();
+    expect(turnoverNeed({
+      ...unit,
+      operational_status: 'NEEDS_COMPLETIONS',
+      custom_reason: 'נקי · השלמות · מגבות',
+      sop_progress: { completions: [{ id: 'c1', text: 'מגבות', done: false }] }
+    }, bookings, '2026-08-25')).toBeNull();
+  });
+
+  it('ignores סגור / שיפוץ blocks when opening or keeping a cleaning task', () => {
+    const closed = [
+      {
+        id: 'kin_689_1',
+        unit_id: 'k689',
+        guest_name: 'סגור',
+        check_in_date: '2026-09-05',
+        check_out_date: '2026-09-17',
+        booking_status: 'CHECKED_OUT'
+      },
+      {
+        id: 'kin_689_2',
+        unit_id: 'k689',
+        guest_name: 'סגור',
+        check_in_date: '2026-09-17',
+        check_out_date: '2026-09-20',
+        booking_status: 'CONFIRMED'
+      }
+    ];
+    expect(turnoverNeed({ id: 'k689', name: 'שאטו', is_active: true, operational_status: 'READY' }, closed, '2026-09-17')).toBeNull();
+    expect(isStaleHousekeeping({
+      id: 'k689',
+      name: 'שאטו',
+      is_active: true,
+      operational_status: 'DIRTY',
+      custom_reason: 'ניקוי לאחר יציאה והכנה לכניסה',
+      updated_at: '2026-09-17T09:19:41.891Z'
+    }, closed, '2026-09-17')).toBe(false);
+  });
 });
 
 describe('pending manager inspect expiry', () => {
@@ -125,6 +177,26 @@ describe('calendar field status', () => {
     expect(fault.is_escalated).toBe(true);
   });
 
+  it('moves a completions list to ready once every item is done', async () => {
+    const pushed = [];
+    const pushUnitToCloud = vi.fn(async (row) => { pushed.push(row); });
+    await persistRoomCompletions({
+      tenantId: 't1',
+      unit,
+      items: [{ id: 'c1', text: 'מגבות', done: false }],
+      pushUnitToCloud
+    });
+    expect(pushed.at(-1).operational_status).toBe('NEEDS_COMPLETIONS');
+    await persistRoomCompletions({
+      tenantId: 't1',
+      unit,
+      items: [{ id: 'c1', text: 'מגבות', done: true }],
+      pushUnitToCloud
+    });
+    expect(pushed.at(-1).operational_status).toBe('READY');
+    expect(pushed.at(-1).quality_inspections?.at(-1)?.source).toBe('calendar');
+  });
+
   it('flips staff occupancy without wiping housekeeping', async () => {
     const pushed = [];
     const pushUnitToCloud = vi.fn(async (row) => { pushed.push(row); });
@@ -136,5 +208,35 @@ describe('calendar field status', () => {
     });
     expect(pushed[0].staff_occupancy).toBe('OCCUPIED');
     expect(pushed[0].operational_status).toBeUndefined();
+  });
+
+  it('sets assigned staff without wiping housekeeping status', async () => {
+    const pushed = [];
+    const pushUnitToCloud = vi.fn(async (row) => { pushed.push(row); });
+    await applyAssignedStaff({
+      tenantId: 't1',
+      unit: { ...unit, operational_status: 'DIRTY' },
+      assignedStaff: 'אוסנת',
+      pushUnitToCloud
+    });
+    expect(pushed[0].assigned_staff).toBe('אוסנת');
+    expect(pushed[0].operational_status).toBeUndefined();
+  });
+});
+
+describe('passed manager inspection', () => {
+  it('treats rated manager feedback as passed and ignores a calendar clean mark', () => {
+    expect(passedManagerInspection({
+      operational_status: 'READY',
+      custom_reason: 'ממתין לביקורת מנהל',
+      quality_inspections: [{ at: '2026-09-16T08:00:00.000Z', source: 'calendar', ratings: {}, reopened: false }]
+    })).toBe(false);
+    expect(passedManagerInspection({
+      operational_status: 'READY',
+      lastInspection: { at: '2026-09-16T10:00:00.000Z', ratings: { clean: 5 }, reopened: false }
+    })).toBe(true);
+    expect(passedManagerInspection({
+      qualityInspections: [{ at: '2026-09-16T10:00:00.000Z', ratings: { clean: 2 }, reopened: true }]
+    })).toBe(false);
   });
 });

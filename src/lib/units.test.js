@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calendarInventory, visibleInventory } from './units.js';
+import { calendarInventory, unitCalendarLines, visibleInventory } from './units.js';
 
 const live = [
   { id: 'hill-1', name: 'צימר בגבעה 1', is_active: true, sort_order: 1 },
@@ -22,5 +22,22 @@ describe('calendarInventory', () => {
     expect(rows[0].id).toBe('k826');
     expect(rows[1].id).toBe('k827');
     expect(rows.some((u) => u.id === 'k618')).toBe(false);
+  });
+});
+
+describe('unitCalendarLines', () => {
+  it('merges complex and cabin number on one line and drops בקתה', () => {
+    expect(unitCalendarLines("טאג' מאהל · בקתה 1")).toEqual({
+      primary: "טאג' מאהל 1",
+      secondary: ''
+    });
+    expect(unitCalendarLines('בתי נורית 3')).toEqual({
+      primary: 'בתי נורית 3',
+      secondary: ''
+    });
+    expect(unitCalendarLines('מול הנוף · בקתה 2')).toEqual({
+      primary: 'מול הנוף 2',
+      secondary: ''
+    });
   });
 });

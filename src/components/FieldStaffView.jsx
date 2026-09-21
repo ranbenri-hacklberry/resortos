@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ClipboardList, PackageMinus, Settings as Gear, Sparkles, Wrench, X } from 'lucide-react';
+import { Baby, Check, ClipboardList, Languages, PackageMinus, Settings as Gear, Sparkles, Volume2, Wrench, X, Camera, ImagePlus } from 'lucide-react';
 import { persistLanguage } from '../i18n';
-import { db, useLiveBookings, useLiveUnits } from '../lib/resortos-db';
+import { useLiveBookings, useLiveUnits } from '../lib/resortos-db';
 import {
   ensureCanonicalUnits,
   pushUnitToCloud,
@@ -22,7 +22,9 @@ import {
   translateFieldReason
 } from '../lib/fieldStaff';
 import { translateToAllLanguages, useDynamicText } from '../lib/translator';
-import { ensureTurnoverCleaning, markCabinCleanedForInspection, reopenCabinCleaning } from '../lib/housekeepingCycle';
+import { markCabinCleanedForInspection, persistRoomCompletions, reopenCabinCleaning } from '../lib/housekeepingCycle';
+import { completionsFromUnit } from '../lib/roomCompletions';
+import RoomCompletionsEditor from './RoomCompletionsEditor';
 import {
   countMonthlyCleans,
   decorateWorkLog,
@@ -31,17 +33,25 @@ import {
   staffActor
 } from '../lib/staffWorkLog';
 import { unitFullName, visibleInventory } from '../lib/units';
+import { unitMatchesBoardArea } from '../lib/dailyDutyReport';
+import { FIELD_UI_LANGUAGES } from '../lib/fieldUiLanguages';
+import { getUnitSign, navLinksForUnit, fieldUnitDisplayName, stripLegendPlotNumber } from '../lib/fieldUnitCatalog';
+import VoiceWalkieModal, { resolveWorkerLang, speakText } from './resortos/VoiceWalkieModal';
+import FieldNavLinks from './FieldNavLinks';
 
 const TENANT_ID = '22222222-2222-2222-2222-222222222222';
 
-const LANGUAGES = [
-  { code: 'he', name: 'עברית', flag: '🇮🇱' },
-  { code: 'en', name: 'English', flag: '🇺🇸' },
-  { code: 'ar', name: 'العربية', flag: '🇸🇦' },
-  { code: 'th', name: 'ไทย', flag: '🇹🇭' }
-];
+const LANGUAGES = FIELD_UI_LANGUAGES;
 
-export default function FieldStaffView({ theme = 'dark', setTheme, sessionUser = null, onLogout }) {
+export default function FieldStaffView({
+  theme = 'dark',
+  setTheme,
+  sessionUser = null,
+  onLogout,
+  liveSync = true,
+  dataEpoch = 0,
+  boardArea = 'all'
+}) {
   const { t, i18n } = useTranslation();
   const isLight = theme === 'light';
   const currentLang = (i18n.language || 'he').split('-')[0];
@@ -53,27 +63,40 @@ export default function FieldStaffView({ theme = 'dark', setTheme, sessionUser =
   const [reportKind, setReportKind] = useState('fault');
   const [reportUnitId, setReportUnitId] = useState('');
   const [reportText, setReportText] = useState('');
+  const [reportPhotos, setReportPhotos] = useState([]);
   const [urgent, setUrgent] = useState(false);
   const [toast, setToast] = useState('');
   const [logOpen, setLogOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [workLog, setWorkLog] = useState([]);
+  const [walkieOpen, setWalkieOpen] = useState(false);
 
   const actor = useMemo(() => staffActor(sessionUser), [sessionUser]);
   const pushAsStaff = useCallback((patch, options = {}) => (
     pushUnitToCloud({
       ...patch,
       assigned_staff: actor?.name || patch.assigned_staff
-    }, { ...options, actor })
+    }, { waitRemote: true, ...options, actor })
   ), [actor]);
 
   const allowedUnitIds = sessionUser?.allowed_units;
+  const scopedUnits = useMemo(() => {
+    const inventory = visibleInventory(units, allowedUnitIds);
+    if (!boardArea || boardArea === 'all') return inventory;
+    return inventory.filter((unit) => unitMatchesBoardArea(unit, boardArea));
+  }, [units, allowedUnitIds, boardArea]);
+  const scopedIds = useMemo(() => scopedUnits.map((unit) => unit.id), [scopedUnits]);
   const tasks = useMemo(
-    () => listFieldStaffTasks(units, bookings, undefined, allowedUnitIds),
-    [units, bookings, allowedUnitIds]
+    () => listFieldStaffTasks(
+      units,
+      bookings,
+      undefined,
+      boardArea && boardArea !== 'all' ? scopedIds : allowedUnitIds
+    ),
+    [units, bookings, scopedIds, allowedUnitIds, boardArea]
   );
   const counts = useMemo(() => fieldStaffCounts(tasks), [tasks]);
-  const cabins = useMemo(() => visibleInventory(units, allowedUnitIds), [units, allowedUnitIds]);
+  const cabins = scopedUnits;
   const monthCleans = useMemo(() => countMonthlyCleans(workLog), [workLog]);
   const logRows = useMemo(() => decorateWorkLog(workLog, units), [workLog, units]);
 
@@ -103,36 +126,26 @@ export default function FieldStaffView({ theme = 'dark', setTheme, sessionUser =
           syncUnitOpsToDexie(TENANT_ID),
           syncCloudBookingsToDexie(TENANT_ID)
         ]);
-        if (stop) return;
-        const liveUnits = (await db.units.toArray()).filter((row) => row.tenant_id === TENANT_ID);
-        const liveBookings = (await db.bookings.toArray()).filter((row) => row.tenant_id === TENANT_ID);
-        await ensureTurnoverCleaning({
-          tenantId: TENANT_ID,
-          units: liveUnits,
-          bookings: liveBookings,
-          pushUnitToCloud
-        });
       } catch (_) {}
     }
     pull();
+    if (!liveSync) {
+      return () => { stop = true; };
+    }
     const offBookings = subscribeToRealtimeCloudBookings(TENANT_ID);
     const offOps = subscribeToRealtimeUnitOps(TENANT_ID);
-    const tick = setInterval(pull, 20000);
+    const tick = setInterval(pull, 60000);
     return () => {
       stop = true;
       if (typeof offBookings === 'function') offBookings();
       if (typeof offOps === 'function') offOps();
       clearInterval(tick);
     };
-  }, []);
+  }, [liveSync, dataEpoch]);
 
   useEffect(() => {
     reloadLog();
   }, [reloadLog]);
-
-  useEffect(() => {
-    if (!reportUnitId && cabins[0]?.id) setReportUnitId(cabins[0].id);
-  }, [cabins, reportUnitId]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -151,6 +164,24 @@ export default function FieldStaffView({ theme = 'dark', setTheme, sessionUser =
   const flash = () => {
     try { navigator.vibrate?.(14); } catch (_) {}
   };
+
+  const speakTask = useCallback((text, lang = currentLang) => {
+    const worker = resolveWorkerLang(lang === 'he' ? 'th' : lang);
+    const speakLang = lang === 'he' ? 'he' : worker;
+    speakText(text, speakLang);
+  }, [currentLang]);
+
+  const taskSpeechText = useCallback((task) => {
+    const i18nMap = task?.unit?.reason_i18n || {};
+    const worker = resolveWorkerLang(currentLang);
+    const reasonLocal = task?.title_translated
+      || task?.description_th
+      || i18nMap[worker]
+      || i18nMap[currentLang]
+      || task?.reason
+      || '';
+    return [task?.name, reasonLocal].filter(Boolean).join('. ');
+  }, [currentLang]);
 
   const toggleTask = async (task) => {
     if (!task?.unit || busyId) return;
@@ -207,14 +238,29 @@ export default function FieldStaffView({ theme = 'dark', setTheme, sessionUser =
 
   const openReport = (unitId = '', kind = 'fault') => {
     setReportKind(kind === 'shortage' ? 'shortage' : 'fault');
-    setReportUnitId(unitId || cabins[0]?.id || '');
+    setReportUnitId(unitId || '');
     setReportText('');
+    setReportPhotos([]);
     setUrgent(false);
     setReportOpen(true);
   };
 
+  const appendReportPhotos = (fileList) => {
+    Array.from(fileList || []).slice(0, 4).forEach((file) => {
+      if (!String(file.type || '').startsWith('image/')) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target?.result;
+        if (typeof base64 === 'string') {
+          setReportPhotos((prev) => [...prev, base64].slice(0, 4));
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
   const submitReport = async () => {
-    const unit = cabins.find((row) => row.id === reportUnitId) || cabins[0];
+    const unit = cabins.find((row) => row.id === reportUnitId);
     if (!unit || busyId) return;
     const shortage = reportKind === 'shortage';
     const typed = reportText.trim();
@@ -230,6 +276,9 @@ export default function FieldStaffView({ theme = 'dark', setTheme, sessionUser =
       const stored = (shortage && keepDirty && prev && !prev.includes(reason)) ? `${prev} · ${reason}` : reason;
       const sourceLang = guessFieldSourceLang(stored, currentLang);
       const reason_i18n = await translateToAllLanguages(stored, sourceLang);
+      const nextImages = reportPhotos.length
+        ? reportPhotos
+        : (Array.isArray(unit.image_urls) ? unit.image_urls : []);
       await pushAsStaff({
         id: unit.id,
         tenant_id: TENANT_ID,
@@ -243,6 +292,7 @@ export default function FieldStaffView({ theme = 'dark', setTheme, sessionUser =
         text_source_lang: sourceLang,
         is_escalated: urgent,
         cleaning_started_at: shortage ? (unit.cleaning_started_at || null) : null,
+        image_urls: nextImages,
         updated_at: new Date().toISOString()
       });
       setToast(shortage ? t('FIELD_TOAST_SHORTAGE') : t('FIELD_TOAST_FAULT'));
@@ -369,22 +419,25 @@ export default function FieldStaffView({ theme = 'dark', setTheme, sessionUser =
         </button>
       </header>
 
-      <main style={{ padding: '0.9rem 1rem calc(1.4rem + env(safe-area-inset-bottom))' }}>
-        {tasks.length ? tasks.map((task) => (
+      <main style={{ padding: '0.9rem 1rem calc(5.5rem + env(safe-area-inset-bottom))' }}>
+        {tasks.length ? tasks.map((task) => {
+          const sign = getUnitSign(task.id || task.unit?.id);
+          const nav = navLinksForUnit(task.id || task.unit?.id);
+          return (
           <article
             key={task.id}
             style={{
               background: colors.card,
-              border: `1px solid ${task.open ? 'rgba(249,115,22,0.28)' : 'rgba(16,185,129,0.28)'}`,
+              border: `1px solid ${task.kind === 'completions' ? 'rgba(13,148,136,0.35)' : (task.open ? 'rgba(249,115,22,0.28)' : 'rgba(16,185,129,0.28)')}`,
               borderRadius: 14,
-              padding: '0.35rem 0.45rem 0.35rem 0.35rem',
+              padding: '0.55rem 0.55rem 0.55rem 0.4rem',
               marginBottom: 8,
               display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              minHeight: 52
+              flexDirection: 'column',
+              gap: 6
             }}
           >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 52 }}>
             <button
               type="button"
               disabled={Boolean(busyId)}
@@ -396,7 +449,7 @@ export default function FieldStaffView({ theme = 'dark', setTheme, sessionUser =
                 flex: '0 0 48px',
                 borderRadius: 14,
                 border: 'none',
-                background: task.open ? '#F97316' : '#10B981',
+                background: task.kind === 'completions' ? '#0D9488' : (task.open ? '#F97316' : '#10B981'),
                 color: '#FFF',
                 cursor: 'pointer',
                 display: 'grid',
@@ -430,40 +483,85 @@ export default function FieldStaffView({ theme = 'dark', setTheme, sessionUser =
                 lineHeight: 1.2,
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
-                textOverflow: 'ellipsis'
+                textOverflow: 'ellipsis',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6
               }}>
-                {task.name}
+                {sign?.sign ? <span aria-hidden="true">{sign.sign}</span> : null}
+                <span style={{
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap'
+                }}>
+                  {fieldUnitDisplayName(task.unit || task.id, task.name)}
+                </span>
               </div>
-              {!task.cleaning && task.reason ? (
+              {sign?.th ? (
                 <div style={{
                   color: colors.muted,
-                  fontSize: '0.74rem',
-                  fontWeight: 700,
-                  marginTop: 2,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis'
+                  fontSize: '0.7rem',
+                  fontWeight: 800,
+                  marginTop: 1
                 }}>
-                  <FieldReasonText
-                    text={task.reason}
-                    translations={task.unit?.reason_i18n}
-                    sourceLang={task.unit?.text_source_lang}
-                  />
+                  {stripLegendPlotNumber(sign.th)}{sign.he ? ` · ${sign.he}` : ''}
                 </div>
               ) : null}
-              {task.cleaning && task.guests?.total ? (
+              {!task.cleaning && task.reason ? (
+                <TaskBilingualReason
+                  text={task.reason}
+                  translations={task.unit?.reason_i18n}
+                  sourceLang={task.unit?.text_source_lang}
+                  titleTranslated={task.title_translated}
+                  descriptionTh={task.description_th}
+                  muted={colors.muted}
+                />
+              ) : null}
+              {task.cleaning && ((task.guests?.total > 0) || task.needsCrib) ? (
                 <div style={{
-                  color: colors.text,
-                  fontSize: '0.72rem',
-                  fontWeight: 800,
-                  marginTop: 2,
-                  lineHeight: 1.3
+                  marginTop: 6,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  flexWrap: 'wrap'
                 }}>
-                  {t('FIELD_GUESTS')}: {[
-                    task.guests.adults ? t('FIELD_PAX_ADULTS', { count: task.guests.adults }) : '',
-                    task.guests.children ? t('FIELD_PAX_CHILDREN', { count: task.guests.children }) : '',
-                    task.guests.infants ? t('FIELD_PAX_INFANTS', { count: task.guests.infants }) : ''
-                  ].filter(Boolean).join(' · ')}
+                  {task.guests?.total > 0 ? (
+                    <span style={{
+                      fontSize: '0.74rem',
+                      fontWeight: 800,
+                      color: colors.text,
+                      background: isLight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.06)',
+                      border: `1px solid ${colors.line}`,
+                      borderRadius: 999,
+                      padding: '2px 9px'
+                    }}>
+                      {task.peopleLabel && task.peopleLabel !== '—'
+                        ? task.peopleLabel
+                        : `${task.guests.total} אורחים`}
+                    </span>
+                  ) : null}
+                  {task.needsCrib ? (
+                    <span
+                      title="מיטת תינוק"
+                      aria-label="מיטת תינוק"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        fontSize: '0.74rem',
+                        fontWeight: 800,
+                        color: '#DB2777',
+                        background: 'rgba(219,39,119,0.12)',
+                        border: '1px solid rgba(219,39,119,0.28)',
+                        borderRadius: 999,
+                        padding: '2px 8px'
+                      }}
+                    >
+                      <Baby size={13} strokeWidth={2.4} />
+                      מיטת תינוק
+                    </span>
+                  ) : null}
                 </div>
               ) : null}
               {task.cleaning && task.lockbox ? (
@@ -478,14 +576,127 @@ export default function FieldStaffView({ theme = 'dark', setTheme, sessionUser =
                   {t('FIELD_LOCKBOX')}: {task.lockbox}
                 </div>
               ) : null}
+              {Array.isArray(task.unit?.image_urls) && task.unit.image_urls[0] ? (
+                <div style={{
+                  marginTop: 6,
+                  display: 'flex',
+                  gap: 6,
+                  overflowX: 'auto'
+                }}>
+                  {task.unit.image_urls.slice(0, 3).map((src, index) => (
+                    <img
+                      key={`${task.id}_img_${index}`}
+                      src={src}
+                      alt=""
+                      style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: 8,
+                        objectFit: 'cover',
+                        border: `1px solid ${colors.line}`,
+                        flex: '0 0 auto'
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : null}
             </button>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                speakTask(taskSpeechText(task), currentLang);
+              }}
+              aria-label="הקראה קולית"
+              title="הקראה קולית"
+              style={{
+                width: 40,
+                height: 40,
+                flex: '0 0 40px',
+                borderRadius: 12,
+                border: `1px solid ${colors.line}`,
+                background: isLight ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.14)',
+                color: '#6366F1',
+                cursor: 'pointer',
+                display: 'grid',
+                placeItems: 'center',
+                touchAction: 'manipulation'
+              }}
+            >
+              <Volume2 size={18} />
+            </button>
+            </div>
+            {nav ? (
+              <FieldNavLinks
+                wazeUrl={nav.wazeUrl}
+                mapsUrl={nav.mapsUrl}
+                propertyLabel={nav.propertyHe}
+                theme={theme}
+              />
+            ) : null}
+            {task.kind === 'completions' ? (
+              <RoomCompletionsEditor
+                items={completionsFromUnit(task.unit)}
+                chips={SHORTAGE_CHIPS}
+                isLight={isLight}
+                textColor={colors.text}
+                mutedColor={colors.muted}
+                lineColor={colors.line}
+                onChange={(items) => persistRoomCompletions({
+                  tenantId: TENANT_ID,
+                  unit: task.unit,
+                  items,
+                  pushUnitToCloud: pushAsStaff
+                })}
+              />
+            ) : null}
           </article>
-        )) : (
+          );
+        }) : (
           <div style={{ textAlign: 'center', color: colors.muted, fontWeight: 700, padding: '3rem 1rem' }}>
             {t('FIELD_NO_TASKS')}
           </div>
         )}
       </main>
+
+      <button
+        type="button"
+        onClick={() => setWalkieOpen(true)}
+        aria-label="תרגום קולי"
+        style={{
+          position: 'fixed',
+          bottom: 'calc(1.5rem + env(safe-area-inset-bottom))',
+          left: '1.5rem',
+          zIndex: 40,
+          minHeight: 52,
+          borderRadius: 999,
+          border: 'none',
+          background: '#6366F1',
+          color: '#FFF',
+          boxShadow: '0 12px 28px rgba(99,102,241,0.45)',
+          padding: '0 1rem 0 0.85rem',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 8,
+          fontWeight: 900,
+          fontSize: '0.82rem',
+          cursor: 'pointer',
+          touchAction: 'manipulation'
+        }}
+      >
+        <Languages size={18} />
+        <span>תרגום קולי / การแปล</span>
+      </button>
+
+      <VoiceWalkieModal
+        isOpen={walkieOpen}
+        onClose={() => setWalkieOpen(false)}
+        currentLang={currentLang}
+        theme={theme}
+        units={cabins}
+        actor={actor}
+        onTaskCreated={reloadLog}
+      />
 
       {settingsOpen ? (
         <div
@@ -535,7 +746,7 @@ export default function FieldStaffView({ theme = 'dark', setTheme, sessionUser =
               </button>
             </div>
             <div style={{ fontSize: '0.8rem', fontWeight: 800, marginBottom: 8 }}>{t('SETTINGS_SELECT_LANG')}</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${LANGUAGES.length}, 1fr)`, gap: 6, marginBottom: 16 }}>
               {LANGUAGES.map((lang) => {
                 const isActive = currentLang === lang.code;
                 return (
@@ -677,8 +888,9 @@ export default function FieldStaffView({ theme = 'dark', setTheme, sessionUser =
                   fontWeight: 800
                 }}
               >
+                <option value="">{t('FIELD_PICK_UNIT', 'בחרו יחידה')}</option>
                 {cabins.map((unit) => (
-                  <option key={unit.id} value={unit.id}>{unitFullName(unit)}</option>
+                  <option key={unit.id} value={unit.id}>{fieldUnitDisplayName(unit)}</option>
                 ))}
               </select>
             </label>
@@ -720,6 +932,118 @@ export default function FieldStaffView({ theme = 'dark', setTheme, sessionUser =
                 resize: 'vertical'
               }}
             />
+            <div style={{ marginTop: 12 }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                marginBottom: 8
+              }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 800, color: colors.muted }}>
+                  תמונה (אופציונלי)
+                </span>
+                <label style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  minHeight: 36,
+                  borderRadius: 999,
+                  border: `1px solid ${colors.line}`,
+                  padding: '0 10px',
+                  fontWeight: 800,
+                  fontSize: '0.72rem',
+                  color: colors.text,
+                  cursor: reportPhotos.length >= 4 ? 'not-allowed' : 'pointer',
+                  opacity: reportPhotos.length >= 4 ? 0.5 : 1
+                }}>
+                  <Camera size={14} />
+                  הוסף תמונה
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    multiple
+                    disabled={reportPhotos.length >= 4}
+                    style={{ display: 'none' }}
+                    onChange={(event) => {
+                      appendReportPhotos(event.target.files);
+                      event.target.value = '';
+                    }}
+                  />
+                </label>
+              </div>
+              {reportPhotos.length ? (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {reportPhotos.map((src, index) => (
+                    <div
+                      key={`${index}_${String(src).slice(-10)}`}
+                      style={{
+                        position: 'relative',
+                        width: 72,
+                        height: 72,
+                        borderRadius: 12,
+                        overflow: 'hidden',
+                        border: `1px solid ${colors.line}`
+                      }}
+                    >
+                      <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <button
+                        type="button"
+                        onClick={() => setReportPhotos((prev) => prev.filter((_, i) => i !== index))}
+                        aria-label="הסר תמונה"
+                        style={{
+                          position: 'absolute',
+                          top: 4,
+                          insetInlineStart: 4,
+                          width: 22,
+                          height: 22,
+                          borderRadius: 999,
+                          border: 'none',
+                          background: 'rgba(0,0,0,0.65)',
+                          color: '#FFF',
+                          display: 'grid',
+                          placeItems: 'center',
+                          cursor: 'pointer',
+                          padding: 0
+                        }}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <label style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  width: '100%',
+                  minHeight: 52,
+                  borderRadius: 12,
+                  border: `1px dashed ${colors.line}`,
+                  color: colors.muted,
+                  fontWeight: 800,
+                  fontSize: '0.78rem',
+                  cursor: 'pointer'
+                }}>
+                  <ImagePlus size={16} />
+                  צילום / בחירה מהגלריה
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    multiple
+                    style={{ display: 'none' }}
+                    onChange={(event) => {
+                      appendReportPhotos(event.target.files);
+                      event.target.value = '';
+                    }}
+                  />
+                </label>
+              )}
+            </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
               {[{ id: false, label: t('FIELD_PRIORITY_NORMAL') }, { id: true, label: t('FIELD_PRIORITY_URGENT') }].map((row) => (
                 <button
@@ -862,6 +1186,62 @@ function FieldReasonText({ text, translations, sourceLang }) {
   const source = sourceLang || guessFieldSourceLang(text);
   const live = useDynamicText(catalog ? '' : (text || ''), catalog ? null : (translations || null), source);
   return catalog ? dict : (live || dict);
+}
+
+function TaskBilingualReason({
+  text,
+  translations,
+  sourceLang,
+  titleTranslated,
+  descriptionTh,
+  muted
+}) {
+  const { i18n } = useTranslation();
+  const currentLang = (i18n.language || 'he').split('-')[0];
+  const worker = resolveWorkerLang(currentLang);
+  const localized = (
+    <FieldReasonText text={text} translations={translations} sourceLang={sourceLang} />
+  );
+  const heLine = String(translations?.he || (guessFieldSourceLang(text, 'he') === 'he' ? text : '') || '').trim();
+  const translatedLine = String(
+    titleTranslated
+    || descriptionTh
+    || translations?.[worker]
+    || (currentLang !== 'he' ? translations?.[currentLang] : '')
+    || ''
+  ).trim();
+
+  const top = heLine || localized;
+  const bottom = translatedLine && translatedLine !== String(heLine) ? translatedLine : '';
+
+  return (
+    <div style={{ marginTop: 2 }}>
+      <div style={{
+        color: muted,
+        fontSize: '0.74rem',
+        fontWeight: 700,
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis'
+      }}>
+        {top}
+      </div>
+      {bottom ? (
+        <div style={{
+          color: muted,
+          fontSize: '0.68rem',
+          fontWeight: 600,
+          opacity: 0.85,
+          marginTop: 1,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis'
+        }}>
+          {bottom}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function countChip(isLight, color) {

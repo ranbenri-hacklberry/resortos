@@ -87,7 +87,7 @@ export interface Booking {
 
 export interface Property {
   id: string;
-  tenant_id: string;
+  tenant_id?: string;
   name: string;
   village?: string;
   cluster?: string;
@@ -96,6 +96,7 @@ export interface Property {
   access?: Record<string, any>;
   created_at?: string;
   updated_at?: string;
+  [key: string]: any;
 }
 
 export interface Promotion {
@@ -441,3 +442,35 @@ export function useResortOSSyncStatus(tenantId: string): SyncMeta | undefined {
     [tenantId]
   );
 }
+
+// =============================================================================
+// 6. MANAGED PROPERTIES DEXIE PERSISTENCE (Zero localStorage quota limits)
+// =============================================================================
+
+export async function getLocalManagedProperties(): Promise<any[]> {
+  try {
+    return await db.properties.toArray();
+  } catch (err) {
+    console.warn('[Dexie] Failed to load local managed properties:', err);
+    return [];
+  }
+}
+
+export async function saveLocalManagedProperties(properties: any[]): Promise<void> {
+  try {
+    if (!properties || properties.length === 0) return;
+    await db.properties.bulkPut(properties);
+  } catch (err) {
+    console.warn('[Dexie] Failed to bulkPut managed properties:', err);
+  }
+}
+
+export async function saveSingleLocalManagedProperty(property: any): Promise<void> {
+  try {
+    if (!property || !property.id) return;
+    await db.properties.put(property);
+  } catch (err) {
+    console.warn('[Dexie] Failed to put managed property:', err);
+  }
+}
+

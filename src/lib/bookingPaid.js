@@ -73,8 +73,18 @@ export function dueAgorotOf(booking) {
 export function kinorotSettlementKind(booking) {
   const mode = String(booking?.payment_mode || '');
   const req = String(booking?.special_requests || '');
+  const channel = String(booking?.channel_source || '').toLowerCase();
   if (mode === 'VOUCHER' || /\|pay:voucher\b/.test(req)) return 'voucher';
   if (mode === 'COMP' || /\|pay:comp\b/.test(req)) return 'comp';
+  if (
+    mode === 'BOOKING'
+    || /\|pay:booking\b/.test(req)
+    || channel === 'booking_com'
+    || channel === 'booking.com'
+    || /@guest\.booking\.com\b/i.test(String(booking?.guest_email || ''))
+  ) {
+    return 'booking';
+  }
   return '';
 }
 

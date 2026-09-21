@@ -13,34 +13,34 @@ export const DEFAULT_RESORT_UNITS = [
   { id: 'mialis-villa', name: 'וילה מיאליס ריזורט', sort_order: 10, unit_type: 'villa', max_occupancy: 23, base_price_agorot: 250000 },
   { id: 'suite-1', name: 'סוויטה 1 (הירוקה)', sort_order: 11, unit_type: 'suite', max_occupancy: 5, base_price_agorot: 150000 },
   { id: 'suite-2', name: 'סוויטה 2 (הורודה)', sort_order: 12, unit_type: 'suite', max_occupancy: 5, base_price_agorot: 150000 },
-  { id: 'k671', name: 'בתי נורית 1', sort_order: 13, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
-  { id: 'k673', name: 'בתי נורית 2', sort_order: 14, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
-  { id: 'k674', name: 'בתי נורית 3', sort_order: 15, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
-  { id: 'k675', name: 'בתי נורית 4', sort_order: 16, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
-  { id: 'k676', name: 'בתי נורית 5', sort_order: 17, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
-  { id: 'k677', name: 'בתי נורית 6', sort_order: 18, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
-  { id: 'k678', name: 'בתי נורית 7', sort_order: 19, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
-  { id: 'k679', name: 'בתי נורית 8', sort_order: 20, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
-  { id: 'k808', name: "טאג' מאהל · בקתה 1", sort_order: 21, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
-  { id: 'k809', name: "טאג' מאהל · בקתה 2", sort_order: 22, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
-  { id: 'k810', name: "טאג' מאהל · בקתה 3", sort_order: 23, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
-  { id: 'k811', name: "טאג' מאהל · בקתה 4", sort_order: 24, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
-  { id: 'k680', name: 'מול הנוף · בקתה 1', sort_order: 25, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
-  { id: 'k681', name: 'מול הנוף · בקתה 2', sort_order: 26, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
-  { id: 'k682', name: 'מול הנוף · בקתה 3', sort_order: 27, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
-  { id: 'k683', name: 'מול הנוף · בקתה 4', sort_order: 28, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
-  { id: 'k684', name: 'מול הנוף · בקתה 5', sort_order: 29, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
-  { id: 'k685', name: 'נופים בלבן · בקתה 1', sort_order: 30, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
-  { id: 'k686', name: 'נופים בלבן · בקתה 2', sort_order: 31, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
-  { id: 'k687', name: 'טוסקנה · פירנצה 1', sort_order: 32, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
-  { id: 'k688', name: 'טוסקנה · פירנצה 2', sort_order: 33, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
-  { id: 'k689', name: 'טוסקנה · שאטו', sort_order: 34, unit_type: 'cabin', max_occupancy: 10, base_price_agorot: 85000 },
-  { id: 'k690', name: 'חצר מוסיקלית · חליל', sort_order: 35, unit_type: 'cabin', max_occupancy: 4, base_price_agorot: 85000 },
-  { id: 'k691', name: 'חצר מוסיקלית · מיתר', sort_order: 36, unit_type: 'cabin', max_occupancy: 4, base_price_agorot: 85000 },
-  { id: 'k692', name: 'חצר מוסיקלית · פעמון', sort_order: 37, unit_type: 'cabin', max_occupancy: 4, base_price_agorot: 85000 },
-  { id: 'k693', name: 'בקתות מאיה · בקתה 1', sort_order: 38, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
-  { id: 'k694', name: 'בקתות מאיה · בקתה 2', sort_order: 39, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
-  { id: 'k695', name: 'בקתות מאיה · בקתה 3', sort_order: 40, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 }
+  { id: 'k671', name: 'Ⓖ23 בתי נורית 1', sort_order: 13, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
+  { id: 'k673', name: 'Ⓖ23 בתי נורית 2', sort_order: 14, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
+  { id: 'k674', name: 'Ⓖ23 בתי נורית 3', sort_order: 15, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
+  { id: 'k675', name: 'Ⓖ23 בתי נורית 4', sort_order: 16, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
+  { id: 'k676', name: 'Ⓖ23 בתי נורית 5', sort_order: 17, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
+  { id: 'k677', name: 'Ⓖ23 בתי נורית 6', sort_order: 18, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
+  { id: 'k678', name: 'Ⓖ23 בתי נורית 7', sort_order: 19, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
+  { id: 'k679', name: 'Ⓖ23 בתי נורית 8', sort_order: 20, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
+  { id: 'k808', name: "Ⓔ27 טאג' מאהל · בקתה 1", sort_order: 21, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
+  { id: 'k809', name: "Ⓔ27 טאג' מאהל · בקתה 2", sort_order: 22, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
+  { id: 'k810', name: "Ⓔ27 טאג' מאהל · בקתה 3", sort_order: 23, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
+  { id: 'k811', name: "Ⓔ27 טאג' מאהל · בקתה 4", sort_order: 24, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
+  { id: 'k680', name: 'Ⓐ29 מול הנוף · בקתה 1', sort_order: 25, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
+  { id: 'k681', name: 'Ⓐ29 מול הנוף · בקתה 2', sort_order: 26, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
+  { id: 'k682', name: 'Ⓐ29 מול הנוף · בקתה 3', sort_order: 27, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
+  { id: 'k683', name: 'Ⓐ29 מול הנוף · בקתה 4', sort_order: 28, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
+  { id: 'k684', name: 'Ⓐ29 מול הנוף · בקתה 5', sort_order: 29, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
+  { id: 'k685', name: 'Ⓑ28 נופים בלבן · בקתה 1', sort_order: 30, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
+  { id: 'k686', name: 'Ⓑ28 נופים בלבן · בקתה 2', sort_order: 31, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
+  { id: 'k687', name: 'Ⓒ27 טוסקנה · פירנצה 1', sort_order: 32, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
+  { id: 'k688', name: 'Ⓒ27 טוסקנה · פירנצה 2', sort_order: 33, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
+  { id: 'k689', name: 'Ⓒ27 טוסקנה · שאטו', sort_order: 34, unit_type: 'cabin', max_occupancy: 10, base_price_agorot: 85000 },
+  { id: 'k690', name: 'Ⓓ26 חצר מוסיקלית · בקתה 1', sort_order: 35, unit_type: 'cabin', max_occupancy: 4, base_price_agorot: 85000 },
+  { id: 'k691', name: 'Ⓓ26 חצר מוסיקלית · בקתה 2', sort_order: 36, unit_type: 'cabin', max_occupancy: 4, base_price_agorot: 85000 },
+  { id: 'k692', name: 'Ⓓ26 חצר מוסיקלית · בקתה 3', sort_order: 37, unit_type: 'cabin', max_occupancy: 4, base_price_agorot: 85000 },
+  { id: 'k693', name: 'Ⓕ24 בקתות מאיה · בקתה 1', sort_order: 38, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
+  { id: 'k694', name: 'Ⓕ24 בקתות מאיה · בקתה 2', sort_order: 39, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
+  { id: 'k695', name: 'Ⓕ24 בקתות מאיה · בקתה 3', sort_order: 40, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 }
 ];
 
 /** @deprecated use DEFAULT_RESORT_UNITS — kept so existing imports keep working */
@@ -70,7 +70,8 @@ NAME_TO_ID['בתי נורית · בקתה 8'] = 'k679';
 
 export const FORCE_DOCUMENT_NAMES = new Set([
   'mialis-villa', 'suite-1', 'suite-2',
-  'k671', 'k673', 'k674', 'k675', 'k676', 'k677', 'k678', 'k679'
+  'k671', 'k673', 'k674', 'k675', 'k676', 'k677', 'k678', 'k679',
+  'k690', 'k691', 'k692'
 ]);
 NAME_TO_ID['סייסטה · רומנטית 1'] = 'k620';
 NAME_TO_ID['סייסטה · רומנטית 2'] = 'k621';
@@ -144,13 +145,13 @@ export function unitAccessGroup(unitId) {
   if (id === 'mialis-villa' || id.startsWith('suite-')) return 'מיאליס';
   if (id.startsWith('hill-')) return 'צימר בגבעה';
   if (id.startsWith('dome-')) return 'כיפת שמיים';
-  if (/^k67[1-9]$/.test(id)) return 'בתי נורית · רמות';
-  if (/^k80[8-9]$/.test(id) || id === 'k810' || id === 'k811') return "טאג' מאהל · רמות";
-  if (/^k68[0-4]$/.test(id)) return 'מול הנוף · רמות';
-  if (id === 'k685' || id === 'k686') return 'נופים בלבן · רמות';
-  if (/^k68[7-9]$/.test(id)) return 'בקתות טוסקנה · רמות';
-  if (/^k69[0-2]$/.test(id)) return 'החצר המוסיקלית · רמות';
-  if (/^k69[3-5]$/.test(id)) return 'בקתות מאיה · רמות';
+  if (/^k67[1-9]$/.test(id)) return 'Ⓖ בתי נורית · רמות';
+  if (/^k80[8-9]$/.test(id) || id === 'k810' || id === 'k811') return "Ⓔ טאג' מאהל · רמות";
+  if (/^k68[0-4]$/.test(id)) return 'Ⓐ מול הנוף · רמות';
+  if (id === 'k685' || id === 'k686') return 'Ⓑ נופים בלבן · רמות';
+  if (/^k68[7-9]$/.test(id)) return 'Ⓒ בקתות טוסקנה · רמות';
+  if (/^k69[0-2]$/.test(id)) return 'Ⓓ החצר המוסיקלית · רמות';
+  if (/^k69[3-5]$/.test(id)) return 'Ⓕ בקתות מאיה · רמות';
   if (id === 'k618' || id === 'k619' || /^k62[0-3]$/.test(id)) return 'סייסטה · רמות';
   if (id === 'k826' || id === 'k827') return 'קאסה נובה · נוב';
   return 'יחידות נוספות';
@@ -210,15 +211,30 @@ export function unitCalendarPrefix(fullName, shortName) {
   return leftover.join(' ');
 }
 
-/** Two calendar lines from the full inventory name: property / unit. */
+/** Two calendar lines from the full inventory name: property+number / (detail unused — lockbox is separate). */
 export function unitCalendarLines(fullName) {
-  const name = String(fullName || '').trim();
+  let name = String(fullName || '').trim();
   if (!name) return { primary: '', secondary: '' };
+  // Calendar labels skip the word "בקתה" — only complex + cabin number.
+  // (No \b — JS word boundaries don't work with Hebrew.)
+  name = name
+    .replace(/בקתה/gi, ' ')
+    .replace(/\s*·\s*/g, ' · ')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+
   if (name.includes('·')) {
     const [left, ...rest] = name.split('·');
-    return { primary: left.trim(), secondary: rest.join('·').trim() };
+    const right = rest.join('·').replace(/·/g, ' ').trim();
+    const primary = [left.trim(), right].filter(Boolean).join(' ');
+    return { primary, secondary: '' };
   }
+
   const words = name.split(/\s+/).filter(Boolean);
+  // Keep trailing cabin number on the same line: "בתי נורית 1"
+  if (words.length >= 2 && /^\d+[א-תA-Za-z]?$/.test(words[words.length - 1])) {
+    return { primary: words.join(' '), secondary: '' };
+  }
   if (words.length >= 2) {
     return { primary: words.slice(0, -1).join(' '), secondary: words[words.length - 1] };
   }

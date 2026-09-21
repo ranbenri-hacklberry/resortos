@@ -1,4 +1,4 @@
-import { hasNextGuestToday } from './cabinAccess';
+import { hasNextGuestToday, israelToday } from './cabinAccess';
 import { isFullyPaid } from './bookingPaid';
 import { guidesFromContent, mergeGuestProfile } from './guestProfile';
 import { propertyIdForUnit, seedProperty, seedUnitOverride } from './guestProfileSeed';
@@ -44,15 +44,37 @@ export function guestBundleForUnit(unit, property) {
   return merged;
 }
 
+/** Room is clean (READY) and no *other* guest is occupying it. */
+export function roomOpenForGuestCheckin(unit, bookings, today = israelToday(), forBooking = null) {
+  if (String(unit?.operational_status || '') !== 'READY') return false;
+  const unitId = unit?.id;
+  if (!unitId) return false;
+  const day = String(today || '').slice(0, 10);
+  const others = (bookings || []).filter((row) => {
+    if (row.unit_id !== unitId || row.deleted_at) return false;
+    if (row.booking_status === 'CANCELED' || row.booking_status === 'CHECKED_OUT') return false;
+    if (forBooking?.id && row.id === forBooking.id) return false;
+    const cin = String(row.check_in_date || '').slice(0, 10);
+    const cout = String(row.check_out_date || '').slice(0, 10);
+    return Boolean(cin && cout && day >= cin && day < cout);
+  });
+  return others.length === 0;
+}
+
 export function buildStaySnapshot(booking, unit, bookings, property) {
-  const inHouse = booking?.booking_status === 'CHECKED_IN' && isFullyPaid(booking);
-  const ready = inHouse;
+  const paid = isFullyPaid(booking);
+  const checkedIn = booking?.booking_status === 'CHECKED_IN';
+  const roomOpen = roomOpenForGuestCheckin(unit, bookings, israelToday(), booking);
+  const inHouse = checkedIn && paid;
+  // Codes unlock after paid check-in; room_open flags early check-in eligibility.
+  const ready = inHouse && (roomOpen || Boolean(booking?.stay?.guest_checked_in_at) || unit?.operational_status === 'READY');
   const prev = booking?.stay && typeof booking.stay === 'object' ? booking.stay : {};
   const bundle = guestBundleForUnit({ ...unit, id: booking?.unit_id || unit?.id }, property);
   const networks = ready ? (bundle.access.wifi || []) : [];
   const gate = bundle.access.gate || null;
   return {
     cabin_ready: ready,
+    room_open: roomOpen,
     operational_status: unit?.operational_status || 'DIRTY',
     door_pin: ready ? (bundle.access.lockbox || null) : null,
     gate_mode: gate?.mode || null,
@@ -69,6 +91,7 @@ export function buildStaySnapshot(booking, unit, bookings, property) {
     checkout_time: prev.checkout_time || bundle.content.check_out || '11:00',
     late_until: prev.late_until || null,
     self_checked_out_at: prev.self_checked_out_at || null,
+    guest_checked_in_at: prev.guest_checked_in_at || null,
     feedback_stars: prev.feedback_stars || null,
     feedback_text: prev.feedback_text || null,
     feedback_google: prev.feedback_google ?? null,

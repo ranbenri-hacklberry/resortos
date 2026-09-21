@@ -463,6 +463,56 @@ export const SOUTH_GOLAN_PLACES = [
   }
 ];
 
+const PLACE_PHOTO_BY_ID = {
+  dudis: '/guide/places/full-bar-givat-yoav-steak.jpg',
+  paul_bar: '/guide/places/full-bar-givat-yoav-steak.jpg',
+  limoneto: '/guide/cafe.jpg',
+  yoava: '/guide/cafe.jpg',
+  go_golan: '/guide/jeep.jpg',
+  twister: '/guide/trail.jpg',
+  kol_shofar: '/guide/gallery.jpg',
+  alin_bee: '/guide/pastry.jpg',
+  mitzpe_ofir: '/guide/places/mizpe-ofir-bunkers-trail.jpg',
+  shimmys: '/guide/steak.jpg',
+  nakhtom: '/guide/bakery.jpg',
+  pizza_amici: '/guide/pizza.jpg',
+  mika_winery: '/guide/wine.jpg',
+  nof_golan_mall: '/guide/places/nof-golan-mall-bnei-yehuda-mall.jpg',
+  neot_flavors: '/guide/places/mezati-bnei-yehuda-breakfast.jpg',
+  azizo: '/guide/steak.jpg',
+  cafe_rico: '/guide/cafe.jpg',
+  terra_nova: '/guide/places/terra-nova-winery-kanaf-wine.jpg',
+  scoria: '/guide/wine.jpg',
+  ein_kanaf: '/guide/places/ein-kanaf-spring.jpg',
+  moshbutz: '/guide/places/moshbutz-ramot-steak.jpg',
+  habikta: '/guide/places/habakta-ramot-steak.jpg',
+  cafe_moyz: '/guide/cafe.jpg',
+  ramot_ranch: '/guide/jeep.jpg',
+  lol_art: '/guide/gallery.jpg',
+  majrase: '/guide/places/majrase-baticha-spring.jpg',
+  chateau_golan: '/guide/places/golan-heights-winery-visitor-center-wine.jpg',
+  truckafe: '/guide/cafe.jpg',
+  fass_brewery: '/guide/beer.jpg',
+  natour_dairy: '/guide/breakfast.jpg',
+  mandarina: '/guide/thai.jpg',
+  ein_keshatot: '/guide/places/um-el-kanatir-ein-keshatot-ruins.jpg',
+  meitzar_stream: '/guide/places/al-al-black-white-falls-spring.jpg',
+  ein_shoko: '/guide/places/ein-shoko-spring.jpg'
+};
+
+const CATEGORY_PHOTO = {
+  dining: '/guide/steak.jpg',
+  cafe: '/guide/cafe.jpg',
+  attractions: '/guide/jeep.jpg',
+  winery: '/guide/wine.jpg',
+  nature: '/guide/spring.jpg',
+  services: '/guide/mall.jpg'
+};
+
+function placeCardPhoto(place) {
+  return place?.photo || PLACE_PHOTO_BY_ID[place?.id] || CATEGORY_PHOTO[place?.category] || '/guide/trail.jpg';
+}
+
 export default function GolanInteractiveMap({ theme = 'dark' }) {
   const isLight = theme === 'light';
   const mapRef = useRef(null);
@@ -473,7 +523,7 @@ export default function GolanInteractiveMap({ theme = 'dark' }) {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [settlementFilter, setSettlementFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [viewMode, setViewMode] = useState('map'); // 'map' | 'list'
+  const [viewMode, setViewMode] = useState('cards'); // 'cards' | 'map'
 
   const categories = [
     { id: 'all', label: 'הכל', icon: Layers },
@@ -681,17 +731,18 @@ export default function GolanInteractiveMap({ theme = 'dark' }) {
                 <MapPin size={20} />
               </div>
               <h2 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, color: textPrimary }}>
-                מפה אינטראקטיבית: אטרקציות, קולינריה וניווט Waze
+                אטרקציות וקולינריה באזור
               </h2>
             </div>
             <p style={{ margin: 0, fontSize: '0.85rem', color: textSecondary }}>
-              מיקומים מדויקים, כפתורי ניווט Waze ישירים, טלפונים וקישורי WhatsApp עבור רמות, גבעת יואב ודרום הגולן ({filteredPlaces.length} מקומות).
+              כרטיסיות עם תמונה, Waze, טלפון ו-WhatsApp · רמות, גבעת יואב ודרום הגולן ({filteredPlaces.length} מקומות).
             </p>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <button
-              onClick={() => setViewMode(viewMode === 'map' ? 'list' : 'map')}
+              type="button"
+              onClick={() => setViewMode(viewMode === 'cards' ? 'map' : 'cards')}
               style={{
                 background: bgSubtle,
                 border: `1px solid ${borderCard}`,
@@ -706,8 +757,8 @@ export default function GolanInteractiveMap({ theme = 'dark' }) {
                 gap: '0.4rem'
               }}
             >
-              {viewMode === 'map' ? <Layers size={16} /> : <MapPin size={16} />}
-              <span>{viewMode === 'map' ? 'תצוגת רשימה' : 'תצוגת מפה'}</span>
+              {viewMode === 'cards' ? <MapPin size={16} /> : <Layers size={16} />}
+              <span>{viewMode === 'cards' ? 'תצוגת מפה' : 'תצוגת כרטיסיות'}</span>
             </button>
           </div>
         </div>
@@ -790,8 +841,8 @@ export default function GolanInteractiveMap({ theme = 'dark' }) {
         </div>
       </div>
 
-      {/* MAIN CONTAINER: MAP OR LIST */}
-      <div style={{ display: 'grid', gridTemplateColumns: selectedPlace ? '1fr 340px' : '1fr', gap: '1rem' }}>
+      {/* MAIN CONTAINER: CARDS OR MAP */}
+      <div style={{ display: 'grid', gridTemplateColumns: selectedPlace && viewMode === 'map' ? '1fr 340px' : '1fr', gap: '1rem' }}>
         {viewMode === 'map' ? (
           <div
             style={{
@@ -805,7 +856,6 @@ export default function GolanInteractiveMap({ theme = 'dark' }) {
           >
             <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
 
-            {/* Quick legend on top left */}
             <div
               style={{
                 position: 'absolute',
@@ -826,77 +876,144 @@ export default function GolanInteractiveMap({ theme = 'dark' }) {
             </div>
           </div>
         ) : (
-          /* LIST VIEW */
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.85rem' }}>
-            {filteredPlaces.map((place) => {
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+              gap: '0.9rem'
+            }}
+          >
+            {filteredPlaces.length === 0 ? (
+              <div style={{
+                gridColumn: '1 / -1',
+                textAlign: 'center',
+                padding: '2.5rem 1rem',
+                color: textSecondary,
+                fontWeight: 700,
+                border: `1px dashed ${borderCard}`,
+                borderRadius: 16
+              }}>
+                לא נמצאו מקומות לפי הסינון
+              </div>
+            ) : filteredPlaces.map((place) => {
               const color = getCategoryColor(place.category);
-              const emoji = getCategoryEmoji(place.category);
-
+              const photo = placeCardPhoto(place);
               return (
-                <div
+                <article
                   key={place.id}
                   style={{
                     background: bgCard,
                     border: `1px solid ${borderCard}`,
-                    borderRadius: '14px',
-                    padding: '1.1rem',
+                    borderRadius: 16,
+                    overflow: 'hidden',
                     display: 'flex',
                     flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    boxShadow: isLight ? '0 2px 8px rgba(0,0,0,0.02)' : 'none'
+                    minHeight: 0,
+                    boxShadow: isLight ? '0 2px 10px rgba(0,0,0,0.04)' : 'none'
                   }}
                 >
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                      <span
-                        style={{
-                          fontSize: '0.7rem',
-                          fontWeight: 800,
-                          padding: '2px 8px',
-                          borderRadius: '6px',
-                          background: `${color}20`,
-                          color: color
-                        }}
-                      >
-                        {emoji} {place.categoryName}
-                      </span>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: textSecondary }}>
-                        📍 {place.settlement}
-                      </span>
-                    </div>
-
-                    <h3 style={{ margin: '0 0 0.4rem 0', fontSize: '1.05rem', fontWeight: 800, color: textPrimary }}>
-                      {place.name}
-                    </h3>
-                    <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.82rem', color: textSecondary, lineHeight: 1.45 }}>
-                      {place.description}
-                    </p>
+                  <div style={{ position: 'relative', aspectRatio: '4 / 3', background: bgSubtle }}>
+                    <img
+                      src={photo}
+                      alt=""
+                      loading="lazy"
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        display: 'block'
+                      }}
+                    />
+                    <span
+                      style={{
+                        position: 'absolute',
+                        top: 10,
+                        insetInlineStart: 10,
+                        fontSize: '0.68rem',
+                        fontWeight: 800,
+                        padding: '3px 8px',
+                        borderRadius: 8,
+                        background: 'rgba(10,10,12,0.72)',
+                        color: '#F8FAFC',
+                        backdropFilter: 'blur(4px)'
+                      }}
+                    >
+                      {place.categoryName}
+                    </span>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', borderTop: `1px solid ${borderCard}`, paddingTop: '0.75rem' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
+                  <div style={{
+                    padding: '0.85rem 0.9rem 1rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 8,
+                    flex: 1
+                  }}>
+                    <div>
+                      <h3 style={{
+                        margin: 0,
+                        fontSize: '1rem',
+                        fontWeight: 900,
+                        color: textPrimary,
+                        lineHeight: 1.25
+                      }}>
+                        {place.name}
+                      </h3>
+                      <div style={{
+                        marginTop: 4,
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        color: textSecondary,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }}>
+                        <MapPin size={12} color={color} />
+                        {place.settlement}
+                      </div>
+                    </div>
+
+                    <p style={{
+                      margin: 0,
+                      fontSize: '0.78rem',
+                      color: textSecondary,
+                      lineHeight: 1.45,
+                      flex: 1,
+                      display: '-webkit-box',
+                      WebkitLineClamp: 3,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden'
+                    }}>
+                      {place.description}
+                    </p>
+
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: place.phone || place.whatsapp ? '1fr 1fr' : '1fr',
+                      gap: 6,
+                      marginTop: 2
+                    }}>
                       <a
                         href={place.wazeUrl}
                         target="_blank"
                         rel="noreferrer"
                         style={{
                           background: '#33CCFF',
-                          color: '#000000',
-                          padding: '0.45rem',
-                          borderRadius: '8px',
-                          fontSize: '0.78rem',
-                          fontWeight: 800,
+                          color: '#0A0A0C',
+                          padding: '0.48rem',
+                          borderRadius: 10,
+                          fontSize: '0.76rem',
+                          fontWeight: 900,
                           textDecoration: 'none',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          gap: '4px'
+                          gap: 4
                         }}
                       >
                         <Navigation size={13} />
-                        <span>נווט ב-Waze</span>
+                        Waze
                       </a>
-
                       {place.whatsapp ? (
                         <a
                           href={`https://wa.me/${place.whatsapp}`}
@@ -905,19 +1022,19 @@ export default function GolanInteractiveMap({ theme = 'dark' }) {
                           style={{
                             background: '#25D366',
                             color: '#FFFFFF',
-                            padding: '0.45rem',
-                            borderRadius: '8px',
-                            fontSize: '0.78rem',
-                            fontWeight: 800,
+                            padding: '0.48rem',
+                            borderRadius: 10,
+                            fontSize: '0.76rem',
+                            fontWeight: 900,
                             textDecoration: 'none',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            gap: '4px'
+                            gap: 4
                           }}
                         >
                           <MessageSquare size={13} />
-                          <span>WhatsApp</span>
+                          WhatsApp
                         </a>
                       ) : place.phone ? (
                         <a
@@ -926,35 +1043,31 @@ export default function GolanInteractiveMap({ theme = 'dark' }) {
                             background: bgSubtle,
                             color: textPrimary,
                             border: `1px solid ${borderCard}`,
-                            padding: '0.45rem',
-                            borderRadius: '8px',
-                            fontSize: '0.78rem',
-                            fontWeight: 700,
+                            padding: '0.48rem',
+                            borderRadius: 10,
+                            fontSize: '0.76rem',
+                            fontWeight: 800,
                             textDecoration: 'none',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            gap: '4px'
+                            gap: 4
                           }}
                         >
                           <Phone size={13} />
-                          <span>חייג עכשיו</span>
+                          חייג
                         </a>
-                      ) : (
-                        <div style={{ fontSize: '0.72rem', color: textSecondary, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          כניסה חופשית
-                        </div>
-                      )}
+                      ) : null}
                     </div>
                   </div>
-                </div>
+                </article>
               );
             })}
           </div>
         )}
 
-        {/* SELECTED PLACE DETAILS DRAWER / CARD */}
-        {selectedPlace && (
+        {/* SELECTED PLACE DETAILS DRAWER / CARD (map mode) */}
+        {selectedPlace && viewMode === 'map' && (
           <div
             style={{
               background: bgCard,

@@ -1,13 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { bookingsMarkingNight, isEffectivelyOccupied, shouldAutoOccupyUnit, unitDisplayStatus, unitNameFrame, vacateBookingOnDate } from './unitStatus.js';
+import {
+  bookingsMarkingNight,
+  isEffectivelyOccupied,
+  listArrivalsAwaitingOccupy,
+  shouldAutoOccupyUnit,
+  unitDisplayStatus,
+  unitNameFrame,
+  unitsWithStaleVacantFlag,
+  vacateBookingOnDate
+} from './unitStatus.js';
 
 describe('unit name frames', () => {
   it('uses green ready, orange dirty, red fault, purple occupied', () => {
     expect(unitNameFrame('READY', false).border).toBe('#4ADE80');
+    expect(unitNameFrame('NEEDS_COMPLETIONS', false).border).toBe('#2DD4BF');
     expect(unitNameFrame('DIRTY', false).border).toBe('#FB923C');
     expect(unitNameFrame('MAINTENANCE_ALERT', false).border).toBe('#F87171');
     expect(unitNameFrame('OCCUPIED', false).border).toBe('#8B5CF6');
-    expect(unitNameFrame('UNAVAILABLE', false).border).toBe('#A8A29E');
+    expect(unitNameFrame('UNAVAILABLE', false).border).toBe('#D6D3D1');
+    expect(unitNameFrame('UNAVAILABLE', false).dashed).toBe(true);
   });
 
   it('marks checkout day as leaving, never occupied', () => {
@@ -119,10 +130,50 @@ describe('unit name frames', () => {
       booking_status: 'CHECKED_IN'
     }];
     const unit = { id: 'k671', operational_status: 'DIRTY', staff_occupancy: 'VACANT' };
-    expect(isEffectivelyOccupied(unit, bookings, '2026-09-04')).toBe(false);
-    expect(unitDisplayStatus(unit, bookings, '2026-09-04').key).toBe('DIRTY');
+    expect(isEffectivelyOccupied(unit, bookings, '2026-09-04')).toBe(true);
+    expect(unitDisplayStatus(unit, bookings, '2026-09-04').key).toBe('OCCUPIED');
+    expect(unitsWithStaleVacantFlag([unit], bookings, '2026-09-04')).toHaveLength(1);
     expect(isEffectivelyOccupied({ id: 'k671', operational_status: 'READY' }, bookings, '2026-09-04')).toBe(true);
     expect(unitDisplayStatus({ id: 'k671', operational_status: 'READY' }, bookings, '2026-09-04').key).toBe('OCCUPIED');
+  });
+
+  it('lists arrival-day stays waiting for occupy after 20:00', () => {
+    const units = [
+      { id: 'k681', operational_status: 'READY', staff_occupancy: 'VACANT' },
+      { id: 'k682', operational_status: 'READY', staff_occupancy: 'OCCUPIED' },
+      { id: 'k683', operational_status: 'READY' }
+    ];
+    const bookings = [
+      {
+        id: 'a1',
+        unit_id: 'k681',
+        check_in_date: '2026-09-18',
+        check_out_date: '2026-09-20',
+        booking_status: 'CONFIRMED',
+        guest_name: 'אורח א'
+      },
+      {
+        id: 'a2',
+        unit_id: 'k682',
+        check_in_date: '2026-09-18',
+        check_out_date: '2026-09-20',
+        booking_status: 'CONFIRMED',
+        guest_name: 'אורח ב'
+      },
+      {
+        id: 'a3',
+        unit_id: 'k683',
+        check_in_date: '2026-09-18',
+        check_out_date: '2026-09-20',
+        booking_status: 'CONFIRMED',
+        guest_name: 'אורח ג'
+      }
+    ];
+    const before = new Date('2026-09-18T16:00:00.000Z'); // 19:00 Israel
+    const after = new Date('2026-09-18T17:30:00.000Z'); // 20:30 Israel
+    expect(listArrivalsAwaitingOccupy(units, bookings, '2026-09-18', before)).toHaveLength(0);
+    const pending = listArrivalsAwaitingOccupy(units, bookings, '2026-09-18', after);
+    expect(pending.map((row) => row.unit.id).sort()).toEqual(['k681', 'k683']);
   });
 
   it('never auto-occupies from check-in hour', () => {
