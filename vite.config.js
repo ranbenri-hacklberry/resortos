@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react-swc';
 import tailwindcss from '@tailwindcss/vite';
 import fs from 'fs';
+import crypto from 'crypto';
 import path from 'path';
 import { createHypPaymentPage } from './functions/lib/hypPay.js';
 import { UNIT_DISPLAY_NAMES, UNIT_PROPERTY } from './functions/lib/unitNames.js';
@@ -236,7 +237,7 @@ function staffAuthPlugin(env) {
 
             // 2. Generate Booking ID & Token
             const bookingId = 'web_' + Date.now();
-            const checkoutToken = 'tok_' + bookingId;
+            const checkoutToken = `tok_${crypto.randomBytes(32).toString('base64url')}`;
             const adultsNum = Number(adults_count) || 2;
             const childrenNum = Number(children_count) || 0;
             const babiesNum = Number(babies_count) || 0;
