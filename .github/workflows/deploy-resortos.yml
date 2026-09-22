@@ -1,0 +1,38 @@
+name: Deploy resortos.app
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-resortos-app
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Restore Cloudflare login
+        env:
+          CLOUDFLARE_WRANGLER_OAUTH: ${{ secrets.CLOUDFLARE_WRANGLER_OAUTH }}
+        run: |
+          if [ -z "$CLOUDFLARE_WRANGLER_OAUTH" ]; then
+            echo "Missing GitHub secret CLOUDFLARE_WRANGLER_OAUTH"
+            exit 1
+          fi
+          mkdir -p "$HOME/.config/.wrangler/config"
+          printf '%s\n' "$CLOUDFLARE_WRANGLER_OAUTH" > "$HOME/.config/.wrangler/config/default.toml"
+          chmod 600 "$HOME/.config/.wrangler/config/default.toml"
+
+      - name: Build and deploy
+        run: npm run deploy:guest
