@@ -32,7 +32,7 @@ const COPY = {
   he: {
     dir: 'rtl',
     htmlLang: 'he',
-    title: 'ResortOS | מפסיקים לנהל את המתחם בבלאגן של וואטסאפ',
+    title: 'ResortOS | מערכת ההפעלה של מתחם האירוח',
     nav: {
       product: 'המוצר',
       compare: 'מול יומן',
@@ -46,9 +46,9 @@ const COPY = {
     ctaNav: 'רשימת המתנה',
     ctaSecondary: 'איך זה עובד',
     heroKicker: 'לבעלי מתחמי נופש, צימרים וסוויטות בוטיק',
-    heroTitle: 'מפסיקים לנהל את המתחם בבלאגן של וואטסאפ. מתחילים להרוויח שקט.',
+    heroTitle: 'מערכת ההפעלה של מתחם האירוח. לא עוד מערכת שצריך לנהל.',
     heroLead:
-      'לוח תפוסה, ניקיון עם אימות בתמונות, גבייה בוואטסאפ ופורטל אורח — קוד לדלת לפי שעת כניסה, התאמת סליקה לבנק, ומס״ב לשכר. בלי פקיד ובלי מחברת באמצע.',
+      'ResortOS יודעת מה אמור לקרות במתחם, פועלת מול עובדים, אורחים, מכשירים ורובוטים, ומוודאת שמה שאמור לקרות באמת קרה. העובד לא צריך ללמוד מערכת חדשה — הוא מקבל את העבודה בערוץ שכבר מוכר לו.',
     statsKicker: 'מספרי מפתח',
     stats: [
       { value: '1.5%', title: 'עמלה', text: 'שומרים על הרווח מהזמנות ישירות, במקום לשלם 15%–20% לעמלות תיווך.' },
@@ -57,17 +57,17 @@ const COPY = {
       { value: '0', title: 'שיחות בלילה', text: 'שקט מוחלט: קוד לשער, סיסמת Wi‑Fi, הפעלת מכשירים וניווט — הכל פתוח לאורח בנייד שלו.' }
     ],
     problemKicker: 'המצב היום',
-    problemTitle: 'המתחם עובד. הניהול מאחורי הקלעים — קורס.',
-    problemLead: 'ארבעה דברים שחוזרים בכל מתחם שעדיין רץ על וואטסאפ, מחברות, וטלפון פרטי.',
+    problemTitle: 'המתחם עובד. המידע מפוזר בכל מקום.',
+    problemLead: 'הבעיה היא לא שוואטסאפ קיים. הבעיה היא שהעסק כולו הופך לזיכרון בתוך קבוצות והודעות: מי ביקש מה, איזה חדר, מה פתוח, מה נסגר, ומה עדיין לא טופל.',
     problems: [
-      { title: 'לוח תפוסה עיוור', text: 'ניהול במחברות ובהודעות גורם לפספוס לילות ריקים ולכפל הזמנות.' },
-      { title: 'משק בית מהזיכרון', text: 'תחלופות מתנהלות בראש. המנקים מנחשים סדרי עדיפויות, ואף אחד לא בודק את החדר לפני שהאורח הבא עומד בדלת.' },
-      { title: 'מענה טלפוני 24/7', text: 'מה הווי־פיי? איך פותחים את השער? איך מפעילים את הג׳קוזי? כל שאלה בסיסית מגיעה לטלפון הפרטי שלכם.' },
-      { title: 'העמלות חותכות את הרווח', text: '15%–20% הולכים לפלטפורמות, בזמן שאורחים חוזרים נסגרים בהתכתבות ידנית ומסורבלת.' }
+      { title: 'המידע קבור בשיחות', text: 'קבוצות, הודעות ושיחות פרטיות הופכות את מצב המתחם לחיפוש אינסופי אחורה: מי אמר מה, על איזה חדר, ומה עדיין פתוח.' },
+      { title: 'העבודה נשארת בראש', text: 'מי מנקה, מה לקחת, כמה אנשים צריך ומה כבר הסתיים — עובר מפה לאוזן. אין מערכת שמנהלת את הלופ ומוודאת שהעבודה בוצעה.' },
+      { title: 'הודעות במקום תפעול', text: 'וואטסאפ יודע להעביר הודעה. הוא לא יודע לנהל את המשימה, לעקוב אחרי זמן, לזהות חריגה ולוודא שהמציאות תואמת לדיווח.' },
+      { title: 'אף אחד לא מחזיק את מצב העסק', text: 'גם כשכל המידע קיים איפשהו, אין שכבה אחת שיודעת מה צריך לקרות עכשיו, מה כבר קרה, ומה דורש התערבות.' }
     ],
-    productKicker: 'איך המערכת עובדת',
-    productTitle: 'מההזמנה הראשונה ועד 5 כוכבים בגוגל',
-    productLead: 'שישה שלבים שמחליפים את הבלאגן — בלי לקפוץ בין וואטסאפ למחברת.',
+    productKicker: 'איך מערכת הפעלה למתחם עובדת',
+    productTitle: 'ResortOS לא מציגה עבודה. היא מפעילה אותה.',
+    productLead: 'Observe → Understand → Decide → Act → Verify. המערכת מחזיקה את המצב התפעולי, מתקשרת עם מי שצריך, ומוודאת שהתוצאה באמת קרתה.',
     features: [
       {
         icon: 'calendar',
@@ -76,28 +76,28 @@ const COPY = {
       },
       {
         icon: 'whatsapp',
-        title: 'סליקה ישירה בוואטסאפ',
-        text: 'שליחת לינק למקדמה או לתשלום מלא תוך שניות. החדר ננעל ל־15 דקות עד לאישור, ואז הקוד נדרך במנעול לפי שעת הצ׳ק־אין.'
+        title: 'תקשורת דרך הערוץ שהצוות כבר מכיר',
+        text: 'ResortOS יכולה לשלוח משימות והנחיות דרך WhatsApp, לשאול מה הסטטוס, לזהות עיכוב ולהסלים כשצריך. WhatsApp הוא הערוץ — לא מערכת התפעול.'
       },
       {
         icon: 'ops',
-        title: 'משק בית עם אימות תמונה',
-        text: 'משימת תחלופה נפתחת אוטומטית בצ׳ק־אאוט. הצוות מעלה צילום אישור; דירוג ביקורת נמוך מחזיר את המשימה לטיפול.'
+        title: 'תפעול עם אימות רב־מקור',
+        text: 'דיווח עובד הוא אות אחד בלבד. ResortOS יכולה להצליב אותו עם פתיחת דלת, חשמל, מים, חיישנים, זמן, מצלמות או בדיקת רובוט ולזהות אנומליות לפני שהיא מסמנת משימה כהושלמה.'
       },
       {
         icon: 'money',
-        title: 'הצלבה ליומן, Hyp והבנק',
-        text: 'הכנסה ברוטו, עמלת 1.5%, וזיכוי נטו לפי יחידה — מול הסליקה והחשבון בבנק באותו יום, לא בייצוא לרו״ח בחודש הבא.'
+        title: 'מצב תפעולי חי',
+        text: 'כל יחידה מחזיקה מצב חי: אורח, ניקיון, בדיקה, תחזוקה, ציוד, גישה, משימות ומוכנות. המטרה היא שהמערכת תדע מה קורה — לא שהמנהל יחפש את המידע.'
       },
       {
         icon: 'staff',
-        title: 'צוות, שפות ומס״ב',
-        text: 'גישה לכל עובד בעברית, ערבית, אנגלית או תאילנדית, נוכחות GPS, וקובץ מס״ב לשכר ולספקים עם אישור שני מנהלים לפני שליחה.'
+        title: 'אנשים, רובוטים ומכשירים',
+        text: 'ResortOS מפעילה בני אדם, IoT ורובוטים דרך שכבת תפעול אחת. העובד לא חייב להשתמש באפליקציה; הרובוט לא חייב לדעת את העסק; ה-Core מחליט מה צריך לקרות.'
       },
       {
         icon: 'reviews',
-        title: 'מנוע ביקורות אוטומטי',
-        text: 'הודעת צ׳ק־אאוט חכמה שמעבירה אורחים מרוצים ישירות לדירוג 5 כוכבים בגוגל מפות.'
+        title: 'המערכת מנהלת, המנהל רואה חריגים',
+        text: 'במקום Dashboard שדורש ניהול מתמיד, ResortOS אמורה לבצע את לופ הניהול: להקצות, לעקוב, לשאול, לאמת ולהסלים. המנהל נכנס כשנדרשת החלטה.'
       }
     ],
     guestKicker: 'חוויית האורח',
@@ -156,33 +156,33 @@ const COPY = {
       }
     ],
     whyKicker: 'למה ResortOS',
-    whyTitle: 'נבנה למתחמי אירוח ישראליים (5–50 יחידות), לא לרשתות של 400 חדרים',
+    whyTitle: 'נבנה כדי להפעיל מתחמי אירוח פיזיים',
     reasons: [
       {
-        title: 'הכל קורה בשיחת וואטסאפ אחת',
-        text: 'קישור ההזמנה, אישור הסליקה, המפתח הדיגיטלי, מדריך המתחם ובקשת הדירוג מרוכזים כולם בשרשור ההודעות המוכר של האורח. בלי מיילים שנעלמים בתיבת הספאם, בלי טפסים מסורבלים ובלי שיחות שירות מיותרות בערב.'
+        title: 'WhatsApp הוא ערוץ — לא מערכת',
+        text: 'מתחמים כבר משתמשים ב-WhatsApp לכל דבר: קבוצות עובדים, משימות, תקלות, חדרים, תמונות ושאלות. ResortOS לא מנסה להחליף את ההרגל הזה באפליקציה חדשה — היא הופכת את הערוץ הקיים לממשק של מערכת תפעול שמאחוריו.'
       },
       {
-        title: 'פורטל שהייה אישי — אפס הורדות',
-        text: 'האורח מקבל קישור ישיר ומאובטח שרץ מיידית בדפדפן הנייד. פתיחת שער, סיסמת ה־Wi‑Fi, הוראות הפעלה למתקנים וחנות פינוקים זמינים לו מסביב לשעון, בלי להכריח אותו להוריד אפליקציה או לייצר שם משתמש וסיסמה.'
+        title: 'העובד לא צריך להיות משתמש תוכנה',
+        text: 'ברק לא צריך לפתוח אפליקציה כדי לדעת מה לנקות. הוא צריך לקבל הודעה: אילו חדרים, באיזו שעה, כמה אנשים, מה לקחת ומה לעשות. ResortOS מנהלת את התקשורת והמעקב מאחורי הקלעים.'
       },
       {
-        title: 'תחלופה מבוקרת ואימות בתמונות',
-        text: 'משימת הניקיון נפתחת אוטומטית בצ׳ק־אאוט לפי צ׳קליסט משימות (SOP) מוגדר מראש. קוד הכניסה לאורח הבא נפתח רק לאחר שאיש הצוות ביצע את הסעיפים, צילם את החדר והבטיח שהיחידה עומדת בסטנדרט האירוח שלכם.'
+        title: 'Expected State מול Observed State',
+        text: 'המערכת יודעת מה אמור לקרות ומה היא באמת רואה. אין עדכון? זו אינפורמציה. יש דיווח אבל אין ראיות תואמות? זו אנומליה. המערכת ממשיכה לבדוק עד שהיחידה באמת מוכנה.'
       },
       {
-        title: 'הכסף נסגר לבד',
-        text: 'בלי מעטפות מזומן ובלי ייצוא חודשי לרו״ח. היומן, הסליקה והבנק נסגרים לאותו סכום, והשכר יוצא במס״ב אחרי שני מאשרים — לא 87 העברות ידניות בבנק.'
+        title: 'Edge מקומי. Cloud מחובר.',
+        text: 'לכל מתחם יכול להיות Edge מקומי שמחזיק את המצב התפעולי וממשיך לעבוד גם כשהאינטרנט נופל. הענן מספק גיבוי, סנכרון, ניהול מרחוק ועדכונים — לא את לולאת התפעול עצמה.'
       }
     ],
-    compareKicker: 'מחברת, יומן, או מערכת שמפעילה',
-    compareTitle: 'ניהול ידני מייצר שיחות. יומן ממוחשב מייצר הקלדה. ResortOS מפעיל את המתחם.',
+    compareKicker: 'מערכת שמפעילה, לא רק מערכת שמציגה',
+    compareTitle: 'וואטסאפ מעביר הודעות. Dashboard מציג מידע. ResortOS מפעילה את המתחם.',
     compareLead:
-      'בלי מערכת — וואטסאפ ומחברת. עם EzGo, אופטימה, MiniHotel או Simple Booking — אתר הזמנות ויומן, ופקיד שעדיין מסלק, מוסר מפתח ומתקשר למנקה. כאן התשלום מדליק קוד, מזגן, צ׳קליסט, מס״ב, והתאמה לבנק.',
+      'הבעיה אינה שחסר מידע. הבעיה היא שהמידע מפוזר בין קבוצות, הודעות, מחברות ומסכים. ResortOS מחברת את המצב הפיזי של המתחם ללולאת פעולה: Observe → Decide → Act → Verify.',
     comparePillars: [
-      { title: 'ניהול ידני', tag: 'וואטסאפ · מחברת · אקסל', text: 'מחכה שתזכור ותקליד. מייצר עוד שיחות בלילה.' },
-      { title: 'יומן ואתר הזמנות', tag: 'EzGo · אופטימה · MiniHotel · Simple Booking', text: 'שומר תפוסה ומוכר מהאתר. מייצר עוד עבודה משרדית.' },
-      { title: 'ResortOS', tag: 'מערכת הפעלה למתחם', text: 'מפעיל אנשים, דלתות וכסף. פחות הקלדה, אפס דליפות.', featured: true }
+      { title: 'ניהול ידני', tag: 'קבוצות וואטסאפ · מחברת · אקסל', text: 'המידע קיים — אבל מפוזר. צריך לזכור, לחפש, לשאול ולעדכן.' },
+      { title: 'Dashboard / PMS', tag: 'יומן · הזמנות · מסכים', text: 'מרכז מידע ומציג אותו. עדיין דורש מאדם לנהל את הפעולות.' },
+      { title: 'ResortOS', tag: 'מערכת הפעלה למתחם', text: 'יודעת מה אמור לקרות, פועלת מול אנשים ומכשירים, מאמתת תוצאות ומערבת מנהל רק בחריגים.', featured: true }
     ],
     compareLoop: ['האורח משלם', 'קוד נדרך במנעול', 'מזגן שעה לפני הגעה', 'צ׳קליסט למנקה', 'מס״ב באישור 4-עיניים', 'יומן, Hyp והבנק לאותו סכום'],
     compareCols: ['ResortOS', 'יומן / אתר הזמנות', 'ניהול ידני'],
@@ -208,7 +208,7 @@ const COPY = {
       'עובדים עם המתחם הראשון, ובקרוב נוכל להתחיל להתרחב. רוצים להצטרף כשנפתח? פנו אלינו בוואטסאפ ונכניס אתכם לרשימת המתנה.',
     contactSubmit: 'פנו אלינו בוואטסאפ',
     contactHint: '054-807-6123',
-    footerNote: 'ResortOS — תפוסה, תפעול ושהייה למתחמי נופש.',
+    footerNote: 'ResortOS — מערכת ההפעלה של התפעול הפיזי במתחמי אירוח.',
     ramotLink: 'מתחמי רמות · ניווט',
     rights: 'כל הזכויות שמורות',
     waPrefill: 'שלום, אשמח להצטרף לרשימת המתנה של ResortOS.'
@@ -216,7 +216,7 @@ const COPY = {
   en: {
     dir: 'ltr',
     htmlLang: 'en',
-    title: 'ResortOS | Stop running the property from a WhatsApp mess',
+    title: 'ResortOS | The Operating System for physical hospitality operations',
     nav: {
       product: 'Product',
       compare: 'Vs a diary',
@@ -230,9 +230,9 @@ const COPY = {
     ctaNav: 'Waitlist',
     ctaSecondary: 'How it works',
     heroKicker: 'For holiday complexes, cabins, and boutique suites',
-    heroTitle: 'Stop running the property from a WhatsApp mess. Start earning quiet.',
+    heroTitle: 'The Operating System for your hospitality property. Not another system to operate.',
     heroLead:
-      'Occupancy board, photo-verified housekeeping, WhatsApp collection, and a guest portal — door codes timed to check-in, card charges matched to the bank, and Masav payroll. No clerk and no notebook in the middle.',
+      'ResortOS knows what should happen across the property, acts through staff, guests, devices, and robots, and verifies that reality matches the plan. Workers do not need to learn another app — they receive work through the channel they already use.',
     statsKicker: 'The numbers that matter',
     stats: [
       { value: '1.5%', title: 'Fee', text: 'Keep the margin on direct bookings, instead of paying 15–20% in OTA commissions.' },
@@ -241,17 +241,17 @@ const COPY = {
       { value: '0', title: 'Night calls', text: 'Total quiet: gate code, Wi‑Fi password, appliance instructions, and navigation — all open to the guest on their phone.' }
     ],
     problemKicker: 'Today',
-    problemTitle: 'The property works. The back-office is collapsing.',
-    problemLead: 'Four things that show up in every complex still run on WhatsApp, notebooks, and a private phone.',
+    problemTitle: 'The property works. The information is everywhere.',
+    problemLead: 'The problem is not WhatsApp itself. It is that the entire operation becomes memory spread across groups and messages: who asked for what, which room, what is open, what is closed, and what is still waiting.',
     problems: [
-      { title: 'Blind occupancy', text: 'Notebooks and chat threads miss empty nights and create double bookings.' },
-      { title: 'Housekeeping from memory', text: 'Turnovers live in someone’s head. Cleaners guess priorities, and nobody checks the room before the next guest is at the door.' },
-      { title: 'On-call 24/7', text: 'What’s the Wi-Fi? How do I open the gate? How do I start the jacuzzi? Every basic question hits your private phone.' },
-      { title: 'Fees cut the profit', text: '15–20% goes to booking platforms, while returning guests still close in a slow manual chat.' }
+      { title: 'Information buried in chat', text: 'Groups, messages, and private chats turn the property state into an endless search: who said what, about which room, and what is still open.' },
+      { title: 'Work stays in people’s heads', text: 'Who cleans, what to take, how many people are needed, and what is already done — all passed around informally. Nothing owns the operational loop.' },
+      { title: 'Messages instead of operations', text: 'WhatsApp can deliver a message. It does not own the task, track time, detect anomalies, or verify that the physical world matches the report.' },
+      { title: 'Nobody owns the live state', text: 'Even when the information exists somewhere, there is no layer that knows what should happen now, what already happened, and what requires intervention.' }
     ],
-    productKicker: 'How the system works',
-    productTitle: 'From the first booking to 5 stars on Google',
-    productLead: 'Six steps that replace the mess — without jumping between WhatsApp and a notebook.',
+    productKicker: 'How an operating system for a property works',
+    productTitle: 'ResortOS does not display the work. It operates it.',
+    productLead: 'Observe → Understand → Decide → Act → Verify. The system holds the operational state, communicates with whoever is needed, and verifies the outcome.',
     features: [
       {
         icon: 'calendar',
@@ -260,28 +260,28 @@ const COPY = {
       },
       {
         icon: 'whatsapp',
-        title: 'WhatsApp collection',
-        text: 'Send a deposit or full-payment link in seconds. The room locks for 15 minutes until the charge is confirmed, then the lock code arms for check-in time.'
+        title: 'Communication through the channel staff already use',
+        text: 'ResortOS can send work and instructions through WhatsApp, ask for status, detect delays, and escalate when needed. WhatsApp is the channel — not the operational system.'
       },
       {
         icon: 'ops',
-        title: 'Photo-verified housekeeping',
-        text: 'A turnover task opens automatically at checkout. Staff upload a proof photo; a low inspection score sends the job back.'
+        title: 'Multimodal operational verification',
+        text: 'A worker report is one signal. ResortOS can correlate it with door access, electricity, water, sensors, timing, cameras, or robot inspection and detect anomalies before marking a task complete.'
       },
       {
         icon: 'money',
-        title: 'Diary, Hyp, and bank in one match',
-        text: 'Gross income, the 1.5% fee, and net credit by unit — against the acquirer and the bank account the same day, not an export to the accountant next month.'
+        title: 'Live operational state',
+        text: 'Every unit has live state: guest, cleaning, inspection, maintenance, equipment, access, tasks, and readiness. The goal is for the system to know what is happening — not for the manager to search for it.'
       },
       {
         icon: 'staff',
-        title: 'Staff, languages, and Masav',
-        text: 'A login per employee in Hebrew, Arabic, English, or Thai, GPS attendance, and one Masav file for wages and suppliers with two-manager approval before send.'
+        title: 'People, robots, and devices',
+        text: 'ResortOS operates people, IoT, and robots through one operational layer. The worker does not have to use an app; the robot does not need to understand the business; the Core decides what needs to happen.'
       },
       {
         icon: 'reviews',
-        title: 'Automatic review engine',
-        text: 'A smart checkout message that sends happy guests straight to a 5-star Google Maps review.'
+        title: 'The system manages; the manager sees exceptions',
+        text: 'Instead of a dashboard that requires constant attention, ResortOS runs the management loop: assign, follow up, ask, verify, and escalate. The manager steps in when a decision is required.'
       }
     ],
     guestKicker: 'Guest experience',
@@ -340,7 +340,7 @@ const COPY = {
       }
     ],
     whyKicker: 'Why ResortOS',
-    whyTitle: 'Built for Israeli hospitality complexes (5–50 units), not 400-room chains',
+    whyTitle: 'Built to operate physical hospitality properties',
     reasons: [
       {
         title: 'Everything happens in one WhatsApp thread',
@@ -355,7 +355,7 @@ const COPY = {
         text: 'The cleaning task opens automatically at checkout against a predefined SOP checklist. The next guest’s entry code is released only after staff complete the items, photograph the room, and confirm the unit meets your hospitality standard.'
       },
       {
-        title: 'The money closes itself',
+        title: 'Local Edge. Cloud-connected.',
         text: 'No cash envelopes and no monthly export to the accountant. The diary, the acquirer, and the bank close on the same total, and wages go out in Masav after two approvers — not dozens of manual bank transfers.'
       }
     ],
