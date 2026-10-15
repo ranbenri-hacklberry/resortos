@@ -24,15 +24,23 @@ jobs:
 
       - name: Restore Cloudflare login
         env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_WRANGLER_OAUTH: ${{ secrets.CLOUDFLARE_WRANGLER_OAUTH }}
         run: |
-          if [ -z "$CLOUDFLARE_WRANGLER_OAUTH" ]; then
-            echo "Missing GitHub secret CLOUDFLARE_WRANGLER_OAUTH"
+          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "Using CLOUDFLARE_API_TOKEN"
+          elif [ -n "$CLOUDFLARE_WRANGLER_OAUTH" ]; then
+            mkdir -p "$HOME/.config/.wrangler/config"
+            mkdir -p "$HOME/.wrangler/config"
+            printf '%s\n' "$CLOUDFLARE_WRANGLER_OAUTH" > "$HOME/.config/.wrangler/config/default.toml"
+            printf '%s\n' "$CLOUDFLARE_WRANGLER_OAUTH" > "$HOME/.wrangler/config/default.toml"
+            chmod 600 "$HOME/.config/.wrangler/config/default.toml" "$HOME/.wrangler/config/default.toml"
+          else
+            echo "Missing CLOUDFLARE_API_TOKEN or CLOUDFLARE_WRANGLER_OAUTH"
             exit 1
           fi
-          mkdir -p "$HOME/.config/.wrangler/config"
-          printf '%s\n' "$CLOUDFLARE_WRANGLER_OAUTH" > "$HOME/.config/.wrangler/config/default.toml"
-          chmod 600 "$HOME/.config/.wrangler/config/default.toml"
 
       - name: Build and deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: npm run deploy:guest
