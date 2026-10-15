@@ -248,6 +248,23 @@ export async function handleSendGuestComm(req, res) {
       });
     }
     if (!message) return res.status(400).json({ error: 'MESSAGE_REQUIRED' });
+    if (req.body?.channel === 'phone') {
+      const row = await insertGuestComm({
+        booking_id: booking.id,
+        tenant_id: booking.tenant_id,
+        channel: 'phone',
+        direction: 'outbound',
+        recipient_phone: booking.guest_phone || '',
+        content: message,
+        status: 'logged',
+        sent_at: new Date().toISOString(),
+        metadata: {
+          kind: 'call',
+          actor: req.staff?.username || req.staff?.name || 'staff'
+        }
+      });
+      return res.json({ ok: true, row });
+    }
     const row = await sendAndLogGuestSms({
       booking,
       phone: req.body?.phone || booking.guest_phone,

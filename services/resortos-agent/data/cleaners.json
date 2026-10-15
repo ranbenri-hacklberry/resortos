@@ -1,0 +1,56 @@
+[
+  {
+    "phone": "972503934696",
+    "name": "ברק",
+    "role": "HOUSEKEEPING",
+    "language": "he"
+  },
+  {
+    "phone": "972525834355",
+    "name": "אבו",
+    "role": "HOUSEKEEPING",
+    "language": "ar"
+  },
+  {
+    "phone": "972526046069",
+    "name": "אוסנת",
+    "role": "HOUSEKEEPING",
+    "language": "he"
+  },
+  {
+    "phone": "972557778344",
+    "name": "טופ",
+    "role": "HOUSEKEEPING",
+    "language": "th"
+  },
+  {
+    "phone": "972559495515",
+    "name": "שיבה",
+    "role": "HOUSEKEEPING",
+    "language": "th"
+  },
+  {
+    "phone": "972559281657",
+    "name": "טאו",
+    "role": "HOUSEKEEPING",
+    "language": "th"
+  },
+  {
+    "phone": "972506983399",
+    "name": "רני",
+    "role": "MANAGER",
+    "language": "he"
+  },
+  {
+    "phone": "972548317887",
+    "name": "רני",
+    "role": "MANAGER",
+    "language": "he"
+  },
+  {
+    "phone": "170626836910125",
+    "name": "רני",
+    "role": "MANAGER",
+    "language": "he"
+  }
+]

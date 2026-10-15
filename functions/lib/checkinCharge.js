@@ -116,7 +116,7 @@ function stayInfo(booking) {
   return [booking.unit_id, booking.guest_name, nights].filter(Boolean).join(' · ');
 }
 
-export async function startCardCheckin(booking, env, { successUrl, failUrl } = {}) {
+export async function startCardCheckin(booking, env, { successUrl, failUrl, stayInFrame } = {}) {
   const quote = await quoteCheckin(booking, env);
   if (!quote.needsCharge) {
     return { quote, payUrl: null, skipped: true, purpose: 'balance', terminal: 'A' };
@@ -133,7 +133,8 @@ export async function startCardCheckin(booking, env, { successUrl, failUrl } = {
     info,
     heshDesc: `[0~${info || 'שהייה'}~1~${Number(quote.amount).toFixed(2)}]`,
     successUrl,
-    failUrl
+    failUrl,
+    stayInFrame: Boolean(stayInFrame)
   });
   return {
     quote,
@@ -193,7 +194,7 @@ export async function chargeSavedCardCheckin(booking, env) {
   };
 }
 
-export async function startGuestPayment(booking, env, { successUrl, failUrl } = {}) {
+export async function startGuestPayment(booking, env, { successUrl, failUrl, stayInFrame } = {}) {
   const quote = quoteGuestCharge(booking);
   if (!quote.needsCharge) {
     return { quote, payUrl: null, skipped: true, purpose: quote.purpose, terminal: quote.terminal };
@@ -212,6 +213,7 @@ export async function startGuestPayment(booking, env, { successUrl, failUrl } = 
     heshDesc: `[0~${info || quote.label}~1~${Number(quote.amount).toFixed(2)}]`,
     successUrl,
     failUrl,
+    stayInFrame: Boolean(stayInFrame),
     tokenize: true
   });
   return {

@@ -3,10 +3,10 @@ import { cabinPartyError, cabinPartySummaryHe, cabinPartyTotals, normalizeCabinP
 
 describe('per-cabin guest party', () => {
   it('caps adults+children at catalog occupancy and keeps crib out of the count', () => {
-    const rows = normalizeCabinParties(['hill-1'], { 'hill-1': { adults: 6, children: 4, crib: true, occupant_phone: '0500000001' } });
-    expect(rows[0]).toMatchObject({ adults: 6, children: 1, crib: true, max: 7 });
+    const rows = normalizeCabinParties(['hill-1'], { 'hill-1': { adults: 3, children: 4, crib: true, occupant_phone: '0500000001' } });
+    expect(rows[0]).toMatchObject({ adults: 3, children: 1, crib: true, max: 4 });
     expect(cabinPartyError(rows)).toBe('');
-    expect(cabinPartyTotals(rows)).toEqual({ adults: 6, children: 1, cribs: 1 });
+    expect(cabinPartyTotals(rows)).toEqual({ adults: 3, children: 1, cribs: 1 });
     expect(cabinPartySummaryHe(rows)).toMatch(/מיטת תינוק/);
   });
 

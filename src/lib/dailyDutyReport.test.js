@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bookingGuestHeadcount, bookingHasCrib, buildDailyDutyHtml, buildHousekeepingWhatsAppText, collectHousekeepingDutyJobs, dailyDutyCounts, dutyPrintAreaOf, guestCardFirstName, listDutyBoardRows, sortDutyBoardRows, turnaroundUnitIds, unitMatchesBoardArea } from './dailyDutyReport.js';
+import { bookingGuestHeadcount, bookingHasCrib, buildDailyDutyHtml, buildHousekeepingWhatsAppText, calendarPartyLabel, collectHousekeepingDutyJobs, dailyDutyCounts, dutyPrintAreaOf, guestCardFirstName, listDutyBoardRows, sortDutyBoardRows, turnaroundUnitIds, unitMatchesBoardArea } from './dailyDutyReport.js';
 
 const units = [
   { id: 'hill-1', name: 'צימר בגבעה 1', sort_order: 1 },
@@ -14,6 +14,17 @@ const bookings = [
   { id: 'c', unit_id: 'k671', guest_name: 'רמות', check_in_date: '2026-08-26', check_out_date: '2026-08-27', booking_status: 'CONFIRMED' },
   { id: 'd', unit_id: 'k687', guest_name: 'נשאר', check_in_date: '2026-08-24', check_out_date: '2026-08-28', booking_status: 'CONFIRMED' }
 ];
+
+describe('calendar party label', () => {
+  it('matches the calendar shorthand for a couple, adults, and a baby', () => {
+    expect(calendarPartyLabel({ adults_count: 2, children_count: 2 })).toBe('זוג +2');
+    expect(calendarPartyLabel({ adults_count: 4 })).toBe('4 מבוגרים');
+    expect(calendarPartyLabel({ adults_count: 2, children_count: 1, infants_count: 1 })).toBe('זוג +1 +תינוק');
+    expect(calendarPartyLabel({ special_requests: 'pax:2+0+1' })).toBe('זוג +תינוק');
+    expect(calendarPartyLabel({ adults_count: 2 })).toBe('זוג');
+    expect(calendarPartyLabel({})).toBe('');
+  });
+});
 
 describe('calendar card guest bits', () => {
   it('shows a first name and a total without splitting adults and children', () => {
@@ -40,6 +51,9 @@ describe('duty print areas', () => {
     expect(dutyPrintAreaOf('suite-green')).toBe('givat');
     expect(dutyPrintAreaOf('k826')).toBe('givat');
     expect(dutyPrintAreaOf('k671')).toBe('ramot');
+    expect(dutyPrintAreaOf('pilot-office', 'משרד')).toBe('pilot');
+    expect(unitMatchesBoardArea({ id: 'pilot-office', name: 'משרד' }, 'pilot')).toBe(true);
+    expect(unitMatchesBoardArea({ id: 'pilot-office', name: 'משרד' }, 'ramot')).toBe(false);
     expect(unitMatchesBoardArea({ id: 'k826' }, 'all')).toBe(true);
     expect(unitMatchesBoardArea({ id: 'k826' }, 'givat')).toBe(true);
     expect(unitMatchesBoardArea({ id: 'k671' }, 'givat')).toBe(false);
@@ -259,5 +273,34 @@ describe('housekeeping WhatsApp', () => {
     expect(teamText).toContain('סה״כ 1 בקתות לניקיון');
     expect(teamText).not.toContain('צימר בגבעה');
     expect(teamText).toContain("טאג' 2");
+  });
+});
+
+describe('morning duty report', () => {
+  it('splits arrivals, same-day turnovers and departures', () => {
+    const html = buildDailyDutyHtml({
+      dateStr: '2026-10-12',
+      kind: 'morning',
+      area: 'all',
+      units,
+      bookings: [
+        { id: 'out', unit_id: 'k671', guest_name: 'יוצא היום', guest_phone: '0501111111', check_in_date: '2026-10-10', check_out_date: '2026-10-12', booking_status: 'CHECKED_OUT' },
+        { id: 'in', unit_id: 'k671', guest_name: 'נכנס היום', guest_phone: '0502222222', check_in_date: '2026-10-12', check_out_date: '2026-10-14', booking_status: 'CONFIRMED' },
+        { id: 'arrive', unit_id: 'hill-1', guest_name: 'רק כניסה', check_in_date: '2026-10-12', check_out_date: '2026-10-13', booking_status: 'CONFIRMED' },
+        { id: 'leave', unit_id: 'k826', guest_name: 'רק יציאה', check_in_date: '2026-10-10', check_out_date: '2026-10-12', booking_status: 'CHECKED_OUT' }
+      ]
+    });
+    expect(html).toContain('דוח תחילת יום');
+    expect(html).toContain('כניסות');
+    expect(html).toContain('החלפות');
+    expect(html).toContain('יציאות');
+    expect(html).toContain('יוצא יוצא היום · נכנס נכנס היום');
+    expect(html).toContain('רק כניסה');
+    expect(html).toContain('רק יציאה');
+    const swapAt = html.indexOf('<h1>החלפות</h1>');
+    const outAt = html.indexOf('<h1>יציאות</h1>');
+    expect(html.slice(swapAt, outAt)).toContain('יוצא היום');
+    expect(html.slice(swapAt, outAt)).not.toContain('רק יציאה');
+    expect(html.slice(outAt)).not.toContain('יוצא היום');
   });
 });

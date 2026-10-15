@@ -158,7 +158,7 @@ export async function createStaffTask({
     assigned_staff: actor?.name || unit.assigned_staff || null,
     image_urls: nextImages,
     updated_at: new Date().toISOString()
-  }, { actor });
+  }, { actor, viaEdge: true });
 
   // Optional legacy/personal tasks table — ignore schema mismatches.
   let legacy = null;

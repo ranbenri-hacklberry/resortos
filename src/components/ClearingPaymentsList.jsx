@@ -47,6 +47,12 @@ export default function ClearingPaymentsList({
                 {payment.collected_at ? ` · ${String(payment.collected_at).replace('T', ' ').slice(0, 16)}` : ''}
               </div>
             ) : null}
+            {String(payment.source || payment.accountKey || '').toUpperCase() === 'CASH' && (payment.payer_name || payment.payer_id) ? (
+              <div style={{ marginTop: 2, fontSize: '0.8rem', fontWeight: 900 }}>
+                {payment.payer_name || 'משלם'}
+                {payment.payer_id ? ` · ת.ז. ${payment.payer_id}` : ''}
+              </div>
+            ) : null}
           </div>
         );
       })}

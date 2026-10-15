@@ -6,9 +6,20 @@ import {
   shouldAutoOccupyUnit,
   unitDisplayStatus,
   unitNameFrame,
+  priorityRoomStatus,
   unitsWithStaleVacantFlag,
   vacateBookingOnDate
 } from './unitStatus.js';
+
+describe('priority room status', () => {
+  it('follows the saved mark and ignores an older inspection record', () => {
+    const oldInspect = [{ at: '2026-10-09T08:00:00.000Z', source: 'calendar', ratings: {}, reopened: false }];
+    expect(priorityRoomStatus({ operational_status: 'READY', custom_reason: 'מוכן לאורח', quality_inspections: oldInspect }).label).toBe('מוכן');
+    expect(priorityRoomStatus({ operational_status: 'READY', custom_reason: 'ממתין לביקורת מנהל' }).label).toBe('ממתין לבדיקה');
+    expect(priorityRoomStatus({ operational_status: 'DIRTY' }).label).toBe('לניקוי');
+    expect(priorityRoomStatus({ operational_status: 'READY', staff_occupancy: 'OCCUPIED' }).label).toBe('מאוכלס');
+  });
+});
 
 describe('unit name frames', () => {
   it('uses green ready, orange dirty, red fault, purple occupied', () => {

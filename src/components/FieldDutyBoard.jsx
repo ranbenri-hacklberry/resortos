@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Baby, Banknote, MessageCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLiveBookings, useLiveUnits } from '../lib/resortos-db';
-import { ensureCanonicalUnits, ensureGuestStayPublished, pushUnitToCloud, syncCloudBookingsToDexie, syncUnitOpsToDexie } from '../lib/cloudDb';
+import { ensureCanonicalUnitCatalog, ensureGuestStayPublished, pushUnitToCloud, subscribeToOpsEdgeEvents, syncCloudBookingsToDexie, syncUnitOpsToDexie } from '../lib/cloudDb';
 import { buildHousekeepingWhatsAppText, defaultReportDate, hebrewDateLabel, listDutyBoardRows, occupiesCalendarDay, shareHousekeepingWhatsApp, sortDutyBoardRows, turnaroundUnitIds, unitMatchesBoardArea } from '../lib/dailyDutyReport';
 import { applyCalendarOccupancy, applyCalendarUnitStatus, applyAssignedStaff, persistRoomCompletions } from '../lib/housekeepingCycle';
 import { fieldUnitDisplayName } from '../lib/fieldUnitCatalog';
@@ -89,15 +89,19 @@ export default function FieldDutyBoard({
       try {
         const from = shiftYmd(today, -2);
         const to = shiftYmd(today, 21);
-        await ensureCanonicalUnits(TENANT_ID, { pullOnly: true, skipPurge: true });
+        await ensureCanonicalUnitCatalog();
         if (stop) return;
         await Promise.all([
-          syncCloudBookingsToDexie(TENANT_ID, { from, to }),
-          syncUnitOpsToDexie(TENANT_ID)
+          syncCloudBookingsToDexie(TENANT_ID, { from, to, viaEdge: true }),
+          syncUnitOpsToDexie(TENANT_ID, { viaEdge: true })
         ]);
       } catch (_) {}
     })();
-    return () => { stop = true; };
+    const offEvents = subscribeToOpsEdgeEvents();
+    return () => {
+      stop = true;
+      if (typeof offEvents === 'function') offEvents();
+    };
   }, [dataEpoch, today]);
 
   const units = useMemo(() => {
@@ -167,7 +171,7 @@ export default function FieldDutyBoard({
   }, [rowsByTab, bookingsById]);
 
   const pushOpsQuiet = (patch, options) => (
-    pushUnitToCloud(patch, { waitRemote: true, skipStayPublish: true, ...options })
+    pushUnitToCloud(patch, { waitRemote: true, skipStayPublish: true, viaEdge: true, ...options })
   );
 
   const closeOpsSheet = () => setOpsUnitId(null);

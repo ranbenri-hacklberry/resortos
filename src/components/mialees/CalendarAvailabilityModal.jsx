@@ -22,7 +22,7 @@ import {
   buildWhatsAppReservationUrl,
   calculateStayPricing
 } from '../../lib/multiPropertyCatalog';
-import { fetchLiveAvailability, createLiveBooking, startCheckoutPayment } from '../../lib/mialeesApi';
+import { fetchLiveAvailability, createLiveBooking } from '../../lib/mialeesApi';
 import { addDaysIso } from '../../lib/mialeesBookingRestrictions';
 
 export function CalendarAvailabilityModal({
@@ -298,34 +298,9 @@ export function CalendarAvailabilityModal({
     const booking = res.booking;
     setBookingConfirmed(booking);
 
-    // If payment pay_url is returned directly from booking creation, redirect immediately to Hyp
-    if (res.payment?.pay_url) {
-      setPaymentPayUrl(res.payment.pay_url);
-      setIsSubmitting(false);
-      window.location.href = res.payment.pay_url;
-      return;
-    }
-
-    // Otherwise start Hyp payment checkout via token
+    setIsSubmitting(false);
     if (booking.checkout_token) {
-      const checkoutRes = await startCheckoutPayment({
-        token: booking.checkout_token,
-        guestName,
-        guestEmail
-      });
-
-      setIsSubmitting(false);
-
-      if (checkoutRes.success && checkoutRes.payUrl) {
-        setPaymentPayUrl(checkoutRes.payUrl);
-        // Seamless immediate redirect to Hyp secured deposit payment page
-        window.location.href = checkoutRes.payUrl;
-      } else {
-        // Fallback: Show link to /stay/:token
-        setPaymentPayUrl(`/stay/${booking.checkout_token}`);
-      }
-    } else {
-      setIsSubmitting(false);
+      setPaymentPayUrl(`/stay/${booking.checkout_token}`);
     }
   }
 
@@ -783,7 +758,7 @@ export function CalendarAvailabilityModal({
                     className="w-full sm:flex-1 py-3 px-5 rounded-xl bg-[#C5A880] hover:bg-[#b8986c] text-[#26130F] text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 shadow-md transition-transform hover:scale-[1.02]"
                   >
                     <CreditCard className="w-4 h-4" />
-                    <span>מעבר לתשלום מקדמה מאובטח (Hyp)</span>
+                    <span>לדף השהות</span>
                   </a>
                 )}
 

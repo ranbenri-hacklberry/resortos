@@ -4,6 +4,10 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createStaff, deactivateAgent, deactivateStaff, getAttendanceSettings, getSharedTrackerDoc, getStaffMe, listAgents, listStaff, listStaffDirectory, loginStaff, logoutStaff, requireManagerStaff, requireStaff, revealStaffPassword, saveSharedTrackerDoc, setAttendanceSettings, updateStaff, upsertAgent } from './auth.js';
+import { tryHandleOps } from './opsGateway.js';
+import { tryHandleClimate } from './climateGateway.js';
+import { tryHandleNetwork } from './routerGateway.js';
+import { tryHandleAssetBeacons } from './assetBeaconWatch.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -65,6 +69,18 @@ app.post(
 );
 
 app.use(express.json());
+app.use(async (req, res, next) => {
+    try {
+        if (await tryHandleClimate(req, res)) return;
+        if (await tryHandleNetwork(req, res)) return;
+        if (await tryHandleAssetBeacons(req, res)) return;
+        if (await tryHandleOps(req, res)) return;
+    } catch (err) {
+        res.status(500).json({ error: err.message || 'OPS_FAILED' });
+        return;
+    }
+    next();
+});
 
 async function withCheckout(methodName, req, res, next) {
     const checkout = await import('./guestCheckout.js');
@@ -85,6 +101,15 @@ app.post('/api/guest/mailbox/charge', async (req, res) => {
         return res.json(charged);
     } catch (err) {
         return res.status(err.status || 502).json({ error: err.message || 'CHARGE_START_FAILED' });
+    }
+});
+app.post('/api/guest/mailbox/charge-result', async (req, res) => {
+    try {
+        const { confirmMailboxCardCharge } = await import('./checkoutMailbox.js');
+        const result = await confirmMailboxCardCharge(req.body || {});
+        return res.json(result);
+    } catch (err) {
+        return res.status(err.status || 502).json({ error: err.message || 'CHARGE_RESULT_FAILED' });
     }
 });
 app.get('/api/guest-by-phone', async (req, res) => {
@@ -122,6 +147,15 @@ function sendFinanceError(res, err) {
   if (status >= 500) console.error('[open-finance]', err.message);
   res.status(status).json({ error: err.message || 'OPEN_FINANCE_FAILED' });
 }
+
+app.get('/api/priority/cashflow', requireManagerStaff, async (req, res) => {
+  try {
+    const { getExpenseCashflow } = await import('./expenseCashflow.js');
+    res.json(getExpenseCashflow());
+  } catch (err) {
+    res.status(Number(err.status) || 500).json({ error: err.message || 'CASHFLOW_FAILED' });
+  }
+});
 
 app.get('/api/finance/overview', requireManagerStaff, async (req, res) => {
   try {

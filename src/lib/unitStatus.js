@@ -111,6 +111,19 @@ export function staffOccupancyOf(unit) {
   return null;
 }
 
+/** The four room marks Priority saves. Calendar and the ops map read this, not a second inspection history. */
+export function priorityRoomStatus(unit) {
+  const stay = unit?.staff_occupancy === 'OCCUPIED' ? 'OCCUPIED' : 'VACANT';
+  const clean = String(unit?.operational_status || '');
+  const reason = String(unit?.custom_reason || '');
+  if (stay === 'OCCUPIED') return { key: 'occupied', label: 'מאוכלס' };
+  if (clean === 'MAINTENANCE_ALERT') return { key: 'alert', label: 'תקלה' };
+  if (clean === 'DIRTY' || clean === 'IN_PROGRESS') return { key: 'dirty', label: 'לניקוי' };
+  if (clean === 'NEEDS_COMPLETIONS') return { key: 'inspect', label: 'ממתין לבדיקה' };
+  if (clean === 'READY' && /ממתין|ביקורת|בדיקה/.test(reason)) return { key: 'inspect', label: 'ממתין לבדיקה' };
+  return { key: 'ready', label: 'מוכן' };
+}
+
 export function isEffectivelyOccupied(unit, bookings, today = israelToday()) {
   if (coveringUnavailableHold(bookings, unit?.id, today)) return false;
   if (staffOccupancyOf(unit) === 'OCCUPIED') return true;
@@ -311,6 +324,9 @@ export function unitDisplayStatus(unit, bookings, today = israelToday(), now = n
   if (ops === 'DIRTY') return UNIT_STATUS_BADGES.DIRTY;
   if (ops === 'NEEDS_COMPLETIONS') return UNIT_STATUS_BADGES.NEEDS_COMPLETIONS;
   if (leavingToday) return UNIT_STATUS_BADGES.LEAVING;
+  if (ops === 'READY' && isAwaitingManagerInspect(unit)) {
+    return { ...UNIT_STATUS_BADGES.READY, label: 'ממתין לבדיקה' };
+  }
   if (ops === 'READY') return UNIT_STATUS_BADGES.READY;
   return tonight ? UNIT_STATUS_BADGES.READY : UNIT_STATUS_BADGES.DIRTY;
 }

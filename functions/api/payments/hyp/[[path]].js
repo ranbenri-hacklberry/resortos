@@ -1,9 +1,12 @@
 import {
   createHypInvoiceLink,
   getHypLowProfileResult,
+  hypApprovalCodeFromParams,
   hypCheckoutTokenFromParams,
   hypLowProfileIdFromParams,
   hypParentBreakoutResponse,
+  hypReceiptResponse,
+  hypReturnLooksFailed,
   HYP_RETURN_ORIGIN,
   parseHypQuery
 } from '../../../lib/hypPay.js';
@@ -76,12 +79,41 @@ export async function onRequest(context) {
     return checkoutOnRequest({ ...context, request: inner, params: { path: [token] } });
   }
 
-  if (action === 'success' && (method === 'GET' || method === 'POST')) {
+  if ((action === 'success' || action === 'receipt') && (method === 'GET' || method === 'POST')) {
     const search = await searchFromRequest(request);
     const returned = parseHypQuery(search);
     const token = hypCheckoutTokenFromParams(returned);
-    if (!/^tok_[A-Za-z0-9_-]+$/.test(token)) {
-      return hypParentBreakoutResponse(`${HYP_RETURN_ORIGIN}/?hyp=missing`);
+    const validToken = /^tok_[A-Za-z0-9_-]+$/.test(token);
+    const lpId = hypLowProfileIdFromParams(returned);
+    const failed = hypReturnLooksFailed(returned);
+    if (action === 'receipt' || !validToken) {
+      if (validToken && lpId && !failed) {
+        try {
+          const lp = await getHypLowProfileResult(env, lpId, { order: token });
+          if (lp.paid) {
+            const innerSearch = new URLSearchParams({
+              ...lp.params,
+              LowProfileId: lpId,
+              ReturnValue: token,
+              Order: token
+            }).toString();
+            const innerUrl = new URL(`/api/checkout/${token}/hyp?${innerSearch}`, request.url);
+            await checkoutOnRequest({
+              ...context,
+              request: new Request(innerUrl, { method: 'GET' }),
+              params: { path: [token, 'hyp'] }
+            });
+          }
+        } catch (err) {
+          console.warn('[hyp receipt]', err?.message || err);
+        }
+      }
+      return hypReceiptResponse({
+        approval: hypApprovalCodeFromParams(returned),
+        lowProfileId: lpId,
+        token: validToken ? token : '',
+        paid: !failed
+      });
     }
     const target = new URL(`/api/checkout/${token}/hyp`, HYP_RETURN_ORIGIN);
     if (search) target.search = search;

@@ -4,9 +4,14 @@ import tailwindcss from '@tailwindcss/vite';
 import fs from 'fs';
 import crypto from 'crypto';
 import path from 'path';
+import { pathToFileURL } from 'url';
 import { createHypPaymentPage } from './functions/lib/hypPay.js';
 import { UNIT_DISPLAY_NAMES, UNIT_PROPERTY } from './functions/lib/unitNames.js';
 import { readSharedTracker, writeSharedTracker } from './server/sharedTracker.js';
+import { tryHandleOps } from './server/opsGateway.js';
+import { tryHandleClimate } from './server/climateGateway.js';
+import { tryHandleNetwork } from './server/routerGateway.js';
+import { tryHandleAssetBeacons } from './server/assetBeaconWatch.js';
 
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
@@ -113,6 +118,30 @@ function staffAuthPlugin(env) {
     name: 'hotelos-local-staff-auth',
     configureServer(server) {
       console.log('[hotelos-auth] middleware attached');
+      server.middlewares.use(async (req, res, next) => {
+        try {
+          if (await tryHandleClimate(req, res)) return;
+          if (await tryHandleNetwork(req, res)) return;
+          if (await tryHandleAssetBeacons(req, res)) return;
+          if (await tryHandleOps(req, res)) return;
+        } catch (err) {
+          res.statusCode = 500;
+          res.end(JSON.stringify({ error: err.message || 'OPS_FAILED' }));
+          return;
+        }
+        next();
+      });
+
+      server.middlewares.use((req, res, next) => {
+        const url = req.url ? req.url.split('?')[0] : '';
+        if (url !== '/price-list.html') return next();
+        const filePath = path.join(process.cwd(), 'public/price-list.html');
+        if (!fs.existsSync(filePath)) return next();
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-cache');
+        return fs.createReadStream(filePath).pipe(res);
+      });
 
       // Ensure /resorts/* static images are always served reliably
       server.middlewares.use((req, res, next) => {
@@ -304,7 +333,12 @@ function staffAuthPlugin(env) {
               const hypEnv = {
                 HYP_B_MASOF: process.env.HYP_B_MASOF || '',
                 HYP_B_KEY: process.env.HYP_B_KEY || '',
-                HYP_B_PASSP: process.env.HYP_B_PASSP || ''
+                HYP_B_PASSP: process.env.HYP_B_PASSP || '',
+                CARDCOM_TEST: process.env.CARDCOM_TEST || '',
+                CARDCOM_API_NAME: process.env.CARDCOM_API_NAME || '',
+                CARDCOM_API_PASSWORD: process.env.CARDCOM_API_PASSWORD || '',
+                CARDCOM_A_TERMINAL: process.env.CARDCOM_A_TERMINAL || '',
+                CARDCOM_B_TERMINAL: process.env.CARDCOM_B_TERMINAL || ''
               };
               const hypResult = await createHypPaymentPage(hypEnv, {
                 purpose: 'deposit',
@@ -360,7 +394,12 @@ function staffAuthPlugin(env) {
                   const hypEnv = {
                     HYP_B_MASOF: process.env.HYP_B_MASOF || '',
                     HYP_B_KEY: process.env.HYP_B_KEY || '',
-                    HYP_B_PASSP: process.env.HYP_B_PASSP || ''
+                    HYP_B_PASSP: process.env.HYP_B_PASSP || '',
+                    CARDCOM_TEST: process.env.CARDCOM_TEST || '',
+                    CARDCOM_API_NAME: process.env.CARDCOM_API_NAME || '',
+                    CARDCOM_API_PASSWORD: process.env.CARDCOM_API_PASSWORD || '',
+                    CARDCOM_A_TERMINAL: process.env.CARDCOM_A_TERMINAL || '',
+                    CARDCOM_B_TERMINAL: process.env.CARDCOM_B_TERMINAL || ''
                   };
                   try {
                     const hypResult = await createHypPaymentPage(hypEnv, {
@@ -680,14 +719,14 @@ function queryOf(req) {
 
 function openFinancePlugin(env) {
   for (const key of Object.keys(env)) {
-    if (/^(OPEN_FINANCE_|BANK_SCRAPER_|FIBI_|BEINLEUMI_|HYP_)/.test(key) && env[key] && process.env[key] === undefined) {
+    if (/^(OPEN_FINANCE_|BANK_SCRAPER_|FIBI_|BEINLEUMI_|HYP_|CARDCOM_)/.test(key) && env[key] && process.env[key] === undefined) {
       process.env[key] = env[key];
     }
   }
   const supabaseUrl = (env.SUPABASE_URL || env.VITE_SUPABASE_URL || 'http://127.0.0.1:54321').replace(/\/$/, '');
   const anonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || '';
 
-  async function staffUser(req) {
+  async function staffUser(req, roles = ['MANAGER']) {
     const header = String(req.headers.authorization || '');
     const match = header.match(/^Bearer\s+(\S+)/i);
     const token = match ? match[1] : '';
@@ -725,7 +764,7 @@ function openFinancePlugin(env) {
       err.status = 401;
       throw err;
     }
-    if (user.role !== 'MANAGER') {
+    if (!roles.includes(user.role)) {
       const err = new Error('FORBIDDEN');
       err.status = 403;
       throw err;
@@ -736,8 +775,21 @@ function openFinancePlugin(env) {
   return {
     name: 'hotelos-open-finance',
     configureServer(server) {
+      const serverModuleUrl = (name) => pathToFileURL(path.join(server.config.root, 'server', name)).href;
       server.middlewares.use(async (req, res, next) => {
         const path = requestPath(req);
+        if (req.method === 'GET' && path === '/api/priority/cashflow') {
+          try {
+            await staffUser(req, ['MANAGER', 'PRIORITY']);
+            const cashflowUrl = serverModuleUrl('expenseCashflow.js');
+            const { getExpenseCashflow } = await import(cashflowUrl);
+            return sendJson(res, 200, getExpenseCashflow());
+          } catch (err) {
+            const status = Number(err.status) || 502;
+            if (!res.headersSent) sendJson(res, status, { error: err.message || 'CASHFLOW_FAILED' });
+          }
+          return;
+        }
         if (!path.startsWith('/api/finance')) {
           next();
           return;
@@ -763,7 +815,8 @@ function openFinancePlugin(env) {
           if (req.method === 'POST' && path === '/api/finance/refresh') {
             return sendJson(res, 200, await finance.refreshFinanceConnections());
           }
-          const scrapers = await import('./server/bankScrapers.js');
+          const scrapersUrl = serverModuleUrl('bankScrapers.js');
+          const scrapers = await import(scrapersUrl);
           if (req.method === 'GET' && path === '/api/finance/scrape/status') {
             return sendJson(res, 200, scrapers.bankScraperStatus());
           }
@@ -1012,12 +1065,97 @@ function kinorotSyncPlugin(env) {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const urlPath = requestPath(req);
-        if (urlPath !== '/api/kinorot/sync') {
+        if (urlPath !== '/api/kinorot/sync' && urlPath !== '/api/kinorot/hold' && urlPath !== '/api/kinorot/note') {
           next();
           return;
         }
         try {
-          await requireStaff(req);
+          const user = await requireStaff(req);
+          if (urlPath === '/api/kinorot/hold') {
+            if (req.method !== 'POST') return sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+            const { canEditPriorityStatuses } = await import('./src/lib/staffRoles.js');
+            if (!canEditPriorityStatuses(user.role)) {
+              return sendJson(res, 403, { error: 'אין הרשאה לחסום יחידה' });
+            }
+            const body = await readJsonBody(req).catch(() => ({}));
+            const { spawn } = await import('node:child_process');
+            const created = await new Promise((resolve, reject) => {
+              const child = spawn(process.execPath, [
+                'server/kinorotHold.js',
+                String(body?.unit_id || '')
+              ], { cwd: process.cwd() });
+              let out = '';
+              let errText = '';
+              child.stdout.on('data', (chunk) => { out += chunk; });
+              child.stderr.on('data', (chunk) => { errText += chunk; });
+              child.on('error', reject);
+              child.on('close', (code) => {
+                if (code === 0) {
+                  try {
+                    resolve(JSON.parse(out));
+                  } catch {
+                    reject(Object.assign(new Error('כינורות לא שמר את החסימה'), { status: 502 }));
+                  }
+                  return;
+                }
+                const error = new Error(String(errText || '').trim() || 'החסימה בכינורות נכשלה');
+                error.status = code === 400 || code === 409 ? code : 502;
+                reject(error);
+              });
+            });
+            return sendJson(res, 200, created);
+          }
+          if (urlPath === '/api/kinorot/note') {
+            const { canEditPriorityStatuses } = await import('./src/lib/staffRoles.js');
+            if (!canEditPriorityStatuses(user.role)) {
+              return sendJson(res, 403, { error: 'אין הרשאה לערוך הערה' });
+            }
+            const { spawn } = await import('node:child_process');
+            const runNote = (args, stdin) => new Promise((resolve, reject) => {
+              const child = spawn(process.execPath, ['server/kinorotReservationNote.js', ...args], { cwd: process.cwd() });
+              let out = '';
+              let errText = '';
+              const timer = setTimeout(() => {
+                child.kill('SIGKILL');
+                reject(Object.assign(new Error('כינורות לא הגיב'), { status: 502 }));
+              }, 30000);
+              child.stdout.on('data', (chunk) => { out += chunk; });
+              child.stderr.on('data', (chunk) => { errText += chunk; });
+              child.on('error', (err) => {
+                clearTimeout(timer);
+                reject(err);
+              });
+              child.on('close', (code) => {
+                clearTimeout(timer);
+                if (code === 0) {
+                  try {
+                    resolve(JSON.parse(out));
+                  } catch {
+                    reject(Object.assign(new Error('כינורות לא שמר את ההערה'), { status: 502 }));
+                  }
+                  return;
+                }
+                const error = new Error(String(errText || '').trim() || 'ההערה לא נשמרה בכינורות');
+                error.status = code === 400 ? 400 : 502;
+                reject(error);
+              });
+              if (stdin != null) {
+                child.stdin.end(stdin);
+              }
+            });
+            if (req.method === 'GET') {
+              const resId = new URL(req.url || '', 'http://localhost').searchParams.get('res') || '';
+              return sendJson(res, 200, await runNote(['get', resId]));
+            }
+            if (req.method === 'POST') {
+              const body = await readJsonBody(req).catch(() => ({}));
+              return sendJson(res, 200, await runNote(
+                ['set', String(body?.res_id || '')],
+                JSON.stringify({ note: body?.note || '' })
+              ));
+            }
+            return sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+          }
           const control = await import('./server/kinorotSyncControl.js');
           if (req.method === 'GET') {
             return sendJson(res, 200, control.readKinorotSyncStatus());
@@ -1090,7 +1228,7 @@ function agentLocksPlugin(env) {
 
 function mailboxPublishPlugin(env) {
   for (const key of Object.keys(env)) {
-    if (/^(CHECKOUT_MAILBOX)/.test(key) && env[key] && process.env[key] === undefined) {
+    if (/^(CHECKOUT_MAILBOX|CARDCOM_)/.test(key) && env[key] && process.env[key] === undefined) {
       process.env[key] = env[key];
     }
   }

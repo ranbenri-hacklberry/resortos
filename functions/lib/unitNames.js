@@ -1,6 +1,5 @@
 /** Real cabin → property ids from the occupancy inventory — not invented. */
 export const UNIT_PROPERTY = {
-  'lab-kinneret': 'hill',
   'hill-1': 'hill', 'hill-2': 'hill', 'hill-3': 'hill', 'hill-4': 'hill',
   'dome-blue': 'kipat', 'dome-red': 'kipat', 'dome-green': 'kipat',
   'mialis-villa': 'mialis', 'suite-1': 'mialis', 'suite-2': 'mialis',
@@ -11,13 +10,11 @@ export const UNIT_PROPERTY = {
   k687: 'toscana', k688: 'toscana', k689: 'toscana',
   k690: 'musical', k691: 'musical', k692: 'musical',
   k693: 'maya', k694: 'maya', k695: 'maya',
-  k618: 'siesta', k619: 'siesta', k620: 'siesta', k621: 'siesta', k622: 'siesta', k623: 'siesta',
   k826: 'casa-nova', k827: 'casa-nova'
 };
 
 /** Real cabin names from the occupancy inventory — not invented. */
 export const UNIT_DISPLAY_NAMES = {
-  'lab-kinneret': 'בקתת כנרת',
   'hill-1': 'צימר בגבעה 1',
   'hill-2': 'צימר בגבעה 2',
   'hill-3': 'צימר בגבעה 3',
@@ -47,21 +44,15 @@ export const UNIT_DISPLAY_NAMES = {
   k684: 'מול הנוף · בקתה 5',
   k685: 'נופים בלבן · בקתה 1',
   k686: 'נופים בלבן · בקתה 2',
-  k687: 'טוסקנה · פירנצה 1',
-  k688: 'טוסקנה · פירנצה 2',
-  k689: 'טוסקנה · שאטו',
+  k687: 'טוסקנה · 1',
+  k688: 'טוסקנה · 2',
+  k689: 'טוסקנה · 3',
   k690: 'חצר מוסיקלית · בקתה 1',
   k691: 'חצר מוסיקלית · בקתה 2',
   k692: 'חצר מוסיקלית · בקתה 3',
   k693: 'בקתות מאיה · בקתה 1',
   k694: 'בקתות מאיה · בקתה 2',
   k695: 'בקתות מאיה · בקתה 3',
-  k618: 'סייסטה · משפחתית 1',
-  k619: 'סייסטה · משפחתית 2',
-  k620: 'סייסטה · רומנטית 3',
-  k621: 'סייסטה · רומנטית 4',
-  k622: 'סייסטה · בת הים 5',
-  k623: 'סייסטה · בת הים 6',
   k826: 'קאסה נובה · Aura',
   k827: 'קאסה נובה · Bloom'
 };

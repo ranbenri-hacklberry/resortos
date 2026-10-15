@@ -1,14 +1,26 @@
-const HOLD_RE = /שיפוץ|סגור/;
+/** Final letters fold so שיפוצים matches the same block as שיפוץ. */
+function foldFinals(value) {
+  return String(value || '')
+    .replace(/ץ/g, 'צ')
+    .replace(/ן/g, 'נ')
+    .replace(/ם/g, 'מ')
+    .replace(/ף/g, 'פ')
+    .replace(/ך/g, 'כ');
+}
 
 export function unavailableHoldLabel(text) {
-  const value = String(text || '');
-  if (value.includes('שיפוץ')) return 'שיפוץ';
-  if (value.includes('סגור')) return 'סגור';
+  const folded = foldFinals(text);
+  if (folded.includes('שיפוצ')) return String(text || '').includes('שיפוצים') ? 'שיפוצים' : 'שיפוץ';
+  if (folded.includes('לא זמינ')) return 'לא זמין';
+  if (folded.includes('לא נקי')) return 'לא נקי';
+  if (folded.includes('סגור')) return 'סגור';
+  if (folded.includes('מקולקל')) return 'מקולקל';
+  if (folded.includes('תפוס')) return 'תפוס';
   return '';
 }
 
 export function isUnavailableHoldText(value) {
-  return HOLD_RE.test(String(value || ''));
+  return Boolean(unavailableHoldLabel(value));
 }
 
 export function isKinorotSourced(booking) {

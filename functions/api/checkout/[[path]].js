@@ -16,6 +16,7 @@ import {
   getHypLowProfileResult,
   inquireHypByOrder,
   hypBrowserReturnUrl,
+  hypReceiptUrl,
   hypCheckoutTokenFromParams,
   hypDealToReturnParams,
   hypLowProfileIdFromParams,
@@ -56,6 +57,12 @@ function afterPayRedirect(request, token, row, extra = {}) {
 
 function hypSuccessUrl() {
   return hypBrowserReturnUrl();
+}
+
+function hypChargeReturn(body) {
+  const embed = Boolean(body?.embed_receipt);
+  const url = embed ? hypReceiptUrl() : hypSuccessUrl();
+  return { successUrl: url, failUrl: url, stayInFrame: embed };
 }
 
 async function hypSearchFromRequest(request) {
@@ -333,22 +340,25 @@ function publicPayment(row) {
 }
 
 function publicStay(stay, row) {
+  const isReady = stay && (Boolean(stay.cabin_ready) || String(stay.operational_status || '').toUpperCase() === 'READY');
   const allowed = Boolean(row) && stayFullyPaid(row) && row.booking_status === 'CHECKED_IN';
   if (!stay || typeof stay !== 'object') {
     return { cabin_ready: false, room_open: false, operational_status: 'DIRTY', folio: [], checkout_time: '11:00' };
   }
-  if (allowed && stay.cabin_ready) return stripCardSecrets({ ...stay, cabin_ready: true });
+  if (allowed && isReady) {
+    return stripCardSecrets({ ...stay, cabin_ready: true, operational_status: 'READY' });
+  }
   return stripCardSecrets({
     ...stay,
-    cabin_ready: false,
+    cabin_ready: isReady,
     // Keep room_open so paid guests can check in when the unit is READY + vacant.
-    room_open: Boolean(stay.room_open),
-    operational_status: stay.operational_status || 'DIRTY',
-    door_pin: null,
-    gate_code: null,
-    wifi_ssid: null,
-    wifi_password: null,
-    wifi_networks: []
+    room_open: Boolean(stay.room_open) || isReady,
+    operational_status: isReady ? 'READY' : (stay.operational_status || 'DIRTY'),
+    door_pin: allowed ? stay.door_pin : null,
+    gate_code: allowed ? stay.gate_code : null,
+    wifi_ssid: allowed ? stay.wifi_ssid : null,
+    wifi_password: allowed ? stay.wifi_password : null,
+    wifi_networks: allowed ? (stay.wifi_networks || []) : []
   });
 }
 
@@ -663,6 +673,10 @@ async function handleCheckout(context) {
         guest_name: booking.guest_name || existing.guest_name,
         guest_phone: booking.guest_phone || existing.guest_phone,
         guest_email: booking.guest_email || existing.guest_email,
+        payment_status: booking.payment_status || existing.payment_status,
+        payment_mode: booking.payment_mode || existing.payment_mode,
+        balance_paid: Boolean(booking.balance_paid || existing.balance_paid),
+        clearing_payments: Array.isArray(booking.clearing_payments) && booking.clearing_payments.length ? booking.clearing_payments : (existing.clearing_payments || []),
         stay: {
           ...(existing.stay || {}),
           ...(booking.stay || {}),
@@ -915,10 +929,7 @@ async function handleCheckout(context) {
             status: 'redirected',
             at: new Date().toISOString()
           };
-          const started = await startGuestPayment(row, env, {
-            successUrl: hypSuccessUrl(),
-            failUrl: hypSuccessUrl()
-          });
+          const started = await startGuestPayment(row, env, hypChargeReturn(body));
           if (started.lowProfileId) stay.hyp_intent.lowProfileId = started.lowProfileId;
           const storedDeposit = {
             ...row,
@@ -993,10 +1004,7 @@ async function handleCheckout(context) {
             cabin_id: unitId,
             at: new Date().toISOString()
           };
-          const started = await startCardCheckin(view, env, {
-            successUrl: hypSuccessUrl(),
-            failUrl: hypSuccessUrl()
-          });
+          const started = await startCardCheckin(view, env, hypChargeReturn(body));
           if (started.lowProfileId) stay.hyp_intent.lowProfileId = started.lowProfileId;
           stay.checkin_quote = started.quote;
           stay.payment_choice = 'CARD';
@@ -1176,10 +1184,7 @@ async function handleCheckout(context) {
     const savedIntent = await persistGuestRow(env, token, stored);
     if (!savedIntent) return json({ error: 'MAILBOX_WRITE_FAILED' }, 503);
     try {
-      const started = await startGuestPayment(stored, env, {
-        successUrl: hypSuccessUrl(),
-        failUrl: hypSuccessUrl()
-      });
+      const started = await startGuestPayment(stored, env, hypChargeReturn(body));
       if (started.lowProfileId) {
         stored.stay.hyp_intent = {
           ...(stored.stay.hyp_intent || {}),

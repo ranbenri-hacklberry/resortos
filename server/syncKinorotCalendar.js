@@ -3,16 +3,17 @@
  * Scrape Kinorot GO occupancy boards and upsert into Studio hotelos_bookings.
  * Intended to run on the Mac Studio via launchd / `npm run sync:kinorot`.
  */
-import { execFileSync, spawnSync } from 'child_process';
+import { execFileSync, spawn, spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { KINOROT_COMPLEXES, KINOROT_PLACE_TO_UNIT, TENANT_ID } from './kinorotPlaces.js';
+import { isRetiredUnitId } from '../src/lib/units.js';
 import { parseResviewPayment } from '../functions/lib/kinorotZcredit.js';
 import { moneyFromKinorotPayment } from '../src/lib/kinorotNotePayments.js';
 import { appendStayHoursToken, notesFromResviewHtml, parseStayHoursFromNotes } from '../src/lib/kinorotStayHours.js';
 import { channelFromKinorotGuest } from '../src/lib/kinorotChannel.js';
-import { writeKinorotSyncStatus } from './kinorotSyncControl.js';
+import { readKinorotSyncStatus, writeKinorotSyncStatus } from './kinorotSyncControl.js';
 import { summarizeKinorotDiff } from './kinorotSyncDiff.js';
 import { notifySameDayKinorotBookings } from './kinorotSameDaySms.js';
 
@@ -77,9 +78,80 @@ function mergeCookies(jar, setCookie) {
   for (const [k, v] of parseCookie(setCookie)) jar.set(k, v);
 }
 
+const BROWSER_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
+
+function isSplash(html) {
+  return /One moment, please|cf-browser-verification|Just a moment/i.test(String(html || '').slice(0, 4000));
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function primeSplash(jar) {
+  const chrome = process.env.KINOROT_CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+  const dir = '/tmp/kinorot-splash-chrome';
+  const port = 9334;
+  fs.rmSync(dir, { recursive: true, force: true });
+  const child = spawn(chrome, [
+    '--headless=new',
+    '--disable-gpu',
+    '--no-first-run',
+    `--user-data-dir=${dir}`,
+    `--remote-debugging-port=${port}`,
+    `--user-agent=${BROWSER_UA}`,
+    `${BASE}/logcrm.php`
+  ], { stdio: 'ignore', detached: true });
+  let ws;
+  try {
+    const deadline = Date.now() + 20000;
+    let list = null;
+    while (Date.now() < deadline) {
+      try {
+        list = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
+        if (list?.length) break;
+      } catch {
+        /* Chrome is still starting */
+      }
+      await sleep(300);
+    }
+    const page = (list || []).find((target) => target.type === 'page') || (list || [])[0];
+    if (!page?.webSocketDebuggerUrl) throw new Error('Chrome did not open the Kinorot splash');
+    ws = new WebSocket(page.webSocketDebuggerUrl);
+    await new Promise((resolve, reject) => {
+      ws.addEventListener('open', resolve, { once: true });
+      ws.addEventListener('error', reject, { once: true });
+    });
+    let id = 0;
+    const send = (method, params = {}) => new Promise((resolve) => {
+      const msgId = ++id;
+      const onMsg = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.id !== msgId) return;
+        ws.removeEventListener('message', onMsg);
+        resolve(data);
+      };
+      ws.addEventListener('message', onMsg);
+      ws.send(JSON.stringify({ id: msgId, method, params }));
+    });
+    await sleep(6000);
+    const cookies = await send('Network.getCookies', { urls: [`${BASE}/`] });
+    const rows = cookies.result?.cookies || [];
+    if (!rows.some((row) => row.name === 'wssplashchk')) {
+      throw new Error('Kinorot splash did not issue a clearance cookie');
+    }
+    for (const row of rows) jar.set(row.name, row.value);
+    saveJar(jar);
+    console.log('[kinorot] splash cleared');
+  } finally {
+    try { ws?.close(); } catch { /* already closed */ }
+    try { process.kill(-child.pid, 'SIGKILL'); } catch { child.kill('SIGKILL'); }
+  }
+}
+
 async function request(url, jar, options = {}) {
   const headers = {
-    'User-Agent': 'Mozilla/5.0 ResortOSKinorotSync',
+    'User-Agent': BROWSER_UA,
     ...(options.headers || {})
   };
   const cookie = cookieHeader(jar);
@@ -95,12 +167,16 @@ async function request(url, jar, options = {}) {
   const single = response.headers.get('set-cookie');
   mergeCookies(jar, setCookies.length ? setCookies : (single ? [single] : []));
   const loc = response.headers.get('location');
-  if (response.status >= 300 && response.status < 400 && loc) {
+  if (options.followRedirect !== false && response.status >= 300 && response.status < 400 && loc) {
     const next = loc.startsWith('http') ? loc : new URL(loc, url).href;
-    return request(next, jar, { method: 'GET' });
+    return request(next, jar, { method: 'GET', skipSplash: options.skipSplash });
   }
   const text = await response.text();
-  return { status: response.status, url: response.url, text };
+  if (!options.skipSplash && isSplash(text)) {
+    await primeSplash(jar);
+    return request(url, jar, { ...options, skipSplash: true });
+  }
+  return { status: response.status, url: response.url, location: loc || '', text };
 }
 
 function looksLoggedIn(html) {
@@ -256,7 +332,7 @@ export function parseBoardHtml(html) {
     if (!resid || !place || !cin || !cout) continue;
     if (!isOccupancyStatus(st)) continue;
     const unitId = KINOROT_PLACE_TO_UNIT[place];
-    if (!unitId) continue;
+    if (!unitId || isRetiredUnitId(unitId)) continue;
     const key = `${place}|${resid}`;
     if (seen.has(key)) continue;
     const pax = paxByKey.get(key);
@@ -270,6 +346,7 @@ export function parseBoardHtml(html) {
       guest: cleanGuestName(tile.realguestname || tile.name),
       phone: String(tile.phone || '').trim(),
       email: String(tile.email || '').trim(),
+      guestid: String(tile.guestid || '').replace(/\D/g, ''),
       adults: pax ? pax.adults : 2,
       children: pax ? pax.children : 0,
       infants: pax ? pax.infants : 0,
@@ -296,6 +373,15 @@ function isLoginPage(html) {
   return /name="pass"|הכניסו את פרטי ההתחברות/.test(String(html || '').slice(0, 8000));
 }
 
+function guestNumIdFromBookres(html) {
+  const tags = String(html || '').match(/<input\b[^>]*>/gi) || [];
+  const tag = tags.find((item) => /name="guestnumid"/i.test(item));
+  if (!tag) return '';
+  const value = (tag.match(/value="([^"]*)"/i) || [])[1] || '';
+  const digits = value.replace(/\D/g, '');
+  return digits.length >= 8 && digits.length <= 9 ? digits : '';
+}
+
 async function enrichGuestContacts(rows, jar) {
   const unique = [...new Set(rows.map((row) => row.resid).filter(Boolean))];
   console.log(`[kinorot] fetching ${unique.length} reservation pages for phones`);
@@ -310,12 +396,26 @@ async function enrichGuestContacts(rows, jar) {
         saveJar(jar);
         page = await request(`${BASE}/resview.php?res=${encodeURIComponent(resid)}`, jar);
       }
+      let guestid = '';
+      try {
+        let editor = await request(`${BASE}/bookres.php?res=${encodeURIComponent(resid)}&hp=1`, jar);
+        if (isLoginPage(editor.text)) {
+          jar.clear();
+          await login(jar);
+          saveJar(jar);
+          editor = await request(`${BASE}/bookres.php?res=${encodeURIComponent(resid)}&hp=1`, jar);
+        }
+        guestid = guestNumIdFromBookres(editor.text);
+      } catch (err) {
+        console.log(`[kinorot] bookres ${resid} failed: ${err.message || err}`);
+      }
       details.set(resid, {
         ...parseResviewGuest(page.text),
         payment: parseResviewPayment(page.text),
         pax: parsePaxFromText(stripToText(page.text)),
         notes: notesFromResviewHtml(page.text),
-        hours: parseStayHoursFromNotes(notesFromResviewHtml(page.text))
+        hours: parseStayHoursFromNotes(notesFromResviewHtml(page.text)),
+        guestid
       });
     } catch (err) {
       console.log(`[kinorot] resview ${resid} failed: ${err.message || err}`);
@@ -341,6 +441,7 @@ async function enrichGuestContacts(rows, jar) {
     if (detail.payment) row.payment = detail.payment;
     if (detail.hours) row.hours = detail.hours;
     if (detail.notes) row.notes = detail.notes;
+    if (detail.guestid) row.guestid = detail.guestid;
   }
   console.log(`[kinorot] phones found ${withPhone}/${rows.length}`);
   return jar;
@@ -353,6 +454,13 @@ function bookingStatus(st, cin, cout, today, paymentStatus) {
 
 function sqlString(value) {
   return `'${String(value || '').replace(/'/g, "''")}'`;
+}
+
+function appendTzToken(req, guestid) {
+  const cleaned = String(req || '').replace(/\|tz:\d{5,9}\b/g, '');
+  const id = String(guestid || '').replace(/\D/g, '');
+  if (id.length < 8 || id.length > 9) return cleaned;
+  return `${cleaned}|tz:${id}`;
 }
 
 function appendPayToken(req, money) {
@@ -394,14 +502,18 @@ function bookingRow(row, today) {
     check_out_date: row.cout,
     adults_count: row.adults,
     children_count: row.children,
+    keepParty: !(row.paxFromBoard || row.phone || row.guestid || row.payment || row.notes),
     booking_status: status,
     channel_source: channel,
-    special_requests: appendPayToken(
-      appendStayHoursToken(
-        `kinorot:${row.resid}|pax:${Number(row.adults) || 0}+${Number(row.children) || 0}+${Number(row.infants) || 0}`,
-        row.hours || {}
+    special_requests: appendTzToken(
+      appendPayToken(
+        appendStayHoursToken(
+          `kinorot:${row.resid}|pax:${Number(row.adults) || 0}+${Number(row.children) || 0}+${Number(row.infants) || 0}`,
+          row.hours || {}
+        ),
+        money
       ),
-      money
+      row.guestid
     ),
     checkout_token: `tok_${id}`,
     ...money
@@ -515,7 +627,7 @@ WHERE b.id = n.id
 `;
 }
 
-function buildSql(rows, today, { allowVanish = false } = {}) {
+function buildSql(rows, today, { allowVanish = false, removedIds = [] } = {}) {
   const ids = rows.map((row) => sqlString(row.id));
   const inserts = rows.map((row) => `
 INSERT INTO public.hotelos_bookings (
@@ -548,18 +660,30 @@ ON CONFLICT (id) DO UPDATE SET
   END,
   check_in_date = EXCLUDED.check_in_date,
   check_out_date = EXCLUDED.check_out_date,
-  adults_count = EXCLUDED.adults_count,
-  children_count = EXCLUDED.children_count,
+  adults_count = ${row.keepParty ? 'public.hotelos_bookings.adults_count' : 'EXCLUDED.adults_count'},
+  children_count = ${row.keepParty ? 'public.hotelos_bookings.children_count' : 'EXCLUDED.children_count'},
   booking_status = CASE
     WHEN public.hotelos_bookings.booking_status = 'CHECKED_OUT' THEN public.hotelos_bookings.booking_status
     WHEN EXCLUDED.check_out_date <= ${sqlString(today)}::date THEN 'CHECKED_OUT'
     ELSE EXCLUDED.booking_status
   END,
   channel_source = EXCLUDED.channel_source,
-  special_requests = EXCLUDED.special_requests,
+  special_requests = CASE
+    WHEN EXCLUDED.special_requests !~ '\\|(in|out|pay|tz):'
+      AND public.hotelos_bookings.special_requests ~ '\\|(in|out|pay|tz):'
+      THEN public.hotelos_bookings.special_requests
+    WHEN EXCLUDED.special_requests ~ '\\|tz:[0-9]{8,9}([^0-9]|$)' THEN EXCLUDED.special_requests
+    WHEN public.hotelos_bookings.special_requests ~ '\\|tz:[0-9]{8,9}([^0-9]|$)' THEN
+      regexp_replace(EXCLUDED.special_requests, '\\|tz:[0-9]{5,9}', '') || substring(public.hotelos_bookings.special_requests from '\\|tz:[0-9]{8,9}')
+    ELSE EXCLUDED.special_requests
+  END,
   unit_id = EXCLUDED.unit_id,
   updated_at = now(),
   deleted_at = NULL,
+  cancellation_reason = CASE
+    WHEN public.hotelos_bookings.cancellation_reason = 'removed_from_kinorot' THEN NULL
+    ELSE public.hotelos_bookings.cancellation_reason
+  END,
   total_price_agorot = CASE
     WHEN public.hotelos_bookings.total_price_agorot > 0 THEN public.hotelos_bookings.total_price_agorot
     ELSE EXCLUDED.total_price_agorot
@@ -601,6 +725,19 @@ ON CONFLICT (id) DO UPDATE SET
   END;
 `).join('\n');
 
+  const strikeIds = (removedIds || []).map((id) => sqlString(id)).filter(Boolean);
+  const strikeRemoved = strikeIds.length
+    ? `
+UPDATE public.hotelos_bookings
+SET booking_status = 'CANCELED',
+    cancellation_reason = 'removed_from_kinorot',
+    updated_at = now()
+WHERE id IN (${strikeIds.join(', ')})
+  AND deleted_at IS NULL
+  AND booking_status IS DISTINCT FROM 'CANCELED';
+`
+    : '';
+
   const vanish = (allowVanish && ids.length)
     ? `
 UPDATE public.hotelos_bookings
@@ -621,7 +758,7 @@ WHERE id LIKE 'kin\\_%' ESCAPE '\\'
   AND booking_status IN ('CHECKED_IN', 'CONFIRMED', 'PENDING');
 `;
 
-  return `BEGIN;\n${clearLocalOverlapsSql(rows)}\n${clearStaleKinOverlapsSql(rows)}\n${updateExistingDatesSql(rows)}\n${inserts}\n${vanish}\n${closePast}\nCOMMIT;\n`;
+  return `BEGIN;\n${clearLocalOverlapsSql(rows)}\n${clearStaleKinOverlapsSql(rows)}\n${updateExistingDatesSql(rows)}\n${inserts}\n${strikeRemoved}\n${vanish}\n${closePast}\nCOMMIT;\n`;
 }
 
 function resolvePsql() {
@@ -858,9 +995,40 @@ function countLiveKinFuture(today) {
   return Number(String(result.stdout || '').trim()) || 0;
 }
 
+const FULL_ENRICH_STAMP = '/tmp/kinorot-full-enrich-at';
+
+function horizonForThisRun(horizon) {
+  if (process.env.KINOROT_QUICK !== '1') return horizon;
+  let age = Number.POSITIVE_INFINITY;
+  try {
+    age = Date.now() - fs.statSync(FULL_ENRICH_STAMP).mtimeMs;
+  } catch {
+    age = Number.POSITIVE_INFINITY;
+  }
+  if (age >= 60 * 60 * 1000) return horizon;
+  console.log('[kinorot] quick board, skip reservation pages');
+  return { ...horizon, skipEnrich: true };
+}
+
+function markFullEnrich() {
+  try {
+    fs.writeFileSync(FULL_ENRICH_STAMP, new Date().toISOString());
+  } catch {
+    /* the next run can enrich again */
+  }
+}
+
 export async function main() {
+  const current = readKinorotSyncStatus();
+  if (current.running) {
+    const age = Date.now() - Date.parse(current.lastAttemptAt || '');
+    if (Number.isFinite(age) && age >= 0 && age < 12 * 60 * 1000) {
+      console.log('[kinorot] skip, previous sync still running');
+      return;
+    }
+  }
   const today = todayIso();
-  const horizon = syncHorizon();
+  const horizon = horizonForThisRun(syncHorizon());
   writeKinorotSyncStatus({
     running: true,
     mode: horizon.mode,
@@ -886,10 +1054,14 @@ export async function main() {
   const existing = loadExistingKinRows(rows, today, horizon);
   const changes = summarizeKinorotDiff({ incoming: rows, existing, today });
   console.log(`[kinorot] diff new=${changes.created.length} updated=${changes.updated.length} removed=${changes.removed.length}`);
-  const sql = buildSql(rows, today, { allowVanish });
+  const sql = buildSql(rows, today, {
+    allowVanish,
+    removedIds: (changes.removed || []).map((row) => row.id)
+  });
   const out = runSql(sql);
   console.log(out.trim().split('\n').slice(-8).join('\n'));
   console.log(`[kinorot] upserted ${rows.length} rows`);
+  if (!horizon.skipEnrich) markFullEnrich();
   if (horizon.mode !== 'duty') {
     try {
       const sms = await notifySameDayKinorotBookings(changes.created, today);
@@ -924,6 +1096,13 @@ export async function main() {
     } : {})
   });
 }
+
+export {
+  request as kinorotRequest,
+  login as kinorotLogin,
+  loadJar as loadKinorotJar,
+  saveJar as saveKinorotJar
+};
 
 const isDirect = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isDirect) {

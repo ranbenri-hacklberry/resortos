@@ -106,11 +106,11 @@ describe('field staff view', () => {
 
   it('hides leftover cleaning while the cabin is occupied', () => {
     const units = [
-      { id: 'k618', name: 'סייסטה · משפחתית 1', is_active: true, operational_status: 'DIRTY' }
+      { id: 'k688', name: 'טוסקנה · 2', is_active: true, operational_status: 'DIRTY' }
     ];
     const bookings = [{
       id: 'stay',
-      unit_id: 'k618',
+      unit_id: 'k688',
       check_in_date: '2026-09-02',
       check_out_date: '2026-09-06',
       booking_status: 'CHECKED_IN'

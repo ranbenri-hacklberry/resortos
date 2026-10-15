@@ -163,7 +163,37 @@ body.field-staff-page .app-shell {
 }
 
 .main-stage.operations-stage {
-  padding-inline: 0.9rem;
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: #09090b;
+}
+
+.priority-only-shell {
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: #eaecf0;
+}
+.priority-slot {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.priority-slot[hidden] { display: none !important; }
+
+.main-stage.priority-stage {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: #eaecf0;
 }
 
 .hotelos-ops-board {

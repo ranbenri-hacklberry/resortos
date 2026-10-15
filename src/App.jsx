@@ -3,17 +3,20 @@ import { useTranslation } from 'react-i18next';
 import Login from './components/Login';
 import { fetchStaffMe, getStoredToken, logoutStaff, setStoredToken } from './lib/staffAuth';
 import { fetchKinorotSyncStatus, formatKinorotSyncLabel, hasUnseenKinorotChanges, rememberKinorotChanges, startKinorotSync, unseenKinorotChanges } from './lib/kinorotSyncApi';
-import { canSeeFinancials, isOpsLead, isOwnerManager, isReception } from './lib/staffRoles';
+import { canEditPriorityStatuses, canSeeFinancials, isOpsLead, isOwnerManager, isPriorityOnly, isReception } from './lib/staffRoles';
 import { agentPortalUrl } from './lib/guestStayUrl';
 import { resolveStayToken } from './lib/stayToken';
 import { isFieldStaffMode } from './lib/fieldStaff';
-import { Calendar as CalendarIcon, DollarSign, ShieldCheck, Activity, Zap, RefreshCw } from 'lucide-react';
+import { Calendar as CalendarIcon, DollarSign, ShieldCheck, Activity, Zap, RefreshCw, Printer } from 'lucide-react';
+import NetworkStatusPill from './components/NetworkStatusPill';
+import AssetBeaconAlert from './components/AssetBeaconAlert';
 import './App.css';
 import './index.css';
 
 const FieldOpsShell = lazy(() => import('./components/FieldOpsShell'));
 const ResortOSCalendar = lazy(() => import('./components/ResortOSCalendar'));
-const ResortOSOperations = lazy(() => import('./components/ResortOSOperations'));
+const CommandCenter = lazy(() => import('./components/command/CommandCenter'));
+const PriorityDesk = lazy(() => import('./components/priority/PriorityDesk'));
 const FinancialSummary = lazy(() => import('./components/FinancialSummary'));
 const GuestCheckout = lazy(() => import('./components/GuestCheckout'));
 const Settings = lazy(() => import('./components/Settings'));
@@ -25,7 +28,8 @@ const DEMO_TENANT_ID = '22222222-2222-2222-2222-222222222222';
 function App() {
   const { t } = useTranslation();
   const [theme, setTheme] = useState(localStorage.getItem('hotelos-theme') || 'dark');
-  const [activeTab, setActiveTab] = useState('calendar'); // 'calendar' | 'operations' | 'financials'
+  const [activeTab, setActiveTab] = useState('calendar'); // 'calendar' | 'operations' | 'financials' | 'priority'
+  const [priorityMounted, setPriorityMounted] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const [sessionUser, setSessionUser] = useState(null);
   const [kinorotSync, setKinorotSync] = useState(null);
@@ -104,6 +108,12 @@ function App() {
     document.body.style.backgroundColor = bg;
   }, [theme]);
 
+  const handleLogout = async () => {
+    await logoutStaff();
+    setSessionUser(null);
+    setActiveTab('calendar');
+  };
+
   const isLight = theme === 'light';
   const isCloudflarePublicDomain = window.location.hostname.includes('pages.dev')
     || window.location.hostname.endsWith('.ts.net');
@@ -146,6 +156,24 @@ function App() {
           mode="field"
           onLoggedIn={({ user }) => setSessionUser(user)}
         />
+      );
+    }
+    if (isPriorityOnly(sessionUser.role)) {
+      return (
+        <div className="priority-only-shell" dir="rtl">
+          <Suspense fallback={lazyFallback}>
+            <PriorityDesk
+              tenantId={sessionUser.tenant_id || DEMO_TENANT_ID}
+              canEdit
+              active
+              showCashflow
+              session={{
+                name: sessionUser.display_name || sessionUser.username || '',
+                onLogout: handleLogout
+              }}
+            />
+          </Suspense>
+        </div>
       );
     }
     return (
@@ -300,12 +328,26 @@ function App() {
     (!canViewFinancials && activeTab === 'financials')
     || (!canViewErrands && activeTab === 'errands')
   ) ? 'calendar' : activeTab;
+  if (visibleTab === 'priority' && !priorityMounted) setPriorityMounted(true);
 
-  const handleLogout = async () => {
-    await logoutStaff();
-    setSessionUser(null);
-    setActiveTab('calendar');
-  };
+  if (isPriorityOnly(sessionUser.role)) {
+    return (
+      <div className="priority-only-shell" dir="rtl">
+        <Suspense fallback={lazyFallback}>
+          <PriorityDesk
+            tenantId={tenantId}
+            canEdit
+            active
+            showCashflow
+            session={{
+              name: sessionUser.display_name || sessionUser.username || '',
+              onLogout: handleLogout
+            }}
+          />
+        </Suspense>
+      </div>
+    );
+  }
 
   // 3. Private staff dashboard (Tailscale / LAN). Same hotel data for every account.
   return (
@@ -341,9 +383,32 @@ function App() {
                 fontWeight: 500
               }}>V5.2</span>
             </h1>
+            {visibleTab === 'operations' ? (
+              <button
+                type="button"
+                onClick={() => window.print()}
+                style={{
+                  border: isLight ? '1px solid rgba(0, 0, 0, 0.08)' : '1px solid rgba(255, 255, 255, 0.12)',
+                  background: isLight ? '#fff' : '#18181b',
+                  color: isLight ? '#1C1917' : '#F8FAFC',
+                  borderRadius: 10,
+                  padding: '0.35rem 0.7rem',
+                  fontWeight: 800,
+                  fontSize: '0.75rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  cursor: 'pointer'
+                }}
+              >
+                <Printer size={14} />
+                הדפס דו״ח יומי לארכיון
+              </button>
+            ) : null}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+            <NetworkStatusPill isLight={isLight} />
             <button
               type="button"
               onClick={handleKinorotSync}
@@ -494,6 +559,35 @@ function App() {
             <span>{t('OPERATIONS_TAB', 'תפעול')}</span>
           </button>
 
+          <button
+            onClick={() => setActiveTab('priority')}
+            style={{
+              flex: 1,
+              border: 'none',
+              borderRadius: '10px',
+              padding: '0.5rem 0.2rem',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.25rem',
+              whiteSpace: 'nowrap',
+              background: activeTab === 'priority'
+                ? 'linear-gradient(135deg, #1b365d, #0f2942)'
+                : (isLight ? '#EAE5DD' : '#1E293B'),
+              color: activeTab === 'priority'
+                ? '#FFFFFF'
+                : (isLight ? '#44403C' : '#94A3B8'),
+              boxShadow: activeTab === 'priority' ? '0 4px 12px rgba(15, 41, 66, 0.35)' : 'none',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <span>▦</span>
+            <span>פריוריטי</span>
+          </button>
+
           {canViewErrands && (
           <button
             onClick={() => setActiveTab('errands')}
@@ -559,12 +653,25 @@ function App() {
       </header>
 
       <main
-        className={`main-stage${visibleTab === 'calendar' ? ' calendar-stage' : ''}${visibleTab === 'operations' ? ' operations-stage' : ''}`}
-        style={{
-          padding: visibleTab === 'calendar' ? '0.75rem' : (visibleTab === 'operations' ? undefined : '1rem'),
-          paddingBlock: visibleTab === 'operations' ? '0.5rem' : undefined
-        }}
+          className={`main-stage${visibleTab === 'calendar' ? ' calendar-stage' : ''}${visibleTab === 'operations' ? ' operations-stage' : ''}${visibleTab === 'priority' ? ' priority-stage' : ''}`}
+          style={{
+            padding: visibleTab === 'calendar' ? '0.75rem' : (visibleTab === 'operations' || visibleTab === 'priority' ? 0 : '1rem'),
+            paddingBlock: visibleTab === 'operations' || visibleTab === 'priority' ? 0 : undefined
+          }}
       >
+        <Suspense fallback={null}>
+          {priorityMounted ? (
+            <div className="priority-slot" hidden={visibleTab !== 'priority'}>
+              <PriorityDesk
+                tenantId={tenantId}
+                canEdit={canEditPriorityStatuses(sessionUser.role)}
+                active={visibleTab === 'priority'}
+                showCashflow={canViewFinancials}
+                operatorName={sessionUser.display_name || sessionUser.username || ''}
+              />
+            </div>
+          ) : null}
+        </Suspense>
         <Suspense fallback={lazyFallback}>
           {visibleTab === 'calendar' ? (
             <ResortOSCalendar
@@ -575,20 +682,17 @@ function App() {
               sessionUser={sessionUser}
             />
           ) : visibleTab === 'operations' ? (
-            <ResortOSOperations
-              theme={theme}
-              tenantId={tenantId}
-              sessionRole={sessionUser.role}
-              canSwitchRole={isOpsLead(sessionUser.role)}
-              allowedUnitIds={sessionUser?.allowed_units}
-            />
+            <CommandCenter operatorName={sessionUser?.display_name || sessionUser?.username || 'צוות'} theme={theme} tenantId={tenantId} />
           ) : visibleTab === 'errands' ? (
             <SharedTaskTracker theme={theme} sessionUser={sessionUser} />
-          ) : (
+          ) : visibleTab === 'financials' ? (
             <FinancialSummary theme={theme} tenantId={tenantId} />
-          )}
+          ) : null}
         </Suspense>
       </main>
+      {(visibleTab === 'calendar' || visibleTab === 'operations') ? (
+        <AssetBeaconAlert theme={theme} />
+      ) : null}
       {hasUnseenKinorotChanges(kinorotSync) ? (
         <Suspense fallback={null}>
           <KinorotSyncChangesModal

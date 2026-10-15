@@ -78,10 +78,6 @@ export const PROPERTY_SEED = {
     content: { nav: { query: 'בקתות מאיה מושב רמות', waze: 'https://waze.com/ul/hsvc6gs4k0' } },
     access: { gate: RAMOT_GATE, wifi: MAYA_WIFI }
   }),
-  siesta: property('siesta', 'סייסטה', 'מושב רמות', 'ramot', 17, {
-    content: { nav: { query: 'סייסטה ברמות' } },
-    access: { gate: RAMOT_GATE, wifi: [] }
-  }),
   'casa-nova': property('casa-nova', 'קאסה נובה', 'מושב נוב', 'nov', 20, {
     content: { nav: { query: 'קאסה נובה נוב' } },
     access: { gate: NIGHT_CALL_GATE, wifi: [{ ssid: 'MIALEES', password: 'AD654321' }] }
@@ -89,7 +85,6 @@ export const PROPERTY_SEED = {
 };
 
 export const UNIT_PROPERTY = {
-  'lab-kinneret': 'hill',
   'hill-1': 'hill', 'hill-2': 'hill', 'hill-3': 'hill', 'hill-4': 'hill',
   'dome-blue': 'kipat', 'dome-red': 'kipat', 'dome-green': 'kipat',
   'mialis-villa': 'mialis', 'suite-1': 'mialis', 'suite-2': 'mialis',
@@ -100,7 +95,6 @@ export const UNIT_PROPERTY = {
   k687: 'toscana', k688: 'toscana', k689: 'toscana',
   k690: 'musical', k691: 'musical', k692: 'musical',
   k693: 'maya', k694: 'maya', k695: 'maya',
-  k618: 'siesta', k619: 'siesta', k620: 'siesta', k621: 'siesta', k622: 'siesta', k623: 'siesta',
   k826: 'casa-nova', k827: 'casa-nova'
 };
 
@@ -143,13 +137,13 @@ const LOCKBOX_BY_UNIT = {
   k810: '2530',
   k811: '2540',
   k690: '2610',
-  k691: '2610',
-  k692: '2610',
+  k691: '2620',
+  k692: '2630',
   k687: '2710',
   k688: '2720',
   k689: '2730',
   k685: '2810',
-  k686: '2810',
+  k686: '2820',
   k680: '2910',
   k681: '2920',
   k682: '2930',
@@ -448,13 +442,13 @@ export const UNIT_OVERRIDES = {
         ]
       }
     }
-  },
-  k618: { content: { arrival: 'עוברים את השער הצהוב השני, ישר דרך הכיכר, שמאלה לרחוב ירדן. אחרי השטח הפתוח שלט סייסטה מעץ. הבקתה הראשונה משמאל.' } },
-  k619: { content: { arrival: 'עוברים את השער הצהוב השני, ישר דרך הכיכר, שמאלה לרחוב ירדן. אחרי השטח הפתוח שלט סייסטה מעץ. הבקתה הראשונה מימין.' } },
-  k620: { content: { arrival: 'עוברים את השער הצהוב השני, ישר דרך הכיכר, שמאלה לרחוב ירדן, ימינה בשלט בקתות עץ. הבקתה הראשונה מימין.' } },
-  k621: { content: { arrival: 'עוברים את השער הצהוב השני, ישר דרך הכיכר, שמאלה לרחוב ירדן, ימינה בשלט בקתות עץ. הבקתה למטה בשביל ממול.' } },
-  k622: { content: { arrival: 'עוברים את השער הצהוב השני, ישר דרך הכיכר, שמאלה לרחוב ירדן, ימינה בשלט בקתות עץ. הבקתה משמאל (חוצים לצד השני).' } },
-  k623: { content: { arrival: 'עוברים את השער הצהוב השני, ישר דרך הכיכר, שמאלה לרחוב ירדן, ימינה בשלט בקתות עץ. יורדים למטה ושמאלה, האחרונה מימין.' } }
+  }
+};
+
+const CANONICAL_UNIT_NAMES = {
+  k687: 'Ⓒ27 טוסקנה · 1',
+  k688: 'Ⓒ27 טוסקנה · 2',
+  k689: 'Ⓒ27 טוסקנה · 3'
 };
 
 export function propertyIdForUnit(unitId) {
@@ -585,8 +579,10 @@ export async function ensureGuestProfiles(tenantId) {
     const override = seedUnitOverride(unitId);
     const nextAccess = { ...(existing.access && typeof existing.access === 'object' ? existing.access : {}), ...(override.access || {}) };
     if (!override.access?.lockbox && nextAccess.lockbox === '0000') delete nextAccess.lockbox;
+    const canonicalName = CANONICAL_UNIT_NAMES[unitId];
     await db.units.put({
       ...existing,
+      ...(canonicalName ? { name: canonicalName } : {}),
       property_id: existing.property_id || propertyId,
       content: emptyJson(existing.content) ? (override.content || {}) : existing.content,
       access: nextAccess
@@ -601,7 +597,7 @@ export async function ensureGuestProfiles(tenantId) {
     const override = seedUnitOverride(unitId);
     const { data: remote } = await supabase
       .from('resort_units')
-      .select('id, property_id, content, access')
+      .select('id, name, property_id, content, access')
       .eq('tenant_id', tenantId)
       .eq('id', unitId)
       .maybeSingle();
@@ -614,6 +610,8 @@ export async function ensureGuestProfiles(tenantId) {
     if (override.access?.lockbox || override.access?.wifi || nextAccess.lockbox !== remote.access?.lockbox) {
       patch.access = nextAccess;
     }
+    const canonicalName = CANONICAL_UNIT_NAMES[unitId];
+    if (canonicalName && remote.name !== canonicalName) patch.name = canonicalName;
     if (Object.keys(patch).length === 1) continue;
     const { error: unitErr } = await supabase
       .from('resort_units')

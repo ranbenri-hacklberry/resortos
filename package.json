@@ -20,6 +20,9 @@
     "build:reviews": "vite build --config vite.reviews.config.js && cp dist-reviews/reviews.html dist-reviews/index.html && cp resources/favicon.png resources/apple-touch-icon.png dist-reviews/",
     "deploy:reviews": "npm run build:reviews && wrangler pages deploy dist-reviews --project-name whastar --commit-dirty=true",
     "build:mialees": "node ./node_modules/vite/bin/vite.js build --config vite.mialees.config.js && cp dist-mialees/mialees.html dist-mialees/index.html && cp -R public/resorts dist-mialees/ 2>/dev/null && cp resources/favicon.png resources/apple-touch-icon.png dist-mialees/ 2>/dev/null || true",
+    "build:volthub": "node ./node_modules/vite/bin/vite.js build --config vite.volthub.config.js && cp dist-volthub/volthub.html dist-volthub/index.html && cp vercel.volthub.json dist-volthub/vercel.json",
+    "deploy:volthub": "npm run build:volthub && wrangler pages deploy dist-volthub --project-name volthub --commit-dirty=true",
+    "deploy:volthub:vercel": "npm run build:volthub && npx vercel deploy dist-volthub --prod --name volthub --yes",
     "build:resortos": "node ./node_modules/vite/bin/vite.js build --config vite.resortos.config.js && cp dist-resortos/resortos.html dist-resortos/index.html && cp vercel.static.json dist-resortos/vercel.json && cp -f public/_redirects dist-resortos/_redirects 2>/dev/null && cp -R public/guides dist-resortos/ 2>/dev/null && cp -R public/resorts dist-resortos/ 2>/dev/null && cp resources/favicon.png resources/apple-touch-icon.png dist-resortos/ 2>/dev/null || true",
     "deploy:mialees": "npm run build:mialees && wrangler pages deploy dist-mialees --project-name mialees-resort --commit-dirty=true",
     "native:sync": "npm run build:reviews && npx cap sync android",
@@ -27,7 +30,7 @@
     "sync:kinorot": "node server/syncKinorotCalendar.js",
     "sync:banks": "node server/syncBanks.js",
     "sync:hyp": "node server/syncHyp.js",
-    "test": "vitest run && node --test functions/lib/hypPay.test.js functions/lib/guestContext.test.js functions/lib/demoCheckout.test.js functions/lib/edgeAgentStore.test.js",
+    "test": "vitest run && node --test functions/lib/hypPay.test.js functions/lib/guestContext.test.js functions/lib/demoCheckout.test.js functions/lib/edgeAgentStore.test.js server/agentConnections.test.js server/routerStatus.test.js server/assetBeacons.test.js",
     "test:hyp": "node --test functions/lib/hypPay.test.js"
   },
   "dependencies": {

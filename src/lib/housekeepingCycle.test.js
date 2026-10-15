@@ -53,7 +53,10 @@ describe('today-only turnover tasks', () => {
       check_out_date: '2026-08-25',
       booking_status: 'CHECKED_OUT'
     }];
-    expect(turnoverNeed(unit, bookings, '2026-08-25')).toEqual({ reason: 'ניקוי לאחר יציאה והכנה לכניסה' });
+    expect(turnoverNeed(unit, bookings, '2026-08-25')).toEqual({
+      kind: 'clean',
+      reason: 'ניקוי לאחר יציאה והכנה לכניסה'
+    });
     expect(hideHousekeepingTaskWhileOccupied({ ...unit, operational_status: 'DIRTY' }, bookings, '2026-08-25')).toBe(false);
     expect(hideHousekeepingTaskWhileOccupied(unit, bookings, '2026-08-25')).toBe(true);
     expect(hideHousekeepingTaskWhileOccupied(unit, [{ ...bookings[0], booking_status: 'CHECKED_IN' }], '2026-08-25')).toBe(true);
@@ -90,6 +93,28 @@ describe('today-only turnover tasks', () => {
       custom_reason: 'נקי · השלמות · מגבות',
       sop_progress: { completions: [{ id: 'c1', text: 'מגבות', done: false }] }
     }, bookings, '2026-08-25')).toBeNull();
+  });
+
+  it('sends an empty room with a new arrival to inspection, not cleaning', () => {
+    const bookings = [{
+      id: 'in',
+      unit_id: 'k671',
+      check_in_date: '2026-08-25',
+      check_out_date: '2026-08-27',
+      booking_status: 'CONFIRMED'
+    }];
+    expect(turnoverNeed(unit, bookings, '2026-08-25')).toEqual({
+      kind: 'inspect',
+      reason: 'ממתין לביקורת מנהל'
+    });
+    expect(turnoverNeed({
+      ...unit,
+      operational_status: 'DIRTY',
+      custom_reason: 'ניקוי לאחר יציאה והכנה לכניסה'
+    }, bookings, '2026-08-25')).toEqual({
+      kind: 'inspect',
+      reason: 'ממתין לביקורת מנהל'
+    });
   });
 
   it('ignores סגור / שיפוץ blocks when opening or keeping a cleaning task', () => {

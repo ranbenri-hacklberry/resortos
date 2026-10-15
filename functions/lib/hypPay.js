@@ -7,6 +7,10 @@ export function hypBrowserReturnUrl() {
   return `${HYP_RETURN_ORIGIN}/api/payments/hyp/success`;
 }
 
+export function hypReceiptUrl() {
+  return `${HYP_RETURN_ORIGIN}/api/payments/hyp/receipt`;
+}
+
 export function hypCheckoutTokenFromParams(params = {}) {
   return String(
     params.Order
@@ -18,7 +22,61 @@ export function hypCheckoutTokenFromParams(params = {}) {
 }
 
 export function hypLowProfileIdFromParams(params = {}) {
-  return String(params.LowProfileId || params.lowProfileId || params.LowProfileCode || '').trim();
+  return String(params.LowProfileId || params.lowProfileId || params.LowProfileCode || params.lowprofilecode || '').trim();
+}
+
+export function hypApprovalCodeFromParams(params = {}) {
+  return String(
+    params.ACode
+    || params.ApprovalNumber
+    || params.ApprovelNumber
+    || params.ApprovalNum
+    || params.CouponNumber
+    || ''
+  ).trim();
+}
+
+export function hypReturnLooksFailed(params = {}) {
+  const code = params.ResponseCode ?? params.CCode ?? params.ResponeCode ?? params.responseCode;
+  if (code == null || code === '') return false;
+  const n = Number(code);
+  return Number.isFinite(n) && n !== 0;
+}
+
+function receiptHtmlEscape(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+export function hypReceiptResponse({ approval = '', lowProfileId = '', token = '', paid = true } = {}) {
+  const safeToken = /^tok_[A-Za-z0-9_-]+$/.test(String(token || '')) ? String(token) : '';
+  const payload = {
+    type: 'resortos-card-paid',
+    approval: String(approval || '').trim(),
+    lowProfileId: String(lowProfileId || '').trim(),
+    token: safeToken,
+    paid: Boolean(paid)
+  };
+  const scriptPayload = JSON.stringify(payload).replace(/</g, '\\u003c');
+  const title = payload.paid ? 'התשלום אושר' : 'התשלום לא הושלם';
+  const number = payload.approval
+    ? receiptHtmlEscape(payload.approval)
+    : (payload.paid ? 'המספר נשמר בהזמנה' : '—');
+  const stayHref = safeToken
+    ? `${HYP_RETURN_ORIGIN}/stay/${encodeURIComponent(safeToken)}?hyp=ok`
+    : '';
+  const html = `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head><body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;background:#f8fafc;color:#0f172a"><main style="text-align:center;padding:28px 18px;max-width:420px"><p style="margin:0;font-size:15px;font-weight:800;color:#64748b">${title}</p><p style="margin:14px 0 0;font-size:13px;font-weight:700;color:#64748b">מספר אישור</p><p style="margin:6px 0 0;font-size:34px;font-weight:900;letter-spacing:1px">${number}</p><p style="margin:18px 0 0;font-size:14px;line-height:1.45;color:#334155">${payload.paid ? 'אפשר לסגור. ההזמנה מתעדכנת.' : 'לא בוצע חיוב. אפשר לסגור ולנסות שוב.'}</p>${stayHref && payload.paid ? `<p style="margin:16px 0 0"><a href="${receiptHtmlEscape(stayHref)}" style="color:#1d4ed8;font-weight:800">לדף השהות</a></p>` : ''}</main><script>(function(){var msg=${scriptPayload};try{var frame=window.parent&&window.parent!==window;var target=frame?window.parent:(window.top&&window.top!==window?window.top:null);if(target)target.postMessage(msg,'*');}catch(e){}if(msg.paid&&msg.token){var inFrame=false;try{inFrame=window.parent!==window;}catch(e2){inFrame=true;}if(!inFrame){setTimeout(function(){location.replace(${JSON.stringify(stayHref || `${HYP_RETURN_ORIGIN}/`)});},2200);}}})();</script></body></html>`;
+  return new Response(html, {
+    status: 200,
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      'cache-control': 'no-store',
+      'referrer-policy': 'no-referrer'
+    }
+  });
 }
 
 export function hypParentBreakoutResponse(targetUrl) {
@@ -64,8 +122,32 @@ function envTrim(env, key) {
   return String(env?.[key] || '').trim();
 }
 
+export function isCardcomTest(env) {
+  const flag = envTrim(env, 'CARDCOM_TEST').toLowerCase();
+  return flag === '1' || flag === 'true' || flag === 'yes';
+}
+
+function cardcomMasof(env, terminal) {
+  const t = resolveHypTerminal(terminal);
+  const specific = envTrim(env, t === 'B' ? 'CARDCOM_B_TERMINAL' : 'CARDCOM_A_TERMINAL');
+  const shared = t === 'A' ? envTrim(env, 'CARDCOM_TERMINAL') : '';
+  return (specific || shared || (t === 'B' ? '1001' : '1000')).replace(/\D/g, '');
+}
+
 export function hypCreds(env, terminal = 'A') {
   const t = resolveHypTerminal(terminal);
+  if (isCardcomTest(env)) {
+    const masof = cardcomMasof(env, t);
+    const key = envTrim(env, 'CARDCOM_API_NAME') || envTrim(env, 'HYP_API_NAME');
+    const passp = envTrim(env, 'CARDCOM_API_PASSWORD') || envTrim(env, 'HYP_API_PASSWORD');
+    if (!masof || !key || !passp) {
+      const err = new Error('HYP_MISSING_CREDS');
+      err.code = 'HYP_MISSING_CREDS';
+      err.terminal = t;
+      throw err;
+    }
+    return { masof, key, passp, terminal: t, cardcomTest: true };
+  }
   const masof = String(
     (t === 'B' ? envTrim(env, 'HYP_B_MASOF') : envTrim(env, 'HYP_A_MASOF'))
     || (t === 'A' ? envTrim(env, 'HYP_MASOF') : '')
@@ -391,7 +473,7 @@ export function buildHypLowProfileBody(user, input) {
     AdvancedDefinition: {
       MaxNumOfPayments: maxPay,
       MinNumOfPayments: 1,
-      RedirectToParent: true
+      RedirectToParent: input.stayInFrame ? false : true
     }
   };
   if (input.invoice !== false && input.sendHesh !== false && (input.email || (input.products && input.products.length))) {
@@ -569,7 +651,7 @@ export async function createHypPaymentPage(env, input) {
         lastErr = err;
       }
     }
-    if (input.allowSign === false) continue;
+    if (input.allowSign === false || isCardcomTest(env)) continue;
     try {
       const creds = hypCreds(env, terminal);
       const signed = await hypRequest(buildHypSignFields(creds, input));
@@ -685,6 +767,20 @@ export function hypPublicResult(params) {
 
 export function hypApiUser(env, terminal = 'A') {
   const creds = hypCreds(env, terminal);
+  if (creds.cardcomTest) {
+    return {
+      ...creds,
+      apiName: creds.key,
+      apiPassword: creds.passp,
+      portalUser: '',
+      portalPass: '',
+      sharedName: '',
+      sharedPass: '',
+      terminalApiName: '',
+      terminalApiPass: '',
+      zPass: ''
+    };
+  }
   const t = creds.terminal;
   const portalUser = envTrim(env, `HYP_${t}_PORTAL_USER`);
   const portalPass = envTrim(env, `HYP_${t}_PORTAL_PASS`);

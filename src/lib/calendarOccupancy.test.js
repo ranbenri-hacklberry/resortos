@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { barsToDrawOnCell, coveringStayOnDate, isCalendarBarBooking, spanBarPixels, stayCardTone, stayCellSlice, staySlicesOnCell } from './calendarOccupancy.js';
+import { barsToDrawOnCell, coveringStayOnDate, isActiveStay, isCalendarBarBooking, spanBarPixels, stayCardTone, stayCellSlice, staySlicesOnCell } from './calendarOccupancy.js';
 
 const today = '2026-09-03';
 const leaver = {
@@ -125,11 +125,20 @@ describe('stay card tone', () => {
       payment_status: 'UNPAID'
     }, { today: '2026-09-17' })).toBe('inhouse');
     expect(isCalendarBarBooking({
-      id: 'kin_689_1',
-      guest_name: 'סגור',
-      check_in_date: '2026-09-17',
-      check_out_date: '2026-09-20',
-      booking_status: 'CONFIRMED'
+      id: 'kin_685_74589',
+      guest_name: 'אליה',
+      check_in_date: '2026-10-05',
+      check_out_date: '2026-10-06',
+      booking_status: 'CANCELED',
+      cancellation_reason: 'removed_from_kinorot'
     })).toBe(true);
+    expect(isActiveStay({
+      id: 'kin_685_74589',
+      guest_name: 'אליה',
+      check_in_date: '2026-10-05',
+      check_out_date: '2026-10-06',
+      booking_status: 'CANCELED',
+      cancellation_reason: 'removed_from_kinorot'
+    }, '2026-10-05')).toBe(false);
   });
 });

@@ -2,18 +2,14 @@ import { errorJson, json } from '../_db.js';
 import { deskLoginNames } from '../../lib/deskStaff.js';
 import { loadCalendarReplica } from '../../lib/calendarReplica.js';
 import { compactStayRow } from '../../lib/guestContextStore.js';
-import { createHypPaymentPage } from '../../lib/hypPay.js';
+import { createHypPaymentPage, hasHypCreds } from '../../lib/hypPay.js';
 import { UNIT_DISPLAY_NAMES } from '../../lib/unitNames.js';
 import { onRequest as checkoutOnRequest, persistGuestRow, readBooking } from '../checkout/[[path]].js';
 
 const TOKEN_RE = /^tok_[A-Za-z0-9_-]+$/;
 
 function hypReady(env, terminal) {
-  const t = String(terminal || 'A').toUpperCase() === 'B' ? 'B' : 'A';
-  const masof = String(env?.[`HYP_${t}_MASOF`] || (t === 'A' ? env?.HYP_MASOF : '') || (t === 'B' ? '4502315932' : '4502210929')).replace(/\D/g, '');
-  const key = String(env?.[`HYP_${t}_KEY`] || (t === 'A' ? env?.HYP_KEY : '') || '').trim();
-  const passp = String(env?.[`HYP_${t}_PASSP`] || (t === 'A' ? env?.HYP_PASSP : '') || '').trim();
-  return masof.length >= 8 && Boolean(key && passp);
+  return hasHypCreds(env, terminal);
 }
 
 function replicaStays(replica) {

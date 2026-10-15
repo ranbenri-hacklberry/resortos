@@ -4,11 +4,10 @@ import {
   Calendar as CalendarIcon,
   Clock
 } from 'lucide-react';
-import { confirmGuestCheckout, fetchGuestCheckout } from '../lib/guestCheckoutApi';
+import { confirmGuestCheckout } from '../lib/guestCheckoutApi';
 import { useGuestBooking } from '../lib/useGuestBooking';
-import { persistDemoFormToken, persistStayToken } from '../lib/stayToken';
-import { isAndroidInAppBrowser, listenHypParentBreakout, openPaymentUrl, shouldEmbedHypPayment } from '../lib/guestPayBrowser';
-import HypPayFrame from './HypPayFrame';
+import { persistStayToken } from '../lib/stayToken';
+import { isAndroidInAppBrowser, listenHypParentBreakout } from '../lib/guestPayBrowser';
 import {
   applyGuestTheme,
   guestThemeStyles,
@@ -17,7 +16,7 @@ import {
   usableGuestName,
   guestShouldSeeStayPortal
 } from '../lib/guestTheme';
-import { localizedUnitName } from '../lib/units';
+import { cleanGuestCabinName, localizedUnitName } from '../lib/units';
 import { applyStayCabin } from '../lib/cabinParty';
 import { applyPaySplitView } from '../lib/paySplit';
 import GuestStay from './GuestStay';
@@ -65,7 +64,8 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [paying, setPaying] = useState(false);
   const [balancePref, setBalancePref] = useState('CREDIT_CARD');
-  const [payFrameUrl, setPayFrameUrl] = useState('');
+  const [agreed, setAgreed] = useState(false);
+  const [termsChecked, setTermsChecked] = useState(false);
   const [freshBooking, setFreshBooking] = useState(null);
   const paidReturn = hypPaidReturn();
   const hypStatus = typeof window === 'undefined' ? '' : new URLSearchParams(window.location.search).get('hyp') || '';
@@ -94,32 +94,11 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
   }), []);
 
   useEffect(() => {
-    if (!payFrameUrl || previewBooking || !token) return undefined;
-    let stop = false;
-    let inflight = false;
-    async function pullPaid() {
-      if (inflight) return;
-      inflight = true;
-      try {
-        const row = await fetchGuestCheckout(token);
-        if (stop || !row) return;
-        setFreshBooking(row);
-        if (guestShouldSeeStayPortal(row)) {
-          setPayFrameUrl('');
-          setIsSubmitted(true);
-        }
-      } catch (_) {
-      } finally {
-        inflight = false;
-      }
-    }
-    pullPaid();
-    const id = setInterval(pullPaid, 2500);
-    return () => {
-      stop = true;
-      clearInterval(id);
-    };
-  }, [payFrameUrl, token, previewBooking]);
+    if (!token || previewBooking) return;
+    try {
+      if (sessionStorage.getItem(`guest-terms:${token}`) === '1') setAgreed(true);
+    } catch (_) {}
+  }, [token, previewBooking]);
 
   useEffect(() => {
     applyGuestTheme(theme);
@@ -127,8 +106,10 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
   }, [theme]);
 
   useEffect(() => {
-    document.title = stayReady ? t('GUEST_STAY_DOC_TITLE') : t('GUEST_CHECKOUT_TITLE');
-  }, [stayReady, t]);
+    const rawName = activeBooking?.unit_id ? localizedUnitName(activeBooking.unit_id, t, '') : '';
+    const cleanName = cleanGuestCabinName(rawName);
+    document.title = cleanName ? `ברוכים הבאים ל${cleanName}` : (stayReady ? t('GUEST_STAY_DOC_TITLE') : t('GUEST_CHECKOUT_TITLE'));
+  }, [stayReady, activeBooking?.unit_id, t]);
 
   useEffect(() => {
     if (activeBooking?.checkout_token) persistStayToken(activeBooking.checkout_token);
@@ -233,33 +214,13 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
     setPaying(true);
     try {
       const next = await confirmGuestCheckout(token, {
-        guest_name: guestName,
+        guest_name: guestName || usableGuestName(activeBooking?.guest_name) || 'אורח',
         guest_email: guestEmail,
         special_requests: specialRequests,
-        pay: paymentMode !== 'CASH_TRUST',
+        pay: false,
         balance_payment_preference: balancePref
       });
-      if (next?.payment?.pay_url || next?.payment?.iframe_url) {
-        const url = next.payment.iframe_url || next.payment.pay_url;
-        if (shouldEmbedHypPayment(next.payment)) {
-          persistDemoFormToken(token);
-          if (typeof window !== 'undefined' && token) {
-            window.history.replaceState({}, '', `/checkout/${encodeURIComponent(token)}`);
-          }
-          setPayFrameUrl(url);
-          return;
-        }
-        openPaymentUrl(url);
-        return;
-      }
-      const depositPaid = next?.payment_status === 'DEPOSIT_PAID'
-        || next?.payment_status === 'PAID'
-        || next?.stay?.hyp_deposit?.paid
-        || next?.stay?.hyp?.paid;
-      if (paymentMode !== 'CASH_TRUST' && !depositPaid) {
-        window.alert(t('GUEST_PAY_FAILED'));
-        return;
-      }
+      if (next) setFreshBooking(next);
       setIsSubmitted(true);
     } catch (_) {
       window.alert(t(paymentMode === 'CASH_TRUST' ? 'GUEST_CONFIRM_FAILED' : 'GUEST_PAY_FAILED'));
@@ -268,24 +229,13 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
     }
   };
 
-  async function finishEmbeddedPay() {
-    if (!token || paying) return;
-    setPaying(true);
+  async function acceptTerms() {
+    if (!termsChecked || paying) return;
     try {
-      const row = await fetchGuestCheckout(token);
-      if (row) setFreshBooking(row);
-      if (row && guestShouldSeeStayPortal(row)) {
-        setPayFrameUrl('');
-        setIsSubmitted(true);
-        return;
-      }
-      window.alert(t('GUEST_PAY_STILL_PENDING'));
-    } catch (_) {
-      window.alert(t('GUEST_PAY_FAILED'));
-    } finally {
-      setPaying(false);
-    }
-  };
+      if (token) sessionStorage.setItem(`guest-terms:${token}`, '1');
+    } catch (_) {}
+    await handleSubmit({ preventDefault() {} });
+  }
 
   return shell(
     <div>
@@ -357,19 +307,43 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
             </p>
           ) : null}
 
-          {payFrameUrl ? (
-            <div style={{ margin: '0.6rem 0 1rem' }}>
-              <p style={{ margin: '0 0 0.55rem', color: themeStyles.textMuted, fontSize: '0.8rem', fontWeight: 700 }}>
-                {t('GUEST_PAY_WAITING')}
-              </p>
-              <HypPayFrame
-                url={payFrameUrl}
-                t={t}
-                themeStyles={themeStyles}
-                amountLabel={payNowIls.toLocaleString()}
-                onDone={finishEmbeddedPay}
-                doneBusy={paying}
-              />
+          {!agreed ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem', marginTop: '0.7rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 900 }}>{t('GUEST_TERMS_TITLE')}</h3>
+              <p style={{ margin: 0, fontSize: '0.86rem', lineHeight: 1.45, fontWeight: 700 }}>{t('GUEST_TERMS_LEAD')}</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', fontSize: '0.84rem', lineHeight: 1.45 }}>
+                {[1, 2, 3, 4, 5, 6].map((n) => (
+                  <p key={n} style={{ margin: 0 }}>{t(`GUEST_TERMS_${n}`)}</p>
+                ))}
+              </div>
+              <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontWeight: 800, fontSize: '0.86rem' }}>
+                <input
+                  type="checkbox"
+                  checked={termsChecked}
+                  onChange={(e) => setTermsChecked(e.target.checked)}
+                  style={{ marginTop: 3 }}
+                />
+                <span>{t('GUEST_TERMS_CHECK')}</span>
+              </label>
+              <button
+                type="button"
+                disabled={!termsChecked || paying}
+                onClick={acceptTerms}
+                style={{
+                  width: '100%',
+                  background: themeStyles.cta,
+                  color: themeStyles.ctaText,
+                  border: 'none',
+                  borderRadius: 10,
+                  padding: '0.75rem',
+                  fontSize: '0.92rem',
+                  fontWeight: 900,
+                  cursor: !termsChecked || paying ? 'not-allowed' : 'pointer',
+                  opacity: !termsChecked || paying ? 0.55 : 1
+                }}
+              >
+                {paying ? t('GUEST_LOADING') : t('GUEST_TERMS_CONTINUE')}
+              </button>
             </div>
           ) : (
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>

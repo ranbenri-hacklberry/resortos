@@ -117,9 +117,9 @@ const CANONICAL_PROPERTIES: PropertySeed[] = [
     hero_image: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=1200&q=80',
     amenities: ['ג׳קוזי ספא ענק', 'נוף פנורמי לכנרת', 'מכונת קפה', 'מטבחון מאובזר', 'מנגל פרטי'],
     units: [
-      { id: 'k687', name: 'טוסקנה · פירנצה 1', type: 'cabin', bedrooms: 1, bathrooms: 1, max_occupancy: 4, base_price_cents: 85000, weekend_price_cents: 110000, size_m2: 45, features: ['ג׳קוזי מול הנוף', 'מרפסת דק פרטית'] },
-      { id: 'k688', name: 'טוסקנה · פירנצה 2', type: 'cabin', bedrooms: 1, bathrooms: 1, max_occupancy: 4, base_price_cents: 85000, weekend_price_cents: 110000, size_m2: 45, features: ['ג׳קוזי מול הנוף', 'מרפסת דק פרטית'] },
-      { id: 'k689', name: 'טוסקנה · שאטו', type: 'cabin', bedrooms: 2, bathrooms: 1, max_occupancy: 6, base_price_cents: 120000, weekend_price_cents: 150000, size_m2: 65, features: ['בקתת עץ דו-קומתית', 'סלון מרווח', 'ג׳קוזי ספא'] }
+      { id: 'k687', name: 'טוסקנה · 1', type: 'cabin', bedrooms: 1, bathrooms: 1, max_occupancy: 4, base_price_cents: 85000, weekend_price_cents: 110000, size_m2: 45, features: ['ג׳קוזי מול הנוף', 'מרפסת דק פרטית'] },
+      { id: 'k688', name: 'טוסקנה · 2', type: 'cabin', bedrooms: 1, bathrooms: 1, max_occupancy: 4, base_price_cents: 85000, weekend_price_cents: 110000, size_m2: 45, features: ['ג׳קוזי מול הנוף', 'מרפסת דק פרטית'] },
+      { id: 'k689', name: 'טוסקנה · 3', type: 'cabin', bedrooms: 2, bathrooms: 1, max_occupancy: 6, base_price_cents: 120000, weekend_price_cents: 150000, size_m2: 65, features: ['בקתת עץ דו-קומתית', 'סלון מרווח', 'ג׳קוזי ספא'] }
     ]
   },
   {

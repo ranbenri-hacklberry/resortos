@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.resortos.agent</string>
+
+  <!-- EDIT: absolute paths. `which node` for the node path. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/node</string>
+    <string>/Users/user/Documents/Max/hotelos/services/resortos-agent/dist/index.js</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/user/Documents/Max/hotelos/services/resortos-agent</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>NODE_ENV</key>
+    <string>production</string>
+    <key>RESORTOS_URL</key>
+    <string>http://localhost:3000</string>
+    <key>OLLAMA_MODEL</key>
+    <string>qwen2.5:14b-instruct</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>ProcessType</key>
+  <string>Interactive</string>
+
+  <key>StandardOutPath</key>
+  <string>/Users/user/Documents/Max/hotelos/services/resortos-agent/logs/agent.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/user/Documents/Max/hotelos/services/resortos-agent/logs/agent.err.log</string>
+</dict>
+</plist>

@@ -27,7 +27,7 @@ export function listenHypParentBreakout(onHref) {
 }
 
 export function shouldEmbedHypPayment() {
-  return false;
+  return true;
 }
 
 export function isAndroidChrome(ua = typeof navigator === 'undefined' ? '' : navigator.userAgent) {

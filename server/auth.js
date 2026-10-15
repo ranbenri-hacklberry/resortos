@@ -1,3 +1,4 @@
+import { isPriorityRole } from './opsAuthz.js';
 import { readSharedTracker, writeSharedTracker } from './sharedTracker.js';
 
 const loginAttempts = new Map();
@@ -74,6 +75,12 @@ function mapStaffError(payload, res) {
   if (code === 'WEAK_PASSWORD') return res.status(400).json({ error: 'WEAK_PASSWORD' });
   if (code === 'NOT_FOUND') return res.status(404).json({ error: 'NOT_FOUND' });
   return res.status(400).json({ error: code || 'INVALID' });
+}
+
+function denyPriorityModule(user, res) {
+  if (!isPriorityRole(user)) return false;
+  res.status(403).json({ error: 'FORBIDDEN' });
+  return true;
 }
 
 function sendError(res, err) {
@@ -203,6 +210,7 @@ export async function requireStaff(req, res, next) {
   try {
     const user = await staffFromRequest(req);
     if (!user) return res.status(401).json({ error: 'UNAUTHORIZED' });
+    if (denyPriorityModule(user, res)) return;
     req.staffUser = user;
     next();
   } catch (err) {
@@ -380,6 +388,7 @@ export async function getSharedTrackerDoc(req, res) {
     if (!token) return res.status(401).json({ error: 'UNAUTHORIZED' });
     const user = await rpc('hotelos_me', { p_token: token });
     if (!user?.id) return res.status(401).json({ error: 'UNAUTHORIZED' });
+    if (denyPriorityModule(user, res)) return;
     return res.json(readSharedTracker());
   } catch (err) {
     return sendError(res, err);
@@ -392,6 +401,7 @@ export async function saveSharedTrackerDoc(req, res) {
     if (!token) return res.status(401).json({ error: 'UNAUTHORIZED' });
     const user = await rpc('hotelos_me', { p_token: token });
     if (!user?.id) return res.status(401).json({ error: 'UNAUTHORIZED' });
+    if (denyPriorityModule(user, res)) return;
     return res.json(writeSharedTracker(req.body || {}));
   } catch (err) {
     return sendError(res, err);

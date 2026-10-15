@@ -1,6 +1,6 @@
 import { israelToday } from './cabinAccess';
-import { supabase } from './supabaseClient';
 import { unitFullName } from './units';
+import { listWorkLog } from './opsApi';
 
 export function israelMonthStart(today = israelToday()) {
   return `${String(today || '').slice(0, 7)}-01`;
@@ -47,24 +47,14 @@ export function decorateWorkLog(rows, units = []) {
   }));
 }
 
-export async function fetchStaffWorkLog({ tenantId, staffId, monthStart = israelMonthStart() }) {
-  if (!tenantId || !staffId || !supabase) return [];
+export async function fetchStaffWorkLog({ monthStart = israelMonthStart() } = {}) {
   try {
-    const { data, error } = await supabase
-      .from('resort_operations')
-      .select('id, unit_id, domain, reason, status, completed_at, completed_by, completed_by_name, assigned_staff')
-      .eq('tenant_id', tenantId)
-      .eq('status', 'DONE')
-      .not('completed_at', 'is', null)
-      .gte('completed_at', `${monthStart}T00:00:00+03:00`)
-      .eq('completed_by', String(staffId))
-      .order('completed_at', { ascending: false })
-      .limit(120);
-    if (error || !Array.isArray(data)) {
-      if (error) console.warn('[STAFF WORK LOG]', error.message);
-      return [];
-    }
-    return data;
+    const rows = await listWorkLog();
+    const start = Date.parse(`${monthStart}T00:00:00+03:00`);
+    return (rows || []).filter((row) => {
+      const at = Date.parse(row?.completed_at || '');
+      return !start || !at || at >= start;
+    });
   } catch (_) {
     return [];
   }

@@ -8,9 +8,8 @@ import { guestStayOrigin } from './guestStayUrl';
 import { bookingStatusRank, hasRecordedReceipt, paymentStatusRank } from './bookingPaid';
 import { buildStaySnapshot } from './staySnapshot';
 import { canonicalUnitSeed, DEFAULT_RESORT_UNITS, FORCE_DOCUMENT_NAMES, isPhantomUnitId, isRetiredUnitId, matchCanonicalUnitId } from './units';
-import { syncResortOperationHistory } from './resortOperations';
-import { ensureGuestProfiles } from './guestProfileSeed';
-import { clearingPaidAgorot, clearingProofCount, isCanceledBooking, shouldApplyIncomingBooking as shouldApplyIncomingBookingBase } from './bookingMerge';
+import { listBookings, listUnitCatalog, listUnitOperations, saveUnitOperation, subscribeOpsEvents } from './opsApi';
+import { clearingPaidAgorot, clearingProofCount, isCanceledBooking, isVisibleKinorotRemoval, shouldApplyIncomingBooking as shouldApplyIncomingBookingBase } from './bookingMerge';
 
 const BOOKING_PAGE_SIZE = 1000;
 const BOOKING_SNAP_PREFIX = 'resortos_bookings_snap_v1:';
@@ -265,6 +264,11 @@ function mergeBookingRow(base, incoming) {
   }
   if (isCanceledBooking(incoming)) {
     merged.booking_status = 'CANCELED';
+    if (isVisibleKinorotRemoval(incoming)) {
+      merged.deleted_at = null;
+      merged.cancellation_reason = 'removed_from_kinorot';
+      return merged;
+    }
     merged.deleted_at = incoming.deleted_at || merged.deleted_at || new Date().toISOString();
     return merged;
   }
@@ -523,7 +527,6 @@ const FALLBACK_UNIT_NAMES = {
   'dome-green': 'כיפת שמיים ירוק',
   'mialis-villa': 'וילה מיאליס ריזורט',
   'suite-1': 'סוויטה 1 (הירוקה)',
-  'lab-kinneret': 'בקתת כנרת',
   'suite-2': 'סוויטה 2 (הורודה)',
   'k671': 'בתי נורית 1',
   'k673': 'בתי נורית 2',
@@ -544,21 +547,15 @@ const FALLBACK_UNIT_NAMES = {
   'k684': 'מול הנוף · בקתה 5',
   'k685': 'נופים בלבן · בקתה 1',
   'k686': 'נופים בלבן · בקתה 2',
-  'k687': 'טוסקנה · פירנצה 1',
-  'k688': 'טוסקנה · פירנצה 2',
-  'k689': 'טוסקנה · שאטו',
+  'k687': 'טוסקנה · 1',
+  'k688': 'טוסקנה · 2',
+  'k689': 'טוסקנה · 3',
   'k690': 'חצר מוסיקלית · בקתה 1',
   'k691': 'חצר מוסיקלית · בקתה 2',
   'k692': 'חצר מוסיקלית · בקתה 3',
   'k693': 'בקתות מאיה · בקתה 1',
   'k694': 'בקתות מאיה · בקתה 2',
   'k695': 'בקתות מאיה · בקתה 3',
-  'k618': 'סייסטה · משפחתית 1',
-  'k619': 'סייסטה · משפחתית 2',
-  'k620': 'סייסטה · רומנטית 3',
-  'k621': 'סייסטה · רומנטית 4',
-  'k622': 'סייסטה · בת הים 5',
-  'k623': 'סייסטה · בת הים 6',
   'k826': 'קאסה נובה · Aura',
   'k827': 'קאסה נובה · Bloom'
 };
@@ -605,6 +602,16 @@ export async function syncResortUnitsToDexie(tenantId) {
       console.warn('[RESORT UNITS PULL]', error.message);
       return [];
     }
+    await applyResortUnitsToDexie(tenantId, data || []);
+    return data || [];
+  } catch (err) {
+    console.warn('[RESORT UNITS PULL]', err?.message || err);
+    return [];
+  }
+}
+
+async function applyResortUnitsToDexie(tenantId, data) {
+  if (!tenantId) return;
     const now = new Date().toISOString();
     const remoteIds = new Set();
     const puts = [];
@@ -651,11 +658,15 @@ export async function syncResortUnitsToDexie(tenantId) {
         if (stale.length) await db.units.bulkDelete(stale);
       }
     });
-    return data || [];
-  } catch (err) {
-    console.warn('[RESORT UNITS PULL]', err?.message || err);
-    return [];
-  }
+}
+
+/** Field Ops catalog sync: read the session's units from the edge. No seed, purge, or status write. */
+export async function ensureCanonicalUnitCatalog() {
+  const data = await listUnitCatalog();
+  const tenantId = data.find((row) => row?.tenant_id)?.tenant_id;
+  if (!tenantId) return [];
+  await applyResortUnitsToDexie(tenantId, data);
+  return data;
 }
 
 async function seedResortUnitsIfEmpty(tenantId) {
@@ -675,51 +686,8 @@ async function seedResortUnitsIfEmpty(tenantId) {
   if (error) console.warn('[RESORT UNITS SEED]', error.message);
 }
 
-export async function ensureCanonicalUnits(tenantId, options = {}) {
-  if (!tenantId) return;
-  if (!options.skipPurge) await purgeRetiredDemoData(tenantId);
-  let remote = await syncResortUnitsToDexie(tenantId);
-  if (!remote.length) {
-    await seedResortUnitsIfEmpty(tenantId);
-    remote = await syncResortUnitsToDexie(tenantId);
-  }
-  if (options.pullOnly) return remote;
-  await ensureGuestProfiles(tenantId).catch((err) => {
-    console.warn('[GUEST PROFILES]', err?.message || err);
-  });
-  const now = new Date().toISOString();
-  for (const unit of remote) {
-    if (isPhantomUnitId(unit.id) || isRetiredUnitId(unit.id)) continue;
-    const existing = await db.units.get(unit.id);
-    const canonicalName = CANONICAL_NAME_BY_ID[unit.id];
-    const nextName = (FORCE_DOCUMENT_NAMES.has(unit.id) && canonicalName)
-      ? canonicalName
-      : (existing?.name || unit.name || canonicalName);
-    if (existing && nextName && existing.name !== nextName) {
-      await db.units.put({ ...existing, name: nextName, updated_at: now });
-    }
-    await pushUnitToCloud({
-      id: unit.id,
-      tenant_id: tenantId,
-      name: nextName,
-      operational_status: existing?.operational_status,
-      operational_domain: existing?.operational_domain,
-      custom_reason: existing?.custom_reason,
-      assigned_staff: existing?.assigned_staff,
-      is_escalated: existing?.is_escalated,
-      cleaning_started_at: existing?.cleaning_started_at,
-      quality_inspections: existing?.quality_inspections,
-      rework_count: existing?.rework_count,
-      last_failed_fields: existing?.last_failed_fields,
-      image_urls: existing?.image_urls,
-      name_i18n: existing?.name_i18n,
-      reason_i18n: existing?.reason_i18n,
-      text_source_lang: existing?.text_source_lang,
-      sop_progress: existing?.sop_progress,
-      current_operation_id: existing?.current_operation_id,
-      updated_at: existing?.updated_at || now
-    });
-  }
+export async function ensureCanonicalUnits() {
+  return ensureCanonicalUnitCatalog();
 }
 
 async function purgeRetiredDemoData(tenantId) {
@@ -733,16 +701,6 @@ async function purgeRetiredDemoData(tenantId) {
     if (!isRetiredUnitId(booking.unit_id)) continue;
     await db.bookings.delete(booking.id);
   }
-  try {
-    await supabase.from('unit_operations').delete().in('id', ['u1', 'u2', 'u3', 'u4']);
-    await supabase.from('hotelos_bookings').delete().in('unit_id', ['u1', 'u2', 'u3', 'u4']);
-    await supabase.from('resort_operations').delete().in('unit_id', ['u1', 'u2', 'u3', 'u4']);
-  } catch (_) {}
-  if (tenantId) {
-    try {
-      await supabase.from('unit_operations').delete().eq('tenant_id', tenantId).in('id', ['u1', 'u2', 'u3', 'u4']);
-    } catch (_) {}
-  }
 }
 
 export async function retirePhantomUnits(tenantId) {
@@ -751,40 +709,19 @@ export async function retirePhantomUnits(tenantId) {
   const now = new Date().toISOString();
   const nameByPhantom = {};
 
-  try {
-    const { data: ops } = await supabase
-      .from('unit_operations')
-      .select('id, name')
-      .eq('tenant_id', tenantId)
-      .limit(2000);
-    for (const row of ops || []) {
-      if (isPhantomUnitId(row.id)) nameByPhantom[row.id] = row.name;
-    }
-  } catch (_) {}
-
   const units = await db.units.toArray();
   for (const unit of units) {
     if (isPhantomUnitId(unit.id)) nameByPhantom[unit.id] = nameByPhantom[unit.id] || unit.name;
   }
 
   const bookings = await db.bookings.toArray();
-  let cloudBookings = [];
-  try {
-    cloudBookings = await fetchAllTenantBookings(tenantId);
-  } catch (_) {}
 
-  const allBookings = [...bookings];
-  for (const row of cloudBookings) {
-    if (!allBookings.some((item) => item.id === row.id)) allBookings.push(row);
-  }
-
-  for (const booking of allBookings) {
+  for (const booking of bookings) {
     if (!isPhantomUnitId(booking.unit_id) || booking.deleted_at) continue;
     const mappedId = matchCanonicalUnitId(nameByPhantom[booking.unit_id]) || matchCanonicalUnitId(booking.unit_id);
     if (!mappedId) continue;
     const updated = { ...booking, unit_id: mappedId, updated_at: now };
     await db.bookings.put(updated);
-    await pushBookingToCloud(updated, { allowOverlap: true });
   }
 
   for (const unit of units) {
@@ -797,11 +734,6 @@ export async function retirePhantomUnits(tenantId) {
     });
   }
 
-  for (const phantomId of Object.keys(nameByPhantom)) {
-    try {
-      await supabase.from('unit_operations').delete().eq('id', phantomId);
-    } catch (_) {}
-  }
 }
 
 /**
@@ -817,11 +749,16 @@ export async function syncCloudBookingsToDexie(tenantId, options = {}) {
   let lastError = '';
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      let data = options.from && options.to
-        ? await fetchBookingsOverlapping(tenantId, options.from, options.to)
-        : await fetchAllTenantBookings(tenantId);
-      if (!data.length && options.from && options.to) {
-        data = await fetchAllTenantBookings(tenantId);
+      let data;
+      if (options.viaEdge) {
+        data = await listBookings({ from: options.from, to: options.to });
+      } else {
+        data = options.from && options.to
+          ? await fetchBookingsOverlapping(tenantId, options.from, options.to)
+          : await fetchAllTenantBookings(tenantId);
+        if (!data.length && options.from && options.to) {
+          data = await fetchAllTenantBookings(tenantId);
+        }
       }
       if (!data.length) {
         if (attempt < 2) continue;
@@ -868,52 +805,35 @@ export async function reconcileBookingsWithCloud(tenantId) {
 /**
  * Subscribes to Postgres changes on the private Supabase instance.
  */
-export function subscribeToRealtimeCloudBookings(tenantId, onBookingReceived) {
-  if (!tenantId || !supabase) return () => {};
-
-  const channel = supabase
-    .channel(`bookings:${tenantId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'hotelos_bookings',
-        filter: `tenant_id=eq.${tenantId}`
-      },
-      async (payload) => {
-        const bookingData = payload.new;
-        if (!bookingData?.id) return;
-        try {
-          const existing = await db.bookings.get(bookingData.id);
-          if (!shouldApplyIncomingBooking(existing, bookingData)) {
-            let next = existing;
-            if (existing && filledPhone(bookingData.guest_phone) && !filledPhone(existing.guest_phone)) {
-              next = { ...next, guest_phone: bookingData.guest_phone };
-            }
-            next = fillMissingMoney(next, bookingData);
-            if (existing && (
-              clearingProofCount(bookingData) > clearingProofCount(existing)
-              || clearingPaidAgorot(bookingData) > clearingPaidAgorot(existing)
-            )) {
-              next = mergeBookingRow(next, bookingData);
-            }
-            if (next && next !== existing) {
-              await db.bookings.put(next);
-              if (onBookingReceived) onBookingReceived(next);
-            }
-            return;
-          }
-          await db.bookings.put(mergeBookingRow(existing, bookingData));
-          if (onBookingReceived) onBookingReceived(bookingData);
-        } catch (_) {}
+async function applyRealtimeBooking(bookingData, onBookingReceived) {
+  if (!bookingData?.id) return;
+  try {
+    const existing = await db.bookings.get(bookingData.id);
+    if (!shouldApplyIncomingBooking(existing, bookingData)) {
+      let next = existing;
+      if (existing && filledPhone(bookingData.guest_phone) && !filledPhone(existing.guest_phone)) {
+        next = { ...next, guest_phone: bookingData.guest_phone };
       }
-    )
-    .subscribe();
+      next = fillMissingMoney(next, bookingData);
+      if (existing && (
+        clearingProofCount(bookingData) > clearingProofCount(existing)
+        || clearingPaidAgorot(bookingData) > clearingPaidAgorot(existing)
+      )) {
+        next = mergeBookingRow(next, bookingData);
+      }
+      if (next && next !== existing) {
+        await db.bookings.put(next);
+        if (onBookingReceived) onBookingReceived(next);
+      }
+      return;
+    }
+    await db.bookings.put(mergeBookingRow(existing, bookingData));
+    if (onBookingReceived) onBookingReceived(bookingData);
+  } catch (_) {}
+}
 
-  return () => {
-    supabase.removeChannel(channel);
-  };
+export function subscribeToRealtimeCloudBookings(_tenantId, onBookingReceived) {
+  return subscribeToOpsEdgeEvents({ onBooking: onBookingReceived });
 }
 
 /**
@@ -1004,7 +924,7 @@ function opsFieldsFromRow(row) {
 
 const healPushIds = new Set();
 
-async function applyOpsRowToDexie(row) {
+async function applyOpsRowToDexie(row, options = {}) {
   if (!row?.id) return;
   if (isRetiredUnitId(row.id)) {
     await db.units.delete(row.id);
@@ -1026,10 +946,10 @@ async function applyOpsRowToDexie(row) {
   const ops = opsFieldsFromRow(row);
   const existingUpdated = existing?.updated_at || '';
   const incomingUpdated = ops.updated_at || '';
-  if (existing && existingUpdated && incomingUpdated && incomingUpdated < existingUpdated) {
+  if (!options.localOnly && existing && existingUpdated && incomingUpdated && incomingUpdated < existingUpdated) {
     if (existing.tenant_id && existing.operational_status && !healPushIds.has(existing.id)) {
       healPushIds.add(existing.id);
-      void pushUnitToCloud(existing, { waitRemote: true, force: true, skipStayPublish: true })
+      void pushUnitToCloud(existing, { waitRemote: true, force: true, skipStayPublish: true, viaEdge: true })
         .catch(() => {})
         .finally(() => healPushIds.delete(existing.id));
     }
@@ -1069,12 +989,12 @@ export async function pushUnitToCloud(patch, options = {}) {
   if (isRetiredUnitId(patch.id) || isPhantomUnitId(patch.id)) {
     try {
       await db.units.delete(patch.id);
-      await supabase.from('unit_operations').delete().eq('id', patch.id);
     } catch (_) {}
     return;
   }
+  let existing = null;
   try {
-    const existing = await db.units.get(patch.id);
+    existing = await db.units.get(patch.id);
     const merged = {
       ...existing,
       ...patch,
@@ -1096,44 +1016,16 @@ export async function pushUnitToCloud(patch, options = {}) {
     await db.units.put(localRow);
 
     const persistRemote = async () => {
+      const row = toUnitOpsRow(merged);
+      if (!row?.id) return;
+      const saved = await saveUnitOperation(row.id, row);
+      if (saved) await applyOpsRowToDexie(saved, { localOnly: true });
       const statusChanged = existing?.operational_status !== merged.operational_status
         || JSON.stringify(existing?.quality_inspections || []) !== JSON.stringify(merged.quality_inspections || []);
-      let next = merged;
-      if (statusChanged) {
-        const withHistory = await syncResortOperationHistory(existing, merged, options.actor || null);
-        next = { ...merged, ...withHistory };
-        await db.units.put({ ...localRow, ...next });
-      }
-      const row = toUnitOpsRow(next);
-      if (!row || !row.tenant_id) return;
-
-      // Never let a stale browser Dexie row clobber a newer Studio/Postgres status —
-      // unless this is an explicit staff/calendar write.
-      try {
-        if (!options.force) {
-          const { data: remote } = await supabase
-            .from('unit_operations')
-            .select('*')
-            .eq('id', row.id)
-            .maybeSingle();
-          const remoteTs = Date.parse(remote?.updated_at || '') || 0;
-          const localTs = Date.parse(row.updated_at || '') || 0;
-          if (remote && remoteTs > localTs) {
-            await applyOpsRowToDexie(remote);
-            return;
-          }
-        }
-      } catch (_) {}
-
-      const { error } = await supabase.from('unit_operations').upsert(row);
-      if (error) {
-        console.warn('[HOTELOS UNIT OPS PUSH]', error.message);
-        return;
-      }
-      if (statusChanged && !options.skipStayPublish) {
-        const related = await relatedStayBookings(next);
+      if (!options.viaEdge && statusChanged && !options.skipStayPublish) {
+        const related = await relatedStayBookings(saved || merged);
         for (const booking of related) {
-          await publishBookingStay(booking, next).catch((err) => {
+          await publishBookingStay(booking, saved || merged).catch((err) => {
             console.warn('[HOTELOS STAY PUBLISH]', booking.id, err?.message || err);
           });
         }
@@ -1142,49 +1034,36 @@ export async function pushUnitToCloud(patch, options = {}) {
     if (options.waitRemote) await persistRemote();
     else void persistRemote().catch((err) => console.warn('[HOTELOS UNIT OPS PUSH]', err));
   } catch (err) {
+    if (options.throwOnError) {
+      if (existing) {
+        try { await db.units.put(existing); } catch (_) { /* keep the thrown save error */ }
+      }
+      throw err;
+    }
     console.warn('[HOTELOS UNIT OPS PUSH]', err);
   }
 }
 
-export async function syncUnitOpsToDexie(tenantId) {
-  if (!tenantId) return;
+export async function syncUnitOpsToDexie(tenantId, options = {}) {
+  if (!tenantId && !options.viaEdge) return;
   try {
-    const { data, error } = await supabase
-      .from('unit_operations')
-      .select('*')
-      .eq('tenant_id', tenantId)
-      .limit(2000);
-    if (error || !data) {
-      if (error) console.warn('[HOTELOS UNIT OPS PULL]', error.message);
-      return;
-    }
+    const data = await listUnitOperations();
     for (const row of data) {
       await applyOpsRowToDexie(row);
     }
   } catch (_) {}
 }
 
-export function subscribeToRealtimeUnitOps(tenantId) {
-  if (!tenantId || !supabase) return () => {};
+export function subscribeToRealtimeUnitOps() {
+  return subscribeToOpsEdgeEvents();
+}
 
-  const channel = supabase
-    .channel(`unit_operations:${tenantId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'unit_operations',
-        filter: `tenant_id=eq.${tenantId}`
-      },
-      async (payload) => {
-        if (payload.eventType === 'DELETE') return;
-        await applyOpsRowToDexie(payload.new);
-      }
-    )
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
+/** Field Ops live updates. The edge picks the tenant and the allowed units. */
+export function subscribeToOpsEdgeEvents(handlers = {}) {
+  return subscribeOpsEvents({
+    onUnit: (row) => applyOpsRowToDexie(row, { localOnly: true }),
+    onBooking: async (row) => {
+      await applyRealtimeBooking(row, handlers.onBooking);
+    }
+  });
 }

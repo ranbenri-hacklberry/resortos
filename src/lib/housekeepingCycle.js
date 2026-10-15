@@ -3,7 +3,7 @@ import { db } from './resortos-db';
 import { allCompletionsDone, completionsFromUnit, completionsReason, NEEDS_COMPLETIONS, writeCompletionsIntoSop } from './roomCompletions';
 import { isUnavailableHoldBooking } from './unavailableHold';
 import { isInventoryUnit } from './units';
-import { isEffectivelyOccupied, isExpiredPendingInspect, unitOpsChoice } from './unitStatus';
+import { isAwaitingManagerInspect, isEffectivelyOccupied, isExpiredPendingInspect, unitOpsChoice } from './unitStatus';
 
 function inspectedReadyToday(unit, today) {
   if (unit?.operational_status !== 'READY') return false;
@@ -25,6 +25,10 @@ function staffHeldCleanToday(unit, today) {
   if (hasSameDayCleanMark(unit, today)) return true;
   if (unit?.operational_status !== 'READY' && unit?.operational_status !== NEEDS_COMPLETIONS) return false;
   return Boolean(unit.updated_at && israelToday(new Date(unit.updated_at)) === today);
+}
+
+function statusPushOptions(saveOptions) {
+  return { force: true, waitRemote: true, ...(saveOptions || {}) };
 }
 
 async function freshUnit(unit) {
@@ -65,7 +69,7 @@ export function passedManagerInspection(unitOrTask) {
   return isManagerInspection(lastInspectionRecord(unitOrTask));
 }
 
-export async function markCabinCleanedForInspection({ tenantId, unit, pushUnitToCloud }) {
+export async function markCabinCleanedForInspection({ tenantId, unit, pushUnitToCloud, saveOptions }) {
   if (!tenantId || !unit?.id || typeof pushUnitToCloud !== 'function') return;
   const nowIso = new Date().toISOString();
   const prev = Array.isArray(unit.quality_inspections) ? unit.quality_inspections : [];
@@ -91,10 +95,10 @@ export async function markCabinCleanedForInspection({ tenantId, unit, pushUnitTo
     ],
     sop_progress: unit.sop_progress,
     updated_at: nowIso
-  }, { force: true, waitRemote: true });
+  }, statusPushOptions(saveOptions));
 }
 
-export async function applyCalendarOccupancy({ tenantId, unit, occupancy, pushUnitToCloud }) {
+export async function applyCalendarOccupancy({ tenantId, unit, occupancy, pushUnitToCloud, saveOptions }) {
   if (!tenantId || !unit?.id || typeof pushUnitToCloud !== 'function') return;
   const next = occupancy === 'OCCUPIED' ? 'OCCUPIED' : occupancy === 'VACANT' ? 'VACANT' : null;
   if (!next) return;
@@ -104,10 +108,12 @@ export async function applyCalendarOccupancy({ tenantId, unit, occupancy, pushUn
     name: unit.name,
     staff_occupancy: next,
     updated_at: new Date().toISOString()
-  });
+  }, saveOptions && (saveOptions.waitRemote || saveOptions.throwOnError)
+    ? { waitRemote: true, ...saveOptions }
+    : undefined);
 }
 
-export async function applyAssignedStaff({ tenantId, unit, assignedStaff, pushUnitToCloud }) {
+export async function applyAssignedStaff({ tenantId, unit, assignedStaff, pushUnitToCloud, saveOptions }) {
   if (!tenantId || !unit?.id || typeof pushUnitToCloud !== 'function') return;
   const name = String(assignedStaff || '').trim();
   await pushUnitToCloud({
@@ -116,17 +122,17 @@ export async function applyAssignedStaff({ tenantId, unit, assignedStaff, pushUn
     name: unit.name,
     assigned_staff: name || null,
     updated_at: new Date().toISOString()
-  });
+  }, statusPushOptions(saveOptions));
 }
 
-export async function applyCalendarUnitStatus({ tenantId, unit, status, pushUnitToCloud, completions }) {
+export async function applyCalendarUnitStatus({ tenantId, unit, status, pushUnitToCloud, completions, saveOptions }) {
   if (!tenantId || !unit?.id || typeof pushUnitToCloud !== 'function') return;
   if (status === 'READY') {
-    await markCabinCleanedForInspection({ tenantId, unit, pushUnitToCloud });
+    await markCabinCleanedForInspection({ tenantId, unit, pushUnitToCloud, saveOptions });
     return;
   }
   if (status === 'DIRTY') {
-    await reopenCabinCleaning({ tenantId, unit, pushUnitToCloud });
+    await reopenCabinCleaning({ tenantId, unit, pushUnitToCloud, saveOptions });
     return;
   }
   if (status === NEEDS_COMPLETIONS) {
@@ -134,7 +140,8 @@ export async function applyCalendarUnitStatus({ tenantId, unit, status, pushUnit
       tenantId,
       unit,
       items: completions == null ? completionsFromUnit(unit) : completions,
-      pushUnitToCloud
+      pushUnitToCloud,
+      saveOptions
     });
     return;
   }
@@ -151,10 +158,10 @@ export async function applyCalendarUnitStatus({ tenantId, unit, status, pushUnit
     is_escalated: choice.key === 'MAINTENANCE_ALERT',
     cleaning_started_at: choice.key === 'IN_PROGRESS' ? nowIso : null,
     updated_at: nowIso
-  }, { force: true, waitRemote: true });
+  }, statusPushOptions(saveOptions));
 }
 
-export async function persistRoomCompletions({ tenantId, unit, items, pushUnitToCloud }) {
+export async function persistRoomCompletions({ tenantId, unit, items, pushUnitToCloud, saveOptions }) {
   if (!tenantId || !unit?.id || typeof pushUnitToCloud !== 'function') return;
   const list = Array.isArray(items) ? items : completionsFromUnit(unit);
   const sop = writeCompletionsIntoSop(unit.sop_progress, list);
@@ -162,7 +169,8 @@ export async function persistRoomCompletions({ tenantId, unit, items, pushUnitTo
     await markCabinCleanedForInspection({
       tenantId,
       unit: { ...unit, sop_progress: sop },
-      pushUnitToCloud
+      pushUnitToCloud,
+      saveOptions
     });
     return;
   }
@@ -178,10 +186,10 @@ export async function persistRoomCompletions({ tenantId, unit, items, pushUnitTo
     is_escalated: false,
     cleaning_started_at: null,
     updated_at: nowIso
-  }, { force: true, waitRemote: true });
+  }, statusPushOptions(saveOptions));
 }
 
-export async function reopenCabinCleaning({ tenantId, unit, pushUnitToCloud }) {
+export async function reopenCabinCleaning({ tenantId, unit, pushUnitToCloud, saveOptions }) {
   if (!tenantId || !unit?.id || typeof pushUnitToCloud !== 'function') return;
   await pushUnitToCloud({
     id: unit.id,
@@ -193,17 +201,17 @@ export async function reopenCabinCleaning({ tenantId, unit, pushUnitToCloud }) {
     is_escalated: false,
     cleaning_started_at: null,
     updated_at: new Date().toISOString()
-  }, { force: true, waitRemote: true });
+  }, statusPushOptions(saveOptions));
 }
 
 export function turnoverNeed(unit, bookings, today = israelToday()) {
   if (!isInventoryUnit(unit)) return null;
   if (unit.operational_status === 'MAINTENANCE_ALERT' || unit.operational_status === 'GARDENING') return null;
-  if (unit.operational_status === 'IN_PROGRESS' || unit.operational_status === 'DIRTY') return null;
   if (unit.operational_status === NEEDS_COMPLETIONS) return null;
   // Already marked clean today (field/calendar) — never re-open dirty on refresh.
   if (staffHeldCleanToday(unit, today)) return null;
   if (inspectedReadyToday(unit, today)) return null;
+  if (isAwaitingManagerInspect(unit)) return null;
 
   const active = (bookings || []).filter((row) => (
     row.unit_id === unit.id &&
@@ -217,9 +225,16 @@ export function turnoverNeed(unit, bookings, today = israelToday()) {
 
   const departingToday = active.some((row) => row.check_out_date === today);
   const arriving = active.some((row) => row.check_in_date === today);
+  const cleaningOpen = unit.operational_status === 'IN_PROGRESS' || unit.operational_status === 'DIRTY';
 
-  if (departingToday || arriving) {
-    return { reason: 'ניקוי לאחר יציאה והכנה לכניסה' };
+  if (departingToday) {
+    if (cleaningOpen) return null;
+    return { kind: 'clean', reason: 'ניקוי לאחר יציאה והכנה לכניסה' };
+  }
+  // Empty room with a new arrival: inspect, do not send housekeeping to clean.
+  if (arriving) {
+    if (unit.operational_status === 'IN_PROGRESS') return null;
+    return { kind: 'inspect', reason: 'ממתין לביקורת מנהל' };
   }
   return null;
 }
@@ -324,6 +339,10 @@ export async function ensureTurnoverCleaning({ tenantId, units, bookings, pushUn
     const need = turnoverNeed(live, bookings, today);
     if (!need) continue;
     if (staffHeldCleanToday(live, today)) continue;
+    if (need.kind === 'inspect') {
+      await markCabinCleanedForInspection({ tenantId, unit: live, pushUnitToCloud });
+      continue;
+    }
     if (live.operational_status === 'DIRTY' && live.custom_reason === need.reason) continue;
     await pushUnitToCloud({
       id: live.id,

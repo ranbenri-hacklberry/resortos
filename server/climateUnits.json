@@ -1,0 +1,18 @@
+{
+  "addAnother": "Copy a unit object. Point deviceIdEnv, localKeyEnv, and hostEnv at new names in .env. Never put the local key in this file.",
+  "units": [
+    {
+      "id": "s16-demo",
+      "name": "S16 Pro",
+      "room": "Demo AC",
+      "productId": "aqlyorlybbtn6ox7",
+      "version": "3.3",
+      "deviceIdEnv": "TUYA_DEVICE_ID",
+      "localKeyEnv": "TUYA_LOCAL_KEY",
+      "hostEnv": "TUYA_S16_HOST",
+      "fallbackHosts": ["192.168.68.60", "192.168.68.57"],
+      "remoteId": "bf369fe2f772f574a1zyuf",
+      "cloudEndpoint": "https://openapi.tuyaeu.com"
+    }
+  ]
+}

@@ -105,9 +105,10 @@ export default function FieldOpsShell({
       const pulled = await syncCloudBookingsToDexie(tenantId, {
         from: fmt(fromDt),
         to: fmt(toDt),
-        force: Boolean(options.force)
+        force: Boolean(options.force),
+        viaEdge: true
       });
-      await syncUnitOpsToDexie(tenantId);
+      await syncUnitOpsToDexie(tenantId, { viaEdge: true });
       const clock = formatKinorotSyncClock(new Date().toISOString());
       if (pulled?.ok) setSyncNote(`נתונים מהסטודיו · ${pulled.count || 0} הזמנות · ${clock}`);
       else setSyncNote(pulled?.error ? `סנכרון נכשל: ${pulled.error}` : 'סנכרון נכשל');
@@ -409,6 +410,7 @@ export default function FieldOpsShell({
                 canSwitchRole={opsLead}
                 allowedUnitIds={sessionUser?.allowed_units}
                 boardArea={boardArea}
+                operatorName={sessionUser?.display_name || sessionUser?.username || 'צוות'}
               />
             </div>
           </Suspense>

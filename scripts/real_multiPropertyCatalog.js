@@ -39,7 +39,7 @@ export const PROPERTY_THEMES = {
     },
     heroImage: '/resorts/mialees.jpg',
     amenities: [
-      'בריכה פרטית לכל יחידה',
+      'בריכה פרטית מחוממת ל-28° לכל יחידה',
       'ג׳קוזי ספא חיצוני',
       'מכונת אספרסו נספרסו',
       'מיקרוגל ומקרר',
@@ -58,8 +58,8 @@ export const PROPERTY_THEMES = {
         bedrooms: 4,
         bathrooms: 3,
         maxOccupancy: 12,
-        basePrice: 2500,
-        weekendPrice: 3200,
+        basePrice: 2800,
+        weekendPrice: 3800,
         sizeM2: 220,
         description: 'וילת יוקרה רחבת ידיים בת 4 חדרי שינה, מטבח שף מאובזר, סלון ענק, חצר מטופחת עם פינות ישיבה ומנגל מקצועי, ומרפסת פנורמית מול נוף הכנרת.',
         features: [
@@ -86,13 +86,13 @@ export const PROPERTY_THEMES = {
         type: 'suite',
         bedrooms: 1,
         bathrooms: 1,
-        maxOccupancy: 5,
-        basePrice: 1300,
-        weekendPrice: 1650,
+        maxOccupancy: 4,
+        basePrice: 800,
+        weekendPrice: 1200,
         sizeM2: 55,
         description: 'סוויטת בוטיק פרטית ואינטימית עם בריכה פרטית מחוממת וג׳קוזי ספא חיצוני ענק, מטבחון מאובזר ופרטיות מוחלטת.',
         features: [
-          'בריכה פרטית מחוממת ואינטימית',
+          'זוג + 2', 'בריכה פרטית מחוממת ל-28°',
           'ג׳קוזי ספא זרמים מפנק בחצר',
           'מיטת קינג סייז מצעי פרימיום',
           'מטבחון מאובזר, מכונת נספרסו, מיקרו ומקרר',
@@ -113,13 +113,13 @@ export const PROPERTY_THEMES = {
         type: 'suite',
         bedrooms: 1,
         bathrooms: 1,
-        maxOccupancy: 5,
-        basePrice: 1300,
-        weekendPrice: 1650,
+        maxOccupancy: 4,
+        basePrice: 800,
+        weekendPrice: 1200,
         sizeM2: 55,
         description: 'סוויטת בוטיק מעוצבת בגווני מוקה וחום יין, עם בריכה פרטית וג׳קוזי ספא מול שקיעות הזהב הקסומות של הכנרת.',
         features: [
-          'בריכה פרטית מרעננת מול נוף השקיעה',
+          'זוג + 2', 'בריכה פרטית מחוממת ל-28° מול נוף השקיעה',
           'ג׳קוזי ספא חיצוני מפואר',
           'מטבחון מאובזר, נספרסו, מיקרוגל ומקרר',
           'מנגל בחצר הפרטית',
@@ -141,13 +141,13 @@ export const PROPERTY_THEMES = {
         bedrooms: 6,
         bathrooms: 5,
         maxOccupancy: 20,
-        basePrice: 4900,
+        basePrice: 4400,
         weekendPrice: 6200,
         sizeM2: 330,
         description: 'סגירה בלעדית של כל ריזורט מיאליס: וילת הנוף + 2 סוויטות הבוטיק. 2 בריכות פרטיות, 2 מתחמי ג׳קוזי ספא ופרטיות אבסולוטית.',
         features: [
           'נעילה בלעדית של וילת הנוף ו-2 סוויטות הבוטיק',
-          '2 בריכות שחייה פרטיות',
+          'בריכות פרטיות מחוממות ל-28°',
           '2 מתחמי ג׳קוזי ספא נפרדים',
           'עד 20 אורחים בפרטיות מושלמת'
         ],
@@ -188,7 +188,7 @@ export const PROPERTY_THEMES = {
     heroImage: '/resorts/toscana.jpg',
     amenities: [
       'מטבח מרכזי משותף מאובזר',
-      'בריכת שחייה משותפת במתחם',
+      'בריכה מרכזית מחוממת ל-28° לכל המתחם',
       'ג׳קוזי פנימי בכל בקתה + ג׳קוזי חיצוני במתחם',
       'סאונה יבשה (בשאטו)',
       'מכונת נספרסו ומיקרוגל',
@@ -200,35 +200,35 @@ export const PROPERTY_THEMES = {
       {
         id: 'k687',
         propertyId: 'toscana',
-        name: 'טוסקנה · פירנצה 1',
+        name: 'טוסקנה · 1',
         type: 'cabin',
-        maxOccupancy: 7,
-        basePrice: 850,
-        weekendPrice: 1100,
+        maxOccupancy: 4,
+        basePrice: 600,
+        weekendPrice: 900,
         description: 'בקתת עץ איטלקית כפרית ורחבת ידיים עם ג׳קוזי ספא פנימי, מרפסת דק מעץ ומטבחון מאובזר.',
-        features: ['עד 7 אורחים (זוג+5)', 'ג׳קוזי ספא פנימי', 'מטבחון, נספרסו, מיקרוגל, מקרר ומנגל', 'טלוויזיה עם יס ו-Wi-Fi']
+        features: ['זוג + 2', 'ג׳קוזי ספא פנימי', 'מטבחון, נספרסו, מיקרוגל, מקרר ומנגל', 'טלוויזיה עם יס ו-Wi-Fi']
       },
       {
         id: 'k688',
         propertyId: 'toscana',
-        name: 'טוסקנה · פירנצה 2',
+        name: 'טוסקנה · 2',
         type: 'cabin',
-        maxOccupancy: 7,
-        basePrice: 850,
-        weekendPrice: 1100,
+        maxOccupancy: 4,
+        basePrice: 600,
+        weekendPrice: 900,
         description: 'בקתת עץ משפחתית חמימה מול מדשאות ירוקות ובריכת השחייה של המתחם.',
-        features: ['עד 7 אורחים (זוג+5)', 'ג׳קוזי ספא מפנק', 'מטבחון מאובזר, נספרסו ומנגל', 'טלוויזיה עם יס ו-Wi-Fi']
+        features: ['זוג + 2', 'ג׳קוזי ספא מפנק', 'מטבחון מאובזר, נספרסו ומנגל', 'טלוויזיה עם יס ו-Wi-Fi']
       },
       {
         id: 'k689',
         propertyId: 'toscana',
-        name: 'טוסקנה · שאטו (עם סאונה)',
+        name: 'טוסקנה · שאטו',
         type: 'villa',
-        maxOccupancy: 10,
-        basePrice: 1200,
-        weekendPrice: 1600,
+        maxOccupancy: 7,
+        basePrice: 850,
+        weekendPrice: 1500,
         description: 'בקתת שאטו ענקית ומפוארת למשפחות וקבוצות, כוללת סאונה יבשה פרטית, ג׳קוזי ספא ומטבח רחב.',
-        features: ['עד 10 אורחים (זוג+8)', 'סאונה יבשה פרטית', 'ג׳קוזי ספא', 'מטבחון מאובזר, נספרסו ומנגל', 'טלוויזיה עם יס ו-Wi-Fi']
+        features: ['זוג + 5', 'סאונה יבשה פרטית', 'ג׳קוזי ספא', 'מטבחון מאובזר, נספרסו ומנגל', 'טלוויזיה עם יס ו-Wi-Fi']
       }
     ]
   },
@@ -263,7 +263,7 @@ export const PROPERTY_THEMES = {
     amenities: [
       'מטבח מרכזי משותף ענק',
       'סאונה יבשה במתחם',
-      'בריכת שחייה משותפת',
+      'בריכה מרכזית מחוממת ל-28° לכל המתחם',
       'ג׳קוזי ספא בכל בקתה',
       'מכונת נספרסו ומיקרוגל',
       'מקרר ומטבחון בכל יחידה',
@@ -271,14 +271,14 @@ export const PROPERTY_THEMES = {
       'טלוויזיה עם יס ו-Wi-Fi'
     ],
     units: [
-      { id: 'k671', propertyId: 'nurit', name: 'בתי נורית 1', type: 'cabin', maxOccupancy: 5, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ כפרית ומטופחת עם ג׳קוזי פנימי ומטבחון.', features: ['עד 5 אורחים', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
-      { id: 'k673', propertyId: 'nurit', name: 'בתי נורית 2', type: 'cabin', maxOccupancy: 7, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ משפחתית מרווחת מול המדשאות.', features: ['עד 7 אורחים (זוג+4)', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
-      { id: 'k674', propertyId: 'nurit', name: 'בתי נורית 3', type: 'cabin', maxOccupancy: 7, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ משפחתית מרווחת.', features: ['עד 7 אורחים (זוג+4)', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
-      { id: 'k675', propertyId: 'nurit', name: 'בתי נורית 4', type: 'cabin', maxOccupancy: 5, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ כפרית ושקטה.', features: ['עד 5 אורחים', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
-      { id: 'k676', propertyId: 'nurit', name: 'בתי נורית 5', type: 'cabin', maxOccupancy: 7, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ משפחתית גדולה.', features: ['עד 7 אורחים (זוג+4)', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
-      { id: 'k677', propertyId: 'nurit', name: 'בתי נורית 6', type: 'cabin', maxOccupancy: 7, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ משפחתית גדולה.', features: ['עד 7 אורחים (זוג+4)', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
-      { id: 'k678', propertyId: 'nurit', name: 'בתי נורית 7', type: 'cabin', maxOccupancy: 5, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ נעימה ורגועה.', features: ['עד 5 אורחים', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
-      { id: 'k679', propertyId: 'nurit', name: 'בתי נורית 8', type: 'cabin', maxOccupancy: 5, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ כפרית ושלווה.', features: ['עד 5 אורחים', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] }
+      { id: 'k671', propertyId: 'nurit', name: 'בתי נורית 1', type: 'cabin', maxOccupancy: 2, basePrice: 500, weekendPrice: 900, description: 'בקתת עץ כפרית ומטופחת עם ג׳קוזי פנימי ומטבחון.', features: ['זוג', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
+      { id: 'k673', propertyId: 'nurit', name: 'בתי נורית 2', type: 'cabin', maxOccupancy: 4, basePrice: 800, weekendPrice: 1300, description: 'בקתת עץ משפחתית מרווחת מול המדשאות.', features: ['זוג + 2', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
+      { id: 'k674', propertyId: 'nurit', name: 'בתי נורית 3', type: 'cabin', maxOccupancy: 4, basePrice: 800, weekendPrice: 1300, description: 'בקתת עץ משפחתית מרווחת.', features: ['זוג + 2', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
+      { id: 'k675', propertyId: 'nurit', name: 'בתי נורית 4', type: 'cabin', maxOccupancy: 2, basePrice: 500, weekendPrice: 900, description: 'בקתת עץ כפרית ושקטה.', features: ['זוג', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
+      { id: 'k676', propertyId: 'nurit', name: 'בתי נורית 5', type: 'cabin', maxOccupancy: 4, basePrice: 800, weekendPrice: 1300, description: 'בקתת עץ משפחתית גדולה.', features: ['זוג + 2', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
+      { id: 'k677', propertyId: 'nurit', name: 'בתי נורית 6', type: 'cabin', maxOccupancy: 4, basePrice: 800, weekendPrice: 1300, description: 'בקתת עץ משפחתית גדולה.', features: ['זוג + 2', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
+      { id: 'k678', propertyId: 'nurit', name: 'בתי נורית 7', type: 'cabin', maxOccupancy: 2, basePrice: 500, weekendPrice: 900, description: 'בקתת עץ נעימה ורגועה.', features: ['זוג', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
+      { id: 'k679', propertyId: 'nurit', name: 'בתי נורית 8', type: 'cabin', maxOccupancy: 2, basePrice: 500, weekendPrice: 900, description: 'בקתת עץ כפרית ושלווה.', features: ['זוג', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] }
     ]
   },
 
@@ -311,7 +311,7 @@ export const PROPERTY_THEMES = {
     heroImage: '/resorts/taj.jpg',
     amenities: [
       'מטבח מרכזי משותף',
-      'בריכת שחייה משותפת במתחם',
+      'בריכה מרכזית מחוממת ל-28° לכל המתחם',
       'ג׳קוזי ספא בכל בקתה',
       'מכונת נספרסו ומיקרוגל',
       'מקרר ומטבחון בכל יחידה',
@@ -319,10 +319,10 @@ export const PROPERTY_THEMES = {
       'טלוויזיה עם יס ו-Wi-Fi'
     ],
     units: [
-      { id: 'k808', propertyId: 'taj', name: 'טאג׳ מאהל · בקתה 1', type: 'cabin', maxOccupancy: 2, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ רומנטית לזוגות עם ג׳קוזי ספא ומרפסת דק.', features: ['זוג (2 אורחים)', 'ג׳קוזי ספא', 'נספרסו, מיקרו, מקרר, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
-      { id: 'k809', propertyId: 'taj', name: 'טאג׳ מאהל · בקתה 2', type: 'cabin', maxOccupancy: 4, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ מרווחת עם ספה נפתחת לילדים וג׳קוזי ספא.', features: ['עד 4 אורחים (זוג+2)', 'ספה נפתחת', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
-      { id: 'k810', propertyId: 'taj', name: 'טאג׳ מאהל · בקתה 3', type: 'cabin', maxOccupancy: 2, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ רומנטית ואינטימית לזוגות.', features: ['זוג (2 אורחים)', 'ג׳קוזי ספא', 'נספרסו, מיקרו, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
-      { id: 'k811', propertyId: 'taj', name: 'טאג׳ מאהל · בקתה 4', type: 'cabin', maxOccupancy: 2, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ שלווה צמודה לבריכה.', features: ['זוג (2 אורחים)', 'ג׳קוזי ספא', 'נספרסו, מיקרו, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] }
+      { id: 'k808', propertyId: 'taj', name: 'טאג׳ מאהל · בקתה 1', type: 'cabin', maxOccupancy: 2, basePrice: 800, weekendPrice: 1200, description: 'בקתת עץ רומנטית לזוגות עם ג׳קוזי ספא ומרפסת דק.', features: ['זוג (2 אורחים)', 'ג׳קוזי ספא', 'נספרסו, מיקרו, מקרר, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
+      { id: 'k809', propertyId: 'taj', name: 'טאג׳ מאהל · בקתה 2', type: 'cabin', maxOccupancy: 2, basePrice: 800, weekendPrice: 1200, description: 'בקתת עץ רומנטית לזוגות עם ג׳קוזי ספא.', features: ['לזוגות בלבד', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
+      { id: 'k810', propertyId: 'taj', name: 'טאג׳ מאהל · בקתה 3', type: 'cabin', maxOccupancy: 2, basePrice: 800, weekendPrice: 1200, description: 'בקתת עץ רומנטית ואינטימית לזוגות.', features: ['זוג (2 אורחים)', 'ג׳קוזי ספא', 'נספרסו, מיקרו, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
+      { id: 'k811', propertyId: 'taj', name: 'טאג׳ מאהל · בקתה 4', type: 'cabin', maxOccupancy: 2, basePrice: 800, weekendPrice: 1200, description: 'בקתת עץ שלווה צמודה לבריכה.', features: ['זוג (2 אורחים)', 'ג׳קוזי ספא', 'נספרסו, מיקרו, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] }
     ]
   },
 
@@ -355,7 +355,7 @@ export const PROPERTY_THEMES = {
     heroImage: '/resorts/mool.jpg',
     amenities: [
       'מטבח מרכזי משותף',
-      'בריכת שחייה משותפת במתחם',
+      'בריכה מרכזית מחוממת ל-28° לכל המתחם',
       'ג׳קוזי ספא / אמבט זרמים',
       'נוף פנורמי פתוח לכנרת',
       'מכונת נספרסו ומיקרוגל',
@@ -364,11 +364,11 @@ export const PROPERTY_THEMES = {
       'טלוויזיה עם יס ו-Wi-Fi'
     ],
     units: [
-      { id: 'k680', propertyId: 'mool', name: 'מול הנוף · בקתה 1', type: 'cabin', maxOccupancy: 5, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ עם מרפסת נוף פתוחה וישירה לכנרת.', features: ['עד 5 אורחים', 'נוף פנורמי לכנרת', 'ג׳קוזי', 'נספרסו ומנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
-      { id: 'k681', propertyId: 'mool', name: 'מול הנוף · בקתה 2', type: 'cabin', maxOccupancy: 7, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ משפחתית מרווחת מול השקיעות.', features: ['עד 7 אורחים (זוג+4)', 'ג׳קוזי ספא מול הנוף', 'נספרסו ומנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
-      { id: 'k682', propertyId: 'mool', name: 'מול הנוף · בקתה 3', type: 'cabin', maxOccupancy: 7, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ משפחתית מרווחת מול הנוף.', features: ['עד 7 אורחים (זוג+4)', 'ג׳קוזי ספא מול הנוף', 'נספרסו ומנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
-      { id: 'k683', propertyId: 'mool', name: 'מול הנוף · בקתה 4', type: 'cabin', maxOccupancy: 5, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ נעימה ושקטה מול הכנרת.', features: ['עד 5 אורחים', 'מרפסת נוף', 'ג׳קוזי', 'נספרסו ומנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
-      { id: 'k684', propertyId: 'mool', name: 'מול הנוף · בקתה 5', type: 'cabin', maxOccupancy: 5, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ פסטורלית עם נוף מרהיב.', features: ['עד 5 אורחים', 'מרפסת נוף', 'ג׳קוזי', 'נספרסו ומנגל', 'טלוויזיה עם יס ו-Wi-Fi'] }
+      { id: 'k680', propertyId: 'mool', name: 'מול הנוף · בקתה 1', type: 'cabin', maxOccupancy: 5, basePrice: 500, weekendPrice: 900, description: 'בקתת עץ עם מרפסת נוף פתוחה וישירה לכנרת.', features: ['עד 5 אורחים', 'נוף פנורמי לכנרת', 'ג׳קוזי', 'נספרסו ומנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
+      { id: 'k681', propertyId: 'mool', name: 'מול הנוף · בקתה 2', type: 'cabin', maxOccupancy: 4, basePrice: 800, weekendPrice: 1300, description: 'בקתת עץ מרווחת מול השקיעות.', features: ['זוג + 2', 'ג׳קוזי ספא מול הנוף', 'נספרסו ומנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
+      { id: 'k682', propertyId: 'mool', name: 'מול הנוף · בקתה 3', type: 'cabin', maxOccupancy: 4, basePrice: 800, weekendPrice: 1300, description: 'בקתת עץ מרווחת מול הנוף.', features: ['זוג + 2', 'ג׳קוזי ספא מול הנוף', 'נספרסו ומנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
+      { id: 'k683', propertyId: 'mool', name: 'מול הנוף · בקתה 4', type: 'cabin', maxOccupancy: 5, basePrice: 500, weekendPrice: 900, description: 'בקתת עץ נעימה ושקטה מול הכנרת.', features: ['עד 5 אורחים', 'מרפסת נוף', 'ג׳קוזי', 'נספרסו ומנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
+      { id: 'k684', propertyId: 'mool', name: 'מול הנוף · בקתה 5', type: 'cabin', maxOccupancy: 5, basePrice: 500, weekendPrice: 900, description: 'בקתת עץ פסטורלית עם נוף מרהיב.', features: ['עד 5 אורחים', 'מרפסת נוף', 'ג׳קוזי', 'נספרסו ומנגל', 'טלוויזיה עם יס ו-Wi-Fi'] }
     ]
   },
 
@@ -377,8 +377,8 @@ export const PROPERTY_THEMES = {
     slug: 'nofim',
     name: 'נופים בלבן',
     hebrewName: 'נופים בלבן',
-    tagline: '2 בקתות עץ רומנטיות עם בריכה פרטית לכל בקתה',
-    subTitle: 'בריכה פרטית, ג׳קוזי ספא ונוף פתוח לכנרת במושב רמות',
+    tagline: '2 בקתות עץ רומנטיות עם בריכה פרטית מחוממת ל-28° לכל בקתה',
+    subTitle: 'זוג + 2, בריכה פרטית מחוממת ל-28° ונוף פתוח לכנרת',
     village: 'מושב רמות',
     region: 'רמת הגולן והכנרת',
     whatsappNumber: '972507597944',
@@ -410,8 +410,8 @@ export const PROPERTY_THEMES = {
       'טלוויזיה עם יס'
     ],
     units: [
-      { id: 'k685', propertyId: 'nofim', name: 'נופים בלבן · בקתה 1', type: 'cabin', maxOccupancy: 7, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ רומנטית ומרווחת עם בריכה פרטית וג׳קוזי מול הכנרת.', features: ['עד 7 אורחים (זוג+5)', 'בריכה פרטית לכל בקתה', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס'] },
-      { id: 'k686', propertyId: 'nofim', name: 'נופים בלבן · בקתה 2', type: 'cabin', maxOccupancy: 7, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ יוקרתית עם בריכה פרטית ונוף פנורמי.', features: ['עד 7 אורחים (זוג+5)', 'בריכה פרטית לכל בקתה', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס'] }
+      { id: 'k685', propertyId: 'nofim', name: 'נופים בלבן · בקתה 1', type: 'cabin', maxOccupancy: 4, basePrice: 750, weekendPrice: 1200, description: 'בקתת עץ רומנטית ומרווחת עם בריכה פרטית וג׳קוזי מול הכנרת.', features: ['זוג + 2', 'בריכה פרטית מחוממת ל-28°', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס'] },
+      { id: 'k686', propertyId: 'nofim', name: 'נופים בלבן · בקתה 2', type: 'cabin', maxOccupancy: 4, basePrice: 750, weekendPrice: 1200, description: 'בקתת עץ יוקרתית עם בריכה פרטית ונוף פנורמי.', features: ['זוג + 2', 'בריכה פרטית מחוממת ל-28°', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס'] }
     ]
   },
 
@@ -420,7 +420,7 @@ export const PROPERTY_THEMES = {
     slug: 'musical',
     name: 'החצר המוסיקלית',
     hebrewName: 'החצר המוסיקלית',
-    tagline: '3 בקתות עץ פסטורליות באווירה שלווה',
+    tagline: '3 בקתות עץ לזוגות בלבד',
     subTitle: 'חליל, מיתר ופעמון במושב רמות – בריכת שחייה, ג׳קוזי ומדשאות',
     village: 'מושב רמות',
     region: 'רמת הגולן והכנרת',
@@ -444,7 +444,7 @@ export const PROPERTY_THEMES = {
     heroImage: '/resorts/musical.jpg',
     amenities: [
       'מטבח מרכזי משותף',
-      'בריכת שחייה משותפת במתחם',
+      'בריכה מרכזית מחוממת ל-28° לכל המתחם',
       'ג׳קוזי פנימי בכל בקתה',
       'מכונת נספרסו ומיקרוגל',
       'מקרר ומטבחון בכל יחידה',
@@ -452,9 +452,9 @@ export const PROPERTY_THEMES = {
       'טלוויזיה עם יס ו-Wi-Fi'
     ],
     units: [
-      { id: 'k690', propertyId: 'musical', name: 'חצר מוסיקלית · חליל', type: 'cabin', maxOccupancy: 4, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ כפרית ונעימה עם ג׳קוזי זוגי.', features: ['עד 4 אורחים (זוג+2)', 'ג׳קוזי זוגי', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
-      { id: 'k691', propertyId: 'musical', name: 'חצר מוסיקלית · מיתר', type: 'cabin', maxOccupancy: 4, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ פסטורלית ושקטה.', features: ['עד 4 אורחים (זוג+2)', 'ג׳קוזי זוגי', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
-      { id: 'k692', propertyId: 'musical', name: 'חצר מוסיקלית · פעמון', type: 'cabin', maxOccupancy: 4, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ שלווה מול המדשאות.', features: ['עד 4 אורחים (זוג+2)', 'ג׳קוזי זוגי', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] }
+      { id: 'k690', propertyId: 'musical', name: 'חצר מוסיקלית · חליל', type: 'cabin', maxOccupancy: 2, basePrice: 600, weekendPrice: 900, description: 'בקתת עץ כפרית ונעימה עם ג׳קוזי זוגי.', features: ['לזוגות בלבד', 'ג׳קוזי זוגי', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
+      { id: 'k691', propertyId: 'musical', name: 'חצר מוסיקלית · מיתר', type: 'cabin', maxOccupancy: 2, basePrice: 600, weekendPrice: 900, description: 'בקתת עץ פסטורלית ושקטה.', features: ['לזוגות בלבד', 'ג׳קוזי זוגי', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
+      { id: 'k692', propertyId: 'musical', name: 'חצר מוסיקלית · פעמון', type: 'cabin', maxOccupancy: 2, basePrice: 600, weekendPrice: 900, description: 'בקתת עץ שלווה מול המדשאות.', features: ['לזוגות בלבד', 'ג׳קוזי זוגי', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] }
     ]
   },
 
@@ -463,7 +463,7 @@ export const PROPERTY_THEMES = {
     slug: 'maya',
     name: 'בקתות מאיה',
     hebrewName: 'בקתות מאיה',
-    tagline: '3 בקתות עץ עם 2 בריכות שחייה במתחם',
+    tagline: 'בקתות 1 ו-3 עם בריכה פרטית, בקתה 2 בלי בריכה פרטית',
     subTitle: 'חצר ירוקה מטופחת, ג׳קוזי פנימי ובריכות שחייה במושב רמות',
     village: 'מושב רמות',
     region: 'רמת הגולן והכנרת',
@@ -487,7 +487,7 @@ export const PROPERTY_THEMES = {
     heroImage: '/resorts/maya.jpg',
     amenities: [
       'מטבח מרכזי משותף',
-      'שתי בריכות שחייה במתחם (ליד בקתה 1 וליד בקתה 3)',
+      'לזוגות בלבד. בריכה פרטית מחוממת ל-28° לבקתות 1 ו-3. בקתה 2 בלי בריכה',
       'ג׳קוזי פנימי בכל בקתה',
       'מכונת נספרסו ומיקרוגל',
       'מקרר ומטבחון בכל יחידה',
@@ -495,55 +495,9 @@ export const PROPERTY_THEMES = {
       'טלוויזיה עם יס ו-Wi-Fi'
     ],
     units: [
-      { id: 'k693', propertyId: 'maya', name: 'בקתות מאיה · בקתה 1', type: 'cabin', maxOccupancy: 5, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ מפנקת צמודה לבריכת השחייה הראשונה עם ג׳קוזי פנימי.', features: ['עד 5 אורחים', 'בריכת שחייה צמודה', 'ג׳קוזי פנימי', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
-      { id: 'k694', propertyId: 'maya', name: 'בקתות מאיה · בקתה 2', type: 'cabin', maxOccupancy: 5, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ כפרית ושקטה עם ג׳קוזי פנימי.', features: ['עד 5 אורחים', 'ג׳קוזי פנימי', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
-      { id: 'k695', propertyId: 'maya', name: 'בקתות מאיה · בקתה 3', type: 'cabin', maxOccupancy: 5, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ מפנקת צמודה לבריכת השחייה השנייה עם ג׳קוזי פנימי.', features: ['עד 5 אורחים', 'בריכת שחייה צמודה', 'ג׳קוזי פנימי', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] }
-    ]
-  },
-
-  siesta: {
-    id: 'siesta',
-    slug: 'siesta',
-    name: 'סייסטה',
-    hebrewName: 'סייסטה',
-    tagline: '6 בקתות עץ משפחתיות ורומנטיות במושב רמות',
-    subTitle: 'בריכת שחייה משותפת, מטבח מרכזי וג׳קוזי ספא',
-    village: 'מושב רמות',
-    region: 'רמת הגולן והכנרת',
-    whatsappNumber: '972507597944',
-    phone: '050-759-7944',
-    wazeUrl: 'https://waze.com/ul?q=Siesta+Ramot&navigate=yes',
-    theme: {
-      primary: '#302621',
-      secondary: '#605149',
-      accent: '#8C6C58',
-      background: '#FAF8F5',
-      bgSoft: '#EDE6DF',
-      surface: '#FFFFFF',
-      surfaceSoft: '#F4ECE4',
-      border: '#D8CBC0',
-      borderLight: '#E7DDD4',
-      dark: '#302621',
-      darkSoft: '#423630',
-      gold: '#C5A880'
-    },
-    heroImage: '/resorts/siesta.jpg',
-    amenities: [
-      'מטבח מרכזי משותף',
-      'בריכת שחייה משותפת במתחם',
-      'ג׳קוזי ספא בכל בקתה',
-      'מכונת נספרסו ומיקרוגל',
-      'מקרר ומטבחון בכל יחידה',
-      'מנגל פרטי לכל בקתה',
-      'טלוויזיה עם יס'
-    ],
-    units: [
-      { id: 'k618', propertyId: 'siesta', name: 'סייסטה · משפחתית 1', type: 'cabin', maxOccupancy: 7, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ משפחתית מרווחת עם ג׳קוזי ומטבחון.', features: ['עד 7 אורחים', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס'] },
-      { id: 'k619', propertyId: 'siesta', name: 'סייסטה · משפחתית 2', type: 'cabin', maxOccupancy: 7, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ משפחתית גדולה.', features: ['עד 7 אורחים', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס'] },
-      { id: 'k620', propertyId: 'siesta', name: 'סייסטה · רומנטית 3', type: 'cabin', maxOccupancy: 4, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ רומנטית לזוגות.', features: ['לזוגות (עד 4 אורחים)', 'ג׳קוזי ספא', 'נספרסו ומנגל', 'טלוויזיה עם יס'] },
-      { id: 'k621', propertyId: 'siesta', name: 'סייסטה · רומנטית 4', type: 'cabin', maxOccupancy: 4, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ רומנטית לזוגות.', features: ['לזוגות (עד 4 אורחים)', 'ג׳קוזי ספא', 'נספרסו ומנגל', 'טלוויזיה עם יס'] },
-      { id: 'k622', propertyId: 'siesta', name: 'סייסטה · בת הים 5', type: 'cabin', maxOccupancy: 5, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ בת הים המפנקת.', features: ['עד 5 אורחים', 'ג׳קוזי ספא', 'נספרסו ומנגל', 'טלוויזיה עם יס'] },
-      { id: 'k623', propertyId: 'siesta', name: 'סייסטה · בת הים 6', type: 'cabin', maxOccupancy: 5, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ בת הים המפנקת.', features: ['עד 5 אורחים', 'ג׳קוזי ספא', 'נספרסו ומנגל', 'טלוויזיה עם יס'] }
+      { id: 'k693', propertyId: 'maya', name: 'בקתות מאיה · בקתה 1', type: 'cabin', maxOccupancy: 2, basePrice: 750, weekendPrice: 1300, description: 'בקתת עץ מפנקת צמודה לבריכת השחייה הראשונה עם ג׳קוזי פנימי.', features: ['לזוגות בלבד', 'בריכה פרטית מחוממת ל-28°', 'ג׳קוזי פנימי', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
+      { id: 'k694', propertyId: 'maya', name: 'בקתות מאיה · בקתה 2', type: 'cabin', maxOccupancy: 2, basePrice: 600, weekendPrice: 900, description: 'בקתת עץ כפרית ושקטה עם ג׳קוזי פנימי.', features: ['לזוגות בלבד', 'בלי בריכה', 'ג׳קוזי פנימי', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
+      { id: 'k695', propertyId: 'maya', name: 'בקתות מאיה · בקתה 3', type: 'cabin', maxOccupancy: 2, basePrice: 750, weekendPrice: 1300, description: 'בקתת עץ מפנקת צמודה לבריכת השחייה השנייה עם ג׳קוזי פנימי.', features: ['לזוגות בלבד', 'בריכה פרטית מחוממת ל-28°', 'ג׳קוזי פנימי', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] }
     ]
   },
 
@@ -576,7 +530,7 @@ export const PROPERTY_THEMES = {
     heroImage: '/resorts/hill.jpg',
     amenities: [
       'מטבח מרכזי משותף מאובזר',
-      'בריכת שחייה משותפת במתחם',
+      'בריכה מרכזית מחוממת ל-28° לכל המתחם',
       'ג׳קוזי ספא בכל בקתה',
       'מכונת נספרסו ומיקרוגל',
       'מקרר ומטבחון בכל יחידה',
@@ -584,10 +538,10 @@ export const PROPERTY_THEMES = {
       'טלוויזיה עם יס'
     ],
     units: [
-      { id: 'hill-1', propertyId: 'hill', name: 'צימר בגבעה 1', type: 'cabin', maxOccupancy: 7, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ כפרית ושלווה עם ג׳קוזי ספא ומטבחון.', features: ['עד 7 אורחים (זוג+5)', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס'] },
-      { id: 'hill-2', propertyId: 'hill', name: 'צימר בגבעה 2', type: 'cabin', maxOccupancy: 7, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ כפרית מרווחת מול החצר.', features: ['עד 7 אורחים (זוג+5)', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס'] },
-      { id: 'hill-3', propertyId: 'hill', name: 'צימר בגבעה 3', type: 'cabin', maxOccupancy: 7, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ כפרית שקטה ופסטורלית.', features: ['עד 7 אורחים (זוג+5)', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס'] },
-      { id: 'hill-4', propertyId: 'hill', name: 'צימר בגבעה 4', type: 'cabin', maxOccupancy: 7, basePrice: 850, weekendPrice: 1100, description: 'בקתת עץ כפרית מרווחת.', features: ['עד 7 אורחים (זוג+5)', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס'] }
+      { id: 'hill-1', propertyId: 'hill', name: 'צימר בגבעה 1', type: 'cabin', maxOccupancy: 4, basePrice: 700, weekendPrice: 1100, description: 'בקתת עץ כפרית ושלווה עם ג׳קוזי ספא ומטבחון.', features: ['זוג + 2', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס'] },
+      { id: 'hill-2', propertyId: 'hill', name: 'צימר בגבעה 2', type: 'cabin', maxOccupancy: 4, basePrice: 700, weekendPrice: 1100, description: 'בקתת עץ כפרית מרווחת מול החצר.', features: ['זוג + 2', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס'] },
+      { id: 'hill-3', propertyId: 'hill', name: 'צימר בגבעה 3', type: 'cabin', maxOccupancy: 4, basePrice: 700, weekendPrice: 1100, description: 'בקתת עץ כפרית שקטה ופסטורלית.', features: ['זוג + 2', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס'] },
+      { id: 'hill-4', propertyId: 'hill', name: 'צימר בגבעה 4', type: 'cabin', maxOccupancy: 4, basePrice: 700, weekendPrice: 1100, description: 'בקתת עץ כפרית מרווחת.', features: ['זוג + 2', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס'] }
     ]
   },
 
@@ -620,6 +574,7 @@ export const PROPERTY_THEMES = {
     heroImage: '/resorts/kipat.jpg',
     amenities: [
       'כיפות גלמפינג יוקרתיות ממוזגות',
+      'בריכה פרטית מחוממת ל-28° לכל צימר',
       'ג׳קוזי ספא מפנק',
       'תצפית כוכבים פנורמית',
       'מטבחון מאובזר וכלי אוכל',
@@ -629,9 +584,9 @@ export const PROPERTY_THEMES = {
       'טלוויזיה עם יס'
     ],
     units: [
-      { id: 'dome-blue', propertyId: 'kipat', name: 'כיפת שמיים כחול', type: 'dome', maxOccupancy: 3, basePrice: 1200, weekendPrice: 1500, description: 'כיפת גלמפינג יוקרתית ממוזגת בגווני כחול עמוק עם ג׳קוזי ספא ותצפית כוכבים.', features: ['עד 3 אורחים (מתאים לזוגות)', 'תקרת כוכבים פנורמית', 'ג׳קוזי ספא', 'מטבחון, מקרר, מנגל', 'טלוויזיה עם יס'] },
-      { id: 'dome-red', propertyId: 'kipat', name: 'כיפת שמיים אדום', type: 'dome', maxOccupancy: 3, basePrice: 1200, weekendPrice: 1500, description: 'כיפת גלמפינג רומנטית ממוזגת בגווני ארגמן חמימים.', features: ['עד 3 אורחים (מתאים לזוגות)', 'תקרת כוכבים פנורמית', 'ג׳קוזי ספא', 'מטבחון, מקרר, מנגל', 'טלוויזיה עם יס'] },
-      { id: 'dome-green', propertyId: 'kipat', name: 'כיפת שמיים ירוק', type: 'dome', maxOccupancy: 3, basePrice: 1200, weekendPrice: 1500, description: 'כיפת גלמפינג פסטורלית ממוזגת באווירה טבעית ושלווה.', features: ['עד 3 אורחים (מתאים לזוגות)', 'תקרת כוכבים פנורמית', 'ג׳קוזי ספא', 'מטבחון, מקרר, מנגל', 'טלוויזיה עם יס'] }
+      { id: 'dome-blue', propertyId: 'kipat', name: 'כיפת שמיים כחול', type: 'dome', maxOccupancy: 2, basePrice: 1200, weekendPrice: 1500, description: 'כיפת גלמפינג יוקרתית ממוזגת בגווני כחול עמוק עם ג׳קוזי ספא ותצפית כוכבים.', features: ['לזוגות בלבד', 'בריכה פרטית מחוממת ל-28°', 'תקרת כוכבים פנורמית', 'ג׳קוזי ספא', 'מטבחון, מקרר, מנגל', 'טלוויזיה עם יס'] },
+      { id: 'dome-red', propertyId: 'kipat', name: 'כיפת שמיים אדום', type: 'dome', maxOccupancy: 2, basePrice: 1200, weekendPrice: 1500, description: 'כיפת גלמפינג רומנטית ממוזגת בגווני ארגמן חמימים.', features: ['לזוגות בלבד', 'בריכה פרטית מחוממת ל-28°', 'תקרת כוכבים פנורמית', 'ג׳קוזי ספא', 'מטבחון, מקרר, מנגל', 'טלוויזיה עם יס'] },
+      { id: 'dome-green', propertyId: 'kipat', name: 'כיפת שמיים ירוק', type: 'dome', maxOccupancy: 2, basePrice: 1200, weekendPrice: 1500, description: 'כיפת גלמפינג פסטורלית ממוזגת באווירה טבעית ושלווה.', features: ['לזוגות בלבד', 'בריכה פרטית מחוממת ל-28°', 'תקרת כוכבים פנורמית', 'ג׳קוזי ספא', 'מטבחון, מקרר, מנגל', 'טלוויזיה עם יס'] }
     ]
   },
 
@@ -663,7 +618,7 @@ export const PROPERTY_THEMES = {
     },
     heroImage: '/resorts/casa-nova.jpg',
     amenities: [
-      'בריכה פרטית לכל סוויטה',
+      'בריכה פרטית לכל סוויטה (לא מחוממת ל-28°)',
       'מטבחון פרטי מאובזר לכל יחידה',
       'ג׳קוזי ספא מפנק',
       'מכונת נספרסו ומיקרוגל',
@@ -673,8 +628,8 @@ export const PROPERTY_THEMES = {
       'מתאים לשומרי שבת ומסורת'
     ],
     units: [
-      { id: 'k826', propertyId: 'casa-nova', name: 'קאסה נובה · Aura', type: 'suite', maxOccupancy: 5, basePrice: 850, weekendPrice: 1100, description: 'סוויטת בוטיק יוקרתית עם בריכה פרטית רחבה, ג׳קוזי ומטבחון מאובזר בפרטיות מלאה.', features: ['עד 5 אורחים', 'בריכה פרטית רחבה', 'ג׳קוזי ספא', 'מטבחון, נספרסו ומנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
-      { id: 'k827', propertyId: 'casa-nova', name: 'קאסה נובה · Bloom', type: 'suite', maxOccupancy: 5, basePrice: 850, weekendPrice: 1100, description: 'סוויטת בוטיק רומנטית ומעוצבת עם בריכה פרטית וג׳קוזי.', features: ['עד 5 אורחים', 'בריכה פרטית', 'ג׳קוזי ספא', 'מטבחון, נספרסו ומנגל', 'טלוויזיה עם יס ו-Wi-Fi'] }
+      { id: 'k826', propertyId: 'casa-nova', name: 'קאסה נובה · Aura', type: 'suite', maxOccupancy: 4, basePrice: 800, weekendPrice: 1200, description: 'סוויטת בוטיק יוקרתית עם בריכה פרטית רחבה (לא מחוממת ל-28°), ג׳קוזי ומטבחון מאובזר בפרטיות מלאה.', features: ['זוג + 2', 'בריכה פרטית רחבה', 'ג׳קוזי ספא', 'מטבחון, נספרסו ומנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
+      { id: 'k827', propertyId: 'casa-nova', name: 'קאסה נובה · Bloom', type: 'suite', maxOccupancy: 4, basePrice: 800, weekendPrice: 1200, description: 'סוויטת בוטיק רומנטית ומעוצבת עם בריכה פרטית וג׳קוזי.', features: ['זוג + 2', 'בריכה פרטית (לא מחוממת ל-28°)', 'ג׳קוזי ספא', 'מטבחון, נספרסו ומנגל', 'טלוויזיה עם יס ו-Wi-Fi'] }
     ]
   }
 };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { 
@@ -28,6 +28,7 @@ import {
   ClipboardCheck,
   CreditCard
 } from 'lucide-react';
+import OfficePilotCard from './OfficePilotCard';
 import { 
   db, 
   useLiveUnits, 
@@ -35,13 +36,14 @@ import {
   useLivePromotions,
   useResortOSSyncStatus
 } from '../lib/resortos-db';
-import { pushBookingToCloud, pushBookingsToCloud, syncCloudBookingsToDexie, subscribeToRealtimeCloudBookings, syncUnitOpsToDexie, subscribeToRealtimeUnitOps, pushUnitToCloud, ensureCanonicalUnits, refreshBookingFromGuestMailbox, hasPublicGuestMailbox } from '../lib/cloudDb';
+import { pushBookingToCloud, pushBookingsToCloud, syncCloudBookingsToDexie, syncUnitOpsToDexie, pushUnitToCloud as pushUnitOps, ensureCanonicalUnitCatalog, subscribeToOpsEdgeEvents, refreshBookingFromGuestMailbox, hasPublicGuestMailbox } from '../lib/cloudDb';
 import { createCheckoutToken } from '../lib/checkoutToken';
 import { findOverlappingBooking, maxAvailableNights } from '../lib/bookingOverlap';
-import { barsToDrawOnCell, isActiveStay, isCalendarBarBooking, isPaintedStay, stayCardTone, spanBarPixels, stayYmd } from '../lib/calendarOccupancy';
+import { barsToDrawOnCell, isActiveStay, isCalendarBarBooking, isKinorotRemovedStay, isPaintedStay, stayCardTone, spanBarPixels, stayYmd } from '../lib/calendarOccupancy';
 import { formatStayHourLabel, stayHoursFromBooking } from '../lib/kinorotStayHours';
 import { agentLockLabel, agentLockOnNight, findOverlappingAgentLock, useAgentLocks } from '../lib/agentLocks';
-import { publishGuestMailbox, startHostCardCharge } from '../lib/guestCheckoutApi';
+import { pollHostCardCharge, publishGuestMailbox, startHostCardCharge } from '../lib/guestCheckoutApi';
+import { applyCalendarCardPayment } from '../lib/calendarCardCharge';
 import { guestStayOrigin, guestStayUrl } from '../lib/guestStayUrl';
 import { guestStaySmsText } from '../lib/micropaySms';
 import { sendStaffSms } from '../lib/staffSmsApi';
@@ -64,6 +66,7 @@ import { calendarInventory, unitCalendarLines, unitMaxOccupancy, whatsAppUnitNam
 import { fieldUnitDisplayName } from '../lib/fieldUnitCatalog';
 import { lockboxCodeForUnit } from '../lib/guestProfileSeed';
 import { applyCalendarOccupancy, applyCalendarUnitStatus, applyAssignedStaff, ensureTurnoverCleaning, openTurnoverAfterCheckout, persistRoomCompletions } from '../lib/housekeepingCycle';
+import { guestNotes, printGuestFile } from '../lib/guestFile';
 import { coveringUnavailableHold, isUnavailableHoldBooking, unavailableHoldLabel } from '../lib/unavailableHold';
 import {
   bookingsMarkingNight,
@@ -76,12 +79,14 @@ import {
   staffOccupancyOf,
   unitDisplayStatus,
   unitNameFrame,
+  priorityRoomStatus,
   unitsWithStaleVacantFlag,
   vacateBookingOnDate
 } from '../lib/unitStatus';
 import UnitOpsStatusSheet from './UnitOpsStatusSheet';
-import { hypAccountOf, listClearingPayments, mergeClearingPayments } from '../lib/clearingPayments';
-import { awaitingBankReview, awaitingCashCollection, dueAgorotOf, hasRecordedReceipt, isFullyPaid, kinorotSettlementKind, paidIlsOfBooking, paymentStatusAfterPaid, recordedPaidAgorot } from '../lib/bookingPaid';
+import { formatIlsFromAgorot, hypAccountOf, isValidIsraeliId, listClearingPayments, mergeClearingPayments, normalizeIsraeliId } from '../lib/clearingPayments';
+import { cashDayTotalAgorot, cashPaymentsOnDate, printCashDayReport } from '../lib/cashDayReport';
+import { awaitingBankReview, awaitingCashCollection, dueAgorotOf, hasRecordedReceipt, isFullyPaid, kinorotSettlementKind, paidIlsOfBooking, paymentStatusAfterPaid, recordedClearingPayments, recordedPaidAgorot } from '../lib/bookingPaid';
 import GuestCommsPanel, { PresenceDot } from './GuestCommsPanel';
 import ClearingPaymentsList from './ClearingPaymentsList';
 import CleaningChecklistModal from './CleaningChecklistModal';
@@ -309,6 +314,43 @@ function paidIlsOf(booking, totalIls, depositIls) {
   return paidIlsOfBooking(booking, totalIls, depositIls);
 }
 
+function cashReceiptAgorot(booking, totalIls) {
+  const totalAgorot = Math.round(Number(totalIls || 0) * 100) || Number(booking?.total_price_agorot) || 0;
+  const due = Math.max(0, totalAgorot - recordedPaidAgorot({
+    ...booking,
+    total_price_agorot: totalAgorot
+  }));
+  return { totalAgorot, amountAgorot: due > 0 ? due : totalAgorot };
+}
+
+function paymentBrief(booking, totalIls) {
+  const payments = recordedClearingPayments(booking).filter((row) => Number(row.amount_agorot) > 0);
+  const last = payments.at(-1) || null;
+  const paidIls = paidIlsOfBooking(
+    booking,
+    totalIls,
+    Math.round((Number(booking?.deposit_agorot) || 0) / 100)
+  );
+  const rawDate = last?.date || String(last?.collected_at || '').slice(0, 10);
+  const mode = String(booking?.payment_mode || '');
+  const settlement = kinorotSettlementKind(booking);
+  const cash = mode === 'CASH' || mode === 'CASH_TRUST' || paidMethodLabel(booking) === 'מזומן';
+  const method = settlement === 'voucher'
+    ? 'שובר נפדה'
+    : settlement === 'comp'
+      ? 'ללא תשלום'
+      : (paidIls > 0 || last
+        ? paidMethodLabel(booking)
+        : (cash ? 'מזומן' : '—'));
+  return {
+    totalIls,
+    paidIls,
+    dateLabel: rawDate ? formatDisplayDate(rawDate) : '—',
+    method: method === 'תשלום' && paidIls <= 0 ? '—' : method,
+    cash: cash && settlement !== 'voucher' && settlement !== 'comp'
+  };
+}
+
 function paidMethodLabel(booking) {
   const settlement = kinorotSettlementKind(booking);
   if (settlement === 'voucher') return 'שובר';
@@ -327,6 +369,20 @@ function paidMethodLabel(booking) {
   if (mode === 'VOUCHER') return 'שובר';
   if (String(last.accountLabel || '').includes('מזומן')) return 'מזומן';
   return 'תשלום';
+}
+
+function paymentLineLabel(row) {
+  const method = String(row?.method || '').toLowerCase();
+  const txn = String(row?.txn || '');
+  if (method === 'cash' || /_cash$/.test(txn)) return 'מזומן';
+  if (method === 'bank' || /_bank$/.test(txn)) return 'העברה';
+  if (method === 'card' || /_card$/.test(txn)) return 'אשראי';
+  const key = String(row?.accountKey || '').toUpperCase();
+  const source = String(row?.source || '').toUpperCase();
+  if (source === 'CASH' || key === 'CASH') return 'מזומן';
+  if (source === 'BANK' || key === 'BANK') return 'העברה';
+  if (source === 'HYP' || source === 'CARD' || source === 'DESK' || key.startsWith('HYP') || key === 'MAX_HYP' || key === 'MAX') return 'אשראי';
+  return '';
 }
 
 function localDateTimeValue(date = new Date()) {
@@ -487,6 +543,9 @@ export default function ResortOSCalendar({
   canSeePayments = true,
   sessionUser = null
 }) {
+  const pushUnitToCloud = useCallback((patch, options = {}) => (
+    pushUnitOps(patch, { ...options, viaEdge: true })
+  ), []);
   const { t, i18n } = useTranslation();
   const scrollContainerRef = useRef(null);
   const todayStr = useMemo(() => israelToday(), []);
@@ -503,6 +562,13 @@ export default function ResortOSCalendar({
   const [daySummaryModalData, setDaySummaryModalData] = useState(null);
   const [sendingGuestLink, setSendingGuestLink] = useState(false);
   const [chargingCard, setChargingCard] = useState(false);
+  const [cardChargeNote, setCardChargeNote] = useState('');
+  const [cardPayUrl, setCardPayUrl] = useState('');
+  const [cardReceipt, setCardReceipt] = useState(null);
+  const [chargeAsk, setChargeAsk] = useState(null);
+  const cardWatchRef = useRef(0);
+  const cardSessionRef = useRef(null);
+  const cardRecoveredRef = useRef(new Set());
   const [sendingSms, setSendingSms] = useState(false);
   const [linkHypTerminal, setLinkHypTerminal] = useState('B');
   const [dutyNow, setDutyNow] = useState(() => new Date());
@@ -514,6 +580,8 @@ export default function ResortOSCalendar({
   const [occupyAskDismissed, setOccupyAskDismissed] = useState(() => isOccupyAskDismissedToday());
   const [occupyAskBusy, setOccupyAskBusy] = useState(false);
   const [dutyReportOpen, setDutyReportOpen] = useState(false);
+  const [cashReportOpen, setCashReportOpen] = useState(false);
+  const [cashReportDate, setCashReportDate] = useState(() => israelToday());
   const [dutyReportDate, setDutyReportDate] = useState(() => defaultReportDate());
   const [dutyReportArea, setDutyReportArea] = useState('all');
   const [cleaningChecklistOpen, setCleaningChecklistOpen] = useState(false);
@@ -548,16 +616,19 @@ export default function ResortOSCalendar({
     method: 'CASH',
     amount: '',
     collector: '',
+    payerName: '',
+    payerId: '',
     ref: '',
     terminal: 'B',
     at: israelToday()
   });
   const [cashBusy, setCashBusy] = useState(false);
+  const [cashReceiptOpen, setCashReceiptOpen] = useState(false);
   const [boardSync, setBoardSync] = useState({ ok: true, count: null });
   const [boardArea, setBoardArea] = useState(() => {
     try {
       const stored = localStorage.getItem('resortos-board-area');
-      if (stored === 'ramot' || stored === 'givat' || stored === 'all') return stored;
+      if (BOARD_AREA_FILTERS.some((row) => row.id === stored)) return stored;
     } catch (_) {}
     return 'all';
   });
@@ -819,7 +890,7 @@ export default function ResortOSCalendar({
     });
   }, [rawBookings]);
 
-  const modalOpen = Boolean(isNewModalOpen || dispatchModalData || editingBooking || daySummaryModalData || dutyOpen || dutyReportOpen || cleaningChecklistOpen || occupyAskOpen || opsUnitId);
+  const modalOpen = Boolean(isNewModalOpen || dispatchModalData || editingBooking || daySummaryModalData || dutyOpen || dutyReportOpen || cashReportOpen || cleaningChecklistOpen || occupyAskOpen || opsUnitId);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -859,18 +930,18 @@ export default function ResortOSCalendar({
       try {
         const pulled = await syncCloudBookingsToDexie(tenantId, {
           from: calendarStartStr,
-          to: calendarEndStr
+          to: calendarEndStr,
+          viaEdge: true
         });
         if (cancelled) return;
         if (pulled && typeof pulled === 'object') {
           setBoardSync({ ok: pulled.ok !== false, count: Number(pulled.count) || 0 });
         }
-        await syncUnitOpsToDexie(tenantId);
+        await syncUnitOpsToDexie(tenantId, { viaEdge: true });
       } catch (_) {}
     }
     syncAll();
-    const unsubscribe = subscribeToRealtimeCloudBookings(tenantId);
-    const unsubscribeOps = subscribeToRealtimeUnitOps(tenantId);
+    const unsubscribe = subscribeToOpsEdgeEvents();
     const interval = setInterval(() => {
       if (document.visibilityState === 'hidden') return;
       syncAll();
@@ -891,7 +962,6 @@ export default function ResortOSCalendar({
     return () => {
       cancelled = true;
       if (typeof unsubscribe === 'function') unsubscribe();
-      if (typeof unsubscribeOps === 'function') unsubscribeOps();
       clearInterval(interval);
       document.removeEventListener('visibilitychange', onWake);
       window.removeEventListener('online', onWake);
@@ -940,12 +1010,12 @@ export default function ResortOSCalendar({
     let cancelled = false;
     async function seedInventory() {
       try {
-        await ensureCanonicalUnits(tenantId, { pullOnly: true, skipPurge: true });
+        await ensureCanonicalUnitCatalog();
       } catch (err) {
         console.error('[HOTELOS SEED ERROR]', err);
       }
       if (!cancelled) {
-        syncUnitOpsToDexie(tenantId);
+        syncUnitOpsToDexie(tenantId, { viaEdge: true });
       }
     }
     seedInventory();
@@ -1095,8 +1165,18 @@ export default function ResortOSCalendar({
   });
 
   // 2. EXISTING BOOKING CLICK -> Open Existing Booking Details & Edit Modal
+  const forgetCardForm = () => {
+    cardWatchRef.current += 1;
+    cardSessionRef.current = null;
+    setCardPayUrl('');
+    setCardChargeNote('');
+    setCardReceipt(null);
+    setChargeAsk(null);
+  };
+
   const handleBookingClick = (booking, e) => {
     e.stopPropagation();
+    forgetCardForm();
     setIsEditingBookingDetails(false);
     setBookingModalTab('details');
     setPayDetailsOpen(false);
@@ -1111,6 +1191,8 @@ export default function ResortOSCalendar({
       method: 'CASH',
       amount: '',
       collector: sessionUser?.display_name || sessionUser?.username || '',
+      payerName: booking.guest_name || '',
+      payerId: '',
       ref: '',
       terminal: normalizeHypTerminal(booking.hyp_terminal || booking.stay?.hyp_terminal, booking.payment_mode),
       at: israelToday()
@@ -1437,6 +1519,7 @@ export default function ResortOSCalendar({
     await pushBookingToCloud(updatedBooking);
     await publishGuestMailbox(updatedBooking).catch(() => {});
     setIsEditingBookingDetails(false);
+    forgetCardForm();
     setEditingBooking(null);
     setEditFormData(null);
   };
@@ -1526,6 +1609,15 @@ export default function ResortOSCalendar({
           err.body = data;
           throw err;
         }
+        const sentAt = new Date().toISOString();
+        const stamped = {
+          ...nextBooking,
+          stay: { ...(nextBooking.stay || {}), link_sent_at: sentAt },
+          updated_at: sentAt
+        };
+        await db.bookings.put(stamped);
+        await pushBookingToCloud(stamped);
+        setEditingBooking(stamped);
         window.alert('הסמס נשלח.');
       } else {
         openWhatsAppChat(
@@ -1548,7 +1640,7 @@ export default function ResortOSCalendar({
     }
   };
 
-  const startEditCardCharge = async () => {
+  const startEditCardCharge = async (requestedIls) => {
     if (!editingBooking || chargingCard || sendingGuestLink) return;
     if (editingBooking.booking_status === 'CANCELED') {
       window.alert('אי אפשר לחייב הזמנה מבוטלת.');
@@ -1556,31 +1648,48 @@ export default function ResortOSCalendar({
     }
     const unitId = editFormData?.unit_id || editingBooking.unit_id;
     const token = editingBooking.checkout_token || createCheckoutToken();
-    const lockedTerminal = normalizeHypTerminal(
-      editingBooking.hyp_terminal || editingBooking.stay?.hyp_terminal,
-      editingBooking.payment_mode
-    );
-    const chosenTerminal = editingBooking.hyp_terminal || editingBooking.stay?.hyp_terminal
-      ? lockedTerminal
-      : normalizeHypTerminal(linkHypTerminal, editingBooking.payment_mode);
-    const nextBooking = {
+    const dueBooking = {
       ...editingBooking,
+      total_price_agorot: Number(editFormData?.total_price_ils || 0) > 0
+        ? ilsToAgorot(editFormData.total_price_ils)
+        : editingBooking.total_price_agorot
+    };
+    const dueIls = Math.round(dueAgorotOf(dueBooking)) / 100;
+    if (!(dueIls > 0.5)) {
+      window.alert('אין יתרה לחיוב.');
+      return;
+    }
+    const asked = Math.round(Number(String(requestedIls).replace(/[^\d.]/g, '')) * 100) / 100;
+    const chargeIls = Number.isFinite(asked) && asked > 0.5 ? asked : dueIls;
+    if (chargeIls > dueIls + 0.5) {
+      window.alert('הסכום גבוה מהיתרה.');
+      return;
+    }
+    const nextBooking = {
+      ...dueBooking,
       guest_name: editFormData?.guest_name || editingBooking.guest_name,
       guest_phone: editFormData?.guest_phone || editingBooking.guest_phone,
       guest_email: editFormData?.guest_email || editingBooking.guest_email,
       unit_id: unitId,
       check_in_date: editFormData?.check_in_date || editingBooking.check_in_date,
       check_out_date: editFormData?.check_out_date || editingBooking.check_out_date,
-      total_price_agorot: Number(editFormData?.total_price_ils || 0) > 0
-        ? ilsToAgorot(editFormData.total_price_ils)
-        : editingBooking.total_price_agorot,
       deposit_agorot: Number(editFormData?.deposit_ils || 0) > 0
         ? ilsToAgorot(editFormData.deposit_ils)
         : editingBooking.deposit_agorot,
-      hyp_terminal: editingBooking.payment_mode === 'CASH_TRUST' ? null : chosenTerminal,
+      charge_amount_ils: chargeIls,
+      hyp_terminal: 'A',
       stay: {
         ...(editingBooking.stay || {}),
-        hyp_terminal: editingBooking.payment_mode === 'CASH_TRUST' ? null : chosenTerminal
+        hyp_terminal: 'A',
+        hyp_intent: {
+          ...((editingBooking.stay || {}).hyp_intent || {}),
+          purpose: 'balance',
+          terminal: 'A',
+          stage: 'calendar',
+          amount: chargeIls,
+          status: 'redirected',
+          at: new Date().toISOString()
+        }
       },
       checkout_token: token,
       expires_at: stayExpiresAt({
@@ -1590,18 +1699,189 @@ export default function ResortOSCalendar({
       updated_at: new Date().toISOString()
     };
     setChargingCard(true);
+    setCardChargeNote('');
     try {
       await db.bookings.put(nextBooking);
       await pushBookingToCloud(nextBooking);
       const started = await startHostCardCharge(nextBooking);
-      setEditingBooking({ ...nextBooking, ...(started.booking || {}) });
-      window.open(started.payUrl, '_blank', 'noopener');
-    } catch (_) {
-      window.alert('לא הצלחנו לפתוח חיוב אשראי. בדקו שהקישור עלה לשרת ונסו שוב.');
+      const opened = {
+        ...nextBooking,
+        stay: {
+          ...nextBooking.stay,
+          hyp_intent: {
+            ...nextBooking.stay.hyp_intent,
+            lowProfileId: started.lowProfileId || ''
+          }
+        }
+      };
+      await db.bookings.put(opened);
+      setEditingBooking(opened);
+      setCardReceipt(null);
+      setChargeAsk(null);
+      setCardPayUrl(started.payUrl);
+      setCardChargeNote('הטופס נפתח כאן. ממתינים לאישור הסליקה…');
+      if (started.lowProfileId) {
+        const watch = ++cardWatchRef.current;
+        cardSessionRef.current = {
+          watch,
+          bookingId: opened.id,
+          lowProfileId: started.lowProfileId,
+          terminal: started.terminal || 'A'
+        };
+        void watchCardPayment(watch, opened.id, started.lowProfileId, started.terminal || 'A');
+      }
+    } catch (err) {
+      window.alert(err?.message && err.message !== 'CHARGE_START_FAILED'
+        ? err.message
+        : 'לא הצלחנו לפתוח טופס תשלום. נסו שוב.');
     } finally {
       setChargingCard(false);
     }
   };
+
+  const settleCardPayment = async (watch, bookingId, lowProfileId, terminal, result) => {
+    if (cardWatchRef.current !== watch) return;
+    const current = await db.bookings.get(bookingId);
+    if (!current || cardWatchRef.current !== watch) return;
+    const already = current.stay?.hyp_intent?.status === 'paid'
+      && current.stay?.hyp_intent?.lowProfileId === lowProfileId;
+    const next = already
+      ? current
+      : applyCalendarCardPayment(current, {
+        params: result.params,
+        terminal: result.terminal || terminal,
+        lowProfileId
+      });
+    if (!already) {
+      await db.bookings.put(next);
+      void pushBookingToCloud(next, { allowOverlap: true }).catch(() => {});
+      setEditingBooking((row) => {
+        if (row?.id !== bookingId) return row;
+        setEditFormData(buildEditFormData(next));
+        return next;
+      });
+    }
+    const approval = String(result?.params?.ACode || '').trim();
+    setCardPayUrl('');
+    setCardReceipt({ approval: approval || 'נשמר בהזמנה' });
+    setCardChargeNote(approval
+      ? `התשלום נקלט. מספר אישור ${approval}`
+      : 'התשלום נקלט. ההזמנה סומנה כשולמה באשראי.');
+    window.setTimeout(() => {
+      if (cardWatchRef.current !== watch) return;
+      setCardReceipt(null);
+    }, 4500);
+  };
+
+  const watchCardPayment = async (watch, bookingId, lowProfileId, terminal) => {
+    const startedAt = Date.now();
+    while (cardWatchRef.current === watch && Date.now() - startedAt < 3 * 60 * 1000) {
+      let result = null;
+      try {
+        result = await pollHostCardCharge({ lowProfileId, terminal });
+      } catch (_) {
+        result = null;
+      }
+      if (result?.paid && cardWatchRef.current === watch) {
+        await settleCardPayment(watch, bookingId, lowProfileId, terminal, result);
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 4000));
+    }
+  };
+
+  const settleCardRef = useRef(settleCardPayment);
+  settleCardRef.current = settleCardPayment;
+
+  useEffect(() => {
+    function onCardPaid(event) {
+      const data = event?.data;
+      if (!data || data.type !== 'resortos-card-paid') return;
+      if (event.origin !== 'https://resortos.app' && event.origin !== window.location.origin) return;
+      const session = cardSessionRef.current;
+      if (!session) return;
+      if (data.paid === false) {
+        setCardPayUrl('');
+        setCardReceipt(null);
+        setCardChargeNote('התשלום לא הושלם.');
+        return;
+      }
+      const approval = String(data.approval || '').trim();
+      if (approval) {
+        setCardPayUrl('');
+        setCardReceipt({ approval });
+      }
+      void (async () => {
+        try {
+          const result = await pollHostCardCharge({
+            lowProfileId: session.lowProfileId,
+            terminal: session.terminal
+          });
+          if (!result?.paid) return;
+          await settleCardRef.current?.(
+            session.watch,
+            session.bookingId,
+            session.lowProfileId,
+            session.terminal,
+            result
+          );
+        } catch (_) {}
+      })();
+    }
+    window.addEventListener('message', onCardPaid);
+    return () => window.removeEventListener('message', onCardPaid);
+  }, []);
+
+  useEffect(() => {
+    const pending = (rawBookings || []).filter((booking) => {
+      const intent = booking?.stay?.hyp_intent;
+      const lp = String(intent?.lowProfileId || '').trim();
+      if (!lp || intent?.status === 'paid') return false;
+      if (cardRecoveredRef.current.has(lp)) return false;
+      const at = Date.parse(intent?.at || '');
+      if (!Number.isFinite(at)) return false;
+      const age = Date.now() - at;
+      return age > 15000 && age < 3 * 24 * 60 * 60 * 1000;
+    }).slice(0, 8);
+    if (!pending.length) return undefined;
+    let stop = false;
+    (async () => {
+      for (const booking of pending) {
+        if (stop) return;
+        const intent = booking.stay.hyp_intent;
+        const lp = String(intent.lowProfileId);
+        cardRecoveredRef.current.add(lp);
+        try {
+          const result = await pollHostCardCharge({
+            lowProfileId: lp,
+            terminal: intent.terminal || 'A'
+          });
+          if (stop || !result?.paid) continue;
+          const current = await db.bookings.get(booking.id);
+          if (!current || current.stay?.hyp_intent?.status === 'paid') continue;
+          const next = applyCalendarCardPayment(current, {
+            params: result.params,
+            terminal: result.terminal || intent.terminal || 'A',
+            lowProfileId: lp
+          });
+          await db.bookings.put(next);
+          void pushBookingToCloud(next, { allowOverlap: true }).catch(() => {});
+          setEditingBooking((row) => {
+            if (row?.id !== next.id) return row;
+            setEditFormData(buildEditFormData(next));
+            setCardPayUrl('');
+            const approval = String(result.params?.ACode || '').trim();
+            setCardReceipt({ approval: approval || 'נשמר בהזמנה' });
+            setCardChargeNote(approval
+              ? `התשלום נקלט. מספר אישור ${approval}`
+              : 'התשלום נקלט. ההזמנה סומנה כשולמה באשראי.');
+            return next;
+          });
+        } catch (_) {}
+      }
+    })();
+    return () => { stop = true; };
+  }, [rawBookings]);
 
   // Cancel/Delete Reservation
   const handleCancelBooking = async () => {
@@ -1615,6 +1895,7 @@ export default function ResortOSCalendar({
       };
       await persistBooking(canceledBooking);
       setIsEditingBookingDetails(false);
+      forgetCardForm();
       setEditingBooking(null);
       setEditFormData(null);
     }
@@ -1642,6 +1923,16 @@ export default function ResortOSCalendar({
     const ref = String(cashForm.ref || '').trim();
     if (method === 'CASH' && !collector) {
       window.alert('מי גבה את המזומן?');
+      return;
+    }
+    const payerName = String(cashForm.payerName || editingBooking.guest_name || '').trim();
+    const payerId = normalizeIsraeliId(cashForm.payerId);
+    if (method === 'CASH' && !payerName) {
+      window.alert('הזינו את שם המשלם.');
+      return;
+    }
+    if (method === 'CASH' && !isValidIsraeliId(cashForm.payerId)) {
+      window.alert('מספר תעודת הזהות לא תקין.');
       return;
     }
     if (method !== 'CASH' && !ref) {
@@ -1683,6 +1974,8 @@ export default function ResortOSCalendar({
             amount_agorot: Math.round(amountIls * 100),
             date,
             collector,
+            payer_name: payerName,
+            payer_id: payerId,
             collected_at: collectedAt,
             txn: `cash_${Date.now()}`
           };
@@ -1700,7 +1993,52 @@ export default function ResortOSCalendar({
     setCashBusy(true);
     try {
       await persistBooking(checkedIn);
-      setCashForm((prev) => ({ ...prev, amount: '', ref: '' }));
+      setCashForm((prev) => ({ ...prev, amount: '', ref: '', payerId: '' }));
+    } finally {
+      setCashBusy(false);
+    }
+  };
+
+  const confirmCashReceipt = async () => {
+    if (!editingBooking || cashBusy) return;
+    const priced = cashReceiptAgorot(editingBooking, editFormData?.total_price_ils);
+    const totalAgorot = priced.totalAgorot;
+    const amount = priced.amountAgorot;
+    const payerName = String(cashForm.payerName || editingBooking.guest_name || '').trim();
+    const payerId = normalizeIsraeliId(cashForm.payerId);
+    if (!payerName) {
+      window.alert('הזינו את שם המשלם.');
+      return;
+    }
+    if (!isValidIsraeliId(cashForm.payerId)) {
+      window.alert('מספר תעודת הזהות לא תקין.');
+      return;
+    }
+    const date = israelToday();
+    const payment = {
+      source: 'CASH',
+      accountKey: 'CASH',
+      amount_agorot: amount,
+      date,
+      collector: sessionUser?.display_name || sessionUser?.username || 'משרד',
+      payer_name: payerName,
+      payer_id: payerId,
+      collected_at: `${date}T12:00:00`,
+      txn: `cash_${Date.now()}`
+    };
+    const next = {
+      ...editingBooking,
+      total_price_agorot: totalAgorot || editingBooking.total_price_agorot,
+      clearing_payments: mergeClearingPayments(editingBooking.clearing_payments, payment),
+      payment_mode: 'CASH',
+      payment_status: 'PAID',
+      cash_receipt_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    setCashBusy(true);
+    try {
+      await persistBooking(applyAutoCheckin(next) || next);
+      setCashReceiptOpen(false);
     } finally {
       setCashBusy(false);
     }
@@ -1950,7 +2288,10 @@ export default function ResortOSCalendar({
       return { label: 'ללא תשלום', bg: 'rgba(14, 165, 233, 0.16)', color: '#0284C7', border: '#0EA5E9' };
     }
     if (isFullyPaid(booking)) {
-      const modeLabel = mode === 'CASH' ? ' · מזומן' : mode === 'BANK_TRANSFER' ? ' · העברה' : mode === 'CARD' ? ' · אשראי' : '';
+      const cashId = (booking.clearing_payments || []).map((row) => normalizeIsraeliId(row?.payer_id)).find(Boolean);
+      const modeLabel = mode === 'CASH'
+        ? ` · מזומן${cashId ? ` · ת.ז. ${cashId}` : ''}`
+        : mode === 'BANK_TRANSFER' ? ' · העברה' : mode === 'CARD' ? ' · אשראי' : '';
       return { label: `שולם מלא${modeLabel}`, bg: 'rgba(16, 185, 129, 0.18)', color: '#10B981', border: '#10B981' };
     }
     if (depositActuallyPaid(booking) || status === 'DEPOSIT_PAID') {
@@ -2159,6 +2500,22 @@ export default function ResortOSCalendar({
         </button>
         <button
           type="button"
+          onClick={() => {
+            setCashReportDate(israelToday());
+            setCashReportOpen(true);
+          }}
+          style={{
+            ...buttonStyle,
+            background: isLight ? '#ECFDF5' : '#064E3B',
+            color: isLight ? '#047857' : '#A7F3D0',
+            border: `1px solid ${isLight ? '#6EE7B7' : '#065F46'}`
+          }}
+        >
+          <Banknote size={15} />
+          דוח מזומן
+        </button>
+        <button
+          type="button"
           onClick={() => setCleaningChecklistOpen(true)}
           style={{
             ...buttonStyle,
@@ -2195,7 +2552,7 @@ export default function ResortOSCalendar({
           <button
             type="button"
             onClick={() => {
-              syncCloudBookingsToDexie(tenantId, { from: calendarStartStr, to: calendarEndStr })
+              syncCloudBookingsToDexie(tenantId, { from: calendarStartStr, to: calendarEndStr, viaEdge: true })
                 .then((pulled) => setBoardSync({ ok: pulled?.ok !== false, count: Number(pulled?.count) || 0 }))
                 .catch(() => setBoardSync({ ok: false, count: 0 }));
             }}
@@ -2210,6 +2567,10 @@ export default function ResortOSCalendar({
           </button>
         ) : null}
       </div>
+
+      {boardArea === 'pilot' ? (
+        <OfficePilotCard operator={sessionUser?.display_name || sessionUser?.username || 'צוות'} />
+      ) : null}
 
       {/* MAIN GRID DASHBOARD - native 2D scroll (trackpad / mouse) */}
       <div 
@@ -2322,7 +2683,19 @@ export default function ResortOSCalendar({
             const fullUnitName = fieldUnitDisplayName(unit, t(unit.id + '_name', unit.name));
             const { primary: unitPrefix, secondary: unitDetail } = unitCalendarLines(fullUnitName);
             const ops = unitDisplayStatus(unit, rawBookings, todayStr, dutyNow);
-            const cube = unitNameFrame(ops.key, isLight);
+            const room = priorityRoomStatus(unit);
+            const frameKey = ops.key === 'UNAVAILABLE'
+              ? 'UNAVAILABLE'
+              : (room.key === 'occupied'
+                ? 'OCCUPIED'
+                : room.key === 'dirty'
+                  ? 'DIRTY'
+                  : room.key === 'inspect'
+                    ? 'NEEDS_COMPLETIONS'
+                    : room.key === 'alert'
+                      ? 'MAINTENANCE_ALERT'
+                      : 'READY');
+            const cube = unitNameFrame(frameKey, isLight);
             const lockbox = lockboxCodeForUnit(unit);
 
             return (
@@ -2349,7 +2722,7 @@ export default function ResortOSCalendar({
                 <div
                   role="button"
                   tabIndex={0}
-                  title={lockbox ? `${fullUnitName} · כספת ${lockbox}` : 'לחץ לשינוי סטטוס תפעול'}
+                  title={lockbox ? `${fullUnitName} · ${room.label} · כספת ${lockbox}` : `${fullUnitName} · ${room.label}`}
                   onClick={(event) => {
                     event.stopPropagation();
                     openOpsSheet(unit.id);
@@ -2528,9 +2901,10 @@ export default function ResortOSCalendar({
                 if (!pix) return null;
                 const hold = isUnavailableHoldBooking(booking);
                 const holdLabel = hold ? (unavailableHoldLabel(booking.guest_name) || 'סגור') : '';
-                const departed = !hold && booking.booking_status === 'CHECKED_OUT'
+                const kinorotRemoved = !hold && isKinorotRemovedStay(booking);
+                const departed = !hold && !kinorotRemoved && booking.booking_status === 'CHECKED_OUT'
                   && stayYmd(booking.check_in_date) < todayStr;
-                const frameColor = hold ? '#D6D3D1' : (departed ? '#94A3B8' : stayFrameColor(booking));
+                const frameColor = hold ? '#D6D3D1' : (kinorotRemoved || departed ? '#94A3B8' : stayFrameColor(booking));
                 const tone = stayCardTone(booking, { today: todayStr });
                 const bankWait = !hold && !departed && awaitingBankReview(booking);
                 const hours = hold ? { checkout: '', checkin: '' } : stayHoursFromBooking(booking);
@@ -2542,7 +2916,7 @@ export default function ResortOSCalendar({
                     key={booking.id}
                     onClick={(e) => handleBookingClick(booking, e)}
                     className={bankWait ? 'hotelos-bank-wait' : undefined}
-                    title={hold ? holdLabel : `${booking.guest_name || 'אורח'} · ${bookingPeopleLabel(booking)}${hourHint ? ` · ${hourHint}` : ''}`}
+                    title={hold ? holdLabel : kinorotRemoved ? `${booking.guest_name || 'אורח'} · בוטל בכינורות` : `${booking.guest_name || 'אורח'} · ${bookingPeopleLabel(booking)}${hourHint ? ` · ${hourHint}` : ''}`}
                     style={{
                       position: 'absolute',
                       top: rowIndex * UNIT_ROW_PX + 2,
@@ -2552,9 +2926,11 @@ export default function ResortOSCalendar({
                       zIndex: hold ? 8 : 12,
                       pointerEvents: 'auto',
                       borderRadius: 4,
-                      border: hold || departed ? `1.5px dashed ${frameColor}` : `2px solid ${frameColor}`,
+                      border: hold || kinorotRemoved || departed ? `1.5px dashed ${frameColor}` : `2px solid ${frameColor}`,
                       background: hold
                         ? holdNightHatch(isLight)
+                        : kinorotRemoved
+                        ? (isLight ? 'rgba(241, 245, 249, 0.72)' : 'rgba(30, 41, 59, 0.35)')
                         : departed
                         ? (isLight ? 'rgba(241, 245, 249, 0.95)' : 'rgba(30, 41, 59, 0.55)')
                         : tone === 'unpaid'
@@ -2579,7 +2955,8 @@ export default function ResortOSCalendar({
                     <span style={{
                       fontWeight: 800,
                       fontSize: '0.62rem',
-                      color: hold || departed ? (isLight ? '#78716C' : '#D6D3D1') : (isLight ? '#0F172A' : '#FFFFFF'),
+                      color: hold || kinorotRemoved || departed ? (isLight ? '#78716C' : '#D6D3D1') : (isLight ? '#0F172A' : '#FFFFFF'),
+                      textDecoration: kinorotRemoved ? 'line-through' : 'none',
                       whiteSpace: 'nowrap',
                       pointerEvents: 'none'
                     }}>
@@ -3405,7 +3782,7 @@ export default function ResortOSCalendar({
                 }).border : themeStyles.inputBorder}`,
                 borderRadius: '16px',
                 width: '100%',
-                maxWidth: '400px',
+                maxWidth: cardPayUrl ? 'min(94vw, 520px)' : '400px',
                 maxHeight: '86vh',
                 overflowY: 'auto',
                 padding: '0.95rem 1rem 1.05rem',
@@ -3426,6 +3803,24 @@ export default function ResortOSCalendar({
                   </span>
                 </h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  {!isEditingBookingDetails && !isUnavailableHoldBooking(editingBooking) && editingBooking?.booking_status !== 'CANCELED' && (
+                    <button
+                      type="button"
+                      onClick={() => printGuestFile(editingBooking, { units: rawUnits, bookings: rawBookings })}
+                      style={{
+                        border: `1px solid ${themeStyles.inputBorder}`,
+                        background: isLight ? '#EAE5DD' : '#1E293B',
+                        color: themeStyles.textPrimary,
+                        cursor: 'pointer',
+                        borderRadius: '10px',
+                        padding: '0.4rem 0.7rem',
+                        fontWeight: 800,
+                        fontSize: '0.82rem'
+                      }}
+                    >
+                      תיק אורח
+                    </button>
+                  )}
                   {!isEditingBookingDetails && (
                     <button
                       type="button"
@@ -3450,7 +3845,9 @@ export default function ResortOSCalendar({
                   )}
                   <button
                     onClick={() => {
+                      setCashReceiptOpen(false);
                       setIsEditingBookingDetails(false);
+                      forgetCardForm();
                       setEditingBooking(null);
                     }}
                     style={{ border: 'none', background: 'none', cursor: 'pointer', color: themeStyles.textMuted }}
@@ -3492,11 +3889,27 @@ export default function ResortOSCalendar({
                         —
                       </div>
                     )}
-                    <div style={{ marginTop: '0.28rem', fontSize: '0.84rem', fontWeight: 800 }}>
-                      {formatDisplayDate(editFormData.check_in_date)} → {formatDisplayDate(editFormData.check_out_date)}
-                      <span style={{ color: themeStyles.textMuted, fontWeight: 700 }}>
-                        {` · ${getDaysDiff(editFormData.check_in_date, editFormData.check_out_date)} לילות`}
-                      </span>
+                    <div style={{ marginTop: '0.28rem', fontSize: '0.84rem', fontWeight: 800, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      {(() => {
+                        const hours = stayHoursFromBooking(editingBooking);
+                        const arrival = formatStayHourLabel(hours.checkin);
+                        const departure = formatStayHourLabel(hours.checkout);
+                        return (
+                          <>
+                            <div>
+                              {`כניסה ${formatDisplayDate(editFormData.check_in_date)}`}
+                              {arrival ? ` · ${arrival}` : ''}
+                            </div>
+                            <div>
+                              {`יציאה ${formatDisplayDate(editFormData.check_out_date)}`}
+                              {departure ? ` · ${departure}` : ''}
+                            </div>
+                          </>
+                        );
+                      })()}
+                      <div style={{ color: themeStyles.textMuted, fontWeight: 700 }}>
+                        {`${getDaysDiff(editFormData.check_in_date, editFormData.check_out_date)} לילות`}
+                      </div>
                     </div>
                     <div style={{ marginTop: '0.12rem', fontSize: '0.82rem', fontWeight: 700, color: themeStyles.textMuted }}>
                       {bookingPeopleLabel({
@@ -3505,6 +3918,11 @@ export default function ResortOSCalendar({
                         special_requests: editingBooking.special_requests
                       })}
                     </div>
+                    {guestNotes(editingBooking) ? (
+                      <div style={{ marginTop: '0.35rem', fontSize: '0.86rem', fontWeight: 800, lineHeight: 1.35 }}>
+                        {guestNotes(editingBooking)}
+                      </div>
+                    ) : null}
                   </div>
 
                   {editingBooking?.booking_status !== 'CANCELED' ? (
@@ -3557,402 +3975,232 @@ export default function ResortOSCalendar({
 
                   {bookingModalTab !== 'messages' ? (
                   <>
-                  {canSeePayments && editingBooking?.booking_status !== 'CANCELED' && editingBooking?.payment_mode !== 'CASH_TRUST' && !isFullyPaid(editingBooking) ? (
-                    <HypTerminalField
-                      locked={Boolean(editingBooking.hyp_terminal || editingBooking.stay?.hyp_terminal)}
-                      value={linkHypTerminal}
-                      onChange={setLinkHypTerminal}
-                      themeStyles={themeStyles}
-                    />
-                  ) : null}
-
-                  {editingBooking?.booking_status !== 'CANCELED' && !isFullyPaid(editingBooking) ? (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                    <button
-                      type="button"
-                      onClick={() => sendInitialGuestLink('whatsapp')}
-                      disabled={sendingGuestLink}
-                      style={{
-                        width: '100%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.45rem',
-                        border: 'none',
-                        cursor: sendingGuestLink ? 'wait' : 'pointer',
-                        background: 'linear-gradient(135deg, #25D366, #128C7E)',
-                        color: '#FFF',
-                        borderRadius: '12px',
-                        padding: '0.85rem',
-                        fontWeight: 800,
-                        fontSize: '0.82rem',
-                        boxShadow: '0 4px 14px rgba(37, 211, 102, 0.35)',
-                        opacity: sendingGuestLink ? 0.75 : 1
-                      }}
-                    >
-                      <ExternalLink size={16} />
-                      {sendingGuestLink ? 'מכין קישור…' : t('SEND_WHATSAPP_LINK')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => sendInitialGuestLink('sms')}
-                      disabled={sendingGuestLink}
-                      style={{
-                        width: '100%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.45rem',
-                        border: 'none',
-                        cursor: sendingGuestLink ? 'wait' : 'pointer',
-                        background: 'linear-gradient(135deg, #0EA5E9, #0369A1)',
-                        color: '#FFF',
-                        borderRadius: '12px',
-                        padding: '0.85rem',
-                        fontWeight: 800,
-                        fontSize: '0.82rem',
-                        boxShadow: '0 4px 14px rgba(14, 165, 233, 0.35)',
-                        opacity: sendingGuestLink ? 0.75 : 1
-                      }}
-                    >
-                      <MessageSquare size={16} />
-                      {sendingGuestLink ? 'מכין קישור…' : t('SEND_SMS_LINK')}
-                    </button>
-                    </div>
-                  ) : null}
-
-                  {canSeePayments && editingBooking?.booking_status !== 'CANCELED' && editingBooking?.payment_mode !== 'CASH_TRUST' && !isFullyPaid(editingBooking) ? (
-                    <button
-                      type="button"
-                      onClick={startEditCardCharge}
-                      disabled={chargingCard || sendingGuestLink}
-                      style={{
-                        width: '100%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.45rem',
-                        border: 'none',
-                        cursor: chargingCard ? 'wait' : 'pointer',
-                        background: 'linear-gradient(135deg, #7C3AED, #6D28D9)',
-                        color: '#FFF',
-                        borderRadius: '12px',
-                        padding: '0.85rem',
-                        fontWeight: 800,
-                        fontSize: '0.82rem',
-                        boxShadow: '0 4px 14px rgba(124, 58, 237, 0.35)',
-                        opacity: chargingCard ? 0.75 : 1
-                      }}
-                    >
-                      <CreditCard size={16} />
-                      {chargingCard ? 'פותח סליקה…' : 'חיוב אשראי עכשיו'}
-                    </button>
-                  ) : null}
-
-                  {canSeePayments && isFullyPaid(editingBooking) && editingBooking?.booking_status !== 'CANCELED' && !payDetailsOpen ? (
-                    <button
-                      type="button"
-                      onClick={() => setPayDetailsOpen(true)}
-                      style={{
-                        width: '100%',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: '0.75rem',
-                        padding: '0.7rem 0.85rem',
-                        borderRadius: '12px',
-                        cursor: 'pointer',
-                        textAlign: 'start',
-                        background: isLight ? 'rgba(16, 185, 129, 0.1)' : 'rgba(16, 185, 129, 0.12)',
-                        border: '2px solid #10B981',
-                        color: themeStyles.textPrimary
-                      }}
-                    >
-                      <span style={{ fontSize: '1.02rem', fontWeight: 800 }}>
-                        {(() => {
-                          const totalIls = Number(editFormData.total_price_ils || 0);
-                          const depositIls = Number(editFormData.deposit_ils || 0);
-                          const paidIls = paidIlsOf({
-                            ...editingBooking,
-                            total_price_agorot: totalIls * 100,
-                            deposit_agorot: depositIls * 100
-                          }, totalIls, depositIls);
-                          return `שולם ₪${paidIls.toLocaleString('he-IL')} · ${paidMethodLabel(editingBooking)}`;
-                        })()}
-                      </span>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 800, color: themeStyles.textMuted, flexShrink: 0 }}>פרטים</span>
-                    </button>
-                  ) : (
-                  <div style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.38rem',
-                    padding: '0.65rem 0.75rem',
-                    borderRadius: '12px',
-                    background: isLight ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.04)',
-                    border: `2px solid ${canSeePayments ? getPaymentBadge(editingBooking).border : themeStyles.inputBorder}`
-                  }}>
-                    {canSeePayments && isFullyPaid(editingBooking) && editingBooking?.booking_status !== 'CANCELED' ? (
-                      <button
-                        type="button"
-                        onClick={() => setPayDetailsOpen(false)}
-                        style={{
-                          alignSelf: 'start',
-                          border: 'none',
-                          background: 'transparent',
-                          color: themeStyles.textMuted,
-                          fontWeight: 800,
-                          fontSize: '0.74rem',
-                          cursor: 'pointer',
-                          padding: 0
-                        }}
-                      >
-                        הסתר פרטים
-                      </button>
-                    ) : null}
-                    {[
-                      ...(canSeePayments
-                        ? (() => {
-                          const totalIls = Number(editFormData.total_price_ils || 0);
-                          const depositIls = Number(editFormData.deposit_ils || 0);
-                          const badgeBooking = {
-                            ...editingBooking,
-                            total_price_agorot: totalIls * 100,
-                            deposit_agorot: depositIls * 100
-                          };
-                          const paidIls = paidIlsOf(badgeBooking, totalIls, depositIls);
-                          const dueIls = Math.max(0, totalIls - paidIls);
-                          return [
-                            ['מחיר', `₪${totalIls.toLocaleString('he-IL')}`],
-                            ['מקדמה נדרשת', `₪${depositIls.toLocaleString('he-IL')}`],
-                            ['שולם', `₪${paidIls.toLocaleString('he-IL')}`],
-                            ['יתרה', `₪${dueIls.toLocaleString('he-IL')}`]
-                          ];
-                        })()
-                        : [])
-                    ].map(([label, value]) => (
-                      <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem' }}>
-                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: themeStyles.textMuted }}>{label}</span>
-                        <span style={{ fontSize: '1.02rem', fontWeight: 800 }}>{value}</span>
-                      </div>
-                    ))}
-                    {canSeePayments ? (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
-                      <span style={{ fontSize: '0.78rem', fontWeight: 700, color: themeStyles.textMuted }}>תשלום</span>
-                      {(() => {
-                        const badge = getPaymentBadge({
-                          ...editingBooking,
-                          deposit_agorot: Number(editFormData.deposit_ils || 0) * 100,
-                          total_price_agorot: Number(editFormData.total_price_ils || 0) * 100
-                        });
-                        return (
-                          <span style={{
-                            fontSize: '0.82rem',
-                            fontWeight: 800,
-                            padding: '0.2rem 0.55rem',
-                            borderRadius: '999px',
-                            background: badge.bg,
-                            color: badge.color,
-                            border: `1px solid ${badge.border}`
-                          }}>
-                            {badge.label}
-                          </span>
-                        );
-                      })()}
-                    </div>
-                    ) : null}
-                    {canSeePayments && (paymentProofUrl || paymentProofBusy || awaitingBankReview(editingBooking)) ? (
-                      <div style={{
-                        padding: '0.75rem',
-                        borderRadius: 12,
-                        border: `1px solid ${awaitingBankReview(editingBooking) ? '#F97316' : themeStyles.inputBorder}`,
-                        background: isLight ? 'rgba(249, 115, 22, 0.06)' : 'rgba(249, 115, 22, 0.08)'
-                      }}>
-                        <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#EA580C', marginBottom: 8 }}>
-                          {paymentProofBusy ? 'טוען צילום העברה…' : 'צילום העברה מהאורח'}
-                        </div>
-                        {paymentProofUrl ? (
-                          <a href={paymentProofUrl} target="_blank" rel="noopener noreferrer">
-                            <img
-                              src={paymentProofUrl}
-                              alt="צילום העברה"
-                              style={{ width: '100%', maxHeight: 280, objectFit: 'contain', borderRadius: 10, display: 'block', background: isLight ? '#FFF' : '#0F172A' }}
-                            />
-                          </a>
+                  {canSeePayments && editingBooking?.booking_status !== 'CANCELED' ? (() => {
+                    const totalIls = Number(editFormData.total_price_ils || 0)
+                      || (Number(editingBooking.total_price_agorot) || 0) / 100;
+                    const priced = {
+                      ...editingBooking,
+                      total_price_agorot: Math.round(totalIls * 100) || Number(editingBooking.total_price_agorot) || 0
+                    };
+                    const brief = paymentBrief(priced, totalIls || (priced.total_price_agorot / 100));
+                    const recordedIls = recordedClearingPayments(priced).reduce(
+                      (sum, row) => sum + (Number(row.amount_agorot) > 0 ? Number(row.amount_agorot) : 0),
+                      0
+                    ) / 100;
+                    const paidShown = recordedIls > 0 ? recordedIls : brief.paidIls;
+                    const roomIls = Math.round(totalIls || priced.total_price_agorot / 100);
+                    const dueIls = isFullyPaid(priced) ? 0 : Math.max(0, Math.round(dueAgorotOf(priced) / 100) || Math.max(0, roomIls - paidShown));
+                    const balanceLeft = dueIls > 0 || (!isFullyPaid(priced) && paidShown <= 0);
+                    const rowStyle = { display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: '0.92rem' };
+                    const labelStyle = { color: themeStyles.textMuted, fontWeight: 700 };
+                    const valueStyle = { fontWeight: 900 };
+                    const payParts = recordedClearingPayments(priced)
+                      .filter((row) => Number(row.amount_agorot) > 0)
+                      .map((row) => ({
+                        key: row.txn || `${row.source}-${row.amount_agorot}-${row.date || ''}`,
+                        label: paymentLineLabel(row),
+                        ils: Math.round(Number(row.amount_agorot) / 100),
+                        date: row.date ? formatDisplayDate(row.date) : ''
+                      }))
+                      .filter((row) => row.label && row.ils > 0);
+                    const splitPay = new Set(payParts.map((row) => row.label)).size > 1;
+                    const voucher = brief.method === 'שובר נפדה' || brief.method === 'ללא תשלום';
+                    if (voucher && brief.dateLabel === '—' && !balanceLeft) {
+                      return (
+                        <div style={rowStyle}><span style={labelStyle}>דרך</span><span style={valueStyle}>{brief.method}</span></div>
+                      );
+                    }
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {!voucher ? (
+                          <div style={rowStyle}>
+                            <span style={labelStyle}>שולם</span>
+                            <span style={valueStyle}>
+                              {`₪${paidShown.toLocaleString('he-IL')}`}
+                              {dueIls > 0 && roomIls > paidShown
+                                ? ` מתוך ₪${roomIls.toLocaleString('he-IL')}`
+                                : ''}
+                            </span>
+                          </div>
                         ) : null}
-                        {awaitingBankReview(editingBooking) ? (
+                        {dueIls > 0 ? (
+                          <div style={rowStyle}><span style={labelStyle}>יתרה</span><span style={valueStyle}>₪{dueIls.toLocaleString('he-IL')}</span></div>
+                        ) : null}
+                        {splitPay ? payParts.map((part) => (
+                          <div key={part.key} style={rowStyle}>
+                            <span style={labelStyle}>{part.date ? `${part.label} · ${part.date}` : part.label}</span>
+                            <span style={valueStyle}>{`₪${part.ils.toLocaleString('he-IL')}`}</span>
+                          </div>
+                        )) : (
+                          <>
+                            {brief.dateLabel !== '—' ? (
+                              <div style={rowStyle}><span style={labelStyle}>תאריך</span><span style={valueStyle}>{brief.dateLabel}</span></div>
+                            ) : null}
+                            {brief.method !== '—' ? (
+                              <div style={rowStyle}><span style={labelStyle}>דרך</span><span style={valueStyle}>{brief.method}</span></div>
+                            ) : null}
+                          </>
+                        )}
+                        {recordedClearingPayments(priced).filter((row) => String(row.source).toUpperCase() === 'CASH' && row.payer_id).map((row) => (
+                          <div key={row.txn || row.payer_id} style={rowStyle}>
+                            <span style={labelStyle}>ת.ז.</span>
+                            <span style={valueStyle} dir="ltr">{row.payer_name ? `${row.payer_name} · ` : ''}{row.payer_id}</span>
+                          </div>
+                        ))}
+                        {dueIls <= 0 ? (
+                          <div style={{ fontWeight: 900, color: '#15803d', fontSize: '0.95rem' }}>שולם</div>
+                        ) : null}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
                           <button
                             type="button"
-                            disabled={cashBusy || !paymentProofUrl}
-                            onClick={approveBankTransfer}
+                            disabled={sendingGuestLink}
+                            onClick={() => sendInitialGuestLink('sms')}
                             style={{
-                              width: '100%',
-                              marginTop: 10,
                               border: 'none',
                               borderRadius: 10,
                               padding: '0.7rem',
                               fontWeight: 800,
-                              background: '#EA580C',
-                              color: '#FFF',
-                              cursor: 'pointer'
+                              cursor: sendingGuestLink ? 'wait' : 'pointer',
+                              background: 'linear-gradient(135deg, #0f766e, #115e59)',
+                              color: '#FFF'
                             }}
                           >
-                            {cashBusy ? 'מעדכן…' : `אשר העברה · ₪${Math.max(1, Math.round(dueAgorotOf(editingBooking) / 100)).toLocaleString('he-IL')}`}
+                            {sendingGuestLink ? 'שולחים קישור…' : 'שלח קישור לדף האורח'}
                           </button>
-                        ) : null}
-                      </div>
-                    ) : null}
-                    {canSeePayments && listClearingPayments(editingBooking).length ? (
-                      <div>
-                        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: themeStyles.textMuted, marginBottom: 4 }}>סליקה ואסמכתאות</div>
-                        <ClearingPaymentsList
-                          booking={editingBooking}
-                          isLight={isLight}
-                          muted={themeStyles.textMuted}
-                          compact
-                        />
-                      </div>
-                    ) : null}
-                    {canSeePayments && editingBooking?.booking_status !== 'CANCELED' && isFullyPaid(editingBooking) ? (
-                      <div style={{
-                        marginTop: '0.35rem',
-                        paddingTop: '0.7rem',
-                        borderTop: `1px solid ${themeStyles.cellBorder || themeStyles.inputBorder}`,
-                        fontSize: '0.85rem',
-                        fontWeight: 800,
-                        color: '#22C55E'
-                      }}>
-                        שולם במלואו · הכניסה לחדר מאושרת אוטומטית
-                      </div>
-                    ) : null}
-                    {canSeePayments && editingBooking?.booking_status !== 'CANCELED' ? (
-                      <div style={{
-                        marginTop: '0.2rem',
-                        paddingTop: '0.55rem',
-                        borderTop: `1px solid ${themeStyles.cellBorder || themeStyles.inputBorder}`
-                      }}>
-                        <div style={{ fontSize: '0.74rem', fontWeight: 800, color: themeStyles.textMuted, marginBottom: 6 }}>
-                          {isFullyPaid(editingBooking) ? 'תשלום נוסף שהתקבל' : 'תשלום שהתקבל ידנית'}
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginBottom: 6 }}>
-                          {[
-                            ['CASH', 'מזומן'],
-                            ['CARD', 'סליקה'],
-                            ['BANK', 'העברה']
-                          ].map(([id, label]) => {
-                            const on = cashForm.method === id;
-                            return (
-                              <button
-                                key={id}
-                                type="button"
-                                onClick={() => setCashForm({ ...cashForm, method: id })}
+                          {editingBooking?.stay?.link_sent_at ? (
+                            <div style={{ fontSize: '0.82rem', fontWeight: 800, color: themeStyles.textMuted }}>
+                              {`נשלח קישור · ${new Date(editingBooking.stay.link_sent_at).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`}
+                            </div>
+                          ) : null}
+                        {balanceLeft ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            {chargeAsk != null ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '0.7rem', borderRadius: 10, background: isLight ? '#EFF6FF' : '#1E293B' }}>
+                                <div style={{ fontWeight: 800, fontSize: '0.85rem' }}>סכום לחיוב בכרטיס הזה</div>
+                                <input
+                                  inputMode="decimal"
+                                  value={chargeAsk}
+                                  onChange={(event) => setChargeAsk(event.target.value)}
+                                  style={{
+                                    border: `1px solid ${themeStyles.inputBorder}`,
+                                    borderRadius: 8,
+                                    padding: '0.55rem',
+                                    fontWeight: 800,
+                                    fontSize: '1.05rem'
+                                  }}
+                                />
+                                <div style={{ display: 'flex', gap: 6 }}>
+                                  <button
+                                    type="button"
+                                    disabled={chargingCard}
+                                    onClick={() => startEditCardCharge(chargeAsk)}
+                                    style={{
+                                      flex: 1,
+                                      border: 'none',
+                                      borderRadius: 10,
+                                      padding: '0.65rem',
+                                      fontWeight: 800,
+                                      cursor: chargingCard ? 'wait' : 'pointer',
+                                      background: 'linear-gradient(135deg, #1d4ed8, #1e3a8a)',
+                                      color: '#FFF'
+                                    }}
+                                  >
+                                    {chargingCard ? 'פותחים טופס…' : 'פתח טופס תשלום'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setChargeAsk(null)}
+                                    style={{
+                                      border: `1px solid ${themeStyles.inputBorder}`,
+                                      borderRadius: 10,
+                                      padding: '0.65rem 0.8rem',
+                                      fontWeight: 800,
+                                      background: 'transparent',
+                                      color: themeStyles.textPrimary,
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    ביטול
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                            <button
+                              type="button"
+                              disabled={chargingCard}
+                              onClick={() => setChargeAsk(String(dueIls))}
+                              style={{
+                                border: 'none',
+                                borderRadius: 10,
+                                padding: '0.7rem',
+                                fontWeight: 800,
+                                cursor: chargingCard ? 'wait' : 'pointer',
+                                background: 'linear-gradient(135deg, #1d4ed8, #1e3a8a)',
+                                color: '#FFF'
+                              }}
+                            >
+                              {chargingCard ? 'פותחים טופס…' : `חיוב אשראי · ₪${dueIls.toLocaleString('he-IL')}`}
+                            </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCashForm((prev) => ({
+                                  ...prev,
+                                  payerName: prev.payerName || editingBooking?.guest_name || '',
+                                  payerId: prev.payerId || ''
+                                }));
+                                setCashReceiptOpen(true);
+                              }}
+                              style={{
+                                border: 'none',
+                                borderRadius: 10,
+                                padding: '0.7rem',
+                                fontWeight: 800,
+                                cursor: 'pointer',
+                                background: 'linear-gradient(135deg, #059669, #047857)',
+                                color: '#FFF'
+                              }}
+                            >
+                              עדכן קבלת מזומן
+                            </button>
+                            {cardReceipt ? (
+                              <div
                                 style={{
-                                  border: `1px solid ${on ? '#6366F1' : themeStyles.inputBorder}`,
-                                  background: on ? 'rgba(99, 102, 241, 0.16)' : themeStyles.inputBg,
-                                  color: on ? '#A5B4FC' : themeStyles.textPrimary,
-                                  borderRadius: 8,
-                                  padding: '0.38rem 0.2rem',
-                                  fontWeight: 800,
-                                  fontSize: '0.74rem',
-                                  cursor: 'pointer'
+                                  borderRadius: 12,
+                                  background: '#f0fdf4',
+                                  color: '#14532d',
+                                  textAlign: 'center',
+                                  padding: '1.4rem 1rem'
                                 }}
                               >
-                                {label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
-                          <input
-                            type="number"
-                            min="1"
-                            step="1"
-                            placeholder="סכום ₪"
-                            value={cashForm.amount}
-                            onChange={(e) => setCashForm({ ...cashForm, amount: e.target.value })}
-                            style={{ padding: '0.45rem', borderRadius: 8, background: themeStyles.inputBg, border: `1px solid ${themeStyles.inputBorder}`, color: themeStyles.textPrimary, fontWeight: 700 }}
-                          />
-                          <input
-                            type="date"
-                            value={cashForm.at}
-                            onChange={(e) => setCashForm({ ...cashForm, at: e.target.value })}
-                            style={{ padding: '0.45rem', borderRadius: 8, background: themeStyles.inputBg, border: `1px solid ${themeStyles.inputBorder}`, color: themeStyles.textPrimary, fontWeight: 700 }}
-                          />
-                        </div>
-                        {cashForm.method === 'CASH' ? (
-                          <input
-                            type="text"
-                            placeholder="מי גבה"
-                            value={cashForm.collector}
-                            onChange={(e) => setCashForm({ ...cashForm, collector: e.target.value })}
-                            style={{ width: '100%', marginTop: 6, padding: '0.45rem', borderRadius: 8, background: themeStyles.inputBg, border: `1px solid ${themeStyles.inputBorder}`, color: themeStyles.textPrimary, fontWeight: 700, boxSizing: 'border-box' }}
-                          />
-                        ) : (
-                          <input
-                            type="text"
-                            placeholder={cashForm.method === 'CARD' ? 'אסמכתה / מספר אישור' : 'אסמכתת העברה'}
-                            value={cashForm.ref}
-                            onChange={(e) => setCashForm({ ...cashForm, ref: e.target.value })}
-                            style={{ width: '100%', marginTop: 6, padding: '0.45rem', borderRadius: 8, background: themeStyles.inputBg, border: `1px solid ${themeStyles.inputBorder}`, color: themeStyles.textPrimary, fontWeight: 700, boxSizing: 'border-box' }}
-                          />
-                        )}
-                        {cashForm.method === 'CARD' ? (
-                          <select
-                            value={cashForm.terminal}
-                            onChange={(e) => setCashForm({ ...cashForm, terminal: e.target.value })}
-                            style={{ width: '100%', marginTop: 6, padding: '0.45rem', borderRadius: 8, background: themeStyles.inputBg, border: `1px solid ${themeStyles.inputBorder}`, color: themeStyles.textPrimary, fontWeight: 700 }}
-                          >
-                            <option value="B">{hypTerminalLabel('B')}</option>
-                            <option value="A">{hypTerminalLabel('A')}</option>
-                          </select>
-                        ) : null}
-                        <button
-                          type="button"
-                          disabled={cashBusy}
-                          onClick={recordManualPayment}
-                          style={{
-                            width: '100%',
-                            marginTop: 7,
-                            border: 'none',
-                            borderRadius: 9,
-                            padding: '0.55rem',
-                            fontWeight: 800,
-                            fontSize: '0.82rem',
-                            cursor: cashBusy ? 'wait' : 'pointer',
-                            background: cashForm.method === 'BANK'
-                              ? 'linear-gradient(135deg, #2563EB, #1D4ED8)'
-                              : cashForm.method === 'CARD'
-                                ? 'linear-gradient(135deg, #7C3AED, #6D28D9)'
-                                : 'linear-gradient(135deg, #059669, #047857)',
-                            color: '#FFF'
-                          }}
-                        >
-                          {cashBusy
-                            ? 'רושם…'
-                            : cashForm.method === 'CARD'
-                              ? 'רשום סליקה'
-                              : cashForm.method === 'BANK'
-                                ? 'רשום העברה'
-                                : 'רשום מזומן'}
-                        </button>
-                        {!isFullyPaid(editingBooking) ? (
-                          <div style={{ marginTop: 6, fontSize: '0.74rem', fontWeight: 800, color: '#EF4444' }}>
-                            כניסה לחדר אחרי תשלום מלא
-                            {dueAgorotOf({
-                              ...editingBooking,
-                              total_price_agorot: Number(editFormData.total_price_ils || 0) * 100
-                            }) > 0
-                              ? ` · יתרה ₪${Math.round(dueAgorotOf({
-                                ...editingBooking,
-                                total_price_agorot: Number(editFormData.total_price_ils || 0) * 100
-                              }) / 100).toLocaleString('he-IL')}`
-                              : ''}
+                                <div style={{ fontWeight: 800, fontSize: '0.95rem' }}>התשלום אושר</div>
+                                <div style={{ marginTop: 8, fontSize: '0.78rem', fontWeight: 700, color: '#166534' }}>מספר אישור</div>
+                                <div style={{ marginTop: 4, fontSize: '1.8rem', fontWeight: 900, letterSpacing: 1 }}>{cardReceipt.approval}</div>
+                              </div>
+                            ) : cardPayUrl ? (
+                              <iframe
+                                title="טופס תשלום"
+                                src={cardPayUrl}
+                                style={{
+                                  width: '100%',
+                                  height: 'min(68vh, 640px)',
+                                  border: 0,
+                                  borderRadius: 12,
+                                  background: '#fff'
+                                }}
+                              />
+                            ) : null}
+                            {cardChargeNote ? (
+                              <div style={{ fontSize: '0.82rem', fontWeight: 700, color: themeStyles.textMuted }}>{cardChargeNote}</div>
+                            ) : null}
                           </div>
                         ) : null}
+                        </div>
                       </div>
-                    ) : null}
-                  </div>
-                  )}
+                    );
+                  })() : null}
+
 
                   {editingBooking?.booking_status === 'PENDING' && !depositActuallyPaid(editingBooking) && (
                     <button
@@ -3996,6 +4244,7 @@ export default function ResortOSCalendar({
                         await db.bookings.put(confirmedBooking);
                         await pushBookingToCloud(confirmedBooking);
                         setIsEditingBookingDetails(false);
+                        forgetCardForm();
                         setEditingBooking(null);
                       }}
                       style={{
@@ -4085,98 +4334,6 @@ export default function ResortOSCalendar({
                     />
                   </div>
                 </div>
-
-                {canSeePayments && editingBooking?.booking_status !== 'CANCELED' && editingBooking?.payment_mode !== 'CASH_TRUST' ? (
-                  <HypTerminalField
-                    locked={Boolean(editingBooking.hyp_terminal || editingBooking.stay?.hyp_terminal)}
-                    value={linkHypTerminal}
-                    onChange={setLinkHypTerminal}
-                    themeStyles={themeStyles}
-                  />
-                ) : null}
-
-                {editingBooking?.booking_status !== 'CANCELED' ? (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                  <button
-                    type="button"
-                    onClick={() => sendInitialGuestLink('whatsapp')}
-                    disabled={sendingGuestLink}
-                    style={{
-                      width: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '0.45rem',
-                      border: 'none',
-                      cursor: sendingGuestLink ? 'wait' : 'pointer',
-                      background: 'linear-gradient(135deg, #25D366, #128C7E)',
-                      color: '#FFF',
-                      borderRadius: '12px',
-                      padding: '0.75rem',
-                      fontWeight: 800,
-                      fontSize: '0.78rem',
-                      boxShadow: '0 4px 14px rgba(37, 211, 102, 0.28)',
-                      opacity: sendingGuestLink ? 0.75 : 1
-                    }}
-                  >
-                    <ExternalLink size={16} />
-                    {sendingGuestLink ? 'מכין קישור…' : t('SEND_WHATSAPP_LINK')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => sendInitialGuestLink('sms')}
-                    disabled={sendingGuestLink}
-                    style={{
-                      width: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '0.45rem',
-                      border: 'none',
-                      cursor: sendingGuestLink ? 'wait' : 'pointer',
-                      background: 'linear-gradient(135deg, #0EA5E9, #0369A1)',
-                      color: '#FFF',
-                      borderRadius: '12px',
-                      padding: '0.75rem',
-                      fontWeight: 800,
-                      fontSize: '0.78rem',
-                      boxShadow: '0 4px 14px rgba(14, 165, 233, 0.28)',
-                      opacity: sendingGuestLink ? 0.75 : 1
-                    }}
-                  >
-                    <MessageSquare size={16} />
-                    {sendingGuestLink ? 'מכין קישור…' : t('SEND_SMS_LINK')}
-                  </button>
-                  </div>
-                ) : null}
-
-                {canSeePayments && editingBooking?.booking_status !== 'CANCELED' && editingBooking?.payment_mode !== 'CASH_TRUST' && !isFullyPaid(editingBooking) ? (
-                  <button
-                    type="button"
-                    onClick={startEditCardCharge}
-                    disabled={chargingCard || sendingGuestLink}
-                    style={{
-                      width: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '0.45rem',
-                      border: 'none',
-                      cursor: chargingCard ? 'wait' : 'pointer',
-                      background: 'linear-gradient(135deg, #7C3AED, #6D28D9)',
-                      color: '#FFF',
-                      borderRadius: '12px',
-                      padding: '0.75rem',
-                      fontWeight: 800,
-                      fontSize: '0.82rem',
-                      boxShadow: '0 4px 14px rgba(124, 58, 237, 0.28)',
-                      opacity: chargingCard ? 0.75 : 1
-                    }}
-                  >
-                    <CreditCard size={16} />
-                    {chargingCard ? 'פותח סליקה…' : 'חיוב אשראי עכשיו'}
-                  </button>
-                ) : null}
 
                 {isOpenStay(editingBooking) ? (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
@@ -4409,6 +4566,7 @@ export default function ResortOSCalendar({
                       };
                       await db.bookings.put(confirmedBooking);
                       await pushBookingToCloud(confirmedBooking);
+                      forgetCardForm();
                       setEditingBooking(null);
                     }}
                     style={{
@@ -4498,6 +4656,91 @@ export default function ResortOSCalendar({
               </form>
               )}
             </motion.div>
+            {cashReceiptOpen ? (() => {
+              const priced = cashReceiptAgorot(editingBooking, editFormData?.total_price_ils);
+              const amountIls = Math.round(priced.amountAgorot / 100);
+              return (
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    zIndex: 3,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'rgba(0,0,0,0.45)'
+                  }}
+                >
+                  <div style={{
+                    width: 'min(320px, 100%)',
+                    borderRadius: 16,
+                    padding: '1rem',
+                    background: themeStyles.wrapperBg,
+                    color: themeStyles.textPrimary,
+                    boxShadow: '0 18px 40px rgba(0,0,0,0.45)',
+                    textAlign: 'center'
+                  }}>
+                    <div style={{ fontWeight: 900, fontSize: '1rem' }}>קבלת מזומן</div>
+                    <div style={{ margin: '0.7rem 0 0.4rem', fontSize: '1.7rem', fontWeight: 900 }}>
+                      ₪{amountIls.toLocaleString('he-IL')}
+                    </div>
+                    <label style={{ display: 'block', textAlign: 'right', fontSize: '0.78rem', fontWeight: 800, marginTop: 8 }}>
+                      שם המשלם
+                      <input
+                        value={cashForm.payerName}
+                        onChange={(event) => setCashForm((prev) => ({ ...prev, payerName: event.target.value }))}
+                        style={{ display: 'block', width: '100%', marginTop: 4, padding: '0.55rem', borderRadius: 8, border: `1px solid ${themeStyles.inputBorder}`, background: themeStyles.inputBg, color: themeStyles.textPrimary, font: 'inherit' }}
+                      />
+                    </label>
+                    <label style={{ display: 'block', textAlign: 'right', fontSize: '0.78rem', fontWeight: 800, margin: '8px 0 12px' }}>
+                      תעודת זהות
+                      <input
+                        inputMode="numeric"
+                        value={cashForm.payerId}
+                        onChange={(event) => setCashForm((prev) => ({ ...prev, payerId: event.target.value }))}
+                        style={{ display: 'block', width: '100%', marginTop: 4, padding: '0.55rem', borderRadius: 8, border: `1px solid ${themeStyles.inputBorder}`, background: themeStyles.inputBg, color: themeStyles.textPrimary, font: 'inherit', direction: 'ltr', textAlign: 'right' }}
+                      />
+                    </label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        type="button"
+                        disabled={cashBusy}
+                        onClick={confirmCashReceipt}
+                        style={{
+                          flex: 1,
+                          border: 'none',
+                          borderRadius: 10,
+                          padding: '0.7rem',
+                          fontWeight: 800,
+                          cursor: cashBusy ? 'wait' : 'pointer',
+                          background: 'linear-gradient(135deg, #059669, #047857)',
+                          color: '#FFF'
+                        }}
+                      >
+                        {cashBusy ? 'רושם…' : 'אישור'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={cashBusy}
+                        onClick={() => setCashReceiptOpen(false)}
+                        style={{
+                          flex: 1,
+                          borderRadius: 10,
+                          padding: '0.7rem',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          background: 'transparent',
+                          color: themeStyles.textPrimary,
+                          border: `1px solid ${themeStyles.inputBorder}`
+                        }}
+                      >
+                        ביטול
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })() : null}
           </div>
         )}
       </AnimatePresence>
@@ -4680,6 +4923,105 @@ export default function ResortOSCalendar({
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {cashReportOpen ? (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 140,
+              background: 'rgba(0,0,0,0.65)',
+              backdropFilter: 'blur(4px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '1rem'
+            }}
+            onClick={() => setCashReportOpen(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.92, opacity: 0 }}
+              onClick={(event) => event.stopPropagation()}
+              style={{
+                background: themeStyles.wrapperBg,
+                border: `1px solid ${themeStyles.inputBorder}`,
+                borderRadius: '20px',
+                width: '100%',
+                maxWidth: '520px',
+                maxHeight: '86vh',
+                overflowY: 'auto',
+                padding: '1.35rem',
+                boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
+                color: themeStyles.textPrimary
+              }}
+            >
+              {(() => {
+                const rows = cashPaymentsOnDate(rawBookings, units, cashReportDate);
+                const total = cashDayTotalAgorot(rows);
+                return (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
+                      <div>
+                        <div style={{ color: themeStyles.textMuted, fontSize: '0.75rem', fontWeight: 800 }}>הדפסה לצוות</div>
+                        <h3 style={{ margin: '0.3rem 0 0', fontSize: '1.15rem' }}>דוח מזומן יומי</h3>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setCashReportOpen(false)}
+                        style={{ background: 'none', border: 'none', color: themeStyles.textMuted, cursor: 'pointer', padding: 4 }}
+                        aria-label="סגור"
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+                    <label style={{ display: 'block', margin: '1rem 0 0.4rem', fontSize: '0.8rem', fontWeight: 700, color: themeStyles.textMuted }}>
+                      תאריך
+                      <input
+                        type="date"
+                        value={cashReportDate}
+                        onChange={(event) => setCashReportDate(event.target.value)}
+                        style={{ display: 'block', marginTop: 6, padding: '0.5rem', borderRadius: 8, border: `1px solid ${themeStyles.inputBorder}`, background: themeStyles.inputBg, color: themeStyles.textPrimary, font: 'inherit' }}
+                      />
+                    </label>
+                    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {rows.length ? rows.map((row, index) => (
+                        <div key={`${row.payerId}-${row.at}-${index}`} style={{ border: `1px solid ${themeStyles.inputBorder}`, borderRadius: 12, padding: '0.65rem 0.75rem' }}>
+                          <div style={{ fontWeight: 900 }}>{row.payerName || '—'} · {formatIlsFromAgorot(row.amountAgorot)}</div>
+                          <div dir="ltr" style={{ fontWeight: 800, marginTop: 2 }}>{row.payerId || '—'}</div>
+                          <div style={{ color: themeStyles.textMuted, fontSize: '0.82rem', marginTop: 2 }}>{row.unitName}{row.collector ? ` · גבה ${row.collector}` : ''}</div>
+                        </div>
+                      )) : (
+                        <div style={{ color: themeStyles.textMuted, fontWeight: 700 }}>אין תשלומי מזומן ביום הזה</div>
+                      )}
+                    </div>
+                    <div style={{ marginTop: 12, fontWeight: 900 }}>סה״כ {formatIlsFromAgorot(total)}</div>
+                    <button
+                      type="button"
+                      onClick={() => printCashDayReport(rawBookings, units, cashReportDate)}
+                      style={{
+                        marginTop: 14,
+                        width: '100%',
+                        border: 'none',
+                        borderRadius: 12,
+                        padding: '0.75rem',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        background: 'linear-gradient(135deg, #059669, #047857)',
+                        color: '#fff'
+                      }}
+                    >
+                      הפק דוח
+                    </button>
+                  </>
+                );
+              })()}
+            </motion.div>
+          </div>
+        ) : null}
       </AnimatePresence>
 
       <AnimatePresence>

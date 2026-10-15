@@ -25,6 +25,7 @@ export function recordedClearingPayments(booking) {
 
 export function hasRecordedReceipt(booking) {
   if (booking?.stay?.hyp?.paid || booking?.stay?.hyp_deposit?.paid) return true;
+  if (booking?.cash_receipt_at) return true;
   return recordedClearingPayments(booking).some((row) => Number(row.amount_agorot) > 0);
 }
 

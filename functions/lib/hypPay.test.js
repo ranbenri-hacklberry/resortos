@@ -7,11 +7,16 @@ import {
   buildHypTokenChargeFields,
   formatHypListDate,
   hasHypCreds,
+  hypApiUser,
   hypCCode,
+  hypApprovalCodeFromParams,
   hypCheckoutTokenFromParams,
   hypCreds,
   hypLowProfileIdFromParams,
   hypParentBreakoutResponse,
+  hypReceiptResponse,
+  hypReceiptUrl,
+  hypReturnLooksFailed,
   hypDealMatchesCheckout,
   hypDealToReturnParams,
   hypDealToRow,
@@ -80,6 +85,39 @@ test('hypCreds reads HYP_A_* / HYP_B_* and falls back to legacy A vars', () => {
   assert.equal(b.terminal, 'B');
 
   assert.equal(hasHypCreds({}, 'A'), false);
+
+  const cardcom = hypCreds({
+    CARDCOM_TEST: '1',
+    CARDCOM_API_NAME: 'api-name',
+    CARDCOM_API_PASSWORD: 'api-pass'
+  }, 'A');
+  assert.equal(cardcom.masof, '1000');
+  assert.equal(cardcom.cardcomTest, true);
+  assert.equal(cardcom.key, 'api-name');
+  assert.equal(hypCreds({
+    CARDCOM_TEST: '1',
+    CARDCOM_API_NAME: 'api-name',
+    CARDCOM_API_PASSWORD: 'api-pass'
+  }, 'B').masof, '1001');
+  const lp = buildHypLowProfileBody(
+    { masof: cardcom.masof, apiName: cardcom.key, apiPassword: cardcom.passp },
+    { amount: 10, order: 'tok_test', invoice: false }
+  );
+  assert.equal(lp.TerminalNumber, 1000);
+  assert.equal(lp.ApiName, 'api-name');
+  assert.equal(hasHypCreds({ CARDCOM_TEST: '1', CARDCOM_API_NAME: 'api-name', CARDCOM_API_PASSWORD: 'api-pass' }, 'B'), true);
+  const testUser = hypApiUser({
+    CARDCOM_TEST: '1',
+    CARDCOM_API_NAME: 'cardtest26',
+    CARDCOM_API_PASSWORD: 'cardcom26',
+    HYP_A_API_NAME: 'production-user',
+    HYP_A_API_PASSWORD: 'production-pass',
+    HYP_API_NAME: 'shared-user',
+    HYP_API_PASSWORD: 'shared-pass'
+  }, 'A');
+  assert.equal(testUser.masof, '1000');
+  assert.equal(testUser.apiName, 'cardtest26');
+  assert.equal(testUser.apiPassword, 'cardcom26');
   assert.throws(() => hypCreds({}, 'B'), { code: 'HYP_MISSING_CREDS' });
 
   const apiKeyIsNotSignKey = hypCreds({
@@ -336,4 +374,33 @@ test('payment return breakout stays on resortos.app', async () => {
   const blockedHtml = await blocked.text();
   assert.match(blockedHtml, /hyp=missing/);
   assert.doesNotMatch(blockedHtml, /evil\.example/);
+});
+
+test('embedded card charge stays in the frame and the receipt shows the approval number', async () => {
+  const framed = buildHypLowProfileBody(
+    { masof: '1000', apiName: 'api-user', apiPassword: 'api-pass' },
+    {
+      amount: 10,
+      order: 'tok_test',
+      invoice: false,
+      successUrl: hypReceiptUrl(),
+      stayInFrame: true
+    }
+  );
+  assert.equal(framed.AdvancedDefinition.RedirectToParent, false);
+  assert.equal(framed.SuccessRedirectUrl, 'https://resortos.app/api/payments/hyp/receipt');
+  assert.equal(hypApprovalCodeFromParams({ ApprovalNumber: '445566' }), '445566');
+  assert.equal(hypReturnLooksFailed({ ResponseCode: '600' }), true);
+  assert.equal(hypReturnLooksFailed({ ResponseCode: '0' }), false);
+  const receipt = hypReceiptResponse({
+    approval: '445566',
+    lowProfileId: 'lp-9',
+    token: 'tok_test',
+    paid: true
+  });
+  const html = await receipt.text();
+  assert.match(html, /445566/);
+  assert.match(html, /resortos-card-paid/);
+  assert.doesNotMatch(html, /window\.top\.location\.replace/);
+  assert.doesNotMatch(html, /hyp=missing/);
 });

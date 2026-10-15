@@ -1,0 +1,20 @@
+[
+  {
+    "lockId": 35634434,
+    "lockMac": "F5:60:1C:E2:09:A9",
+    "lockName": "Mate",
+    "aesKeyStr": "7e,8b,30,81,b6,72,22,f8,5f,1a,c4,38,1d,56,2a,32",
+    "unlockKey": "0118726469",
+    "lockFlagPos": 0,
+    "adminPs": "0649329475",
+    "keyboardPwdVersion": 0,
+    "specialValue": 625800695,
+    "lockVersion": {
+      "protocolType": null,
+      "protocolVersion": null,
+      "scene": 9,
+      "groupId": null,
+      "orgId": null
+    }
+  }
+]

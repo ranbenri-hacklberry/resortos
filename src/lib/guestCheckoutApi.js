@@ -87,7 +87,28 @@ export async function startHostCardCharge(booking) {
     error.status = response.status;
     throw error;
   }
-  return { payUrl, booking: data };
+  return {
+    payUrl,
+    lowProfileId: data.lowProfileId || data.payment?.lowProfileId || '',
+    terminal: data.terminal || '',
+    booking: data
+  };
+}
+
+export async function pollHostCardCharge({ lowProfileId, terminal }) {
+  const response = await fetch('/api/guest/mailbox/charge-result', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lowProfileId, terminal }),
+    signal: abortAfter(20000)
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(data.message || data.error || 'CHARGE_RESULT_FAILED');
+    error.status = response.status;
+    throw error;
+  }
+  return data;
 }
 
 export async function stayAction(token, payload) {

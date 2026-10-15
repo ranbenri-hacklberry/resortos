@@ -473,7 +473,7 @@ export const SEEDED_PROPERTIES: CabinProperty[] = [
       {
         "id": "k687",
         "propertyId": "toscana",
-        "name": "טוסקנה · פירנצה 1",
+        "name": "טוסקנה · 1",
         "englishName": "",
         "type": "cabin",
         "bedrooms": 1,
@@ -496,7 +496,7 @@ export const SEEDED_PROPERTIES: CabinProperty[] = [
       {
         "id": "k688",
         "propertyId": "toscana",
-        "name": "טוסקנה · פירנצה 2",
+        "name": "טוסקנה · 2",
         "englishName": "",
         "type": "cabin",
         "bedrooms": 1,
@@ -519,7 +519,7 @@ export const SEEDED_PROPERTIES: CabinProperty[] = [
       {
         "id": "k689",
         "propertyId": "toscana",
-        "name": "טוסקנה · שאטו (עם סאונה)",
+        "name": "טוסקנה · 3",
         "englishName": "",
         "type": "villa",
         "bedrooms": 1,

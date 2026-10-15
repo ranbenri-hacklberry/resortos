@@ -52,10 +52,25 @@ export function stayCardTone(booking, { today } = {}) {
   return 'unpaid';
 }
 
+/** Kinorot dropped this stay. Keep the bar, draw it struck through, and do not count it as occupancy. */
+export function isKinorotRemovedStay(booking) {
+  return Boolean(
+    booking
+    && !booking.deleted_at
+    && booking.booking_status === 'CANCELED'
+    && booking.cancellation_reason === 'removed_from_kinorot'
+    && String(booking.id || '').startsWith('kin_')
+    && stayYmd(booking.check_in_date)
+    && stayYmd(booking.check_out_date)
+  );
+}
+
 /** Guest stays plus סגור / שיפוץ blocks that should appear on the occupancy board. */
 export function isCalendarBarBooking(booking) {
-  if (!booking || booking.deleted_at || booking.booking_status === 'CANCELED') return false;
+  if (!booking || booking.deleted_at) return false;
   if (!stayYmd(booking.check_in_date) || !stayYmd(booking.check_out_date)) return false;
+  if (isKinorotRemovedStay(booking)) return true;
+  if (booking.booking_status === 'CANCELED') return false;
   return isPaintedStay(booking) || isUnavailableHoldBooking(booking);
 }
 

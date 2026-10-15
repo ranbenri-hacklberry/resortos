@@ -12,7 +12,7 @@
     <string>/Users/rani/kinorot-sync/server/syncKinorotCalendar.js</string>
   </array>
   <key>StartInterval</key>
-  <integer>900</integer>
+  <integer>300</integer>
   <key>RunAtLoad</key>
   <true/>
   <key>ProcessType</key>
@@ -31,6 +31,8 @@
     <string>rani</string>
     <key>PATH</key>
     <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>KINOROT_QUICK</key>
+    <string>1</string>
   </dict>
 </dict>
 </plist>

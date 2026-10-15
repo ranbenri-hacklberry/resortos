@@ -1,21 +1,16 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Banknote, Building2, CreditCard, MessageSquare, Upload, X } from 'lucide-react';
+import { Banknote, Building2, MessageSquare, Upload, X } from 'lucide-react';
 import { GUEST_BRAND } from '../lib/guestTheme';
 import BankDetailsCard from './BankDetailsCard';
-import HypPayFrame from './HypPayFrame';
-import { openPaymentUrl } from '../lib/guestPayBrowser';
-
 const TABS = [
-  { id: 'card', Icon: CreditCard, labelKey: 'INSTAY_TAB_CARD' },
   { id: 'bank', Icon: Building2, labelKey: 'INSTAY_TAB_BANK' },
   { id: 'cash', Icon: Banknote, labelKey: 'INSTAY_TAB_CASH' }
 ];
 
-function tabFromPreference(pref, hasSavedCard) {
-  if (pref === 'BANK_TRANSFER') return 'bank';
+function tabFromPreference(pref) {
   if (pref === 'CASH') return 'cash';
-  return hasSavedCard ? 'saved' : 'card';
+  return 'bank';
 }
 
 export { tabFromPreference };
@@ -47,8 +42,6 @@ export default function CheckinDrawer({
   hostWhatsAppHref
 }) {
   const paying = Boolean(busy);
-  const cardTab = tab === 'saved' || tab === 'card';
-  const showPay = tab === 'pay' || Boolean(iframeUrl);
 
   if (!open) return null;
 
@@ -92,24 +85,23 @@ export default function CheckinDrawer({
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <div style={{ fontWeight: 900, fontSize: '1.05rem' }}>
-              {showPay ? t('INSTAY_CHECKIN_IFRAME_TITLE') : t('INSTAY_CHECKIN_TITLE')}
+              {t('INSTAY_CHECKIN_TITLE')}
             </div>
             <button type="button" onClick={onClose} style={{ border: 'none', background: 'none', color: themeStyles.textMuted, cursor: 'pointer' }}>
                 <X size={20} />
               </button>
           </div>
 
-          {!showPay ? (
-            <div style={{ display: 'flex', gap: 6, marginBottom: 12, background: themeStyles.inputBg, borderRadius: 12, padding: 4 }}>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 12, background: themeStyles.inputBg, borderRadius: 12, padding: 4 }}>
               {TABS.map((item) => {
-                const active = item.id === 'card' ? cardTab : tab === item.id;
-                const labelKey = item.id === 'card' && hasSavedCard ? 'INSTAY_TAB_SAVED' : item.labelKey;
+                const active = tab === item.id;
+                const labelKey = item.labelKey;
                 return (
                   <button
                     key={item.id}
                     type="button"
                     disabled={paying}
-                    onClick={() => onTab(item.id === 'card' ? (hasSavedCard ? 'saved' : 'card') : item.id)}
+                    onClick={() => onTab(item.id)}
                     style={{
                       flex: 1,
                       border: 'none',
@@ -127,54 +119,12 @@ export default function CheckinDrawer({
                 );
               })}
             </div>
-          ) : null}
 
           {error ? (
             <p style={{ margin: '0 0 0.85rem', color: '#F87171', fontWeight: 700, fontSize: '0.82rem' }}>{error}</p>
           ) : null}
 
-          {cardTab && !iframeUrl ? (
-            <>
-              {hasSavedCard ? (
-                <>
-                  <p style={{ margin: '0 0 0.85rem', color: themeStyles.textMuted, lineHeight: 1.55, fontSize: '0.9rem' }}>
-                    {quote?.needsCharge
-                      ? t('INSTAY_CHECKIN_SAVED_BODY', { amount: amountLabel || '—', last4: savedLast4 || '••••' })
-                      : t('INSTAY_CHECKIN_BODY_FREE')}
-                  </p>
-                  <button
-                    type="button"
-                    disabled={paying}
-                    onClick={onChargeSaved}
-                    style={primaryBtn(GUEST_BRAND.wine)}
-                  >
-                    {paying ? t('INSTAY_CHECKIN_PAYING') : t('INSTAY_CHECKIN_PAY_DOOR', { amount: amountLabel || '—' })}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={paying}
-                    onClick={onNewCard}
-                    style={ghostBtn(themeStyles)}
-                  >
-                    {t('INSTAY_CHECKIN_OPT_NEW_CARD')}
-                  </button>
-                </>
-              ) : (
-                <>
-                  <p style={{ margin: '0 0 0.85rem', color: themeStyles.textMuted, lineHeight: 1.55, fontSize: '0.9rem' }}>
-                    {quote?.needsCharge
-                      ? t('INSTAY_CHECKIN_BODY_CHARGE_NO_MASK', { amount: amountLabel || '—' })
-                      : t('INSTAY_CHECKIN_BODY_FREE')}
-                  </p>
-                  <button type="button" disabled={paying} onClick={onNewCard} style={primaryBtn(GUEST_BRAND.wine)}>
-                    {paying ? t('INSTAY_CHECKIN_PAYING') : (quote?.needsCharge ? t('INSTAY_CHECKIN_CONFIRM') : t('INSTAY_CHECKIN_CONFIRM_FREE'))}
-                  </button>
-                </>
-              )}
-            </>
-          ) : null}
-
-          {tab === 'bank' && !iframeUrl ? (
+          {tab === 'bank' ? (
             <>
               <p style={{ margin: '0 0 0.5rem', color: themeStyles.textMuted, lineHeight: 1.55, fontSize: '0.88rem' }}>
                 {t('INSTAY_CHECKIN_BANK_BODY')}
@@ -211,7 +161,7 @@ export default function CheckinDrawer({
             </>
           ) : null}
 
-          {tab === 'cash' && !iframeUrl ? (
+          {tab === 'cash' ? (
             <>
               <p style={{ margin: '0 0 0.75rem', color: themeStyles.textMuted, lineHeight: 1.55, fontSize: '0.9rem' }}>
                 {t('INSTAY_CHECKIN_CASH_PIN_BODY', { amount: amountLabel || '—' })}
@@ -256,26 +206,6 @@ export default function CheckinDrawer({
             </>
           ) : null}
 
-          {showPay ? (
-            <>
-              {iframeUrl ? (
-                <HypPayFrame
-                  url={iframeUrl}
-                  t={t}
-                  themeStyles={themeStyles}
-                  amountLabel={amountLabel}
-                  onOpenFull={openPaymentUrl}
-                />
-              ) : (
-                <p style={{ margin: '0 0 0.85rem', color: themeStyles.textMuted, fontSize: '0.88rem' }}>
-                  {t('INSTAY_CHECKIN_IFRAME_TITLE')}
-                </p>
-              )}
-              <button type="button" disabled={paying} onClick={onCompletePay} style={primaryBtn(GUEST_BRAND.wine)}>
-                {t('INSTAY_CHECKIN_DONE')}
-              </button>
-            </>
-          ) : null}
         </motion.div>
       </motion.div>
     </AnimatePresence>
@@ -297,19 +227,5 @@ function primaryBtn(bg) {
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8
-  };
-}
-
-function ghostBtn(themeStyles) {
-  return {
-    width: '100%',
-    border: `1px solid ${themeStyles.inputBorder}`,
-    borderRadius: 12,
-    padding: '0.75rem',
-    fontWeight: 800,
-    background: 'transparent',
-    color: themeStyles.textPrimary,
-    cursor: 'pointer',
-    marginBottom: 8
   };
 }

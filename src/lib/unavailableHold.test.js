@@ -28,6 +28,13 @@ describe('unavailable Kinorot holds', () => {
   it('detects שיפוץ / סגור from Kinorot, not a normal guest', () => {
     expect(isUnavailableHoldBooking(hold)).toBe(true);
     expect(isUnavailableHoldBooking({ ...hold, guest_name: 'סגור' })).toBe(true);
+    expect(isUnavailableHoldBooking({ ...hold, guest_name: 'שיפוצים' })).toBe(true);
+    expect(isUnavailableHoldBooking({ ...hold, guest_name: 'לא זמין' })).toBe(true);
+    expect(isUnavailableHoldBooking({ ...hold, guest_name: 'לא נקי' })).toBe(true);
+    expect(isUnavailableHoldBooking({ ...hold, guest_name: 'מזגן מקולקל' })).toBe(true);
+    expect(isUnavailableHoldBooking({ ...hold, guest_name: 'תפוס' })).toBe(true);
+    expect(isUnavailableHoldBooking({ ...hold, guest_name: 'תפוס לתיקון' })).toBe(true);
+    expect(isUnavailableHoldBooking({ ...hold, guest_name: 'דניאל ניחנקין' })).toBe(false);
     expect(isUnavailableHoldBooking(guest)).toBe(false);
     expect(isUnavailableHoldBooking({ ...hold, id: 'local-1', special_requests: '' })).toBe(true);
   });

@@ -33,6 +33,10 @@ scratch/
 .env
 .env.local
 *.log
+firmware/include/wifi_credentials.h
+firmware/include/secrets.h
+firmware/.pio/
+.pio/
 
 # Attendance session cookies & screenshots
 server/session.json

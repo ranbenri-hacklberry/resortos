@@ -65,6 +65,8 @@ describe('kinorot note payments', () => {
       { resid: '70541', last4: '0146' }
     );
     expect(row.source).toBe('KINOROT');
+    expect(row.method).toBe('card');
+    expect(row.accountKey).toBe('MAX');
     expect(row.amount_agorot).toBe(180000);
     expect(row.last4).toBe('0146');
     expect(row.txn).toContain('70541');
@@ -131,6 +133,18 @@ describe('kinorot note payments', () => {
     expect(parsed.due).toBe(0);
     expect(parsed.notePayments).toEqual([
       { date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), method: 'card', amount: 1800 }
+    ]);
+  });
+
+  it('keeps a card deposit and a cash balance as separate clearing rows', () => {
+    const text = '6.10 חויב מקדמה באשראי 320 שולם במזומן 1280 לצוקי';
+    const rows = clearingPaymentsFromKinorotNotes(
+      parseKinorotNotePayments(text, { todayIso: '2026-10-12' }),
+      { resid: '74513', last4: '3310' }
+    );
+    expect(rows.map((row) => [row.method, row.accountKey, row.amount_agorot, row.last4])).toEqual([
+      ['card', 'MAX', 32000, '3310'],
+      ['cash', 'CASH', 128000, '']
     ]);
   });
 });

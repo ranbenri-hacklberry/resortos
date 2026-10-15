@@ -13,6 +13,7 @@ import { staffPhoneLabel } from '../lib/staffPhones';
 import { agentPortalUrl, normalizeGuestOrigin } from '../lib/guestStayUrl';
 import { fetchSmsCredit } from '../lib/staffSmsApi';
 import BookingRestrictionsSettings from './BookingRestrictionsSettings';
+import ConnectedAgentsSettings from './ConnectedAgentsSettings';
 
 const LANGUAGES = FIELD_UI_LANGUAGES;
 
@@ -512,7 +513,7 @@ export default function Settings({ theme, setTheme, sessionUser, onSessionUserUp
                 left: '50%',
                 zIndex: 9999,
                 width: 'calc(100vw - 2rem)',
-                maxWidth: '440px',
+                maxWidth: '560px',
                 maxHeight: '90vh',
                 overflowY: 'auto',
                 padding: '1.5rem',
@@ -545,7 +546,8 @@ export default function Settings({ theme, setTheme, sessionUser, onSessionUserUp
                     { id: 'attendance', label: t('SETTINGS_TAB_ATTENDANCE', 'נוכחות') },
                     { id: 'sop', label: t('SETTINGS_TAB_SOP', 'משימות') },
                     { id: 'holidays', label: t('SETTINGS_TAB_HOLIDAYS', 'חגים') }
-                  ] : [])
+                  ] : []),
+                  ...(canOpenAgents ? [{ id: 'agents-connected', label: 'סוכנים מחוברים' }] : [])
                 ].map((item) => (
                   <button
                     key={item.id}
@@ -694,6 +696,8 @@ export default function Settings({ theme, setTheme, sessionUser, onSessionUserUp
                 />
               ) : tab === 'holidays' ? (
                 <BookingRestrictionsSettings tenantId={tenantId} isLight={isLight} t={t} />
+              ) : tab === 'agents-connected' ? (
+                <ConnectedAgentsSettings isLight={isLight} />
               ) : (
                 <StaffTab
                   isLight={isLight}
@@ -1140,6 +1144,11 @@ function StaffForm({ isLight, isManager, canOpenAgents = false, isNew, staffForm
       {staffForm.role === 'RECEPTION' && (
         <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: '8px 0 0', lineHeight: 1.45, fontWeight: 700 }}>
           {t('SETTINGS_STAFF_RECEPTION_HELP', 'תפקיד פקידות פותח את דף החיובים בטלפון: resortos.app/desk — בלי Tailscale ובלי היומן המלא.')}
+        </p>
+      )}
+      {staffForm.role === 'PRIORITY' && (
+        <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: '8px 0 0', lineHeight: 1.45, fontWeight: 700 }}>
+          {t('SETTINGS_STAFF_PRIORITY_HELP', 'תפקיד פריוריטי נכנס רק למסך פריוריטי, עם הרשאות פעולה כמו מנהל על סטטוס האירוח וסטטוס הניקיון. בלי לוח תפוסה, תפעול, סידורים או פיננסים.')}
         </p>
       )}
       {canOpenAgents && (staffForm.role === 'MANAGER' || staffForm.role === 'OPS_MANAGER') && (

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shouldApplyIncomingBooking } from './bookingMerge.js';
+import { isVisibleKinorotRemoval, shouldApplyIncomingBooking } from './bookingMerge.js';
 import { bookingStatusRank, paymentStatusRank } from './bookingPaid.js';
 
 const ranks = {
@@ -10,6 +10,21 @@ const ranks = {
 const realRanks = { paymentStatusRank, bookingStatusRank };
 
 describe('shouldApplyIncomingBooking', () => {
+  it('keeps a Kinorot removal visible when Postgres did not delete the row', () => {
+    expect(isVisibleKinorotRemoval({
+      id: 'kin_685_74589',
+      booking_status: 'CANCELED',
+      cancellation_reason: 'removed_from_kinorot',
+      deleted_at: null
+    })).toBe(true);
+    expect(isVisibleKinorotRemoval({
+      id: 'kin_685_74589',
+      booking_status: 'CANCELED',
+      cancellation_reason: 'removed_from_kinorot',
+      deleted_at: '2026-10-05T08:58:54.487Z'
+    })).toBe(false);
+  });
+
   it('always writes a new id', () => {
     expect(shouldApplyIncomingBooking(null, { id: 'kin_680_70233' }, '2026-09-03', ranks)).toBe(true);
   });

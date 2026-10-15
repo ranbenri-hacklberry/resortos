@@ -244,7 +244,7 @@ export default function AgentApp() {
         cabin_quotes: cabinQuotes
       });
       setLock(reserved.lock);
-      setPayUrl(reserved.hypPaymentUrl || reserved.iframe_url || reserved.pay_url);
+      setPayUrl('');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -512,14 +512,11 @@ export default function AgentApp() {
         ) : null}
       </section>
 
-      {payUrl ? (
+      {lock?.checkout_token ? (
         <section className="mt-4 rounded-2xl border border-slate-800 overflow-hidden bg-white">
-          <iframe title="תשלום מאובטח" src={payUrl} allow="payment" className="w-full h-[480px] rounded-2xl border-none shadow-md" />
           <div className="p-3 grid gap-2 bg-stone-100">
-            <a className="text-center rounded-xl border border-stone-300 bg-white py-3 font-bold" href={`https://wa.me/?text=${encodeURIComponent(`לינק לתשלום מקדמה: ${lock?.checkout_token ? `https://resortos.app/checkout/${lock.checkout_token}` : payUrl}`)}`}>שלח קישור לתשלום ישיר לאורח בוואטסאפ</a>
-            <button type="button" className="rounded-xl bg-emerald-500 text-slate-950 font-black py-3" onClick={finishPay} disabled={busy === 'verify'}>
-              {busy === 'verify' ? 'בודקים…' : 'סיימתי את התשלום'}
-            </button>
+            <a className="text-center rounded-xl border border-stone-300 bg-white py-3 font-bold" href={`https://resortos.app/stay/${encodeURIComponent(lock.checkout_token)}`}>דף האורח</a>
+            <a className="text-center rounded-xl border border-stone-300 bg-white py-3 font-bold" href={`https://wa.me/?text=${encodeURIComponent(`קישור לשהות: https://resortos.app/stay/${lock.checkout_token}`)}`}>שלח קישור לאורח בוואטסאפ</a>
           </div>
         </section>
       ) : (

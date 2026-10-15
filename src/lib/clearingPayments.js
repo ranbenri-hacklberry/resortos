@@ -71,6 +71,24 @@ export function formatIlsFromAgorot(agorot) {
   return `₪${n.toLocaleString('he-IL')}`;
 }
 
+export function normalizeIsraeliId(raw) {
+  const digits = String(raw || '').replace(/\D/g, '');
+  if (digits.length < 5 || digits.length > 9) return '';
+  return digits.padStart(9, '0');
+}
+
+export function isValidIsraeliId(raw) {
+  const id = normalizeIsraeliId(raw);
+  if (!id) return false;
+  let sum = 0;
+  for (let i = 0; i < 9; i += 1) {
+    let n = Number(id[i]) * ((i % 2) + 1);
+    if (n > 9) n -= 9;
+    sum += n;
+  }
+  return sum % 10 === 0;
+}
+
 export function normalizeClearingPayment(raw = {}) {
   const terminalId = String(raw.terminalId || '').trim();
   const hyp = (raw.source === 'HYP' || terminalId || String(raw.accountKey || '').startsWith('HYP') || raw.accountKey === 'MAX_HYP')
@@ -104,7 +122,9 @@ export function normalizeClearingPayment(raw = {}) {
     last4: raw.last4 || '',
     brand: raw.brand || '',
     collector: String(raw.collector || raw.collected_by || '').trim(),
-    collected_at: raw.collected_at || raw.at || raw.date || ''
+    collected_at: raw.collected_at || raw.at || raw.date || '',
+    payer_name: String(raw.payer_name || raw.payerName || '').trim(),
+    payer_id: normalizeIsraeliId(raw.payer_id || raw.payerId || '')
   };
 }
 

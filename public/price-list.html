@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>מחירון מתחמים · אמצע שבוע / סוף שבוע</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #1c1915;
+      --muted: #5c564c;
+      --line: #d9d0c3;
+      --paper: #f7f3ec;
+      --card: #fffdf9;
+      --gold: #8c6a32;
+      --band: #efe6d6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #e7e1d6;
+      color: var(--ink);
+      font-family: Heebo, "Arial Hebrew", Arial, sans-serif;
+    }
+    .toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      background: #1c1915;
+      color: #f7f3ec;
+    }
+    .toolbar button {
+      border: 0;
+      background: #c6a46a;
+      color: #1c1915;
+      font: inherit;
+      font-weight: 700;
+      padding: 8px 16px;
+      border-radius: 999px;
+      cursor: pointer;
+    }
+    .sheet {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 18px auto;
+      background: var(--card);
+      padding: 14mm 12mm 12mm;
+      box-shadow: 0 12px 40px rgba(40, 30, 10, 0.12);
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 16px;
+      border-bottom: 2px solid var(--ink);
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+    }
+    .kicker {
+      margin: 0 0 2px;
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .when {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: left;
+      line-height: 1.45;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th {
+      text-align: right;
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      font-weight: 700;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--ink);
+    }
+    th:nth-child(4),
+    td:nth-child(4) {
+      text-align: center;
+      width: 92px;
+    }
+    td {
+      padding: 7px 8px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    .num { font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
+    td:nth-child(4).num { text-align: center; }
+    .village td {
+      padding: 12px 2px 4px;
+      border: 0;
+      color: var(--gold);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+    }
+    .start td { border-top: 2px solid var(--ink); }
+    .more td { background: #f6f1e8; }
+    .pool { color: var(--muted); }
+    footer {
+      margin-top: 14px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    footer strong { color: var(--ink); }
+    @page { size: A4; margin: 10mm; }
+    @media print {
+      body { background: white; }
+      .toolbar { display: none; }
+      .sheet { width: auto; min-height: 0; margin: 0; box-shadow: none; padding: 0; }
+      tr { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <span>מחירון להדפסה · A4</span>
+    <button type="button" onclick="window.print()">הדפס</button>
+  </div>
+  <article class="sheet">
+    <header>
+      <div>
+        <p class="kicker">ResortOS</p>
+        <h1>מחירון מתחמים</h1>
+      </div>
+      <p class="when">מחיר ללילה בש״ח<br />אמצע שבוע / סוף שבוע<br />סוף שבוע: חמישי ושישי</p>
+    </header>
+    <table>
+      <thead>
+        <tr>
+          <th>מתחם / יחידה</th>
+          <th>תפוסה</th>
+          <th>בריכה</th>
+          <th>אמצע שבוע</th>
+          <th>סוף שבוע</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="village"><td colspan="5">מושב רמות</td></tr>
+        <tr class="start">
+          <td>מאיה 1 ו-3</td>
+          <td>זוג</td>
+          <td class="pool">פרטית · 28°</td>
+          <td class="num">750</td>
+          <td class="num">1,300</td>
+        </tr>
+        <tr class="more">
+          <td>מאיה · בקתה 2</td>
+          <td>זוג</td>
+          <td class="pool">בלי בריכה</td>
+          <td class="num">600</td>
+          <td class="num">900</td>
+        </tr>
+        <tr class="start">
+          <td>החצר המוסיקלית</td>
+          <td>זוג</td>
+          <td class="pool">מרכזית · 28°</td>
+          <td class="num">600</td>
+          <td class="num">900</td>
+        </tr>
+        <tr class="start">
+          <td>נופים בלבן</td>
+          <td>זוג + 2</td>
+          <td class="pool">פרטית · 28°</td>
+          <td class="num">750</td>
+          <td class="num">1,200</td>
+        </tr>
+        <tr class="start">
+          <td>טוסקנה</td>
+          <td>זוג + 2</td>
+          <td class="pool">מרכזית · 28°</td>
+          <td class="num">600</td>
+          <td class="num">900</td>
+        </tr>
+        <tr class="more">
+          <td>טוסקנה · שאטו</td>
+          <td>זוג + 5</td>
+          <td class="pool">מרכזית · 28°</td>
+          <td class="num">850</td>
+          <td class="num">1,500</td>
+        </tr>
+        <tr class="start">
+          <td>בתי נורית · זוג (1, 4, 7, 8)</td>
+          <td>זוג</td>
+          <td class="pool">מרכזית · 28°</td>
+          <td class="num">500</td>
+          <td class="num">900</td>
+        </tr>
+        <tr class="more">
+          <td>בתי נורית · זוג + 2 (2, 3, 5, 6)</td>
+          <td>זוג + 2</td>
+          <td class="pool">מרכזית · 28°</td>
+          <td class="num">800</td>
+          <td class="num">1,300</td>
+        </tr>
+        <tr class="start">
+          <td>טאג׳ מאהל</td>
+          <td>זוג</td>
+          <td class="pool">מרכזית · 28°</td>
+          <td class="num">800</td>
+          <td class="num">1,200</td>
+        </tr>
+        <tr class="start">
+          <td>מול הנוף · זוגי (1, 4, 5)</td>
+          <td>זוג</td>
+          <td class="pool">מרכזית · 28°</td>
+          <td class="num">500</td>
+          <td class="num">900</td>
+        </tr>
+        <tr class="more">
+          <td>מול הנוף · זוג + 2 (2, 3)</td>
+          <td>זוג + 2</td>
+          <td class="pool">מרכזית · 28°</td>
+          <td class="num">800</td>
+          <td class="num">1,300</td>
+        </tr>
+
+        <tr class="village"><td colspan="5">מושב נאות גולן</td></tr>
+        <tr class="start">
+          <td>מיאליס · סוויטות</td>
+          <td>זוג + 2</td>
+          <td class="pool">פרטית · 28°</td>
+          <td class="num">800</td>
+          <td class="num">1,200</td>
+        </tr>
+        <tr class="more">
+          <td>מיאליס · וילה</td>
+          <td>וילה</td>
+          <td class="pool">פרטית · 28°</td>
+          <td class="num">2,800</td>
+          <td class="num">3,800</td>
+        </tr>
+
+        <tr class="village"><td colspan="5">מושב גבעת יואב</td></tr>
+        <tr class="start">
+          <td>צימר בגבעה</td>
+          <td>זוג + 2</td>
+          <td class="pool">מרכזית · 28°</td>
+          <td class="num">700</td>
+          <td class="num">1,100</td>
+        </tr>
+        <tr class="start">
+          <td>כיפת שמיים</td>
+          <td>זוג</td>
+          <td class="pool">פרטית · 28°</td>
+          <td class="num">1,200</td>
+          <td class="num">1,500</td>
+        </tr>
+
+        <tr class="village"><td colspan="5">מושב נוב</td></tr>
+        <tr class="start">
+          <td>קאסה נובה</td>
+          <td>זוג + 2</td>
+          <td class="pool">פרטית</td>
+          <td class="num">800</td>
+          <td class="num">1,200</td>
+        </tr>
+      </tbody>
+    </table>
+    <footer>
+      <strong>בריכות.</strong>
+      בקתה 2 במאיה בלי בריכה. בשאר המתחמים בלי בריכה פרטית יש בריכה מרכזית.
+      כל הבריכות מחוממות ל-28°, חוץ מבריכות קאסה נובה.
+      <br />
+      <strong>סגירת מיאליס.</strong>
+      וילה + שתי סוויטות: 4,400 באמצע השבוע ו-6,200 בסוף השבוע.
+    </footer>
+  </article>
+</body>
+</html>

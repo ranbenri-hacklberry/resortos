@@ -508,7 +508,7 @@ function stayCollectionKey(row) {
   return `${name}|${row?.stayDate || ''}|${row?.property || ''}`;
 }
 
-const SKIP_MISMATCH_NAME = /^(תפוס|ביטול|סגור|שיפוץ|מוצאש|יציאה)/;
+const SKIP_MISMATCH_NAME = /^(תפוס|ביטול|סגור|שיפוצ|שיפוץ|לא זמין|לא נקי|מוצאש|יציאה)/;
 
 function kinorotResid(booking) {
   const req = String(booking?.special_requests || '');

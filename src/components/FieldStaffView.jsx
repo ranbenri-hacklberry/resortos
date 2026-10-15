@@ -4,10 +4,9 @@ import { Baby, Check, ClipboardList, Languages, PackageMinus, Settings as Gear, 
 import { persistLanguage } from '../i18n';
 import { useLiveBookings, useLiveUnits } from '../lib/resortos-db';
 import {
-  ensureCanonicalUnits,
+  ensureCanonicalUnitCatalog,
   pushUnitToCloud,
-  subscribeToRealtimeCloudBookings,
-  subscribeToRealtimeUnitOps,
+  subscribeToOpsEdgeEvents,
   syncCloudBookingsToDexie,
   syncUnitOpsToDexie
 } from '../lib/cloudDb';
@@ -28,10 +27,9 @@ import RoomCompletionsEditor from './RoomCompletionsEditor';
 import {
   countMonthlyCleans,
   decorateWorkLog,
-  fetchStaffWorkLog,
-  israelMonthStart,
   staffActor
 } from '../lib/staffWorkLog';
+import { listWorkLog } from '../lib/opsApi';
 import { unitFullName, visibleInventory } from '../lib/units';
 import { unitMatchesBoardArea } from '../lib/dailyDutyReport';
 import { FIELD_UI_LANGUAGES } from '../lib/fieldUiLanguages';
@@ -76,7 +74,7 @@ export default function FieldStaffView({
     pushUnitToCloud({
       ...patch,
       assigned_staff: actor?.name || patch.assigned_staff
-    }, { waitRemote: true, ...options, actor })
+    }, { waitRemote: true, viaEdge: true, ...options, actor })
   ), [actor]);
 
   const allowedUnitIds = sessionUser?.allowed_units;
@@ -102,11 +100,7 @@ export default function FieldStaffView({
 
   const reloadLog = useCallback(async () => {
     if (!actor?.id) return;
-    const rows = await fetchStaffWorkLog({
-      tenantId: TENANT_ID,
-      staffId: actor.id,
-      monthStart: israelMonthStart()
-    });
+    const rows = await listWorkLog();
     setWorkLog(rows);
   }, [actor]);
 
@@ -120,11 +114,11 @@ export default function FieldStaffView({
     let stop = false;
     async function pull() {
       try {
-        await ensureCanonicalUnits(TENANT_ID);
+        await ensureCanonicalUnitCatalog();
         if (stop) return;
         await Promise.all([
-          syncUnitOpsToDexie(TENANT_ID),
-          syncCloudBookingsToDexie(TENANT_ID)
+          syncUnitOpsToDexie(TENANT_ID, { viaEdge: true }),
+          syncCloudBookingsToDexie(TENANT_ID, { viaEdge: true })
         ]);
       } catch (_) {}
     }
@@ -132,13 +126,11 @@ export default function FieldStaffView({
     if (!liveSync) {
       return () => { stop = true; };
     }
-    const offBookings = subscribeToRealtimeCloudBookings(TENANT_ID);
-    const offOps = subscribeToRealtimeUnitOps(TENANT_ID);
+    const offEvents = subscribeToOpsEdgeEvents();
     const tick = setInterval(pull, 60000);
     return () => {
       stop = true;
-      if (typeof offBookings === 'function') offBookings();
-      if (typeof offOps === 'function') offOps();
+      if (typeof offEvents === 'function') offEvents();
       clearInterval(tick);
     };
   }, [liveSync, dataEpoch]);

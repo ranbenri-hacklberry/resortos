@@ -2,7 +2,6 @@
 export const DEFAULT_RESORT_UNITS = [
   { id: 'k826', name: 'קאסה נובה · Aura', sort_order: 0, unit_type: 'suite', max_occupancy: 5, base_price_agorot: 85000 },
   { id: 'k827', name: 'קאסה נובה · Bloom', sort_order: 1, unit_type: 'suite', max_occupancy: 5, base_price_agorot: 85000 },
-  { id: 'lab-kinneret', name: 'בקתת כנרת', sort_order: 2, unit_type: 'cabin', max_occupancy: 4, base_price_agorot: 85000 },
   { id: 'hill-1', name: 'צימר בגבעה 1', sort_order: 3, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
   { id: 'hill-2', name: 'צימר בגבעה 2', sort_order: 4, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
   { id: 'hill-3', name: 'צימר בגבעה 3', sort_order: 5, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
@@ -32,9 +31,9 @@ export const DEFAULT_RESORT_UNITS = [
   { id: 'k684', name: 'מול הנוף · בקתה 5', sort_order: 29, unit_type: 'cabin', max_occupancy: 5, base_price_agorot: 85000 },
   { id: 'k685', name: 'נופים בלבן · בקתה 1', sort_order: 30, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
   { id: 'k686', name: 'נופים בלבן · בקתה 2', sort_order: 31, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
-  { id: 'k687', name: 'טוסקנה · פירנצה 1', sort_order: 32, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
-  { id: 'k688', name: 'טוסקנה · פירנצה 2', sort_order: 33, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
-  { id: 'k689', name: 'טוסקנה · שאטו', sort_order: 34, unit_type: 'cabin', max_occupancy: 10, base_price_agorot: 85000 },
+  { id: 'k687', name: 'טוסקנה · 1', sort_order: 32, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
+  { id: 'k688', name: 'טוסקנה · 2', sort_order: 33, unit_type: 'cabin', max_occupancy: 7, base_price_agorot: 85000 },
+  { id: 'k689', name: 'טוסקנה · 3', sort_order: 34, unit_type: 'cabin', max_occupancy: 10, base_price_agorot: 85000 },
   { id: 'k690', name: 'חצר מוסיקלית · חליל', sort_order: 35, unit_type: 'cabin', max_occupancy: 4, base_price_agorot: 85000 },
   { id: 'k691', name: 'חצר מוסיקלית · מיתר', sort_order: 36, unit_type: 'cabin', max_occupancy: 4, base_price_agorot: 85000 },
   { id: 'k692', name: 'חצר מוסיקלית · פעמון', sort_order: 37, unit_type: 'cabin', max_occupancy: 4, base_price_agorot: 85000 },
@@ -54,7 +53,6 @@ const NAME_TO_ID = Object.fromEntries(
 );
 NAME_TO_ID['מיאליס וילה'] = 'mialis-villa';
 NAME_TO_ID['וילה מיאליס'] = 'mialis-villa';
-NAME_TO_ID['בקתת כנרת'] = 'lab-kinneret';
 NAME_TO_ID['סוויטה 1'] = 'suite-1';
 NAME_TO_ID['סוויטה 2'] = 'suite-2';
 NAME_TO_ID['סוויטה מיאליס ירוקה'] = 'suite-1';
@@ -72,14 +70,11 @@ export const FORCE_DOCUMENT_NAMES = new Set([
   'mialis-villa', 'suite-1', 'suite-2',
   'k671', 'k673', 'k674', 'k675', 'k676', 'k677', 'k678', 'k679'
 ]);
-NAME_TO_ID['סייסטה · רומנטית 1'] = 'k620';
-NAME_TO_ID['סייסטה · רומנטית 2'] = 'k621';
-NAME_TO_ID['סייסטה · בת הים 1'] = 'k622';
-NAME_TO_ID['סייסטה · בת הים 2'] = 'k623';
 
 export const RETIRED_UNIT_IDS = new Set([
   'u1', 'u2', 'u3', 'u4',
-  'k618', 'k619', 'k620', 'k621', 'k622', 'k623'
+  'k618', 'k619', 'k620', 'k621', 'k622', 'k623',
+  'lab-kinneret'
 ]);
 
 export function isPhantomUnitId(id) {
@@ -140,7 +135,6 @@ export function calendarInventory(units, allowedUnitIds, tenantId) {
 
 export function unitAccessGroup(unitId) {
   const id = String(unitId || '');
-  if (id === 'lab-kinneret') return 'מעבדה';
   if (id === 'mialis-villa' || id.startsWith('suite-')) return 'מיאליס';
   if (id.startsWith('hill-')) return 'צימר בגבעה';
   if (id.startsWith('dome-')) return 'כיפת שמיים';
@@ -151,7 +145,6 @@ export function unitAccessGroup(unitId) {
   if (/^k68[7-9]$/.test(id)) return 'בקתות טוסקנה · רמות';
   if (/^k69[0-2]$/.test(id)) return 'החצר המוסיקלית · רמות';
   if (/^k69[3-5]$/.test(id)) return 'בקתות מאיה · רמות';
-  if (id === 'k618' || id === 'k619' || /^k62[0-3]$/.test(id)) return 'סייסטה · רמות';
   if (id === 'k826' || id === 'k827') return 'קאסה נובה · נוב';
   return 'יחידות נוספות';
 }

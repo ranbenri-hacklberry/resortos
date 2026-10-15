@@ -15,7 +15,7 @@ import { localizedUnitName } from '../lib/units';
 import GuestAreaGuide from './GuestAreaGuide';
 import GuestInStay from './GuestInStay';
 import CheckinDrawer, { tabFromPreference } from './CheckinDrawer';
-import { listenHypParentBreakout, openPaymentUrl, shouldEmbedHypPayment } from '../lib/guestPayBrowser';
+import { listenHypParentBreakout } from '../lib/guestPayBrowser';
 
 function displayDate(iso) {
   if (!iso) return '—';
@@ -179,9 +179,9 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
     && stay?.self_checked_out_at == null
     && paidForCheckin
     && roomOpen;
-  const showCheckin = showPayCheckin || showPaidCheckin;
-  const showInStay = cabinReady && guestCheckedIn && stay?.self_checked_out_at == null;
-  const showWaiting = !guestCheckedIn ? (phase !== 'pre' && !cabinReady && !showCheckin && !bankWaiting) : (!cabinReady);
+  const isUnitReady = Boolean(stay?.cabin_ready) || String(stay?.operational_status || '').toUpperCase() === 'READY';
+  const showInStay = (cabinReady || (isUnitReady && guestCheckedIn && Boolean(stay?.door_pin))) && stay?.self_checked_out_at == null;
+  const showWaiting = !isUnitReady && stay?.self_checked_out_at == null;
 
   useEffect(() => {
     if (!booking?.checkout_token || autoCheckinSent.current) return;
@@ -290,12 +290,8 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
       if (next?.payment) setPayment(next.payment);
       if (next?.booking_status) setLiveStatus(next.booking_status);
       if (action === 'guest_checkin' && (next?.payment?.pay_url || next?.payment?.iframe_url)) {
-        const url = next.payment.pay_url || next.payment.iframe_url;
-        if (shouldEmbedHypPayment(next.payment)) {
-          setCheckinOpen(true);
-          return;
-        }
-        openPaymentUrl(url);
+        setPayment((prev) => (prev ? { ...prev, pay_url: null, iframe_url: null } : prev));
+        setCheckinError(t('INSTAY_CHECKIN_FAILED'));
         return;
       }
       if (action === 'guest_checkin' && !next?.payment?.iframe_url && !next?.payment?.pay_url) {
@@ -511,7 +507,7 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
           {t('GUEST_HELLO', { name: booking.guest_name || t('GUEST_FALLBACK') })}
         </div>
         <h2 style={{ margin: 0, fontSize: '1.45rem', fontWeight: 900, lineHeight: 1.3 }}>
-          {t(isInHouse(booking) || booking.booking_status === 'CHECKED_IN' ? 'GUEST_IN_UNIT' : 'GUEST_WAITING', { cabin })}
+          {`ברוכים הבאים ל${cabin}`}
         </h2>
       </div>
 

@@ -22,6 +22,7 @@ describe('calendarInventory', () => {
     expect(rows[0].id).toBe('k826');
     expect(rows[1].id).toBe('k827');
     expect(rows.some((u) => u.id === 'k618')).toBe(false);
+    expect(rows.some((u) => u.id === 'lab-kinneret')).toBe(false);
   });
 });
 

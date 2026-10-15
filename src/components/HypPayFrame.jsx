@@ -1,5 +1,4 @@
 import React, { useEffect, useRef } from 'react';
-import { openPaymentUrl } from '../lib/guestPayBrowser';
 
 export default function HypPayFrame({
   url,
@@ -7,7 +6,6 @@ export default function HypPayFrame({
   themeStyles,
   amountLabel,
   height = 'min(68dvh, 620px)',
-  onOpenFull,
   onDone,
   doneBusy = false
 }) {
@@ -87,6 +85,7 @@ export default function HypPayFrame({
           src={url}
           allow="payment"
           referrerPolicy="origin"
+          sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox"
           style={{
             width: '100%',
             height,
@@ -96,26 +95,6 @@ export default function HypPayFrame({
           }}
         />
       </div>
-      <button
-        type="button"
-        onClick={() => {
-          if (onOpenFull) onOpenFull(url);
-          else openPaymentUrl(url);
-        }}
-        style={{
-          width: '100%',
-          marginTop: 10,
-          border: `1px solid ${themeStyles?.inputBorder || '#E5E7EB'}`,
-          borderRadius: 12,
-          padding: '0.75rem',
-          fontWeight: 800,
-          background: 'transparent',
-          color: themeStyles?.textPrimary || '#111',
-          cursor: 'pointer'
-        }}
-      >
-        {t('GUEST_PAY_OPEN_FULL')}
-      </button>
       {onDone ? (
         <button
           type="button"

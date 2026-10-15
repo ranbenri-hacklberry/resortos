@@ -17,6 +17,7 @@ cp "$SRC/server/kinorotSyncDiff.js" "$ROOT/server/"
 cp "$SRC/server/kinorotSameDaySms.js" "$ROOT/server/"
 cp "$SRC/server/micropaySms.js" "$ROOT/server/"
 cp "$SRC/src/lib/kinorotStayHours.js" "$ROOT/src/lib/"
+cp "$SRC/src/lib/kinorotChannel.js" "$ROOT/src/lib/"
 cp "$SRC/src/lib/kinorotNotePayments.js" "$ROOT/src/lib/"
 cp "$SRC/src/lib/deposit.js" "$ROOT/src/lib/"
 cp "$SRC/src/lib/micropaySms.js" "$ROOT/src/lib/"
@@ -40,5 +41,5 @@ print("wrote", "$DEST")
 PY
 launchctl bootout "gui/$(id -u)/il.resortos.kinorot-sync" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$DEST"
-echo "loaded il.resortos.kinorot-sync every 15 minutes from $ROOT"
+echo "loaded il.resortos.kinorot-sync every 5 minutes from $ROOT"
 echo "KINOROT_USER / KINOROT_PASSWORD must be in $ROOT/.env"

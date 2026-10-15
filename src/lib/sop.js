@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient';
+import { listSopTemplates as listEdgeSopTemplates, saveSopTemplate as saveEdgeSopTemplate } from './opsApi';
 import { housekeepingSopSteps } from './cabinSetup';
 
 export const SOP_IDS = {
@@ -153,19 +153,26 @@ function rowToTemplate(row) {
   };
 }
 
-export async function fetchSopTemplates(tenantId) {
-  if (!tenantId) return DEFAULT_SOP_TEMPLATES;
+export async function loadEdgeSopTemplates() {
   try {
-    const { data, error } = await supabase
-      .from('sop_templates')
-      .select('id, domain, title, steps, updated_at')
-      .eq('tenant_id', tenantId);
-    if (error) throw error;
-    if (data?.length) {
+    const data = await listEdgeSopTemplates();
+    if (!data.length) return DEFAULT_SOP_TEMPLATES;
+    const byId = new Map(data.map((row) => [row.id, rowToTemplate(row)]));
+    return DEFAULT_SOP_TEMPLATES.map((seed) => mergeTemplateSteps(seed, byId.get(seed.id)));
+  } catch (err) {
+    console.warn('[SOP TEMPLATES EDGE]', err?.message || err);
+    return DEFAULT_SOP_TEMPLATES;
+  }
+}
+
+export async function fetchSopTemplates() {
+  try {
+    const data = await listEdgeSopTemplates();
+    if (data.length) {
       const byId = new Map(data.map((row) => [row.id, rowToTemplate(row)]));
       return DEFAULT_SOP_TEMPLATES.map((seed) => mergeTemplateSteps(seed, byId.get(seed.id)));
     }
-    await seedSopTemplates(tenantId);
+    await seedSopTemplates();
     return DEFAULT_SOP_TEMPLATES;
   } catch (err) {
     console.warn('[SOP TEMPLATES FETCH]', err?.message || err);
@@ -173,30 +180,13 @@ export async function fetchSopTemplates(tenantId) {
   }
 }
 
-export async function seedSopTemplates(tenantId) {
-  if (!tenantId) return;
-  const now = new Date().toISOString();
-  const rows = DEFAULT_SOP_TEMPLATES.map((template) => ({
-    id: template.id,
-    tenant_id: tenantId,
-    domain: template.domain,
-    title: template.title,
-    steps: template.steps,
-    updated_at: now
-  }));
-  const { error } = await supabase.from('sop_templates').upsert(rows);
-  if (error) console.warn('[SOP TEMPLATES SEED]', error.message);
+export async function seedSopTemplates() {
+  for (const template of DEFAULT_SOP_TEMPLATES) {
+    await saveEdgeSopTemplate(template);
+  }
 }
 
-export async function saveSopTemplate(tenantId, template) {
-  if (!tenantId || !template?.id) return;
-  const { error } = await supabase.from('sop_templates').upsert({
-    id: template.id,
-    tenant_id: tenantId,
-    domain: template.domain,
-    title: template.title,
-    steps: template.steps,
-    updated_at: new Date().toISOString()
-  });
-  if (error) throw error;
+export async function saveSopTemplate(_tenantId, template) {
+  if (!template?.id) return;
+  await saveEdgeSopTemplate(template);
 }

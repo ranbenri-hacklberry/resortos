@@ -178,12 +178,6 @@ export const FIELD_PROPERTIES = {
     circled: 'Ⓕ',
     aliases: ['מאיה', 'בקתות מאיה', 'maya', 'f', 'Ⓕ', '24', '24f', 'f24']
   },
-  siesta: {
-    id: 'siesta',
-    he: 'סייסטה',
-    th: 'ซิเอสตา',
-    aliases: ['סייסטה', 'סייסטא', 'siesta']
-  },
   'casa-nova': {
     id: 'casa-nova',
     he: 'קאסה נובה',
@@ -194,7 +188,6 @@ export const FIELD_PROPERTIES = {
 
 /** Visual / Thai signs Thai housekeepers already use on site. */
 export const FIELD_UNIT_SIGNS = {
-  'lab-kinneret': { sign: '🌊', th: 'คินเนเรต', he: 'כנרת', localNum: null, aliases: ['כנרת', 'lab'] },
   'hill-1': { sign: '1️⃣', th: 'เนิน 1', he: 'גבעה 1', localNum: 1, aliases: ['גבעה 1', 'בגבעה 1'] },
   'hill-2': { sign: '2️⃣', th: 'เนิน 2', he: 'גבעה 2', localNum: 2, aliases: ['גבעה 2', 'בגבעה 2'] },
   'hill-3': { sign: '3️⃣', th: 'เนิน 3', he: 'גבעה 3', localNum: 3, aliases: ['גבעה 3', 'בגבעה 3'] },
@@ -224,21 +217,15 @@ export const FIELD_UNIT_SIGNS = {
   k684: { sign: 'Ⓐ', th: 'Ⓐ29 มูล 5', he: 'מול הנוף 5', localNum: 5, aliases: ['מול הנוף 5', 'מול 5', 'a5'] },
   k685: { sign: 'Ⓑ', th: 'Ⓑ28 โนฟิม 1', he: 'נופים 1', localNum: 1, aliases: ['נופים 1', 'נופים בלבן 1', 'b1', '28b'] },
   k686: { sign: 'Ⓑ', th: 'Ⓑ28 โนฟิม 2', he: 'נופים 2', localNum: 2, aliases: ['נופים 2', 'נופים בלבן 2', 'b2'] },
-  k687: { sign: 'Ⓒ', th: 'Ⓒ27 ฟิเรนเซ 1', he: 'פירנצה 1', localNum: 1, aliases: ['פירנצה 1', 'פירנצה', 'c1', '27c'] },
-  k688: { sign: 'Ⓒ', th: 'Ⓒ27 ฟิเรนเซ 2', he: 'פירנצה 2', localNum: 2, aliases: ['פירנצה 2', 'c2'] },
-  k689: { sign: 'Ⓒ', th: 'Ⓒ27 ชาโต', he: 'שאטו', localNum: 3, aliases: ['שאטו', 'chateau', 'castle', 'c3'] },
+  k687: { sign: 'Ⓒ', th: 'Ⓒ27 1', he: '1', localNum: 1, aliases: ['פירנצה 1', 'פירנצה', 'טוסקנה 1', 'c1', '27c'] },
+  k688: { sign: 'Ⓒ', th: 'Ⓒ27 2', he: '2', localNum: 2, aliases: ['פירנצה 2', 'טוסקנה 2', 'c2'] },
+  k689: { sign: 'Ⓒ', th: 'Ⓒ27 3', he: '3', localNum: 3, aliases: ['שאטו', 'chateau', 'castle', 'טוסקנה 3', 'c3'] },
   k690: { sign: 'Ⓓ', th: 'Ⓓ 1', he: 'מוסיקלית 1', localNum: 1, aliases: ['חליל', 'flute', 'd1', '26d', 'בקתה 1', '690'] },
   k691: { sign: 'Ⓓ', th: 'Ⓓ 2', he: 'מוסיקלית 2', localNum: 2, aliases: ['מיתר', 'string', 'd2', 'בקתה 2', '691'] },
   k692: { sign: 'Ⓓ', th: 'Ⓓ 3', he: 'מוסיקלית 3', localNum: 3, aliases: ['פעמון', 'bell', 'd3', 'בקתה 3', '692'] },
   k693: { sign: 'Ⓕ', th: 'Ⓕ24 มายา 1', he: 'מאיה 1', localNum: 1, aliases: ['מאיה 1', 'f1', '24f'] },
   k694: { sign: 'Ⓕ', th: 'Ⓕ24 มายา 2', he: 'מאיה 2', localNum: 2, aliases: ['מאיה 2', 'f2'] },
   k695: { sign: 'Ⓕ', th: 'Ⓕ24 มายา 3', he: 'מאיה 3', localNum: 3, aliases: ['מאיה 3', 'f3'] },
-  k618: { sign: '👨‍👩‍👧', th: 'ครอบครัว 1', he: 'משפחתית 1', localNum: 1, aliases: ['משפחתית 1', 'סייסטה 1'] },
-  k619: { sign: '👨‍👩‍👧', th: 'ครอบครัว 2', he: 'משפחתית 2', localNum: 2, aliases: ['משפחתית 2', 'סייסטה 2'] },
-  k620: { sign: '💕', th: 'โรแมนติก 3', he: 'רומנטית 3', localNum: 3, aliases: ['רומנטית 3', 'סייסטה 3'] },
-  k621: { sign: '💕', th: 'โรแมนติก 4', he: 'רומנטית 4', localNum: 4, aliases: ['רומנטית 4', 'סייסטה 4'] },
-  k622: { sign: '🧜‍♀️', th: 'นางเงือก 5', he: 'בת הים 5', localNum: 5, aliases: ['בת הים 5', 'סייסטה 5'] },
-  k623: { sign: '🧜‍♀️', th: 'นางเงือก 6', he: 'בת הים 6', localNum: 6, aliases: ['בת הים 6', 'סייסטה 6'] },
   k826: { sign: '✨', th: 'Aura', he: 'Aura', localNum: 1, aliases: ['aura', 'אורה'] },
   k827: { sign: '🌸', th: 'Bloom', he: 'Bloom', localNum: 2, aliases: ['bloom', 'בלום'] }
 };

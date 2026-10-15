@@ -7,6 +7,16 @@ export function isCanceledBooking(row) {
   return Boolean(row?.deleted_at) || row?.booking_status === 'CANCELED';
 }
 
+/** Canceled in Kinorot, but still drawn on the board with a strikethrough. */
+export function isVisibleKinorotRemoval(row) {
+  return Boolean(
+    row
+    && row.booking_status === 'CANCELED'
+    && row.cancellation_reason === 'removed_from_kinorot'
+    && !row.deleted_at
+  );
+}
+
 export function stayStillHasNights(row, today) {
   return Boolean(row?.check_out_date && row.check_out_date > today);
 }

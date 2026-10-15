@@ -120,10 +120,11 @@ export function moneyFromKinorotPayment(payment, resid) {
 export function clearingPaymentsFromKinorotNotes(events, { resid = '', last4 = '' } = {}) {
   return receivedKinorotNotePayments(events).map((event) => {
     const method = event.method || 'card';
-    const accountKey = 'MAX';
+    const accountKey = method === 'cash' ? 'CASH' : method === 'bank' ? 'BANK' : 'MAX';
     return {
       source: 'KINOROT',
       accountKey,
+      method,
       amount: event.amount,
       amount_agorot: Math.round(Number(event.amount || 0) * 100),
       date: event.date || '',

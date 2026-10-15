@@ -35,6 +35,7 @@ import { guestCabinStoreEnabled } from '../lib/guestFeatures';
 import { stayAction } from '../lib/guestCheckoutApi';
 import { selfCheckoutWindow } from '../lib/guestComms';
 import { googleReviewUrl, guestHostWhatsAppHref } from '../lib/stayProperty';
+import { cleanGuestCabinName } from '../lib/units';
 import GuestAreaGuide from './GuestAreaGuide';
 
 function LiveText({ text }) {
@@ -212,7 +213,7 @@ export default function GuestInStay({ booking, unitName, stay, themeStyles, onSt
           {t('INSTAY_WELCOME', { name: booking.guest_name || t('GUEST_FALLBACK') })}
         </h2>
         <div style={{ marginTop: 6, fontWeight: 800, color: themeStyles.textMuted }}>
-          {t('INSTAY_CABIN', { cabin: unitName })}
+          {`ברוכים הבאים ל${cleanGuestCabinName(unitName)}`}
         </div>
       </div>
 

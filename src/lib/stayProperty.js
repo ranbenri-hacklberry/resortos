@@ -1,6 +1,6 @@
 import { PROPERTY_SEED, UNIT_PROPERTY as SEED_UNIT_PROPERTY } from './guestProfileSeed';
 
-const DEFAULT_HOST_PHONE = '0548076123';
+const DEFAULT_HOST_PHONE = '0515262612';
 
 /**
  * Canonical place for a unit — from guest PROPERTY_SEED.nav (query / placeId / waze).

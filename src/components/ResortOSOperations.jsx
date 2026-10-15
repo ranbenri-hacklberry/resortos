@@ -14,6 +14,8 @@ import {
   Camera, 
   Crown
 } from 'lucide-react';
+import OfficePilotCard from './OfficePilotCard';
+import { BOARD_AREA_FILTERS, unitMatchesBoardArea } from '../lib/dailyDutyReport';
 
 const RATING_KEYS_BY_DOMAIN = {
   HOUSEKEEPING: ['clean', 'showerToilets', 'linens', 'orderLook'],
@@ -138,13 +140,11 @@ function DynamicText({ text, translations, sourceLang }) {
 }
 import { db, useLiveUnits, useLiveBookings } from '../lib/resortos-db';
 import {
-  pushUnitToCloud,
-  subscribeToRealtimeCloudBookings,
-  subscribeToRealtimeUnitOps,
+  pushUnitToCloud as pushUnitOps,
+  subscribeToOpsEdgeEvents,
   syncCloudBookingsToDexie,
   syncUnitOpsToDexie,
-  ensureCanonicalUnits,
-  retirePhantomUnits
+  ensureCanonicalUnitCatalog
 } from '../lib/cloudDb';
 import { ensureTurnoverCleaning, isManagerInspection, markCabinCleanedForInspection, passedManagerInspection, persistRoomCompletions } from '../lib/housekeepingCycle';
 import { completionsFromUnit, NEEDS_COMPLETIONS } from '../lib/roomCompletions';
@@ -155,12 +155,11 @@ import { israelToday } from '../lib/cabinAccess';
 import { hideHousekeepingTaskWhileOccupied, isAwaitingManagerInspect, isEffectivelyOccupied } from '../lib/unitStatus';
 import { housekeepingTaskCopy, isGenericTurnoverReason, taskNeedsRoomLockbox } from '../lib/housekeepingTaskMeta';
 import { lockboxCodeForUnit } from '../lib/guestProfileSeed';
-import { unitMatchesBoardArea } from '../lib/dailyDutyReport';
 import { fieldUnitDisplayName, listFieldComplexes, propertyIdForUnit, stripLegendPlotNumber } from '../lib/fieldUnitCatalog';
 import {
   DEFAULT_SOP_TEMPLATES,
   ensureTaskSop,
-  fetchSopTemplates,
+  loadEdgeSopTemplates,
   formatElapsed,
   normalizeSopProgress,
   stepLabel
@@ -174,8 +173,20 @@ export default function ResortOSOperations({
   sessionRole = 'MANAGER',
   canSwitchRole = false,
   allowedUnitIds = [],
-  boardArea = 'all'
+  boardArea: boardAreaProp,
+  operatorName = 'צוות'
 }) {
+  const [ownArea, setOwnArea] = useState(() => {
+    try {
+      const stored = localStorage.getItem('resortos-board-area');
+      if (BOARD_AREA_FILTERS.some((row) => row.id === stored)) return stored;
+    } catch (_) {}
+    return 'all';
+  });
+  const boardArea = boardAreaProp ?? ownArea;
+  const pushUnitToCloud = useCallback((patch, options = {}) => (
+    pushUnitOps(patch, { ...options, viaEdge: true })
+  ), []);
   // Live Dexie IndexedDB Hooks
   const rawUnits = useLiveUnits(tenantId);
   const units = useMemo(() => {
@@ -187,24 +198,22 @@ export default function ResortOSOperations({
 
   // Real-time Cloud Sync — soft poll; skip no-op Dexie writes in syncUnitOpsToDexie.
   useEffect(() => {
-    syncCloudBookingsToDexie(tenantId);
-    syncUnitOpsToDexie(tenantId);
-    ensureCanonicalUnits(tenantId).then(() => retirePhantomUnits(tenantId)).catch(() => {});
-    const unsubscribeBookings = subscribeToRealtimeCloudBookings(tenantId);
-    const unsubscribeOps = subscribeToRealtimeUnitOps(tenantId);
+    syncCloudBookingsToDexie(tenantId, { viaEdge: true });
+    syncUnitOpsToDexie(tenantId, { viaEdge: true });
+    ensureCanonicalUnitCatalog().catch(() => {});
+    const unsubscribe = subscribeToOpsEdgeEvents();
     const pollId = setInterval(() => {
-      syncUnitOpsToDexie(tenantId);
+      syncUnitOpsToDexie(tenantId, { viaEdge: true });
     }, 30000);
     return () => {
       clearInterval(pollId);
-      if (typeof unsubscribeBookings === 'function') unsubscribeBookings();
-      if (typeof unsubscribeOps === 'function') unsubscribeOps();
+      if (typeof unsubscribe === 'function') unsubscribe();
     };
   }, [tenantId]);
 
   useEffect(() => {
     if (!tenantId) return;
-    fetchSopTemplates(tenantId).then(setSopTemplates).catch(() => {});
+    loadEdgeSopTemplates().then(setSopTemplates).catch(() => {});
   }, [tenantId]);
 
   // Reactive Theme & i18n Language Sync from App.jsx & Settings.jsx
@@ -1133,6 +1142,36 @@ export default function ResortOSOperations({
         boxSizing: 'border-box'
       }}
     >
+      {boardAreaProp == null ? (
+        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+          {BOARD_AREA_FILTERS.map((area) => {
+            const active = boardArea === area.id;
+            return (
+              <button
+                key={area.id}
+                type="button"
+                onClick={() => {
+                  setOwnArea(area.id);
+                  try { localStorage.setItem('resortos-board-area', area.id); } catch (_) {}
+                }}
+                style={{
+                  borderRadius: '999px',
+                  border: active ? '1px solid transparent' : `1px solid ${isDark ? '#334155' : '#CBD5E1'}`,
+                  background: active ? '#4F46E5' : (isDark ? '#1E293B' : '#FFFFFF'),
+                  color: active ? '#F8FAFC' : colors.textMain,
+                  fontWeight: 800,
+                  fontSize: '0.78rem',
+                  padding: '0.35rem 0.7rem',
+                  cursor: 'pointer'
+                }}
+              >
+                {area.label}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+      {boardArea === 'pilot' ? <OfficePilotCard operator={operatorName} /> : null}
 
       {/* Compact Top Header Bar: Role Selector on Right, + New Ticket on Left (Same 38px Height) */}
       <div className="hotelos-ops-toolbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '1.5rem', paddingTop: '0.5rem' }}>

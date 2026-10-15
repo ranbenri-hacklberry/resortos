@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Lock, LogOut, Upload } from 'lucide-react';
+import { isUnavailableHoldText } from '../lib/unavailableHold';
 import { unitAccessGroup } from '../lib/units';
 import { HYP_TERMINAL_A, HYP_TERMINAL_B } from '../lib/hypTerminal';
 
@@ -396,7 +397,7 @@ export default function DeskApp() {
   const groups = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const filtered = rows.filter((row) => {
-      if (/שיפוץ|סגור/.test(`${row.guest_name || ''} ${row.unit_name || ''}`)) return false;
+      if (isUnavailableHoldText(`${row.guest_name || ''} ${row.unit_name || ''}`)) return false;
       if (payFilter === 'paid' && !row.recorded_paid) return false;
       if (payFilter === 'unpaid' && row.recorded_paid) return false;
       if (!needle) return true;

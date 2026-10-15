@@ -1,4 +1,4 @@
-export const STAFF_ROLES = ['MANAGER', 'OPS_MANAGER', 'RECEPTION', 'HOUSEKEEPING', 'MAINTENANCE', 'GARDENING'];
+export const STAFF_ROLES = ['MANAGER', 'OPS_MANAGER', 'RECEPTION', 'HOUSEKEEPING', 'MAINTENANCE', 'GARDENING', 'PRIORITY'];
 
 export function isOwnerManager(role) {
   return role === 'MANAGER';
@@ -14,6 +14,15 @@ export function canOpenDesk(role) {
 
 export function isOpsLead(role) {
   return role === 'MANAGER' || role === 'OPS_MANAGER';
+}
+
+export function isPriorityOnly(role) {
+  return role === 'PRIORITY';
+}
+
+/** Status edits on the Priority screen. Priority matches a manager; other roles stay as they are. */
+export function canEditPriorityStatuses(role) {
+  return role === 'MANAGER' || role === 'OPS_MANAGER' || role === 'PRIORITY';
 }
 
 export function canSeeFinancials(role) {

@@ -27,12 +27,12 @@ export const DUTY_PRINT_AREAS = [
 export function dutyPrintAreaOf(unitId, unitName = '') {
   const id = String(unitId || '');
   const name = String(unitName || '');
+  if (id === 'pilot-office' || name === 'משרד') return 'pilot';
   if (
     id.startsWith('hill-')
     || id.startsWith('dome-')
     || id === 'mialis-villa'
     || id.startsWith('suite-')
-    || id === 'lab-kinneret'
     || id === 'k826'
     || id === 'k827'
   ) return 'givat';
@@ -49,7 +49,8 @@ export function dutyPrintAreaLabel(area) {
 export const BOARD_AREA_FILTERS = [
   { id: 'all', label: 'הכל' },
   { id: 'ramot', label: 'רמות' },
-  { id: 'givat', label: 'גבעת יואב / נאות גולן / נוב' }
+  { id: 'givat', label: 'גבעת יואב / נאות גולן / נוב' },
+  { id: 'pilot', label: 'פיילוט' }
 ];
 
 export function unitMatchesBoardArea(unit, area) {
@@ -132,7 +133,6 @@ function unitGroup(unitId, unitName) {
   if (/^k68[7-9]$/.test(id)) return 'בקתות טוסקנה · רמות';
   if (/^k69[0-2]$/.test(id)) return 'החצר המוסיקלית · רמות';
   if (/^k69[3-5]$/.test(id)) return 'בקתות מאיה · רמות';
-  if (/^k62[0-3]$/.test(id) || id === 'k618' || id === 'k619') return 'סייסטה · רמות';
   if (id === 'k826' || id === 'k827') return 'קאסה נובה · נוב';
   const name = String(unitName || '');
   if (name.includes('נורית')) return 'בתי נורית · רמות';
@@ -142,7 +142,6 @@ function unitGroup(unitId, unitName) {
   if (name.includes('טוסקנה')) return 'בקתות טוסקנה · רמות';
   if (name.includes('מוסיקלית')) return 'החצר המוסיקלית · רמות';
   if (name.includes('מאיה')) return 'בקתות מאיה · רמות';
-  if (name.includes('סייסטה')) return 'סייסטה · רמות';
   if (name.includes('קאסה')) return 'קאסה נובה · נוב';
   return 'יחידות נוספות';
 }
@@ -411,7 +410,6 @@ const COMPLEX_ORDER = [
   'בקתות טוסקנה · רמות',
   'החצר המוסיקלית · רמות',
   'בקתות מאיה · רמות',
-  'סייסטה · רמות',
   'יחידות נוספות'
 ];
 
@@ -627,6 +625,25 @@ export function bookingPeopleLabel(booking) {
   return guestPeople(booking).label;
 }
 
+/** Compact party line, the way the calendar describes a stay: זוג +2, 4 מבוגרים, זוג +1 +תינוק. */
+export function calendarPartyLabel(booking) {
+  const { adults, children, infants, total } = bookingGuestCounts(booking);
+  if (total <= 0) return '';
+  const baby = infants === 1 ? 'תינוק' : infants > 1 ? `${infants} תינוקות` : '';
+  if (adults === 2) {
+    const extra = [];
+    if (children > 0) extra.push(`+${children}`);
+    if (baby) extra.push(`+${baby}`);
+    return extra.length ? `זוג ${extra.join(' ')}` : 'זוג';
+  }
+  const base = adults === 1 ? '1 מבוגר' : adults > 1 ? `${adults} מבוגרים` : '';
+  const extra = [];
+  if (children === 1) extra.push(base ? '+1' : '1 ילד');
+  else if (children > 1) extra.push(base ? `+${children}` : `${children} ילדים`);
+  if (baby) extra.push(base || children ? `+${baby}` : baby);
+  return [base, ...extra].filter(Boolean).join(' ');
+}
+
 export function guestCardFirstName(name) {
   const raw = String(name || '').replace(/\s+/g, ' ').trim();
   if (!raw) return 'אורח';
@@ -741,6 +758,34 @@ function reportCss() {
   `;
 }
 
+export function morningMovement(bookings, units, dateStr, area = 'all') {
+  const checkouts = collectRows(bookings, units, dateStr, 'check_out_date', area);
+  const checkins = collectRows(bookings, units, dateStr, 'check_in_date', area);
+  const swaps = turnaroundUnitIds(bookings, dateStr);
+  const leavingByUnit = new Map(checkouts.map((row) => [row.unitId, row]));
+  const arrivingByUnit = new Map(checkins.map((row) => [row.unitId, row]));
+  const turnovers = [...swaps].map((unitId) => {
+    const leaving = leavingByUnit.get(unitId);
+    const arriving = arrivingByUnit.get(unitId);
+    const base = leaving || arriving;
+    if (!base || !inPrintArea(base, area)) return null;
+    return {
+      ...base,
+      guest: `יוצא ${leaving?.guest || '—'} · נכנס ${arriving?.guest || '—'}`,
+      phone: [leaving?.phone, arriving?.phone].filter(Boolean).join(' · '),
+      otherDate: `יציאה ${leaving?.checkoutHour || '—'} · כניסה ${arriving?.checkinHour || '—'}`,
+      nights: arriving?.nights || leaving?.nights || 0,
+      people: arriving?.people || leaving?.people,
+      swapHour: `יציאה ${leaving?.checkoutHour || '—'} · כניסה ${arriving?.checkinHour || '—'}`
+    };
+  }).filter(Boolean).sort((a, b) => a.sort - b.sort || a.unitName.localeCompare(b.unitName, 'he'));
+  return {
+    checkins: checkins.filter((row) => !swaps.has(row.unitId)),
+    turnovers,
+    checkouts: checkouts.filter((row) => !swaps.has(row.unitId))
+  };
+}
+
 export function dailyDutyCounts(bookings, units, dateStr, area = '') {
   return {
     checkouts: collectRows(bookings, units, dateStr, 'check_out_date', area).length,
@@ -754,6 +799,41 @@ export function buildDailyDutyHtml({ dateStr, kind, bookings, units, area = 'all
   const areaLabel = dutyPrintAreaLabel(area);
   const checkouts = collectRows(bookings, units, dateStr, 'check_out_date', area);
   const checkins = collectRows(bookings, units, dateStr, 'check_in_date', area);
+  if (kind === 'morning') {
+    const movement = morningMovement(bookings, units, dateStr, area);
+    const title = `דוח תחילת יום · ${areaLabel} · ${label}`;
+    const counts = [
+      `${movement.checkins.length} כניסות`,
+      `${movement.turnovers.length} החלפות`,
+      `${movement.checkouts.length} יציאות`
+    ];
+    const body = [
+      `<section class="block"><h1>כניסות</h1>${tableHtml(groupRows(movement.checkins), 'יציאה', 'הגיעו', 'מוכן', { showPeople: true, hourField: 'checkinHour' })}</section>`,
+      `<section class="block"><h1>החלפות</h1>${tableHtml(groupRows(movement.turnovers), 'שעות', 'יצא', 'נכנס', { showPeople: true, hourField: 'swapHour' })}</section>`,
+      `<section class="block"><h1>יציאות</h1>${tableHtml(groupRows(movement.checkouts), 'כניסה', 'יצאו', 'נקי', { hourField: 'checkoutHour' })}</section>`
+    ].join('');
+    return `<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<title>${esc(title)}</title>
+<style>${reportCss()}</style>
+</head>
+<body>
+  <div class="actions"><button onclick="window.print()">הדפסה</button></div>
+  <header>
+    <div>
+      <h1>${esc(title)}</h1>
+      <div class="sub">${esc([areaLabel, ...counts].filter(Boolean).join(' · '))}</div>
+    </div>
+    <div class="meta">ResortOS</div>
+  </header>
+  ${body}
+  <footer>הופק מיומן ResortOS · ${esc(label)}</footer>
+</body>
+</html>`;
+  }
+
   const showOut = kind === 'checkouts' || kind === 'both';
   const showIn = kind === 'checkins' || kind === 'both';
   const title = kind === 'checkins'
