@@ -179,6 +179,7 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
     && stay?.self_checked_out_at == null
     && paidForCheckin
     && roomOpen;
+  const showCheckin = showPayCheckin || showPaidCheckin;
   const isUnitReady = Boolean(stay?.cabin_ready) || String(stay?.operational_status || '').toUpperCase() === 'READY';
   const showInStay = (cabinReady || (isUnitReady && guestCheckedIn && Boolean(stay?.door_pin))) && stay?.self_checked_out_at == null;
   const showWaiting = !isUnitReady && stay?.self_checked_out_at == null;
