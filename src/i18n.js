@@ -504,7 +504,7 @@ const resources = {
       "INSTAY_COPIED": "הועתק",
       "INSTAY_COPY_PIN": "העתקת קוד",
       "INSTAY_GATE": "שער",
-      "INSTAY_GATE_CODE": "קוד שער",
+      "INSTAY_GATE_CODE": "קוד השער למושב",
       "INSTAY_GATE_SOON": "יפורסם בקרוב",
       "INSTAY_CALL_GATE": "חיוג לשער",
       "INSTAY_GATE_NIGHT": "בשעות הלילה השער נעול. התקשרו לנציג כדי שיפתח אותו.",
