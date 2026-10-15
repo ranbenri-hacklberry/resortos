@@ -32,6 +32,12 @@ import { verifyStaffPin } from '../../lib/staffPin.js';
 import { normalizeBalancePreference } from '../../lib/balancePref.js';
 import { buildDemoCheckoutRow } from '../../lib/demoCheckout.js';
 import { applyPaidArrivalCheckin, stayExpiresAt, stayLinkExpired } from '../../../src/lib/stayAccess.js';
+import {
+  CATALOG_LOCKBOX,
+  CATALOG_WIFI,
+  RAMOT_GATE_CODE,
+  UNIT_PROPERTY
+} from '../../lib/unitNames.js';
 
 const TOKEN_RE = /^tok_[A-Za-z0-9_-]+$/;
 const BOOKING_PREFIX = 'booking:';
@@ -341,24 +347,31 @@ function publicPayment(row) {
 
 function publicStay(stay, row) {
   const isReady = stay && (Boolean(stay.cabin_ready) || String(stay.operational_status || '').toUpperCase() === 'READY');
-  const allowed = Boolean(row) && stayFullyPaid(row) && row.booking_status === 'CHECKED_IN';
-  if (!stay || typeof stay !== 'object') {
-    return { cabin_ready: false, room_open: false, operational_status: 'DIRTY', folio: [], checkout_time: '11:00' };
-  }
-  if (allowed && isReady) {
-    return stripCardSecrets({ ...stay, cabin_ready: true, operational_status: 'READY' });
-  }
+  const inStay = Boolean(row) && (row.booking_status === 'CHECKED_IN' || row.booking_status === 'CHECKED_OUT' || Boolean(stay?.guest_checked_in_at));
+  const allowPin = Boolean(row) && (stayFullyPaid(row) || inStay);
+
+  const unitId = row?.unit_id || stay?.unit_id || '';
+  const propId = UNIT_PROPERTY[unitId] || '';
+  const defaultWifi = CATALOG_WIFI[propId] || [];
+  const wifiList = (Array.isArray(stay?.wifi_networks) && stay.wifi_networks.length)
+    ? stay.wifi_networks
+    : (stay?.wifi_ssid ? [{ ssid: stay.wifi_ssid, password: stay.wifi_password || '' }] : defaultWifi);
+  const gateCode = stay?.gate_code || (unitId.startsWith('k') ? RAMOT_GATE_CODE : null);
+
+  const baseStay = (stay && typeof stay === 'object') ? stay : { folio: [], checkout_time: '11:00' };
+
   return stripCardSecrets({
-    ...stay,
+    ...baseStay,
     cabin_ready: isReady,
     // Keep room_open so paid guests can check in when the unit is READY + vacant.
-    room_open: Boolean(stay.room_open) || isReady,
-    operational_status: isReady ? 'READY' : (stay.operational_status || 'DIRTY'),
-    door_pin: allowed ? stay.door_pin : null,
-    gate_code: allowed ? stay.gate_code : null,
-    wifi_ssid: allowed ? stay.wifi_ssid : null,
-    wifi_password: allowed ? stay.wifi_password : null,
-    wifi_networks: allowed ? (stay.wifi_networks || []) : []
+    room_open: Boolean(baseStay.room_open) || isReady,
+    operational_status: isReady ? 'READY' : (baseStay.operational_status || 'DIRTY'),
+    door_pin: allowPin ? (baseStay.door_pin || CATALOG_LOCKBOX[unitId] || null) : null,
+    gate_code: gateCode,
+    gate_mode: baseStay.gate_mode || (gateCode ? 'code' : null),
+    wifi_ssid: wifiList[0]?.ssid || null,
+    wifi_password: wifiList[0]?.password || null,
+    wifi_networks: wifiList
   });
 }
 

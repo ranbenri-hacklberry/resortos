@@ -56,3 +56,27 @@ export const UNIT_DISPLAY_NAMES = {
   k826: 'קאסה נובה · Aura',
   k827: 'קאסה נובה · Bloom'
 };
+
+export const CATALOG_LOCKBOX = {
+  k671: '2310', k673: '2320', k674: '2330', k675: '2340', k676: '2350', k677: '2360', k678: '2370', k679: '2380',
+  k693: '2410', k694: '2420', k695: '2430',
+  k808: '2510', k809: '2520', k810: '2530', k811: '2540',
+  k690: '2610', k691: '2620', k692: '2630',
+  k687: '2710', k688: '2720', k689: '2730',
+  k685: '2810', k686: '2820',
+  k680: '2910', k681: '2920', k682: '2930', k683: '2940', k684: '2950'
+};
+
+export const CATALOG_WIFI = {
+  taj: [{ ssid: 'LUTUS', password: '12345678' }],
+  nurit: [{ ssid: 'MIALEES RESORT', password: 'MIAL2026' }],
+  mool: [{ ssid: 'Mol_hanof', password: '12345678' }],
+  nofim: [{ ssid: 'TP-LINK_FA30', password: '15107312' }],
+  toscana: [{ ssid: 'Toscana', password: '12345678' }],
+  musical: [{ ssid: 'Music yard', password: '12345678' }],
+  maya: [{ ssid: 'Maya', password: '12345678' }],
+  mialis: [{ ssid: 'CASAMIA', password: 'CASAMIA10' }],
+  'casa-nova': [{ ssid: 'MIALEES', password: 'AD654321' }]
+};
+
+export const RAMOT_GATE_CODE = '#2464';

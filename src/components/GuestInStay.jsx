@@ -36,6 +36,7 @@ import { stayAction } from '../lib/guestCheckoutApi';
 import { selfCheckoutWindow } from '../lib/guestComms';
 import { googleReviewUrl, guestHostWhatsAppHref } from '../lib/stayProperty';
 import { cleanGuestCabinName } from '../lib/units';
+import { LOCKBOX_BY_UNIT, PROPERTY_SEED, UNIT_PROPERTY } from '../lib/guestProfileSeed';
 import GuestAreaGuide from './GuestAreaGuide';
 
 function LiveText({ text }) {
@@ -43,9 +44,13 @@ function LiveText({ text }) {
   return <>{translated}</>;
 }
 
-function wifiNetworks(stay) {
+function wifiNetworks(stay, booking) {
   if (Array.isArray(stay?.wifi_networks) && stay.wifi_networks.length) return stay.wifi_networks;
   if (stay?.wifi_password) return [{ ssid: stay.wifi_ssid, password: stay.wifi_password }];
+  const unitId = booking?.unit_id || stay?.unit_id || '';
+  const propId = UNIT_PROPERTY[unitId];
+  const catalog = PROPERTY_SEED[propId]?.access?.wifi;
+  if (Array.isArray(catalog) && catalog.length) return catalog;
   return [];
 }
 
@@ -111,7 +116,7 @@ const STORE_LOOK = {
 
 export default function GuestInStay({ booking, unitName, stay, themeStyles, onStayUpdate }) {
   const { t } = useTranslation();
-  const [guideOpen, setGuideOpen] = useState('jacuzzi');
+  const [guideOpen, setGuideOpen] = useState(null);
   const [folioOpen, setFolioOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [copied, setCopied] = useState('');
@@ -128,10 +133,12 @@ export default function GuestInStay({ booking, unitName, stay, themeStyles, onSt
   const checkoutWindow = selfCheckoutWindow(booking, stay);
   const checkoutDay = isCheckoutDay(booking, stay);
   const lateOpen = isLateWindow(booking);
-  const networks = wifiNetworks(stay);
+  const networks = wifiNetworks(stay, booking);
   const guides = Array.isArray(stay?.guides) && stay.guides.length ? stay.guides : guidesFromContent({});
+  const doorPin = stay?.door_pin || LOCKBOX_BY_UNIT[booking?.unit_id || stay?.unit_id];
+  const gateCode = stay?.gate_code || (String(booking?.unit_id || '').startsWith('k') ? '#2464' : null);
   const nightCallGate = Boolean(stay?.gate_night_call) && isVillageGateNight();
-  const hasGate = stay?.gate_mode === 'code' || stay?.gate_mode === 'dial' || (stay?.gate_mode === 'call' && nightCallGate) || nightCallGate;
+  const hasGate = stay?.gate_mode === 'code' || stay?.gate_mode === 'dial' || (stay?.gate_mode === 'call' && nightCallGate) || nightCallGate || Boolean(gateCode);
   const hostWa = guestHostWhatsAppHref(
     t('GUEST_HOST_WHATSAPP', {
       name: booking.guest_name || t('GUEST_FALLBACK'),
@@ -217,7 +224,7 @@ export default function GuestInStay({ booking, unitName, stay, themeStyles, onSt
         </div>
       </div>
 
-      {stay?.door_pin ? (
+      {doorPin ? (
       <div
         style={{
           ...card,
@@ -228,11 +235,11 @@ export default function GuestInStay({ booking, unitName, stay, themeStyles, onSt
       >
         <div style={{ fontSize: '0.75rem', fontWeight: 800, opacity: 0.7 }}>{t('INSTAY_DOOR_PIN')}</div>
         <div style={{ fontSize: '2.35rem', fontWeight: 900, letterSpacing: '0.28em', margin: '8px 0 10px', fontVariantNumeric: 'tabular-nums' }}>
-          {stay.door_pin}
+          {doorPin}
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: '0.78rem', opacity: 0.7 }}>{t('INSTAY_PIN_UNTIL')}</span>
-          <button type="button" onClick={() => copy('pin', stay.door_pin)} style={ghostBtn('#F8F4EA', 'rgba(255,255,255,0.16)')}>
+          <button type="button" onClick={() => copy('pin', doorPin)} style={ghostBtn('#F8F4EA', 'rgba(255,255,255,0.16)')}>
             <Copy size={14} /> {copied === 'pin' ? t('INSTAY_COPIED') : t('INSTAY_COPY_PIN')}
           </button>
         </div>
@@ -243,11 +250,11 @@ export default function GuestInStay({ booking, unitName, stay, themeStyles, onSt
         {hasGate ? (
         <div style={card}>
           <div style={{ fontSize: '0.75rem', fontWeight: 800, color: themeStyles.textMuted }}>
-            {stay?.gate_mode === 'code' ? t('INSTAY_GATE_CODE') : t('INSTAY_GATE')}
+            {gateCode || stay?.gate_mode === 'code' ? t('INSTAY_GATE_CODE') : t('INSTAY_GATE')}
           </div>
-          {stay?.gate_code ? (
+          {gateCode ? (
             <div dir="ltr" style={{ fontSize: '1.45rem', fontWeight: 900, margin: '8px 0 10px', lineHeight: 1.3, unicodeBidi: 'isolate' }}>
-              {stay.gate_code}
+              {gateCode}
             </div>
           ) : nightCallGate ? (
             <div style={{ fontSize: '0.92rem', fontWeight: 800, margin: '8px 0 10px', lineHeight: 1.4 }}>
@@ -258,13 +265,13 @@ export default function GuestInStay({ booking, unitName, stay, themeStyles, onSt
               {stay?.gate_mode === 'code' ? t('INSTAY_GATE_SOON') : '••••'}
             </div>
           )}
-          {stay?.gate_code && nightCallGate ? (
+          {gateCode && nightCallGate ? (
             <div style={{ fontSize: '0.8rem', fontWeight: 700, color: themeStyles.textMuted, margin: '-4px 0 10px', lineHeight: 1.45 }}>
               {t('INSTAY_GATE_NIGHT')}
             </div>
           ) : null}
-          {stay?.gate_mode === 'code' && stay?.gate_code ? (
-            <button type="button" onClick={() => copy('gate', stay.gate_code)} style={ghostBtn(themeStyles.textPrimary, 'transparent', themeStyles.inputBorder)}>
+          {gateCode ? (
+            <button type="button" onClick={() => copy('gate', gateCode)} style={ghostBtn(themeStyles.textPrimary, 'transparent', themeStyles.inputBorder)}>
               <Copy size={14} /> {copied === 'gate' ? t('INSTAY_COPIED') : t('INSTAY_COPY_PIN')}
             </button>
           ) : null}

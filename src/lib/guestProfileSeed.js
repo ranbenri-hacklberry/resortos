@@ -115,7 +115,7 @@ const TOSCANA_TV = [
 ];
 
 /** Key-safe codes from the printed welcome sheets (קוד לכספת-מפתח). */
-const LOCKBOX_BY_UNIT = {
+export const LOCKBOX_BY_UNIT = {
   'hill-1': '3041',
   'hill-2': '3042',
   'hill-3': '3043',
