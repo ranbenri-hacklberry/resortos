@@ -114,6 +114,33 @@ const STORE_LOOK = {
   wine: { Icon: Wine, from: '#9F1239', to: '#4C0519' }
 };
 
+const JACUZZI_ILLUSTRATED_STEPS = [
+  {
+    step: 1,
+    title: 'הנחת פקק הגומי',
+    image: '/guides/jacuzzi/jacuzzi-1-rubber-plug.jpg',
+    text: 'מניחים את פקק הגומי הדק על פתח הניקוז בקרקעית הג׳קוזי ומוודאים שהוא אטום היטב.'
+  },
+  {
+    step: 2,
+    title: 'מילוי מים מעל לג׳טים',
+    image: '/guides/jacuzzi/jacuzzi-2-full.jpg',
+    text: 'פותחים מים וממלאים את הג׳קוזי עד שכל פתחי הסילונים (הג׳טים) מכוסים לחלוטין במים.'
+  },
+  {
+    step: 3,
+    title: 'הפעלת המתג בקיר',
+    image: '/guides/jacuzzi/jacuzzi-2-on.jpg',
+    text: 'רק כשהג׳קוזי מלא ומכסה את הג׳טים, לוחצים על המתג בקיר. הנורה האדומה תידלק.'
+  },
+  {
+    step: 4,
+    title: 'כיבוי וריקון המים',
+    image: '/guides/jacuzzi/jacuzzi-4-drain.jpg',
+    text: 'בסיום השימוש מכבים את המתג בקיר ומשחררים את פקק הגומי לריקון מלא לפני הצ׳ק־אאוט.'
+  }
+];
+
 export default function GuestInStay({ booking, unitName, stay, themeStyles, onStayUpdate }) {
   const { t } = useTranslation();
   const [guideOpen, setGuideOpen] = useState(null);
@@ -338,11 +365,61 @@ export default function GuestInStay({ booking, unitName, stay, themeStyles, onSt
                 <ChevronDown size={16} style={{ transform: open ? 'rotate(180deg)' : 'none' }} />
               </button>
               {open ? (
-                <ol style={{ margin: '10px 0 0', paddingInlineStart: 18, color: themeStyles.textMuted, lineHeight: 1.55, fontSize: '0.88rem' }}>
-                  {guide.steps.map((step) => (
-                    <li key={step} style={{ marginBottom: 6 }}><LiveText text={step} /></li>
-                  ))}
-                </ol>
+                guide.id === 'jacuzzi' ? (
+                  <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    {JACUZZI_ILLUSTRATED_STEPS.map((s) => (
+                      <div
+                        key={s.step}
+                        style={{
+                          borderRadius: 14,
+                          overflow: 'hidden',
+                          border: `1px solid ${themeStyles.inputBorder}`,
+                          background: themeStyles.wrapperBg || 'rgba(0,0,0,0.1)',
+                          display: 'flex',
+                          flexDirection: 'column'
+                        }}
+                      >
+                        <img
+                          src={s.image}
+                          alt={s.title}
+                          loading="lazy"
+                          style={{
+                            width: '100%',
+                            aspectRatio: '16/9',
+                            objectFit: 'cover',
+                            display: 'block'
+                          }}
+                        />
+                        <div style={{ padding: '10px 12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{
+                              fontSize: '0.72rem',
+                              fontWeight: 900,
+                              background: '#F59E0B',
+                              color: '#1C1917',
+                              padding: '2px 7px',
+                              borderRadius: 6
+                            }}>
+                              {`שלב ${s.step}`}
+                            </span>
+                            <span style={{ fontWeight: 800, fontSize: '0.92rem' }}>
+                              <LiveText text={s.title} />
+                            </span>
+                          </div>
+                          <div style={{ marginTop: 4, fontSize: '0.84rem', color: themeStyles.textMuted, lineHeight: 1.45 }}>
+                            <LiveText text={s.text} />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <ol style={{ margin: '10px 0 0', paddingInlineStart: 18, color: themeStyles.textMuted, lineHeight: 1.55, fontSize: '0.88rem' }}>
+                    {guide.steps.map((step) => (
+                      <li key={step} style={{ marginBottom: 6 }}><LiveText text={step} /></li>
+                    ))}
+                  </ol>
+                )
               ) : null}
             </div>
           );
