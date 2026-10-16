@@ -23,6 +23,7 @@ import {
   managerStatusMenu,
 } from './llm/prompts.js';
 import { answerGuestQuestion, type GuestContext } from './guest/guestKnowledge.js';
+import { answerRackRate } from './pricing/priceList.js';
 import {
   formatManagerInitialCard,
   answerManagerRoomQuestion,
@@ -547,6 +548,12 @@ export function createPipeline(d: PipelineDeps) {
             const lockbox = r?.lockbox || '1357#';
             const occupancy = getRoomOccupancy(currentSession.roomId, bookings, today);
 
+            const rackRate = answerRackRate(trimmed, d.rooms(), currentSession.roomId);
+            if (rackRate) {
+              await d.send(jid, rackRate);
+              return { handled: true, transcript };
+            }
+
             const roomAnswer = answerManagerRoomQuestion(trimmed, roomLabel, lockbox, unit, occupancy, r);
             if (roomAnswer) {
               await d.send(jid, roomAnswer);
@@ -964,6 +971,14 @@ export function createPipeline(d: PipelineDeps) {
           `אם הגעתם להתארח אצלנו או שההזמנה בוצעה במספר אחר, אנא השבו להודעה זו עם שמכם המלא או מספר ההזמנה, ונשמח לעזור לכם בהקדם! 🏡`;
         await d.send(jid, reply);
         return { handled: true, transcript };
+      }
+
+      if (cleaner && text?.trim()) {
+        const rackRate = answerRackRate(text.trim(), d.rooms());
+        if (rackRate) {
+          await d.send(jid, rackRate);
+          return { handled: true, transcript };
+        }
       }
 
       // 4b. Manager Fuzzy / Nickname / Complex Matching

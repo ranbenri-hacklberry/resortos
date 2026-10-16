@@ -33,7 +33,7 @@ export default function DashboardApp() {
 
   // Auth form states
   const [authMode, setAuthMode] = useState('otp'); // 'otp' | 'password'
-  const [phone, setPhone] = useState('0543387383'); // default Adam for convenience
+  const [phone, setPhone] = useState('0506102416'); // default owner mobile
   const [otp, setOtp] = useState('');
   const [challenge, setChallenge] = useState('');
   const [otpSent, setOtpSent] = useState(false);
@@ -258,7 +258,7 @@ export default function DashboardApp() {
                         required
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
-                        placeholder="054-3387383"
+                        placeholder="050-6102416 / 054-8317887"
                         style={{
                           width: '100%',
                           background: 'rgba(255, 255, 255, 0.06)',
@@ -275,7 +275,7 @@ export default function DashboardApp() {
                       />
                     </div>
                     <span style={{ fontSize: '0.72rem', color: '#9E897C', display: 'block', marginTop: '0.35rem' }}>
-                      למשל: אדם (054-3387383) או מנהלי מתחם מורשים
+                      מקס (נייד: 050-6102416 / ווטסאפ: 054-8317887), אדם (054-3387383) או מנהלי מתחם מורשים
                     </span>
                   </div>
 

@@ -57,4 +57,17 @@ BEGIN
       '["hotelos"]'::jsonb
     );
   END IF;
+
+  -- Ensure Max / Ran has updated mobile (0506102416) and WhatsApp (972548317887)
+  IF EXISTS (SELECT 1 FROM public.employees WHERE lower(username) = 'max' OR lower(username) = 'ran' OR name LIKE '%רני%' OR name LIKE '%מקס%') THEN
+    UPDATE public.employees
+    SET
+      phone = '0506102416',
+      whatsapp_phone = '972548317887',
+      role = 'MANAGER',
+      is_admin = true,
+      access_level = 'owner',
+      is_active = true
+    WHERE lower(username) = 'max' OR lower(username) = 'ran' OR name LIKE '%רני%' OR name LIKE '%מקס%';
+  END IF;
 END $$;

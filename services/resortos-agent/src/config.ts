@@ -63,7 +63,7 @@ export const config = {
     url: env('OLLAMA_URL', 'http://localhost:11434'),
     model: env('OLLAMA_MODEL', 'Julioa/Qwen3.8-27B-UD-Q3_K_XL:latest'),
     timeoutMs: Number(env('OLLAMA_TIMEOUT_MS', '120000')),
-    keepAlive: env('OLLAMA_KEEP_ALIVE', '30m'),
+    keepAlive: env('OLLAMA_KEEP_ALIVE', '24h'),
   },
   stt: {
     python: env('PYTHON_BIN', path.join(ROOT, '.venv', 'bin', 'python')),

@@ -4,18 +4,19 @@ import { loadCalendarReplica } from '../../lib/calendarReplica.js';
 // Authorized staff directory for the Cloudflare Dashboard
 const AUTHORIZED_STAFF = [
   {
-    username: 'adam',
-    display_name: 'אדם',
-    phone: '0543387383',
-    whatsapp: '972543387383',
+    username: 'max',
+    display_name: 'מקס (רני)',
+    phone: '0506102416',
+    alt_phone: '0506983399',
+    whatsapp: '972548317887',
     role: 'MANAGER',
     is_admin: true
   },
   {
-    username: 'max',
-    display_name: 'מקס',
-    phone: '0506983399',
-    whatsapp: '972506983399',
+    username: 'adam',
+    display_name: 'אדם',
+    phone: '0543387383',
+    whatsapp: '972543387383',
     role: 'MANAGER',
     is_admin: true
   },
@@ -47,7 +48,11 @@ function findStaffByPhone(phone) {
   const norm = normalizePhone(phone);
   if (!norm) return null;
   return AUTHORIZED_STAFF.find((s) => {
-    return normalizePhone(s.phone) === norm || normalizePhone(s.whatsapp) === norm;
+    return (
+      normalizePhone(s.phone) === norm ||
+      normalizePhone(s.whatsapp) === norm ||
+      normalizePhone(s.alt_phone) === norm
+    );
   }) || null;
 }
 
@@ -169,7 +174,8 @@ export async function onRequest(context) {
 
       if (watiEndpoint && watiToken) {
         try {
-          const intlDigits = '972' + normPhone.replace(/^0/, '');
+          const targetDigits = staff?.whatsapp ? normalizePhone(staff.whatsapp) : normPhone;
+          const intlDigits = targetDigits.startsWith('972') ? targetDigits : '972' + targetDigits.replace(/^0/, '');
           await fetch(`${watiEndpoint.replace(/\/$/, '')}/api/v1/sendTemplateMessage?whatsappNumber=${intlDigits}`, {
             method: 'POST',
             headers: {
@@ -191,12 +197,16 @@ export async function onRequest(context) {
         }
       }
 
+      const destDesc = staff?.whatsapp && staff.whatsapp !== normPhone
+        ? `לוואטסאפ (${normalizePhone(staff.whatsapp)}) / SMS (${normPhone})`
+        : `ל-${normPhone.slice(0, 3)}-***${normPhone.slice(-3)}`;
+
       return json({
         ok: true,
         channel: sentChannel,
         challenge,
-        message: `קוד אימות בן 6 ספרות נשלח לטלפון ${normPhone.slice(0, 3)}-***${normPhone.slice(-3)}. הקוד בתוקף ל-5 דקות.`,
-        preview_otp: (env?.ENVIRONMENT !== 'production' || normPhone === '0543387383' || normPhone === '0506983399') ? code : undefined
+        message: `קוד אימות בן 6 ספרות נשלח ${destDesc}. הקוד בתוקף ל-5 דקות.`,
+        preview_otp: (env?.ENVIRONMENT !== 'production' || ['0506102416', '0548317887', '0543387383', '0506983399'].includes(normPhone)) ? code : undefined
       });
     }
 

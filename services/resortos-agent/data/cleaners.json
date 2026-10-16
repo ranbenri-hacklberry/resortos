@@ -58,5 +58,11 @@
     "name": "אדם",
     "role": "MANAGER",
     "language": "he"
+  },
+  {
+    "phone": "972506102416",
+    "name": "רני",
+    "role": "MANAGER",
+    "language": "he"
   }
 ]

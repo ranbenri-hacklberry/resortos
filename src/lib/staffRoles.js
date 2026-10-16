@@ -46,6 +46,9 @@ export function canSeeFinancials(role, username = '', displayName = '') {
     u === 'max' ||
     u.includes('מקס') ||
     d.includes('מקס') ||
+    u === 'ran' ||
+    u.includes('רני') ||
+    d.includes('רני') ||
     u.includes('owner')
   );
 }

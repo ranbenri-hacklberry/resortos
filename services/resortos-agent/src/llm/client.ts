@@ -52,7 +52,7 @@ export class OllamaClient {
         stream: false,
         format: schema,
         keep_alive: config.ollama.keepAlive,
-        options: { temperature: 0.1, num_ctx: 8192 },
+        options: { temperature: 0.1, num_ctx: 8192, num_predict: 220 },
         messages: [
           { role: 'system', content: system },
           { role: 'user', content: user },
@@ -106,6 +106,22 @@ export class OllamaClient {
     })) as { translation?: unknown };
     if (typeof raw.translation !== 'string' || !raw.translation.trim()) throw new Error('Invalid translation payload');
     return raw.translation.trim();
+  }
+
+  /** Load the model into memory so the next staff message does not wait on a cold start. */
+  async warmup(): Promise<void> {
+    await this.fetchImpl(`${config.ollama.url}/api/generate`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      signal: AbortSignal.timeout(config.ollama.timeoutMs),
+      body: JSON.stringify({
+        model: config.ollama.model,
+        prompt: 'ok',
+        stream: false,
+        keep_alive: config.ollama.keepAlive,
+        options: { num_predict: 1, num_ctx: 8192, temperature: 0 },
+      }),
+    });
   }
 
   /** Round-trip latency to Ollama (lightweight /api/tags). */

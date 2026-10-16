@@ -135,6 +135,10 @@ const server = createServer(async (req, res) => {
 server.listen(config.port, '127.0.0.1', () => log.info(`resortos-agent listening on 127.0.0.1:${config.port}`));
 stt.start();
 void wa.start();
+void llm.warmup().then(
+  () => log.info({ model: config.ollama.model }, 'ollama model warm'),
+  (e) => log.warn({ err: String(e) }, 'ollama warmup failed'),
+);
 
 const shutdown = () => {
   stt.stop();

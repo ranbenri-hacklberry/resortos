@@ -1739,6 +1739,78 @@ describe('manager fuzzy room matching & dictation handling', () => {
   });
 });
 
+describe('rack rate price list for all staff', () => {
+  const housekeeper: CleanerProfile = {
+    phone: '972503934696',
+    name: 'ברק',
+    role: 'HOUSEKEEPING',
+    language: 'he',
+  };
+  const manager: CleanerProfile = {
+    phone: '972548317887',
+    name: 'דניאל',
+    role: 'MANAGER',
+    language: 'he',
+  };
+
+  it('answers a unit price to housekeeping without calling the model', async () => {
+    const deps = makeDeps();
+    deps.cleaners = () => [housekeeper];
+    deps.rooms = () => realRooms as RoomEntry[];
+    const pipeline = createPipeline(deps);
+
+    const res = await pipeline.handleInbound({
+      key: { remoteJid: '972503934696@s.whatsapp.net', fromMe: false },
+      message: { conversation: 'כמה עולה מאיה 1' },
+    } as any);
+
+    expect(res.handled).toBe(true);
+    expect(deps.llm.extractIntent).not.toHaveBeenCalled();
+    const reply = deps.sent[0][1];
+    expect(reply).toContain('750');
+    expect(reply).toContain('1,300');
+    expect(reply).toContain('פרטית');
+  });
+
+  it('still hides guest payment details from housekeeping', async () => {
+    const deps = makeDeps();
+    deps.cleaners = () => [housekeeper];
+    deps.rooms = () => realRooms as RoomEntry[];
+    const pipeline = createPipeline(deps);
+
+    await pipeline.handleInbound({
+      key: { remoteJid: '972503934696@s.whatsapp.net', fromMe: false },
+      message: { conversation: 'כמה שילמו על מאיה 1?' },
+    } as any);
+
+    expect(deps.sent[0][1]).toContain('נגישים למנהלי המערכת בלבד');
+    expect(deps.sent[0][1]).not.toContain('750');
+  });
+
+  it('answers the current room rack rate when a manager asks for the price', async () => {
+    const deps = makeDeps();
+    deps.cleaners = () => [manager];
+    deps.rooms = () => realRooms as RoomEntry[];
+    const pipeline = createPipeline(deps);
+    const jid = '972548317887@s.whatsapp.net';
+
+    await pipeline.handleInbound({
+      key: { remoteJid: jid, fromMe: false },
+      message: { conversation: 'D1' },
+    } as any);
+    await pipeline.handleInbound({
+      key: { remoteJid: jid, fromMe: false },
+      message: { conversation: 'מה המחיר' },
+    } as any);
+
+    const reply = deps.sent[deps.sent.length - 1][1];
+    expect(reply).toContain('600');
+    expect(reply).toContain('900');
+    expect(reply).not.toContain('סטטוס תשלום');
+    expect(deps.llm.extractIntent).not.toHaveBeenCalled();
+  });
+});
+
 
 
 
