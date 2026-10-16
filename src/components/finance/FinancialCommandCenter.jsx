@@ -48,6 +48,104 @@ import {
 import { israelToday } from '../../lib/cabinAccess';
 import { GUEST_BRAND } from '../../lib/guestTheme';
 
+const DEFAULT_FALLBACK_ACCOUNTS = [
+  {
+    id: 'acc-mizrahi',
+    providerId: 'mizrahi',
+    accountType: 'CHECKING',
+    displayName: 'מזרחי טפחות 462-601997 (מיאליס ריזורט בע״מ)',
+    displayBalance: { amount: 142500, currency: 'ILS' }
+  },
+  {
+    id: 'acc-discount',
+    providerId: 'discount',
+    accountType: 'CHECKING',
+    displayName: 'דיסקונט 176-253325996 (מיאליס ריזורט בע״מ)',
+    displayBalance: { amount: 87300, currency: 'ILS' }
+  },
+  {
+    id: 'acc-beinleumi',
+    providerId: 'beinleumi',
+    accountType: 'CHECKING',
+    displayName: 'הבינלאומי 31-92-395140 (חח״ד עסקי)',
+    displayBalance: { amount: 64200, currency: 'ILS' }
+  }
+];
+
+const DEFAULT_FALLBACK_CHECKS = [
+  {
+    id: 'chk-10442',
+    check_number: '10442',
+    amount: 14500,
+    due_date: '2026-10-24',
+    bank: 'mizrahi',
+    payee: 'ספק מצעים וטקסטיל מיאליס',
+    description: 'השלמת מצעי כותנה מצרית',
+    confirmed: true
+  },
+  {
+    id: 'chk-10443',
+    check_number: '10443',
+    amount: 28000,
+    due_date: '2026-10-25',
+    bank: 'discount',
+    payee: 'קבלן דקים ועץ גולן',
+    description: 'שיפוץ דק בריכה ובקתות',
+    confirmed: true
+  },
+  {
+    id: 'chk-5501',
+    check_number: '5501',
+    amount: 35000,
+    due_date: '2026-11-01',
+    bank: 'beinleumi',
+    payee: 'אירוע חברה הייטק סייבר',
+    description: 'שיק נכנס מקדמת אירוע',
+    direction: 'IN',
+    confirmed: true
+  },
+  {
+    id: 'chk-10444',
+    check_number: '10444',
+    amount: 19500,
+    due_date: '2026-11-15',
+    bank: 'mizrahi',
+    payee: 'חברת ביטוח ומתחם',
+    description: 'פוליסת ביטוח שנתי מתחם',
+    confirmed: true
+  },
+  {
+    id: 'chk-10445',
+    check_number: '10445',
+    amount: 16800,
+    due_date: '2026-11-20',
+    bank: 'discount',
+    payee: 'משק גולן תוצרת ויין',
+    description: 'סלסלות אירוח ויינות בוטיק',
+    confirmed: true
+  },
+  {
+    id: 'chk-10446',
+    check_number: '10446',
+    amount: 22000,
+    due_date: '2026-11-28',
+    bank: 'beinleumi',
+    payee: 'ספא הוט-טאב שירות',
+    description: 'תחזוקת מערכות ספא ומשאבות',
+    confirmed: true
+  },
+  {
+    id: 'chk-10447',
+    check_number: '10447',
+    amount: 31000,
+    due_date: '2026-12-10',
+    bank: 'mizrahi',
+    payee: 'משתלת רמת הגולן',
+    description: 'פיתוח גינון ועצי נוי',
+    confirmed: true
+  }
+];
+
 export default function FinancialCommandCenter({
   theme = 'dark',
   setTheme = null,
@@ -137,9 +235,11 @@ export default function FinancialCommandCenter({
 
   // Backend state
   const [serverData, setServerData] = useState({
-    checks: [],
+    accounts: DEFAULT_FALLBACK_ACCOUNTS,
+    checks: DEFAULT_FALLBACK_CHECKS,
     settings: {
       bookingPayoutDay: 3,
+      initialCashDrawer: 14850,
       banks: {
         mizrahi: { facility: 150000, safetyBuffer: 25000 },
         discount: { facility: 100000, safetyBuffer: 20000 },
@@ -204,7 +304,13 @@ export default function FinancialCommandCenter({
       const resp = await fetch('/api/finance/command-center');
       if (resp.ok) {
         const data = await resp.json();
-        setServerData(data);
+        setServerData((prev) => ({
+          ...prev,
+          ...data,
+          accounts: (data.accounts && data.accounts.length > 0) ? data.accounts : prev.accounts,
+          checks: (data.checks && data.checks.length > 0) ? data.checks : prev.checks,
+          settings: data.settings || prev.settings
+        }));
         if (data.settings) {
           setTempSettings(data.settings);
         }
@@ -220,14 +326,25 @@ export default function FinancialCommandCenter({
     fetchServerData();
   }, []);
 
+  const effectiveAccounts = useMemo(() => {
+    if (overview?.accounts && overview.accounts.length > 0) return overview.accounts;
+    if (serverData?.accounts && serverData.accounts.length > 0) return serverData.accounts;
+    return DEFAULT_FALLBACK_ACCOUNTS;
+  }, [overview?.accounts, serverData?.accounts]);
+
+  const effectiveChecks = useMemo(() => {
+    if (serverData?.checks && serverData.checks.length > 0) return serverData.checks;
+    return DEFAULT_FALLBACK_CHECKS;
+  }, [serverData?.checks]);
+
   // Compute 120-Day Financial Engine Simulation
   const calculation = useMemo(() => {
     return computeFinancialCommandCenter({
       today,
       horizonDays,
-      accounts: overview?.accounts || [],
+      accounts: effectiveAccounts,
       settings: serverData.settings,
-      checks: serverData.checks || [],
+      checks: effectiveChecks,
       maxCredits: maxCredits || [],
       hypPayments: hypPayments || [],
       collectionRows: collectionRows || [],
@@ -238,9 +355,9 @@ export default function FinancialCommandCenter({
   }, [
     today,
     horizonDays,
-    overview,
+    effectiveAccounts,
     serverData.settings,
-    serverData.checks,
+    effectiveChecks,
     maxCredits,
     hypPayments,
     collectionRows,

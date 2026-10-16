@@ -276,6 +276,29 @@ export default function DashboardApp() {
                         }}
                       />
                     </div>
+                    <div style={{ marginTop: '0.45rem', display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => setPhone('0506102416')}
+                        style={{ background: 'rgba(197, 160, 89, 0.2)', border: '1px solid rgba(197, 160, 89, 0.4)', color: '#F1D699', borderRadius: '8px', padding: '0.2rem 0.55rem', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
+                      >
+                        מקס (נייד 050-6102416)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPhone('0548317887')}
+                        style={{ background: 'rgba(197, 160, 89, 0.2)', border: '1px solid rgba(197, 160, 89, 0.4)', color: '#F1D699', borderRadius: '8px', padding: '0.2rem 0.55rem', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
+                      >
+                        מקס (ווטסאפ 054-8317887)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPhone('0543387383')}
+                        style={{ background: 'rgba(255, 255, 255, 0.08)', border: '1px solid rgba(255, 255, 255, 0.15)', color: '#D4C5B9', borderRadius: '8px', padding: '0.2rem 0.55rem', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
+                      >
+                        אדם (054-3387383)
+                      </button>
+                    </div>
                     <span style={{ fontSize: '0.72rem', color: '#9E897C', display: 'block', marginTop: '0.35rem' }}>
                       מקס (נייד: 050-6102416 / ווטסאפ: 054-8317887), אדם (054-3387383) או מנהלי מתחם מורשים
                     </span>
@@ -490,14 +513,28 @@ export default function DashboardApp() {
                     onClick={() => { setUsername('0506102416'); setPassword('123456'); }}
                     style={{ background: 'rgba(197, 160, 89, 0.25)', border: '1px solid #C5A059', color: '#FFFFFF', borderRadius: '8px', padding: '0.2rem 0.55rem', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
                   >
-                    נייד: 0506102416 / 123456
+                    מקס (נייד): 0506102416 / 123456
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setUsername('0548317887'); setPassword('123456'); }}
+                    style={{ background: 'rgba(197, 160, 89, 0.25)', border: '1px solid #C5A059', color: '#FFFFFF', borderRadius: '8px', padding: '0.2rem 0.55rem', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
+                  >
+                    מקס (ווטסאפ): 0548317887 / 123456
                   </button>
                   <button
                     type="button"
                     onClick={() => { setUsername('adam'); setPassword('123456'); }}
-                    style={{ background: 'rgba(197, 160, 89, 0.25)', border: '1px solid #C5A059', color: '#FFFFFF', borderRadius: '8px', padding: '0.2rem 0.55rem', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
+                    style={{ background: 'rgba(255, 255, 255, 0.08)', border: '1px solid rgba(255, 255, 255, 0.2)', color: '#D4C5B9', borderRadius: '8px', padding: '0.2rem 0.55rem', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
                   >
                     אדם: adam / 123456
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setUsername('daniel'); setPassword('123456'); }}
+                    style={{ background: 'rgba(255, 255, 255, 0.08)', border: '1px solid rgba(255, 255, 255, 0.2)', color: '#D4C5B9', borderRadius: '8px', padding: '0.2rem 0.55rem', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
+                  >
+                    דניאל: daniel / 123456
                   </button>
                 </div>
               </div>
@@ -593,7 +630,38 @@ export default function DashboardApp() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+            {user.username === 'adam' && (
+              <button
+                type="button"
+                onClick={() => {
+                  handleLogout();
+                  setTimeout(() => {
+                    setUsername('max');
+                    setPassword('123456');
+                    setPhone('0506102416');
+                  }, 50);
+                }}
+                style={{
+                  border: '1px solid #C5A059',
+                  background: 'rgba(197, 160, 89, 0.22)',
+                  color: '#F1D699',
+                  padding: '0.3rem 0.65rem',
+                  borderRadius: '999px',
+                  fontSize: '0.72rem',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.25rem'
+                }}
+                title="החלף משתמש למקס"
+              >
+                <span>🔄</span>
+                <span>החלף למקס (רני)</span>
+              </button>
+            )}
+
             <span 
               style={{
                 fontSize: '0.75rem',
@@ -614,7 +682,7 @@ export default function DashboardApp() {
 
             <button
               onClick={handleLogout}
-              title="התנתק"
+              title="התנתק והחלף משתמש"
               style={{
                 border: '1px solid rgba(255, 255, 255, 0.15)',
                 background: 'rgba(255, 255, 255, 0.08)',
@@ -630,7 +698,7 @@ export default function DashboardApp() {
               }}
             >
               <LogOut size={13} />
-              <span>יציאה</span>
+              <span>החלף משתמש / יציאה</span>
             </button>
           </div>
         </div>
