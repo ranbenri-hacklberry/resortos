@@ -26,7 +26,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         guest: path.join(root, 'guest.html'),
-        desk: path.join(root, 'desk.html')
+        desk: path.join(root, 'desk.html'),
+        dashboard: path.join(root, 'dashboard.html')
       }
     }
   }

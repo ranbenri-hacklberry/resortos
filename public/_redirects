@@ -8,4 +8,6 @@
 /sparkstay/  /sparkstay/index.html  200
 /desk        /desk/index.html       200
 /desk/       /desk/index.html       200
+/dashboard   /dashboard/index.html  200
+/dashboard/* /dashboard/index.html  200
 /p/*         /index.html            200
