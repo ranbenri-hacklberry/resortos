@@ -37,11 +37,14 @@ RESORTOS_MANAGER_TOKEN=... npm run sync-cleaners
 API contract used (see `src/integration/resortos.ts`): `GET /api/ops/units`, `PUT /api/ops/units/:id` with `Authorization: Bearer ros_agent_…`.
 "Ready" is written as `READY` + reason `ממתין לביקורת מנהל` (manager inspection step); issues become `MAINTENANCE_ALERT`; missing supplies keep the unit `DIRTY` with a `חוסר:` reason.
 
+For full architectural documentation, state machines (housekeeping fast-paths, manager Q&A context, slang matching, and guest digital stay FAQ), see [SMART_KEY_QR_SYSTEM.md](./SMART_KEY_QR_SYSTEM.md).
+
 ## Test
 
 ```bash
-npm test                 # mock WhatsApp payloads (Thai voice note, Arabic maintenance report)
+npm test                 # runs all 61 Vitest unit tests (<1.3s)
 npm run typecheck
+```
 
 # STT smoke test (first run downloads whisper-large-v3-turbo, ~1.6GB)
 .venv/bin/python src/stt/transcriber.py --file sample.wav

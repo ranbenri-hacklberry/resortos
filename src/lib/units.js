@@ -18,8 +18,8 @@ export const DEFAULT_RESORT_UNITS = [
   { id: 'k675', name: 'Ⓖ23 בתי נורית 4', sort_order: 16, unit_type: 'cabin', max_occupancy: 2, base_price_agorot: 50000 },
   { id: 'k676', name: 'Ⓖ23 בתי נורית 5', sort_order: 17, unit_type: 'cabin', max_occupancy: 4, base_price_agorot: 80000 },
   { id: 'k677', name: 'Ⓖ23 בתי נורית 6', sort_order: 18, unit_type: 'cabin', max_occupancy: 4, base_price_agorot: 80000 },
-  { id: 'k678', name: 'Ⓖ23 בתי נורית 7', sort_order: 19, unit_type: 'cabin', max_occupancy: 2, base_price_agorot: 50000 },
-  { id: 'k679', name: 'Ⓖ23 בתי נורית 8', sort_order: 20, unit_type: 'cabin', max_occupancy: 2, base_price_agorot: 50000 },
+  { id: 'k678', name: 'Ⓖ23 בתי נורית 7', sort_order: 19, unit_type: 'cabin', max_occupancy: 2, base_price_agorot: 50000, usage: 'STAFF_ACCOMMODATION', booking_enabled: false },
+  { id: 'k679', name: 'Ⓖ23 בתי נורית 8', sort_order: 20, unit_type: 'cabin', max_occupancy: 2, base_price_agorot: 50000, usage: 'STAFF_ACCOMMODATION', booking_enabled: false },
   { id: 'k808', name: "Ⓔ27 טאג' מאהל · בקתה 1", sort_order: 21, unit_type: 'cabin', max_occupancy: 2, base_price_agorot: 80000 },
   { id: 'k809', name: "Ⓔ27 טאג' מאהל · בקתה 2", sort_order: 22, unit_type: 'cabin', max_occupancy: 2, base_price_agorot: 80000 },
   { id: 'k810', name: "Ⓔ27 טאג' מאהל · בקתה 3", sort_order: 23, unit_type: 'cabin', max_occupancy: 2, base_price_agorot: 80000 },
@@ -84,12 +84,65 @@ export const RETIRED_UNIT_IDS = new Set([
   'lab-kinneret'
 ]);
 
+export const STAFF_UNIT_IDS = new Set(['k678', 'k679']);
+export const OFFICE_UNIT_IDS = new Set(['pilot-office']);
+
+export const CANONICAL_OFFICE_UNIT = {
+  id: 'pilot-office',
+  name: 'משרד',
+  sort_order: 99,
+  unit_type: 'office',
+  max_occupancy: 0,
+  base_price_agorot: 0,
+  usage: 'OFFICE',
+  booking_enabled: false
+};
+
+export const CANONICAL_MANAGED_SPACES = [
+  ...DEFAULT_RESORT_UNITS,
+  CANONICAL_OFFICE_UNIT
+];
+
+NAME_TO_ID['pilot-office'] = 'pilot-office';
+NAME_TO_ID['משרד'] = 'pilot-office';
+NAME_TO_ID['המשרד'] = 'pilot-office';
+NAME_TO_ID['משרד ראשי'] = 'pilot-office';
+
 export function isPhantomUnitId(id) {
   return String(id || '').startsWith('u_t_');
 }
 
 export function isRetiredUnitId(id) {
   return RETIRED_UNIT_IDS.has(String(id || ''));
+}
+
+export function unitUsage(unitOrId) {
+  const id = typeof unitOrId === 'object' ? String(unitOrId?.id || '') : String(unitOrId || '');
+  if (typeof unitOrId === 'object' && unitOrId) {
+    if (unitOrId.usage) return unitOrId.usage;
+    if (unitOrId.content?.usage) return unitOrId.content.usage;
+    if (unitOrId.unit_type === 'office') return 'OFFICE';
+    if (unitOrId.unit_type === 'staff' || unitOrId.unit_type === 'staff_accommodation') return 'STAFF_ACCOMMODATION';
+  }
+  if (STAFF_UNIT_IDS.has(id)) return 'STAFF_ACCOMMODATION';
+  if (OFFICE_UNIT_IDS.has(id)) return 'OFFICE';
+  return 'GUEST_ACCOMMODATION';
+}
+
+export function isBookingEligible(unitOrId) {
+  if (typeof unitOrId === 'object' && unitOrId) {
+    if (unitOrId.booking_enabled === false) return false;
+    if (unitOrId.content?.booking_enabled === false) return false;
+  }
+  return unitUsage(unitOrId) === 'GUEST_ACCOMMODATION';
+}
+
+export function isManagedUnit(unit) {
+  return isInventoryUnit(unit);
+}
+
+export function isBookableUnit(unit) {
+  return isInventoryUnit(unit) && isBookingEligible(unit);
 }
 
 export function isInventoryUnit(unit) {
@@ -106,6 +159,19 @@ export function inventoryUnits(units) {
     if (sa !== sb) return sa - sb;
     return String(a.name || '').localeCompare(String(b.name || ''), 'he');
   });
+}
+
+export function getManagedUnits(units) {
+  return inventoryUnits(units);
+}
+
+export function getManagedSpaces(spaces) {
+  const list = spaces && spaces.length ? spaces : CANONICAL_MANAGED_SPACES;
+  return list.filter(isInventoryUnit);
+}
+
+export function getBookableUnits(units) {
+  return inventoryUnits(units).filter(isBookableUnit);
 }
 
 export function normalizeAllowedUnitIds(value) {
@@ -315,19 +381,29 @@ export function matchCanonicalUnitId(value) {
 }
 
 export function canonicalUnitSeed(tenantId, now = new Date().toISOString()) {
-  return DEFAULT_RESORT_UNITS.map((unit) => ({
-    id: unit.id,
-    tenant_id: tenantId,
-    name: unit.name,
-    sort_order: unit.sort_order,
-    unit_type: unit.unit_type || 'cabin',
-    max_occupancy: unit.max_occupancy || 4,
-    base_price_agorot: unit.base_price_agorot,
-    cleaning_fee_agorot: 0,
-    is_active: !isRetiredUnitId(unit.id),
-    created_at: now,
-    updated_at: now,
-    version: 1
-  }));
+  return DEFAULT_RESORT_UNITS.map((unit) => {
+    const usage = unit.usage || unitUsage(unit.id);
+    const booking_enabled = unit.booking_enabled !== undefined ? unit.booking_enabled : isBookingEligible(unit.id);
+    return {
+      id: unit.id,
+      tenant_id: tenantId,
+      name: unit.name,
+      sort_order: unit.sort_order,
+      unit_type: unit.unit_type || 'cabin',
+      max_occupancy: unit.max_occupancy || 4,
+      base_price_agorot: unit.base_price_agorot,
+      cleaning_fee_agorot: 0,
+      is_active: !isRetiredUnitId(unit.id),
+      usage,
+      booking_enabled,
+      content: {
+        usage,
+        booking_enabled
+      },
+      created_at: now,
+      updated_at: now,
+      version: 1
+    };
+  });
 }
 

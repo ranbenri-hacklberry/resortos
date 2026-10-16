@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import Login from './components/Login';
 import { fetchStaffMe, getStoredToken, logoutStaff, setStoredToken } from './lib/staffAuth';
 import { fetchKinorotSyncStatus, formatKinorotSyncLabel, hasUnseenKinorotChanges, rememberKinorotChanges, startKinorotSync, unseenKinorotChanges } from './lib/kinorotSyncApi';
-import { canEditPriorityStatuses, canSeeFinancials, isOpsLead, isOwnerManager, isPriorityOnly, isReception } from './lib/staffRoles';
+import { canEditPriorityStatuses, canSeeFinancials, isFinanceOnly, isOpsLead, isOwnerManager, isPriorityOnly, isReception } from './lib/staffRoles';
 import { agentPortalUrl } from './lib/guestStayUrl';
 import { resolveStayToken } from './lib/stayToken';
 import { isFieldStaffMode } from './lib/fieldStaff';
@@ -247,8 +247,8 @@ function App() {
             ResortOS | פורטל אורחים מאובטח
           </h2>
           <p style={{ fontSize: '0.9rem', color: isLight ? '#44403C' : '#94A3B8', lineHeight: 1.6, margin: 0 }}>
-            עמוד זה מיועד להשלמת הזמנות עבור אורחי הצימר בלבד.<br />
-            אנא לחץ על הקישור האישי שקיבלת ב-WhatsApp להשלמת אישור ההזמנה.
+            עמוד זה מיועד לדף אורח עבור אורחי הצימר בלבד.<br />
+            אנא לחץ על הקישור האישי שקיבלת ב-WhatsApp לצפייה בדף האורח.
           </p>
         </div>
       </div>
@@ -321,7 +321,7 @@ function App() {
   }
 
   const isManager = isOwnerManager(sessionUser.role);
-  const canViewFinancials = canSeeFinancials(sessionUser.role);
+  const canViewFinancials = canSeeFinancials(sessionUser.role, sessionUser.username, sessionUser.display_name);
   const canViewErrands = isOwnerManager(sessionUser.role);
   const tenantId = sessionUser.tenant_id || DEMO_TENANT_ID;
   const visibleTab = (
@@ -343,6 +343,32 @@ function App() {
               name: sessionUser.display_name || sessionUser.username || '',
               onLogout: handleLogout
             }}
+          />
+        </Suspense>
+      </div>
+    );
+  }
+
+  // Finance-only dedicated view for Daniel
+  const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const isFinanceOnlyUser = isFinanceOnly(sessionUser.role, sessionUser.username, sessionUser.display_name)
+    || urlParams?.get('view') === 'finance'
+    || urlParams?.get('role') === 'finance'
+    || urlParams?.get('user') === 'daniel';
+
+  if (isFinanceOnlyUser) {
+    return (
+      <div className="finance-only-shell" dir="rtl">
+        <Suspense fallback={lazyFallback}>
+          <FinancialSummary
+            tenantId={tenantId}
+            theme={theme}
+            setTheme={setTheme}
+            session={{
+              name: sessionUser.display_name || sessionUser.username || 'דניאל',
+              onLogout: handleLogout
+            }}
+            financeOnly
           />
         </Suspense>
       </div>
@@ -407,7 +433,32 @@ function App() {
             ) : null}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {canViewFinancials ? (
+              <button
+                type="button"
+                onClick={() => setActiveTab('financials')}
+                style={{
+                  border: activeTab === 'financials' ? '1px solid #C5A059' : (isLight ? '1px solid rgba(197, 160, 89, 0.45)' : '1px solid rgba(197, 160, 89, 0.35)'),
+                  background: activeTab === 'financials' ? 'linear-gradient(135deg, #C5A059, #A8823A)' : (isLight ? 'rgba(197, 160, 89, 0.12)' : 'rgba(197, 160, 89, 0.18)'),
+                  color: activeTab === 'financials' ? '#FFFFFF' : (isLight ? '#8C6B28' : '#F1D699'),
+                  borderRadius: '999px',
+                  padding: '0.35rem 0.7rem',
+                  fontSize: '0.72rem',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.3rem',
+                  whiteSpace: 'nowrap',
+                  boxShadow: activeTab === 'financials' ? '0 2px 8px rgba(197, 160, 89, 0.35)' : 'none'
+                }}
+                title="מעבר מהיר לחמ״ל פיננסי"
+              >
+                <span>💰</span>
+                <span>חמ״ל פיננסי</span>
+              </button>
+            ) : null}
             <NetworkStatusPill isLight={isLight} />
             <button
               type="button"
@@ -499,22 +550,38 @@ function App() {
           </div>
         </div>
 
-        {/* BOTTOM ROW: NAVIGATION TABS (Strict Order: 1. Occupancy, 2. Operations, 3. Financials) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', width: '100%' }}>
+        {/* BOTTOM ROW: NAVIGATION TABS (Strict Order: 1. Occupancy, 2. Operations, 3. Priority, 4. Errands, 5. Financials) */}
+        <div 
+          className="app-nav-tabs"
+          style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '0.45rem', 
+            width: '100%',
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
+            paddingBottom: '2px',
+            paddingTop: '2px',
+            flexWrap: 'nowrap'
+          }}
+        >
           <button
             onClick={() => setActiveTab('calendar')}
             style={{
-              flex: 1,
+              flex: '1 0 auto',
+              minWidth: 'max-content',
               border: 'none',
               borderRadius: '10px',
-              padding: '0.5rem 0.2rem',
-              fontSize: '0.75rem',
+              padding: '0.55rem 0.85rem',
+              fontSize: '0.78rem',
               fontWeight: 700,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '0.25rem',
+              gap: '0.3rem',
               whiteSpace: 'nowrap',
               background: activeTab === 'calendar' 
                 ? 'linear-gradient(135deg, #6366F1, #4F46E5)' 
@@ -533,17 +600,18 @@ function App() {
           <button
             onClick={() => setActiveTab('operations')}
             style={{
-              flex: 1,
+              flex: '1 0 auto',
+              minWidth: 'max-content',
               border: 'none',
               borderRadius: '10px',
-              padding: '0.5rem 0.2rem',
-              fontSize: '0.75rem',
+              padding: '0.55rem 0.85rem',
+              fontSize: '0.78rem',
               fontWeight: 700,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '0.25rem',
+              gap: '0.3rem',
               whiteSpace: 'nowrap',
               background: activeTab === 'operations' 
                 ? 'linear-gradient(135deg, #10B981, #059669)' 
@@ -562,17 +630,18 @@ function App() {
           <button
             onClick={() => setActiveTab('priority')}
             style={{
-              flex: 1,
+              flex: '1 0 auto',
+              minWidth: 'max-content',
               border: 'none',
               borderRadius: '10px',
-              padding: '0.5rem 0.2rem',
-              fontSize: '0.75rem',
+              padding: '0.55rem 0.85rem',
+              fontSize: '0.78rem',
               fontWeight: 700,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '0.25rem',
+              gap: '0.3rem',
               whiteSpace: 'nowrap',
               background: activeTab === 'priority'
                 ? 'linear-gradient(135deg, #1b365d, #0f2942)'
@@ -592,17 +661,18 @@ function App() {
           <button
             onClick={() => setActiveTab('errands')}
             style={{
-              flex: 1,
+              flex: '1 0 auto',
+              minWidth: 'max-content',
               border: 'none',
               borderRadius: '10px',
-              padding: '0.5rem 0.2rem',
-              fontSize: '0.75rem',
+              padding: '0.55rem 0.85rem',
+              fontSize: '0.78rem',
               fontWeight: 700,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '0.25rem',
+              gap: '0.3rem',
               whiteSpace: 'nowrap',
               background: activeTab === 'errands' 
                 ? 'linear-gradient(135deg, #3B82F6, #1D4ED8)' 
@@ -623,30 +693,31 @@ function App() {
           <button
             onClick={() => setActiveTab('financials')}
             style={{
-              flex: 1,
-              border: 'none',
+              flex: '1 0 auto',
+              minWidth: 'max-content',
+              border: activeTab === 'financials' ? '1px solid #C5A059' : 'none',
               borderRadius: '10px',
-              padding: '0.5rem 0.2rem',
-              fontSize: '0.75rem',
-              fontWeight: 700,
+              padding: '0.55rem 0.95rem',
+              fontSize: '0.78rem',
+              fontWeight: 800,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '0.25rem',
+              gap: '0.3rem',
               whiteSpace: 'nowrap',
               background: activeTab === 'financials' 
-                ? 'linear-gradient(135deg, #F59E0B, #D97706)' 
+                ? 'linear-gradient(135deg, #C5A059, #99742B)' 
                 : (isLight ? '#EAE5DD' : '#1E293B'),
               color: activeTab === 'financials' 
                 ? '#FFFFFF' 
                 : (isLight ? '#44403C' : '#94A3B8'),
-              boxShadow: activeTab === 'financials' ? '0 4px 12px rgba(245, 158, 11, 0.35)' : 'none',
+              boxShadow: activeTab === 'financials' ? '0 4px 12px rgba(197, 160, 89, 0.35)' : 'none',
               transition: 'all 0.2s ease'
             }}
           >
             <span>💰</span>
-            <span>{t('FINANCIALS_TAB', 'פיננסים')}</span>
+            <span>{t('FINANCIALS_TAB', 'חמ״ל פיננסי')}</span>
           </button>
           )}
         </div>

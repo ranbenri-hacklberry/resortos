@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { FileSpreadsheet, Filter, Printer, RefreshCw, Search, Table2 } from 'lucide-react';
 import { formatIlsFromAgorot, normalizeClearingPayment, normalizeIsraeliId } from '../../lib/clearingPayments';
 import { printCashDayReport } from '../../lib/cashDayReport';
@@ -181,6 +182,15 @@ function fallbackUnitName(name) {
   const word = (words[words.length - 1] || '').replace(/^ה/, '');
   if (word && number) return `${word} ${number}`;
   return word || text;
+}
+
+function prioritySleepIsDay(date = new Date()) {
+  const hour = Number(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Jerusalem',
+    hour: '2-digit',
+    hourCycle: 'h23'
+  }).format(date));
+  return hour >= 6 && hour < 18;
 }
 
 function guestFirstName(name) {
@@ -501,6 +511,10 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const [kinorotNote, setKinorotNote] = useState({ resId: '', saved: '', draft: '', loading: false });
   const [housekeepers, setHousekeepers] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [asleep, setAsleep] = useState(false);
+  const [sleepClock, setSleepClock] = useState('');
+  const [sleepDate, setSleepDate] = useState('');
+  const [sleepDay, setSleepDay] = useState(() => prioritySleepIsDay());
   const [refreshedAt, setRefreshedAt] = useState(null);
   const [calendarNote, setCalendarNote] = useState('');
   const [view, setView] = useState('desk');
@@ -514,6 +528,63 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const chooseRef = useRef(() => {});
   const collectRef = useRef(() => {});
   const housekeepersRef = useRef([]);
+  const asleepRef = useRef(false);
+  const SCREEN_IDLE_MS = 30 * 60 * 1000;
+
+  useEffect(() => {
+    if (!active) {
+      asleepRef.current = false;
+      setAsleep(false);
+      return undefined;
+    }
+    let timer = 0;
+    const arm = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        asleepRef.current = true;
+        setAsleep(true);
+      }, SCREEN_IDLE_MS);
+    };
+    const wake = () => {
+      if (asleepRef.current) {
+        asleepRef.current = false;
+        setAsleep(false);
+      }
+      arm();
+    };
+    const nudge = () => {
+      if (asleepRef.current) return;
+      arm();
+    };
+    arm();
+    const opts = { capture: true };
+    window.addEventListener('pointerdown', wake, opts);
+    window.addEventListener('keydown', wake, opts);
+    window.addEventListener('touchstart', wake, opts);
+    window.addEventListener('mousemove', nudge, opts);
+    window.addEventListener('wheel', nudge, opts);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('pointerdown', wake, opts);
+      window.removeEventListener('keydown', wake, opts);
+      window.removeEventListener('touchstart', wake, opts);
+      window.removeEventListener('mousemove', nudge, opts);
+      window.removeEventListener('wheel', nudge, opts);
+    };
+  }, [active]);
+
+  useEffect(() => {
+    if (!asleep) return undefined;
+    const tick = () => {
+      const now = new Date();
+      setSleepClock(now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }));
+      setSleepDate(now.toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' }));
+      setSleepDay(prioritySleepIsDay(now));
+    };
+    tick();
+    const timer = window.setInterval(tick, 30000);
+    return () => window.clearInterval(timer);
+  }, [asleep]);
 
   const rows = useMemo(() => (
     units
@@ -891,8 +962,8 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
     return data;
   };
 
-  const waitForKinorotSync = async (startedAt) => {
-    for (let attempt = 0; attempt < 24; attempt += 1) {
+  const waitForKinorotSync = async (startedAt, attempts = 24) => {
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 3000));
       const status = await staffJson('/api/kinorot/sync', undefined, 'GET');
       if (status.running) continue;
@@ -1007,14 +1078,14 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         const running = await staffJson('/api/kinorot/sync', undefined, 'GET').catch(() => ({}));
         if (running.running) await waitForKinorotSync(running.lastAttemptAt || startedAt).catch(() => {});
         const syncFrom = new Date().toISOString();
-        await staffJson('/api/kinorot/sync', {});
+        await staffJson('/api/kinorot/sync', { quick: true });
         setSaving(false);
         const waitingNote = failed.length
           ? 'חלק מהחסימות נשמרו. מחכה שהיומן יתעדכן'
           : 'נחסם בכינורות עד מחר. מחכה שהיומן יתעדכן';
         setCalendarNote(waitingNote);
         setMessage(waitingNote);
-        waitForKinorotSync(syncFrom)
+        waitForKinorotSync(syncFrom, 80)
           .then(() => pullBoard())
           .then(() => {
             if (!failed.length) {
@@ -1209,6 +1280,21 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
 
   return (
     <div className="priority-root" dir="rtl">
+      {asleep ? createPortal(
+        <button type="button" className={sleepDay ? 'priority-sleep is-day' : 'priority-sleep'} onClick={() => setAsleep(false)} aria-label="חזרה לפריוריטי">
+          <img className="priority-sleep-photo is-night" src="/priority/kinneret-night.jpg" alt="" />
+          <img className="priority-sleep-photo is-day" src="/priority/kinneret-day.jpg" alt="" />
+          <div className="priority-sleep-corner" dir="ltr">
+            <div className="priority-sleep-clock">{sleepClock}</div>
+            <div className="priority-sleep-date">{sleepDate}</div>
+            <div className="priority-sleep-mark">
+              <b>Priority</b>
+              <span>powered by ResortOS</span>
+            </div>
+          </div>
+        </button>,
+        document.body
+      ) : null}
       {session ? (
         <div className="priority-session">
           <span>{session.name}</span>

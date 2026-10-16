@@ -243,7 +243,7 @@ function formatDisplayDate(dateStr) {
 }
 
 function initialGuestWhatsAppText({ unitName, checkInDate, checkoutUrl }) {
-  return `שלום! להשלמת אישור ההזמנה ב-${unitName} לתאריך ${formatDisplayDate(checkInDate)}, לחץ על הקישור:\n\n${checkoutUrl}\n\nתודה!`;
+  return `שלום! קישור לדף אורח ב-${unitName} לתאריך ${formatDisplayDate(checkInDate)}:\n\n${checkoutUrl}\n\nתודה!`;
 }
 
 function smsErrorText(err) {

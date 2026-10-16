@@ -11,6 +11,81 @@
   font-size: 12px;
 }
 
+.priority-sleep {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  border: 0;
+  padding: 0;
+  background: #05070b;
+  cursor: none;
+  overflow: hidden;
+}
+.priority-sleep-photo {
+  position: absolute;
+  width: 130%;
+  height: 130%;
+  left: -15%;
+  top: -15%;
+  object-fit: cover;
+  animation: priority-photo 150s ease-in-out infinite alternate;
+}
+.priority-sleep-photo.is-day { display: none; }
+.priority-sleep.is-day .priority-sleep-photo.is-night { display: none; }
+.priority-sleep.is-day .priority-sleep-photo.is-day { display: block; }
+.priority-sleep::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.38) 0%, rgba(0, 0, 0, 0.05) 32%, rgba(0, 0, 0, 0.12) 100%);
+  pointer-events: none;
+}
+.priority-sleep-corner {
+  position: absolute;
+  top: 36px;
+  left: 44px;
+  z-index: 2;
+  text-align: left;
+}
+.priority-sleep-clock {
+  font: 300 54px/1 "Segoe UI", Tahoma, Arial, sans-serif;
+  letter-spacing: 0.12em;
+  color: #f2f6fa;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.45);
+}
+.priority-sleep-date {
+  margin-top: 8px;
+  font: 400 14px/1.3 Tahoma, "Segoe UI", Arial, sans-serif;
+  letter-spacing: 0.04em;
+  color: rgba(242, 246, 250, 0.82);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
+}
+.priority-sleep-mark {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.priority-sleep-mark b {
+  font: 500 12px/1 "Segoe UI", Tahoma, Arial, sans-serif;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: rgba(242, 246, 250, 0.9);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.4);
+}
+.priority-sleep-mark span {
+  font: 400 10px/1 "Segoe UI", Tahoma, Arial, sans-serif;
+  letter-spacing: 0.16em;
+  color: rgba(242, 246, 250, 0.68);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.4);
+}
+@keyframes priority-photo {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-2%, 0, 0); }
+}
+
 .priority-session {
   flex: 0 0 auto;
   height: 26px;

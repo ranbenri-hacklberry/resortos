@@ -4,7 +4,7 @@ import { unitMaxOccupancy } from './units.js';
 const byId = new Map();
 for (const property of Object.values(PROPERTY_THEMES)) {
   for (const unit of property.units || []) {
-    if (!unit?.id || unit.isFullBuyout) continue;
+    if (!unit?.id || unit.isFullBuyout || unit.booking_enabled === false || unit.usage === 'STAFF_ACCOMMODATION') continue;
     byId.set(unit.id, {
       id: unit.id,
       name: unit.name,

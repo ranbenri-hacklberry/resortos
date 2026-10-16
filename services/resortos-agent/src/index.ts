@@ -27,10 +27,19 @@ const pipeline = createPipeline({
   log,
 });
 
-// Process messages sequentially so the single local LLM/STT is never overloaded.
-let queue: Promise<unknown> = Promise.resolve();
+// Process messages sequentially per chat JID to preserve order within a conversation
+// without blocking different users or rooms concurrently.
+const chatQueues = new Map<string, Promise<unknown>>();
 wa.on('message', (m) => {
-  queue = queue.then(() => pipeline.handleInbound(m)).catch((e) => log.error(e));
+  const jid = m.key.remoteJid || 'global';
+  const prev = chatQueues.get(jid) || Promise.resolve();
+  const next = prev
+    .then(() => pipeline.handleInbound(m))
+    .catch((e) => log.error({ err: String(e), jid }, 'Inbound pipeline error'));
+  chatQueues.set(jid, next);
+  next.finally(() => {
+    if (chatQueues.get(jid) === next) chatQueues.delete(jid);
+  });
 });
 wa.on('logged_out', () => log.fatal('CRITICAL: WhatsApp session logged out. Manual re-pairing required.'));
 
@@ -82,6 +91,13 @@ const server = createServer(async (req, res) => {
       if (config.dispatchToken && req.headers['x-agent-token'] !== config.dispatchToken) return send(res, 401, { error: 'unauthorized' });
       return send(res, 200, await pipeline.handleDispatch(await readJson(req)));
     }
+    if (req.method === 'POST' && req.url === '/api/cleaners/room-exit') {
+      if (config.dispatchToken && req.headers['x-agent-token'] !== config.dispatchToken) return send(res, 401, { error: 'unauthorized' });
+      const body = await readJson(req);
+      const phone = body.cleaner_phone ?? body.phone;
+      const roomId = body.room_id ?? body.room;
+      return send(res, 200, await pipeline.triggerRoomExit({ cleanerPhone: phone, roomId }));
+    }
     if (req.method === 'POST' && req.url === '/api/cleaners/send-qr') {
       const body = await readJson(req);
       const roomCode = body.room ?? body.room_code;
@@ -98,6 +114,15 @@ const server = createServer(async (req, res) => {
         `הדפס והדבק על הכספת. עובד שיסרוק יפעיל את שעון הניקיון ויקבל את קוד הכספת מיידית.`;
       await wa.sendImage(`${phone}@s.whatsapp.net`, png, caption);
       return send(res, 200, { ok: true, room: r.letterCode || r.name, lockbox: r.lockbox, sentTo: phone });
+    }
+    if (req.method === 'POST' && (req.url === '/api/messages/send' || req.url === '/api/alerts/send')) {
+      const body = await readJson(req);
+      const text = String(body.text || body.message || '').trim();
+      let phone = String(body.phone || '').replace(/\D/g, '');
+      if (!text || !phone) return send(res, 400, { error: 'phone and text required' });
+      if (phone.startsWith('0')) phone = `972${phone.slice(1)}`;
+      await wa.sendText(`${phone}@s.whatsapp.net`, text);
+      return send(res, 200, { ok: true, sentTo: phone });
     }
     send(res, 404, { error: 'not found' });
   } catch (e: any) {

@@ -60,12 +60,15 @@ export function startKinorotSync(options = {}) {
   const current = readKinorotSyncStatus();
   if (current.running) return current;
   const mode = String(options.mode || 'full').toLowerCase() === 'duty' ? 'duty' : 'full';
-  const env = { ...process.env, KINOROT_MODE: mode };
+  const env = { ...process.env, KINOROT_MODE: mode, KINOROT_SYNC_SPAWNED: '1' };
+  if (mode === 'duty' || options.quick) {
+    env.KINOROT_SKIP_ENRICH = '1';
+    env.KINOROT_QUICK = '1';
+  }
   if (mode === 'duty') {
     env.KINOROT_DAYS = String(options.days ?? 1);
     env.KINOROT_BACK_DAYS = String(options.backDays ?? 1);
     env.KINOROT_BOARD_DAYS = String(options.boardDays ?? 1);
-    env.KINOROT_SKIP_ENRICH = '1';
   }
   writeKinorotSyncStatus({
     running: true,
@@ -78,6 +81,9 @@ export function startKinorotSync(options = {}) {
     env,
     detached: true,
     stdio: 'ignore'
+  });
+  child.on('error', () => {
+    writeKinorotSyncStatus({ running: false, lastError: 'היומן לא התחיל' });
   });
   child.unref();
   return readKinorotSyncStatus();

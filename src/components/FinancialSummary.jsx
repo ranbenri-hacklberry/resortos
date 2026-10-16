@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useTransition } from 'react';
-import { Building2, CalendarDays } from 'lucide-react';
+import { Building2, CalendarDays, ShieldAlert } from 'lucide-react';
 import { useLiveBookings, useLiveUnits } from '../lib/resortos-db';
 import { loadDailyCollection, seedDailyCollectionIfEmpty } from '../lib/dailyCollection';
 import { syncCloudBookingsToDexie } from '../lib/cloudDb';
@@ -13,15 +13,23 @@ import { addDaysIso } from '../lib/cashFlowForecast';
 import { israelToday } from '../lib/cabinAccess';
 import FinanceBanksPanel from './FinanceBanksPanel';
 import FinanceBookingsPanel from './FinanceBookingsPanel';
+import FinancialCommandCenter from './finance/FinancialCommandCenter';
+import { GUEST_BRAND } from '../lib/guestTheme';
 
 const DEMO_TENANT_ID = '22222222-2222-2222-2222-222222222222';
 
-export default function FinancialSummary({ tenantId = DEMO_TENANT_ID, theme = 'dark' }) {
+export default function FinancialSummary({
+  tenantId = DEMO_TENANT_ID,
+  theme = 'dark',
+  setTheme = null,
+  session = null,
+  financeOnly = false
+}) {
   const bookings = useLiveBookings(tenantId);
   const units = useLiveUnits(tenantId);
   const isLight = theme === 'light';
-  const [part, setPart] = useState('bookings');
-  const [seen, setSeen] = useState({ banks: false, bookings: true });
+  const [part, setPart] = useState('command-center');
+  const [seen, setSeen] = useState({ 'command-center': true, banks: false, bookings: false });
   const [, startTab] = useTransition();
   const [store, setStore] = useState(() => loadDailyCollection());
   const [maxPayload, setMaxPayload] = useState(null);
@@ -31,13 +39,13 @@ export default function FinancialSummary({ tenantId = DEMO_TENANT_ID, theme = 'd
   const [overview, setOverview] = useState(null);
 
   const styles = {
-    wrapperBg: isLight ? '#FFFFFF' : '#0F172A',
-    cardBg: isLight ? '#F8FAFC' : '#1E293B',
-    cardBorder: isLight ? '#E2E8F0' : 'rgba(255,255,255,0.08)',
-    textPrimary: isLight ? '#0F172A' : '#F8FAFC',
-    textMuted: isLight ? '#64748B' : '#94A3B8',
-    inputBg: isLight ? '#FFFFFF' : '#0B1220',
-    shadow: isLight ? '0 10px 30px rgba(0,0,0,0.06)' : '0 20px 40px rgba(0,0,0,0.3)'
+    wrapperBg: isLight ? GUEST_BRAND.cream : GUEST_BRAND.wine,
+    cardBg: isLight ? '#FFFFFF' : '#1A0C09',
+    cardBorder: isLight ? 'rgba(191, 179, 168, 0.4)' : 'rgba(242, 228, 233, 0.12)',
+    textPrimary: isLight ? GUEST_BRAND.wine : GUEST_BRAND.cream,
+    textMuted: isLight ? GUEST_BRAND.mocha : GUEST_BRAND.cloudy,
+    inputBg: isLight ? '#FFFFFF' : '#3A221C',
+    shadow: isLight ? '0 10px 30px rgba(38, 19, 15, 0.05)' : '0 20px 40px rgba(0, 0, 0, 0.4)'
   };
 
   useEffect(() => {
@@ -143,6 +151,32 @@ export default function FinancialSummary({ tenantId = DEMO_TENANT_ID, theme = 'd
     [allRows, bankRows]
   );
 
+  if (financeOnly) {
+    return (
+      <div style={{
+        background: styles.wrapperBg,
+        minHeight: '100vh',
+        color: styles.textPrimary,
+        fontFamily: GUEST_BRAND.fontBody,
+        padding: '0.5rem'
+      }}>
+        <FinancialCommandCenter
+          theme={theme}
+          setTheme={setTheme}
+          session={session}
+          financeOnly={true}
+          styles={styles}
+          overview={overview}
+          beinleumiStatement={beinleumiPayload}
+          maxCredits={maxPayload?.rows || []}
+          hypPayments={hypPayload?.rows || []}
+          collectionRows={allRows}
+          bookings={bookings}
+        />
+      </div>
+    );
+  }
+
   return (
     <div style={{
       background: styles.wrapperBg,
@@ -155,10 +189,51 @@ export default function FinancialSummary({ tenantId = DEMO_TENANT_ID, theme = 'd
     }}>
       <div style={{
         display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
         gap: '0.55rem',
         marginBottom: '1rem'
       }}>
+        <button
+          type="button"
+          onClick={() => showPart('command-center')}
+          style={{
+            border: part === 'command-center' ? 'none' : `1px solid ${styles.cardBorder}`,
+            borderRadius: '14px',
+            padding: '0.85rem 1rem',
+            background: part === 'command-center' ? 'linear-gradient(135deg, #4F46E5, #06B6D4)' : styles.cardBg,
+            color: part === 'command-center' ? '#fff' : styles.textPrimary,
+            cursor: 'pointer',
+            textAlign: 'right',
+            boxShadow: part === 'command-center' ? '0 4px 15px rgba(79, 70, 229, 0.35)' : 'none'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 900, fontSize: '1.05rem' }}>
+            <ShieldAlert size={18} /> חמ״ל פיננסי 120 יום
+          </div>
+          <div style={{ marginTop: '0.25rem', fontSize: '0.78rem', opacity: 0.85, fontWeight: 600 }}>
+            ניצול מסגרות 50%/60%, כריות ביטחון, פער מימון ו-Chloe
+          </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => showPart('banks')}
+          style={{
+            border: part === 'banks' ? 'none' : `1px solid ${styles.cardBorder}`,
+            borderRadius: '14px',
+            padding: '0.85rem 1rem',
+            background: part === 'banks' ? 'linear-gradient(135deg, #3B82F6, #1D4ED8)' : styles.cardBg,
+            color: part === 'banks' ? '#fff' : styles.textPrimary,
+            cursor: 'pointer',
+            textAlign: 'right'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 900, fontSize: '1.05rem' }}>
+            <Building2 size={18} /> בנקים וכרטיסים
+          </div>
+          <div style={{ marginTop: '0.25rem', fontSize: '0.78rem', opacity: 0.85, fontWeight: 600 }}>
+            יתרות נוכחיות, תנועות עו״ש, סליקה ושיוך חשבונות
+          </div>
+        </button>
         <button
           type="button"
           onClick={() => showPart('bookings')}
@@ -179,27 +254,22 @@ export default function FinancialSummary({ tenantId = DEMO_TENANT_ID, theme = 'd
             סכום הזמנה מול מה ששולם בפועל באשראי, מזומן והעברה
           </div>
         </button>
-        <button
-          type="button"
-          onClick={() => showPart('banks')}
-          style={{
-            border: part === 'banks' ? 'none' : `1px solid ${styles.cardBorder}`,
-            borderRadius: '14px',
-            padding: '0.85rem 1rem',
-            background: part === 'banks' ? 'linear-gradient(135deg, #4F46E5, #3730A3)' : styles.cardBg,
-            color: part === 'banks' ? '#fff' : styles.textPrimary,
-            cursor: 'pointer',
-            textAlign: 'right'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 900, fontSize: '1.05rem' }}>
-            <Building2 size={18} /> בנקים ותזרים
-          </div>
-          <div style={{ marginTop: '0.25rem', fontSize: '0.78rem', opacity: 0.85, fontWeight: 600 }}>
-            יתרות, תנועות אחרונות, ותחזית יתרה לפי יום
-          </div>
-        </button>
       </div>
+
+      {seen['command-center'] ? (
+        <div style={{ display: part === 'command-center' ? 'block' : 'none' }}>
+          <FinancialCommandCenter
+            theme={theme}
+            styles={styles}
+            overview={overview}
+            beinleumiStatement={beinleumiPayload}
+            maxCredits={maxPayload?.rows || []}
+            hypPayments={hypPayload?.rows || []}
+            collectionRows={allRows}
+            bookings={bookings}
+          />
+        </div>
+      ) : null}
 
       {seen.banks ? (
         <div style={{ display: part === 'banks' ? 'block' : 'none' }}>

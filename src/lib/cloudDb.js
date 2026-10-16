@@ -7,7 +7,7 @@ import { publishGuestMailbox } from './guestCheckoutApi';
 import { guestStayOrigin } from './guestStayUrl';
 import { bookingStatusRank, hasRecordedReceipt, paymentStatusRank } from './bookingPaid';
 import { buildStaySnapshot } from './staySnapshot';
-import { canonicalUnitSeed, DEFAULT_RESORT_UNITS, FORCE_DOCUMENT_NAMES, isPhantomUnitId, isRetiredUnitId, matchCanonicalUnitId } from './units';
+import { canonicalUnitSeed, DEFAULT_RESORT_UNITS, FORCE_DOCUMENT_NAMES, isBookingEligible, isPhantomUnitId, isRetiredUnitId, matchCanonicalUnitId, unitUsage } from './units';
 import { listBookings, listUnitCatalog, listUnitOperations, saveUnitOperation, subscribeOpsEvents } from './opsApi';
 import { clearingPaidAgorot, clearingProofCount, isCanceledBooking, isVisibleKinorotRemoval, shouldApplyIncomingBooking as shouldApplyIncomingBookingBase } from './bookingMerge';
 
@@ -566,6 +566,8 @@ async function ensureUnitRow(booking) {
   const existing = await db.units.get(booking.unit_id);
   if (existing) return;
   const now = new Date().toISOString();
+  const usage = unitUsage(booking.unit_id);
+  const booking_enabled = isBookingEligible(booking.unit_id);
   await db.units.put({
     id: booking.unit_id,
     tenant_id: booking.tenant_id,
@@ -575,6 +577,12 @@ async function ensureUnitRow(booking) {
     base_price_agorot: 85000,
     cleaning_fee_agorot: 0,
     is_active: true,
+    usage,
+    booking_enabled,
+    content: {
+      usage,
+      booking_enabled
+    },
     created_at: now,
     updated_at: now,
     version: 1
@@ -625,6 +633,10 @@ async function applyResortUnitsToDexie(tenantId, data) {
       for (const row of data || []) {
         if (isPhantomUnitId(row.id) || isRetiredUnitId(row.id)) continue;
         const existing = existingById.get(row.id);
+        const usage = row.usage || row.content?.usage || existing?.usage || unitUsage(row.id);
+        const booking_enabled = row.booking_enabled !== undefined
+          ? row.booking_enabled
+          : (row.content?.booking_enabled !== undefined ? row.content.booking_enabled : isBookingEligible(row.id));
         puts.push({
           unit_type: row.unit_type || existing?.unit_type || 'cabin',
           max_occupancy: row.max_occupancy || existing?.max_occupancy || 4,
@@ -638,8 +650,15 @@ async function applyResortUnitsToDexie(tenantId, data) {
           sort_order: row.sort_order,
           is_active: row.is_active !== false,
           deleted_at: row.is_active === false ? (existing?.deleted_at || now) : null,
+          usage,
+          booking_enabled,
           property_id: row.property_id || existing?.property_id,
-          content: row.content || existing?.content || {},
+          content: {
+            ...(existing?.content || {}),
+            ...(row.content || {}),
+            usage,
+            booking_enabled
+          },
           access: row.access || existing?.access || {},
           operational_status: existing?.id === row.id ? existing?.operational_status : undefined,
           updated_at: existing?.updated_at || row.updated_at || now
@@ -648,14 +667,28 @@ async function applyResortUnitsToDexie(tenantId, data) {
       if (puts.length) await db.units.bulkPut(puts);
       if (remoteIds.size) {
         const local = await db.units.toArray();
-        const stale = [];
+        const archivable = [];
         for (const unit of local) {
           const sameTenant = !unit.tenant_id || unit.tenant_id === tenantId;
           if (!sameTenant) continue;
+          if (isRetiredUnitId(unit.id)) {
+            // Non-destructive archival: preserve historical references & unsynced operational notes,
+            // never physically delete from local Dexie.
+            if (unit.is_active !== false || unit.booking_enabled !== false) {
+              archivable.push({
+                ...unit,
+                is_active: false,
+                booking_enabled: false,
+                deleted_at: unit.deleted_at || now,
+                updated_at: now
+              });
+            }
+            continue;
+          }
           if (isPhantomUnitId(unit.id) || remoteIds.has(unit.id)) continue;
-          stale.push(unit.id);
+          // Unsynced local units are preserved; no destructive automated cleanup.
         }
-        if (stale.length) await db.units.bulkDelete(stale);
+        if (archivable.length) await db.units.bulkPut(archivable);
       }
     });
 }

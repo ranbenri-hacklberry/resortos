@@ -58,5 +58,5 @@ export function parseMicropayResponse(body) {
 export function guestStaySmsText({ unitName, checkInDate, checkoutUrl }) {
   const [year, month, day] = String(checkInDate || '').split('-');
   const when = day ? `${day}/${month}/${year}` : (checkInDate || '');
-  return `שלום! להשלמת אישור ההזמנה ב-${unitName} לתאריך ${when}, לחצו על הקישור:\n${checkoutUrl}`;
+  return `שלום! קישור לדף אורח ב-${unitName} לתאריך ${when}:\n${checkoutUrl}`;
 }

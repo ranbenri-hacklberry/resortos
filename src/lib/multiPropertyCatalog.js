@@ -277,8 +277,8 @@ export const PROPERTY_THEMES = {
       { id: 'k675', propertyId: 'nurit', name: 'בתי נורית 4', type: 'cabin', maxOccupancy: 2, basePrice: 500, weekendPrice: 900, description: 'בקתת עץ כפרית ושקטה.', features: ['זוג', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
       { id: 'k676', propertyId: 'nurit', name: 'בתי נורית 5', type: 'cabin', maxOccupancy: 4, basePrice: 800, weekendPrice: 1300, description: 'בקתת עץ משפחתית גדולה.', features: ['זוג + 2', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
       { id: 'k677', propertyId: 'nurit', name: 'בתי נורית 6', type: 'cabin', maxOccupancy: 4, basePrice: 800, weekendPrice: 1300, description: 'בקתת עץ משפחתית גדולה.', features: ['זוג + 2', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
-      { id: 'k678', propertyId: 'nurit', name: 'בתי נורית 7', type: 'cabin', maxOccupancy: 2, basePrice: 500, weekendPrice: 900, description: 'בקתת עץ נעימה ורגועה.', features: ['זוג', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
-      { id: 'k679', propertyId: 'nurit', name: 'בתי נורית 8', type: 'cabin', maxOccupancy: 2, basePrice: 500, weekendPrice: 900, description: 'בקתת עץ כפרית ושלווה.', features: ['זוג', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] }
+      { id: 'k678', propertyId: 'nurit', name: 'בתי נורית 7', type: 'cabin', maxOccupancy: 2, basePrice: 500, weekendPrice: 900, usage: 'STAFF_ACCOMMODATION', booking_enabled: false, description: 'מגורי צוות ועובדים.', features: ['מגורי עובדים', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] },
+      { id: 'k679', propertyId: 'nurit', name: 'בתי נורית 8', type: 'cabin', maxOccupancy: 2, basePrice: 500, weekendPrice: 900, usage: 'STAFF_ACCOMMODATION', booking_enabled: false, description: 'מגורי צוות ועובדים.', features: ['מגורי עובדים', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'] }
     ]
   },
 
@@ -654,7 +654,7 @@ export function listAllProperties() {
  */
 export function isFullBuyoutAvailable(propertyUnits = [], blockedUnitIds = []) {
   if (!propertyUnits || !propertyUnits.length) return false;
-  const singleUnits = propertyUnits.filter((u) => !u.isFullBuyout);
+  const singleUnits = propertyUnits.filter((u) => !u.isFullBuyout && u.booking_enabled !== false && u.usage !== 'STAFF_ACCOMMODATION');
   if (!singleUnits.length) return false;
   const blockedSet = new Set(blockedUnitIds);
   return singleUnits.every((u) => !blockedSet.has(u.id));

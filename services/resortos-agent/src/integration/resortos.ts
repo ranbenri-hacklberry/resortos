@@ -51,7 +51,15 @@ export class ResortOSError extends Error {
 }
 
 export class ResortOSClient {
+  private unitsCache?: { data: UnitRow[]; expiresAt: number };
+  private bookingsCache = new Map<string, { data: BookingRow[]; expiresAt: number }>();
+
   constructor(private fetchImpl: typeof fetch = fetch) {}
+
+  public clearCache() {
+    this.unitsCache = undefined;
+    this.bookingsCache.clear();
+  }
 
   private async req<T>(method: 'GET' | 'PUT', path: string, body?: unknown): Promise<T> {
     const res = await this.fetchImpl(`${config.resortos.baseUrl}${path}`, {
@@ -88,12 +96,21 @@ export class ResortOSClient {
   }
 
   async listUnits(): Promise<UnitRow[]> {
+    const now = Date.now();
+    if (this.unitsCache && this.unitsCache.expiresAt > now) {
+      return this.unitsCache.data;
+    }
     try {
-      return (await this.req<{ units?: UnitRow[] }>('GET', '/api/ops/units')).units ?? [];
+      const units = (await this.req<{ units?: UnitRow[] }>('GET', '/api/ops/units')).units ?? [];
+      this.unitsCache = { data: units, expiresAt: now + 15_000 };
+      return units;
     } catch (e: any) {
-      if (e?.status === 401 || e?.status === 403 || e?.code === 'ECONNREFUSED') {
+      if (e?.status === 401 || e?.status === 403 || e?.code === 'ECONNREFUSED' || e?.name === 'TimeoutError' || String(e).includes('Timeout')) {
         const rows = await this.postgrest<UnitRow[]>('GET', 'unit_operations', '?select=id,operational_status,custom_reason,assigned_staff,cleaning_started_at&limit=500');
-        if (Array.isArray(rows) && rows.length) return rows;
+        if (Array.isArray(rows) && rows.length) {
+          this.unitsCache = { data: rows, expiresAt: now + 15_000 };
+          return rows;
+        }
       }
       throw e;
     }
@@ -104,16 +121,26 @@ export class ResortOSClient {
     if (params?.from) q.set('from', params.from);
     if (params?.to) q.set('to', params.to);
     const qs = q.toString() ? `?${q.toString()}` : '';
+    const now = Date.now();
+    const cached = this.bookingsCache.get(qs);
+    if (cached && cached.expiresAt > now) {
+      return cached.data;
+    }
     try {
-      return (await this.req<{ bookings?: BookingRow[] }>('GET', `/api/ops/bookings${qs}`)).bookings ?? [];
+      const bookings = (await this.req<{ bookings?: BookingRow[] }>('GET', `/api/ops/bookings${qs}`)).bookings ?? [];
+      this.bookingsCache.set(qs, { data: bookings, expiresAt: now + 20_000 });
+      return bookings;
     } catch (e: any) {
-      if (e?.status === 401 || e?.status === 403 || e?.code === 'ECONNREFUSED') {
+      if (e?.status === 401 || e?.status === 403 || e?.code === 'ECONNREFUSED' || e?.name === 'TimeoutError' || String(e).includes('Timeout')) {
         let filter = '?deleted_at=is.null&select=*&limit=1000';
         if (params?.from && params?.to) {
           filter += `&check_in_date=lte.${encodeURIComponent(params.to)}&check_out_date=gte.${encodeURIComponent(params.from)}`;
         }
         const rows = await this.postgrest<BookingRow[]>('GET', 'hotelos_bookings', filter);
-        if (Array.isArray(rows)) return rows;
+        if (Array.isArray(rows)) {
+          this.bookingsCache.set(qs, { data: rows, expiresAt: now + 20_000 });
+          return rows;
+        }
       }
       throw e;
     }
@@ -131,7 +158,7 @@ export class ResortOSClient {
           'x-hotelos-mailbox': mailboxSecret,
         },
         body: JSON.stringify(booking),
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(2000),
       });
       return res.ok;
     } catch {
@@ -140,10 +167,11 @@ export class ResortOSClient {
   }
 
   private async putUnit(unitId: string, patch: Record<string, unknown>) {
+    this.clearCache();
     try {
       return await this.req('PUT', `/api/ops/units/${encodeURIComponent(unitId)}`, patch);
     } catch (e: any) {
-      if (e?.status === 401 || e?.status === 403 || e?.code === 'ECONNREFUSED') {
+      if (e?.status === 401 || e?.status === 403 || e?.code === 'ECONNREFUSED' || e?.name === 'TimeoutError' || String(e).includes('Timeout')) {
         await this.postgrest('PATCH', 'unit_operations', `?id=eq.${encodeURIComponent(unitId)}`, patch);
         return;
       }
@@ -222,5 +250,58 @@ export class ResortOSClient {
       custom_reason: `חוסר: ${p.description}`,
       assigned_staff: p.reportedBy,
     });
+  }
+
+  /**
+   * Manager updates unit operational status (READY, IN_PROGRESS, DIRTY, MAINTENANCE_ALERT).
+   */
+  async updateUnitStatus(p: { unitId: string; status: string; reason?: string; reportedBy: string }): Promise<ReadyResult> {
+    const unit = (await this.listUnits()).find((u) => u.id === p.unitId);
+    if (!unit) return { ok: false, skipped: 'unit_not_found' };
+    const patch: Record<string, unknown> = {
+      operational_status: p.status,
+      assigned_staff: p.reportedBy,
+    };
+    if (p.reason !== undefined) patch.custom_reason = p.reason;
+    if (p.status === 'READY') {
+      patch.operational_domain = 'HOUSEKEEPING';
+      patch.cleaning_started_at = null;
+      patch.is_escalated = false;
+    } else if (p.status === 'IN_PROGRESS') {
+      patch.operational_domain = 'HOUSEKEEPING';
+      patch.cleaning_started_at = new Date().toISOString();
+    } else if (p.status === 'DIRTY') {
+      patch.operational_domain = 'HOUSEKEEPING';
+      patch.cleaning_started_at = null;
+    } else if (p.status === 'MAINTENANCE_ALERT') {
+      patch.operational_domain = 'MAINTENANCE';
+      patch.is_escalated = true;
+    }
+    await this.putUnit(p.unitId, patch);
+    return { ok: true };
+  }
+
+  /**
+   * Set custom note on unit.
+   */
+  async updateUnitNote(p: { unitId: string; note: string; reportedBy: string }): Promise<void> {
+    await this.putUnit(p.unitId, {
+      custom_reason: p.note,
+      assigned_staff: p.reportedBy,
+    });
+  }
+
+  /**
+   * Save note for guest / booking.
+   */
+  async updateBookingNote(p: { bookingId: string; note: string; reportedBy: string }): Promise<void> {
+    this.clearCache();
+    try {
+      await this.postgrest('PATCH', 'hotelos_bookings', `?id=eq.${encodeURIComponent(p.bookingId)}`, {
+        special_requests: p.note,
+      });
+    } catch {
+      // Non-critical, fallback gracefully
+    }
   }
 }

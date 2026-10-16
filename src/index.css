@@ -805,8 +805,14 @@ body.field-staff-page .app-shell {
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
 /* ── Responsive header ── */
+.app-nav-tabs::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 @media (max-width: 768px) {
-  .enterprise-header { padding-inline: 1rem; }
+  .enterprise-header { padding-inline: 0.75rem; }
   .nav-item { padding: 0 0.6rem; font-size: 0.75rem; }
   .logo-text { font-size: 1rem; }
   .studio-console { padding: 1.5rem; }

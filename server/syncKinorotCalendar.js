@@ -1020,7 +1020,7 @@ function markFullEnrich() {
 
 export async function main() {
   const current = readKinorotSyncStatus();
-  if (current.running) {
+  if (process.env.KINOROT_SYNC_SPAWNED !== '1' && current.running) {
     const age = Date.now() - Date.parse(current.lastAttemptAt || '');
     if (Number.isFinite(age) && age >= 0 && age < 12 * 60 * 1000) {
       console.log('[kinorot] skip, previous sync still running');

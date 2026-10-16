@@ -9,6 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 function checksPath() {
   const candidates = [
     process.env.HOTELOS_CHECKS_PATH,
+    path.resolve(__dirname, '..', 'data', 'checks.json'),
     path.resolve(__dirname, '..', '..', 'private', 'deferred-checks', 'checks.json'),
     path.join(os.homedir(), 'Documents', 'Max', 'private', 'deferred-checks', 'checks.json')
   ].filter(Boolean);

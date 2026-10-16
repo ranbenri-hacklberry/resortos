@@ -17,6 +17,13 @@ export function isPriorityRole(user) {
   return roleOf(user) === 'PRIORITY';
 }
 
+export function isFinanceRole(user) {
+  const role = roleOf(user);
+  const u = String(user?.username || '').toLowerCase();
+  const d = String(user?.display_name || '').toLowerCase();
+  return role === 'FINANCE' || u === 'daniel' || u.includes('דניאל') || d === 'daniel' || d.includes('דניאל');
+}
+
 /** Manager, ops lead, and Priority (manager-level unit scope, Priority screen only). */
 export function hasFullUnitScope(user) {
   return isOpsLead(user) || isPriorityRole(user);

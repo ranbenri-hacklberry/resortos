@@ -70,8 +70,19 @@ export class OllamaClient {
     return JSON.parse(content);
   }
 
-  /** Parse a worker message into a structured intent. Always returns a validated object. */
+  /**
+   * Deterministic fast intent extractor for staff messages.
+   * Resolves common operational phrases in <0.1ms without calling Ollama.
+   */
+  fastIntent(text: string, workerLang: Lang, rooms: RoomEntry[]): InboundIntent | null {
+    return extractIntentFast(text, workerLang, rooms);
+  }
+
+  /** Parse a worker message into a structured intent. Uses ultra-fast deterministic matching first, falling back to LLM. */
   async extractIntent(text: string, workerLang: Lang, rooms: RoomEntry[]): Promise<InboundIntent> {
+    const fast = extractIntentFast(text, workerLang, rooms);
+    if (fast) return fast;
+
     const raw = await this.chat({
       system: inboundSystemPrompt(workerLang, rooms),
       user: text,
@@ -179,3 +190,82 @@ export function resolveRoomByAlias(raw: string, rooms: RoomEntry[]): string | nu
 
   return null;
 }
+
+/**
+ * Fast deterministic intent extractor.
+ * Resolves standard worker reports without hitting Ollama (<0.1ms).
+ */
+export function extractIntentFast(text: string, workerLang: Lang, rooms: RoomEntry[]): InboundIntent | null {
+  const t = text.trim();
+  if (!t) return null;
+
+  // Attempt to resolve room alias directly from text
+  const roomId = resolveRoomByAlias(t, rooms);
+  if (!roomId) return null;
+
+  const room = rooms.find((r) => r.id === roomId);
+  const roomName = workerLang === 'th' ? (room?.letterCode || room?.name || '') : (room?.name || room?.letterCode || '');
+
+  // 1. Room ready patterns (Hebrew, Thai, Arabic, English)
+  if (/מוכן|מוכנה|סיימתי|גמור|נקי|סיום|ready|finish|done|เสร็จ|เรียบร้อย|جاهز|نظيف/i.test(t)) {
+    let reply = '';
+    if (workerLang === 'th') reply = `บันทึกเรียบร้อยค่ะ: ห้อง ${roomName} พร้อมใช้งาน (READY) แล้วค่ะ ✅`;
+    else if (workerLang === 'ar') reply = `أهلاً، تم تسجيل غرفة ${roomName} كجاهزة للاستلام بنجاح! ✅`;
+    else reply = `היי, חדר ${roomName} עודכן בהצלחה כמוכן לאורח (READY)! ✅`;
+    return {
+      action: 'ROOM_READY',
+      room_raw: roomName,
+      room_id: roomId,
+      issue_description_hebrew: null,
+      acknowledgement_reply_cleaner_language: reply,
+    };
+  }
+
+  // 2. Cleaning started patterns
+  if (/מתחיל|מתחילה|התחלתי|נכנסתי|start|clean|เริ่ม|กำลังทำ|بدأت|تنظيف/i.test(t)) {
+    let reply = '';
+    if (workerLang === 'th') reply = `บันทึกเรียบร้อยค่ะ: เริ่มทำความสะอาดห้อง ${roomName} แล้วค่ะ 🧹`;
+    else if (workerLang === 'ar') reply = `تم تسجيل بدء تنظيف غرفة ${roomName}! 🧹`;
+    else reply = `נרשם בהצלחה שהתחלת לנקות את חדר ${roomName}! 🧹`;
+    return {
+      action: 'CLEANING_STARTED',
+      room_raw: roomName,
+      room_id: roomId,
+      issue_description_hebrew: null,
+      acknowledgement_reply_cleaner_language: reply,
+    };
+  }
+
+  // 3. Maintenance issue patterns
+  if (/תקלה|שבור|מקולקל|נוזל|נזילה|מזגן|מים|בעיה|problem|broken|leak|issue|เสีย|พัง|ชำรุด|עטל|خربان|تسريب/i.test(t)) {
+    let reply = '';
+    if (workerLang === 'th') reply = `รับแจ้งปัญหาห้อง ${roomName} เรียบร้อยแล้วค่ะ แจ้งช่างให้ทันทีค่ะ 🛠️`;
+    else if (workerLang === 'ar') reply = `تم استلام بلاغ الصيانة لغرفة ${roomName} وسيتم معالجته فوراً 🛠️`;
+    else reply = `דיווח התקלה לחדר ${roomName} נרשם ומועבר לטיפול צוות האחזקה 🛠️`;
+    return {
+      action: 'MAINTENANCE_ISSUE',
+      room_raw: roomName,
+      room_id: roomId,
+      issue_description_hebrew: t,
+      acknowledgement_reply_cleaner_language: reply,
+    };
+  }
+
+  // 4. Supplies needed patterns
+  if (/חסר|שמפו|סבון|מגבות|סדינים|מצעים|נייר|ציוד|missing|supplies|need|ขาด|หมด|ناقص|مستلزمات/i.test(t)) {
+    let reply = '';
+    if (workerLang === 'th') reply = `รับแจ้งรายการของที่ขาดสำหรับห้อง ${roomName} เรียบร้อยค่ะ 🧺`;
+    else if (workerLang === 'ar') reply = `تم تسجيل النواقص لغرفة ${roomName} وسيتم تزويدها 🧺`;
+    else reply = `דיווח הציוד החסר עבור חדר ${roomName} נרשם בהצלחה 🧺`;
+    return {
+      action: 'SUPPLIES_NEEDED',
+      room_raw: roomName,
+      room_id: roomId,
+      issue_description_hebrew: t,
+      acknowledgement_reply_cleaner_language: reply,
+    };
+  }
+
+  return null;
+}
+

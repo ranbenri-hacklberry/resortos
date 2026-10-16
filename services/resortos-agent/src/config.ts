@@ -16,6 +16,8 @@ export interface CleanerProfile {
   language: Lang;
 }
 
+export type RoomUsage = 'GUEST_ACCOMMODATION' | 'STAFF_ACCOMMODATION' | 'OFFICE' | 'STORAGE' | 'SERVICE_AREA';
+
 export interface RoomEntry {
   /** ResortOS unit id (e.g. k680) - internal DB identifier, never shown to staff */
   id: string;
@@ -27,8 +29,27 @@ export interface RoomEntry {
   letterCode?: string | null;
   /** Key safe lockbox pin code (e.g. 2810) */
   lockbox?: string | null;
+  /** Usage classification */
+  usage?: RoomUsage;
+  /** Whether room is available for guest reservations */
+  booking_enabled?: boolean;
   /** Free-form names/aliases in any language, used for resolving room_raw */
   aliases: string[];
+}
+
+export function isBookableRoom(room?: RoomEntry | null): boolean {
+  if (!room) return false;
+  if (room.booking_enabled === false) return false;
+  if (room.usage && room.usage !== 'GUEST_ACCOMMODATION') return false;
+  return true;
+}
+
+export function isStaffRoom(room?: RoomEntry | null): boolean {
+  return room?.usage === 'STAFF_ACCOMMODATION' || room?.id === 'k678' || room?.id === 'k679';
+}
+
+export function isOfficeRoom(room?: RoomEntry | null): boolean {
+  return room?.usage === 'OFFICE' || room?.id === 'pilot-office';
 }
 
 const env = (k: string, d: string): string => process.env[k] ?? d;
@@ -54,7 +75,7 @@ export const config = {
     baseUrl: env('RESORTOS_URL', 'http://127.0.0.1:4038'),
     /** Approved agent-connection credential (ros_agent_…). Create it with `npm run connect`. */
     token: env('RESORTOS_TOKEN', ''),
-    timeoutMs: Number(env('RESORTOS_TIMEOUT_MS', '10000')),
+    timeoutMs: Number(env('RESORTOS_TIMEOUT_MS', '2000')),
   },
   supabase: {
     url: env('SUPABASE_URL', 'http://127.0.0.1:54321'),

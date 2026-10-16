@@ -216,6 +216,130 @@ app.post('/api/finance/scrape', requireManagerStaff, async (req, res) => {
   }
 });
 
+function requireManagerOrLocal(req, res, next) {
+  const ip = req.ip || req.socket?.remoteAddress || '';
+  const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+  const auth = String(req.get('authorization') || '');
+  if (isLocal && (req.get('x-resortos-agent') || auth.startsWith('Bearer ros_agent_'))) {
+    req.staffUser = { id: 'agent_chloe', username: 'chloe', role: 'MANAGER' };
+    return next();
+  }
+  return requireManagerStaff(req, res, next);
+}
+
+// FINANCIAL COMMAND CENTER API
+app.get('/api/finance/command-center', requireManagerOrLocal, async (req, res) => {
+  try {
+    const fcc = await import('./financialCommandCenter.js');
+    res.json({
+      checks: fcc.getChecksData().checks,
+      settings: fcc.getFinanceSettings(),
+      manualEntries: fcc.getManualEntries(),
+      auditHistory: fcc.getCheckAuditHistory()
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'COMMAND_CENTER_FETCH_FAILED' });
+  }
+});
+
+app.get('/api/finance/settings', requireManagerOrLocal, async (req, res) => {
+  try {
+    const fcc = await import('./financialCommandCenter.js');
+    res.json(fcc.getFinanceSettings());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/finance/settings', requireManagerOrLocal, async (req, res) => {
+  try {
+    const fcc = await import('./financialCommandCenter.js');
+    res.json(fcc.saveFinanceSettings(req.body));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/finance/manual-entries', requireManagerOrLocal, async (req, res) => {
+  try {
+    const fcc = await import('./financialCommandCenter.js');
+    res.json(fcc.getManualEntries());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/finance/manual-entries', requireManagerOrLocal, async (req, res) => {
+  try {
+    const fcc = await import('./financialCommandCenter.js');
+    res.json(fcc.addManualEntry(req.body));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/finance/manual-entries/:id', requireManagerOrLocal, async (req, res) => {
+  try {
+    const fcc = await import('./financialCommandCenter.js');
+    res.json(fcc.deleteManualEntry(req.params.id));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/finance/checks/capture', requireManagerOrLocal, async (req, res) => {
+  try {
+    const fcc = await import('./financialCommandCenter.js');
+    const result = await fcc.captureCheck({
+      imageBase64: req.body?.image,
+      imageName: req.body?.imageName,
+      manualFields: req.body?.fields,
+      capturedBy: req.staffUser?.username || 'owner'
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/finance/checks/confirm', requireManagerOrLocal, async (req, res) => {
+  try {
+    const fcc = await import('./financialCommandCenter.js');
+    const result = fcc.confirmCheckCapture(req.body?.captureId, req.staffUser?.username || 'owner', req.body?.overrides);
+    res.json(result);
+  } catch (err) {
+    res.status(Number(err.status) || 500).json({ error: err.message });
+  }
+});
+
+app.get('/api/finance/checks/audit', requireManagerOrLocal, async (req, res) => {
+  try {
+    const fcc = await import('./financialCommandCenter.js');
+    res.json(fcc.getCheckAuditHistory());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/finance/alerts/whatsapp', requireManagerOrLocal, async (req, res) => {
+  try {
+    const { phone, message } = req.body || {};
+    const agentUrl = process.env.RESORTOS_AGENT_URL || 'http://127.0.0.1:8787';
+    let dispatched = false;
+    try {
+      const resp = await fetch(`${agentUrl}/api/alerts/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phone || '972506983399', message })
+      });
+      if (resp.ok) dispatched = true;
+    } catch (_) {}
+    res.json({ ok: true, dispatched, target: phone || '972506983399' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/sms/credit', requireStaff, async (req, res) => {
   try {
     const { fetchMicropayCredit } = await import('./micropaySms.js');

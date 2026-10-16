@@ -97,16 +97,12 @@ export class WhatsAppClient extends EventEmitter {
     this.sock?.end(undefined);
   }
 
-  /** Human-like send: composing presence proportional to text length, then paused, then message. */
+  /** Fast direct send: non-blocking presence update and immediate message delivery. */
   async sendText(jid: string, text: string): Promise<void> {
     if (!this.sock || this.status !== 'open') throw new Error('WhatsApp socket not open');
-    const { minMs, maxMs, msPerChar } = config.typing;
-    const delay = Math.min(maxMs, Math.max(minMs, text.length * msPerChar)) * (0.8 + Math.random() * 0.4);
-    await this.sock.presenceSubscribe(jid).catch(() => {});
-    await this.sock.sendPresenceUpdate('composing', jid).catch(() => {});
-    await new Promise((r) => setTimeout(r, delay));
-    await this.sock.sendPresenceUpdate('paused', jid).catch(() => {});
+    void this.sock.sendPresenceUpdate('composing', jid).catch(() => {});
     await this.sock.sendMessage(jid, { text });
+    void this.sock.sendPresenceUpdate('paused', jid).catch(() => {});
     this.log.info({ jid, chars: text.length }, 'WhatsApp message sent');
   }
 

@@ -52,5 +52,11 @@
     "name": "רני",
     "role": "MANAGER",
     "language": "he"
+  },
+  {
+    "phone": "972543387383",
+    "name": "אדם",
+    "role": "MANAGER",
+    "language": "he"
   }
 ]

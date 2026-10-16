@@ -1164,6 +1164,7 @@ function kinorotSyncPlugin(env) {
             const body = await readJsonBody(req).catch(() => ({}));
             return sendJson(res, 202, control.startKinorotSync({
               mode: body?.mode,
+              quick: body?.quick === true,
               days: body?.days,
               backDays: body?.backDays,
               boardDays: body?.boardDays

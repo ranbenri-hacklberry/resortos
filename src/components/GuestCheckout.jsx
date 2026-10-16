@@ -108,7 +108,7 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
   useEffect(() => {
     const rawName = activeBooking?.unit_id ? localizedUnitName(activeBooking.unit_id, t, '') : '';
     const cleanName = cleanGuestCabinName(rawName);
-    document.title = cleanName ? `ברוכים הבאים ל${cleanName}` : (stayReady ? t('GUEST_STAY_DOC_TITLE') : t('GUEST_CHECKOUT_TITLE'));
+    document.title = cleanName ? `דף אורח | ${cleanName}` : (stayReady ? t('GUEST_STAY_DOC_TITLE') : t('GUEST_CHECKOUT_TITLE'));
   }, [stayReady, activeBooking?.unit_id, t]);
 
   useEffect(() => {
