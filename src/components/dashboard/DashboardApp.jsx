@@ -38,12 +38,13 @@ export default function DashboardApp() {
   const [challenge, setChallenge] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otpMessage, setOtpMessage] = useState('');
+  const [previewOtp, setPreviewOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Password fallback states
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  // Password fallback states (prefilled with max/123456 for convenience)
+  const [username, setUsername] = useState('max');
+  const [password, setPassword] = useState('123456');
 
   // Verify stored session on boot
   useEffect(() => {
@@ -87,6 +88,7 @@ export default function DashboardApp() {
       setOtpMessage(data.message || 'קוד אימות נשלח בהצלחה.');
       if (data.preview_otp) {
         setOtp(data.preview_otp);
+        setPreviewOtp(data.preview_otp);
       }
     } catch (err) {
       setError(err.message || 'שגיאה בשליחת קוד האימות');
@@ -309,6 +311,29 @@ export default function DashboardApp() {
                     {otpMessage}
                   </div>
 
+                  {previewOtp ? (
+                    <div style={{ background: 'rgba(197, 160, 89, 0.18)', border: '1px solid #C5A059', borderRadius: '12px', padding: '0.65rem 0.85rem', textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.78rem', color: '#F1D699', fontWeight: 700 }}>קוד אימות שנשלח:</div>
+                      <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#FFFFFF', letterSpacing: '0.25em', margin: '0.2rem 0' }}>{previewOtp}</div>
+                      <button
+                        type="button"
+                        onClick={() => setOtp(previewOtp)}
+                        style={{
+                          background: 'rgba(197, 160, 89, 0.3)',
+                          border: '1px solid #C5A059',
+                          color: '#FFFFFF',
+                          borderRadius: '8px',
+                          padding: '0.25rem 0.6rem',
+                          fontSize: '0.72rem',
+                          fontWeight: 800,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        הזן קוד אוטומטית
+                      </button>
+                    </div>
+                  ) : null}
+
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8rem', color: '#D4C5B9', fontWeight: 700, marginBottom: '0.4rem' }}>
                       הזן קוד אימות בן 6 ספרות
@@ -448,6 +473,33 @@ export default function DashboardApp() {
                     outline: 'none'
                   }}
                 />
+              </div>
+
+              <div style={{ background: 'rgba(197, 160, 89, 0.1)', border: '1px solid rgba(197, 160, 89, 0.3)', borderRadius: '12px', padding: '0.65rem 0.85rem', fontSize: '0.76rem', color: '#F1D699' }}>
+                <div>💡 <b>פרטי כניסה מוכנים מראש:</b></div>
+                <div style={{ marginTop: '0.35rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => { setUsername('max'); setPassword('123456'); }}
+                    style={{ background: 'rgba(197, 160, 89, 0.25)', border: '1px solid #C5A059', color: '#FFFFFF', borderRadius: '8px', padding: '0.2rem 0.55rem', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
+                  >
+                    מקס: max / 123456
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setUsername('0506102416'); setPassword('123456'); }}
+                    style={{ background: 'rgba(197, 160, 89, 0.25)', border: '1px solid #C5A059', color: '#FFFFFF', borderRadius: '8px', padding: '0.2rem 0.55rem', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
+                  >
+                    נייד: 0506102416 / 123456
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setUsername('adam'); setPassword('123456'); }}
+                    style={{ background: 'rgba(197, 160, 89, 0.25)', border: '1px solid #C5A059', color: '#FFFFFF', borderRadius: '8px', padding: '0.2rem 0.55rem', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
+                  >
+                    אדם: adam / 123456
+                  </button>
+                </div>
               </div>
 
               <button
