@@ -15,6 +15,7 @@ import {
   Crown
 } from 'lucide-react';
 import OfficePilotCard from './OfficePilotCard';
+import MobileOperationsView from './operations/MobileOperationsView';
 import { BOARD_AREA_FILTERS, unitMatchesBoardArea } from '../lib/dailyDutyReport';
 
 const RATING_KEYS_BY_DOMAIN = {
@@ -260,6 +261,8 @@ export default function ResortOSOperations({
   const [wideBoard, setWideBoard] = useState(() => (
     typeof window !== 'undefined' && window.matchMedia('(min-width: 1100px)').matches
   ));
+  const [viewModeOverride, setViewModeOverride] = useState(null);
+  const isMobileOpsView = viewModeOverride ? viewModeOverride === 'mobile' : !wideBoard;
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return undefined;
@@ -808,6 +811,17 @@ export default function ResortOSOperations({
     setShowDetailModal(true);
   };
 
+  const handleOpenTaskDetail = useCallback((roomOrUnit) => {
+    if (!roomOrUnit) return;
+    const task = tasks.find((t) => t.id === roomOrUnit.id) || {
+      id: roomOrUnit.id,
+      customTitle: fieldUnitDisplayName(roomOrUnit),
+      customReason: roomOrUnit.custom_reason || roomOrUnit.reasonKey || '',
+      photos: roomOrUnit.image_urls || roomOrUnit.photos || []
+    };
+    openTaskDetail(task);
+  }, [tasks]);
+
   const boardColumns = useMemo(() => ([
     { id: 'HOUSEKEEPING', label: t('FILTER_HOUSEKEEPING', 'חדרנות'), Icon: Sparkles, color: '#F59E0B' },
     { id: 'MAINTENANCE', label: t('FILTER_MAINTENANCE', 'אחזקה'), Icon: Wrench, color: '#EF4444' },
@@ -1131,24 +1145,70 @@ export default function ResortOSOperations({
       style={{
         width: '100%',
         minHeight: '100%',
-        background: colors.bg,
+        background: isMobileOpsView ? (isDark ? '#26130F' : '#FDFBF7') : colors.bg,
         color: colors.textMain,
-        padding: '0.75rem 1rem',
+        padding: isMobileOpsView ? '0.25rem 0.5rem 2rem' : '0.75rem 1rem',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'stretch',
         justifyContent: 'flex-start',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
+        fontFamily: isMobileOpsView ? "'Montserrat', 'Heebo', system-ui, sans-serif" : 'system-ui, -apple-system, sans-serif',
         boxSizing: 'border-box'
       }}
     >
-      {boardAreaProp == null ? (
-        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
-          {BOARD_AREA_FILTERS.map((area) => {
-            const active = boardArea === area.id;
-            return (
+      {isMobileOpsView ? (
+        <>
+          {wideBoard && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0.4rem 0.65rem 0' }}>
               <button
-                key={area.id}
+                type="button"
+                onClick={() => setViewModeOverride('board')}
+                style={{
+                  fontSize: '0.74rem',
+                  fontWeight: 800,
+                  padding: '0.25rem 0.55rem',
+                  borderRadius: '4px',
+                  border: '1px solid rgba(197, 160, 89, 0.4)',
+                  background: 'rgba(197, 160, 89, 0.1)',
+                  color: '#C5A059',
+                  cursor: 'pointer'
+                }}
+              >
+                📋 מעבר ללוח 4 עמודות מלא
+              </button>
+            </div>
+          )}
+          <MobileOperationsView
+            units={units}
+            bookings={rawBookings}
+            customTickets={customTickets}
+            onStartTask={handleStartTask}
+            onFinishTask={handleFinishTask}
+            onOpenTaskDetail={handleOpenTaskDetail}
+            onOpenNewTicket={() => {
+              setNewTicket(emptyTicket());
+              setShowAddModal(true);
+            }}
+            onOpenFeedback={(task) => {
+              setSelectedTaskForFeedback(task);
+              setShowFeedbackModal(true);
+            }}
+            tenantId={tenantId}
+            pushUnitToCloud={pushUnitToCloud}
+            theme={theme}
+            isRTL={isRTL}
+            t={t}
+          />
+        </>
+      ) : (
+        <>
+          {boardAreaProp == null ? (
+            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+              {BOARD_AREA_FILTERS.map((area) => {
+                const active = boardArea === area.id;
+                return (
+                  <button
+                    key={area.id}
                 type="button"
                 onClick={() => {
                   setOwnArea(area.id);
@@ -1222,32 +1282,56 @@ export default function ResortOSOperations({
           </div>
         )}
 
-        <button
-          onClick={() => {
-            setNewTicket(emptyTicket());
-            setShowAddModal(true);
-          }}
-          style={{
-            height: '38px',
-            background: 'linear-gradient(135deg, #6366F1, #4F46E5)',
-            color: '#FFF',
-            border: 'none',
-            borderRadius: '10px',
-            padding: '0 1rem',
-            fontSize: '0.82rem',
-            fontWeight: 800,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.35rem',
-            boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)',
-            boxSizing: 'border-box',
-            whiteSpace: 'nowrap'
-          }}
-        >
-          <Plus size={16} />
-          <span>{t('BTN_ADD_CALL', 'קריאה חדשה')}</span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <button
+            type="button"
+            onClick={() => setViewModeOverride('mobile')}
+            style={{
+              height: '38px',
+              background: 'rgba(197, 160, 89, 0.15)',
+              color: '#C5A059',
+              border: '1px solid rgba(197, 160, 89, 0.4)',
+              borderRadius: '10px',
+              padding: '0 0.85rem',
+              fontSize: '0.82rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              boxSizing: 'border-box',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            <span>✨ תצוגת מיאליס</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setNewTicket(emptyTicket());
+              setShowAddModal(true);
+            }}
+            style={{
+              height: '38px',
+              background: 'linear-gradient(135deg, #6366F1, #4F46E5)',
+              color: '#FFF',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '0 1rem',
+              fontSize: '0.82rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              boxSizing: 'border-box',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            <Plus size={16} />
+            <span>{t('BTN_ADD_CALL', 'קריאה חדשה')}</span>
+          </button>
+        </div>
       </div>
 
       {/* Manager KPI Summary Cards */}
@@ -1367,6 +1451,8 @@ export default function ResortOSOperations({
           filteredTasks.map(renderTaskCard)
         )}
       </div>
+      )}
+        </>
       )}
 
       {/* New Ticket Modal (With Camera & Photo Attachments) */}

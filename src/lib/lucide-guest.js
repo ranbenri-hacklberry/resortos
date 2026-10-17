@@ -70,4 +70,8 @@ export { default as Check } from '../../node_modules/lucide-react/dist/esm/icons
 export { default as ShieldCheck } from '../../node_modules/lucide-react/dist/esm/icons/shield-check.js';
 export { default as Activity } from '../../node_modules/lucide-react/dist/esm/icons/activity.js';
 export { default as Zap } from '../../node_modules/lucide-react/dist/esm/icons/zap.js';
+export { default as DoorOpen } from '../../node_modules/lucide-react/dist/esm/icons/door-open.js';
+export { default as Home } from '../../node_modules/lucide-react/dist/esm/icons/home.js';
+export { default as ShoppingCart } from '../../node_modules/lucide-react/dist/esm/icons/shopping-cart.js';
+export { default as MessageCircle } from '../../node_modules/lucide-react/dist/esm/icons/message-circle.js';
 
