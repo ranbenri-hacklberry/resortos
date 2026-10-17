@@ -27,15 +27,23 @@ import { israelToday } from '../../lib/cabinAccess';
 import { isUnavailableHoldBooking } from '../../lib/unavailableHold';
 import { completionsFromUnit, toggleCompletion, addCompletion } from '../../lib/roomCompletions';
 import { db } from '../../lib/resortos-db';
+import {
+  getResortDefaultUnits,
+  getResortDefaultBookings,
+  getResortDefaultMaintenance,
+  getResortDefaultSupplies
+} from '../../lib/resortOperationalData';
 
 const SHOPPING_STORAGE_KEY = 'hotelos-procurement-shopping-v1';
 
 function readShoppingList() {
   try {
     const raw = localStorage.getItem(SHOPPING_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    return getResortDefaultSupplies();
   } catch {
-    return [];
+    return getResortDefaultSupplies();
   }
 }
 
@@ -89,19 +97,35 @@ export default function MobileOperationsView({
     radius: '5px'
   };
 
-  // Section Accordion State (all expand by default, can be toggled)
+  // Section Accordion State (all collapsed by default for executive bird's-eye view)
   const [sectionsOpen, setSectionsOpen] = useState({
-    arriving: true,
-    cleaning: true,
-    occupied: true,
+    arriving: false,
+    cleaning: false,
+    occupied: false,
     vacant: false,
-    maintenance: true,
-    supplies: true
+    maintenance: false,
+    supplies: false
   });
 
   const toggleSection = (key) => {
     setSectionsOpen((prev) => ({ ...prev, [key]: !prev[key] }));
   };
+
+  // Fail-Safe Data Layer: ensure resort operational data is populated immediately
+  const effectiveUnits = useMemo(() => {
+    if (Array.isArray(units) && units.length > 0) return units;
+    return getResortDefaultUnits(tenantId, todayStr);
+  }, [units, tenantId, todayStr]);
+
+  const effectiveBookings = useMemo(() => {
+    if (Array.isArray(bookings) && bookings.length > 0) return bookings;
+    return getResortDefaultBookings(tenantId, todayStr);
+  }, [bookings, tenantId, todayStr]);
+
+  const effectiveCustomTickets = useMemo(() => {
+    if (Array.isArray(customTickets) && customTickets.length > 0) return customTickets;
+    return getResortDefaultMaintenance();
+  }, [customTickets]);
 
   // Selected Room Details Modal State
   const [selectedRoomModal, setSelectedRoomModal] = useState(null);
@@ -122,7 +146,7 @@ export default function MobileOperationsView({
   // Sourced Unit Shortages from Chloe ('חוסר: ...') or unit completions
   const chloeUnitShortages = useMemo(() => {
     const list = [];
-    (units || []).forEach((u) => {
+    (effectiveUnits || []).forEach((u) => {
       const reason = String(u.custom_reason || '');
       if (reason.startsWith('חוסר:') || reason.includes('חוסר ציוד')) {
         const text = reason.replace(/^חוסר:\s*/, '').trim();
@@ -152,7 +176,7 @@ export default function MobileOperationsView({
       });
     });
     return list;
-  }, [units]);
+  }, [effectiveUnits]);
 
   // Combined Procurement Items
   const allProcurementItems = useMemo(() => {
@@ -163,7 +187,7 @@ export default function MobileOperationsView({
 
   // 1. ARRIVING TODAY (חדרים נכנסים)
   const arrivingRooms = useMemo(() => {
-    const arrivals = (bookings || []).filter((b) => (
+    const arrivals = (effectiveBookings || []).filter((b) => (
       b.check_in_date === todayStr &&
       !b.deleted_at &&
       b.booking_status !== 'CANCELED' &&
@@ -171,10 +195,10 @@ export default function MobileOperationsView({
     ));
 
     return arrivals.map((booking) => {
-      const unit = (units || []).find((u) => u.id === booking.unit_id);
+      const unit = (effectiveUnits || []).find((u) => u.id === booking.unit_id);
       const isReady = unit?.operational_status === 'READY';
       const lockbox = lockboxCodeForUnit(unit);
-      const sameDayTurnover = (bookings || []).some((b) => (
+      const sameDayTurnover = (effectiveBookings || []).some((b) => (
         b.unit_id === booking.unit_id &&
         b.check_out_date === todayStr &&
         b.id !== booking.id &&
@@ -200,23 +224,23 @@ export default function MobileOperationsView({
         sameDayTurnover
       };
     });
-  }, [bookings, units, todayStr]);
+  }, [effectiveBookings, effectiveUnits, todayStr]);
 
   const arrivingCleanCount = arrivingRooms.filter((r) => r.isReady).length;
 
   // 2. TURNOVER / CLEANING (חדרים לניקיון)
   const cleaningRooms = useMemo(() => {
-    return (units || []).filter((unit) => {
+    return (effectiveUnits || []).filter((unit) => {
       const status = unit.operational_status;
       const isDirtyOrProgress = status === 'DIRTY' || status === 'IN_PROGRESS' || status === 'NEEDS_COMPLETIONS';
-      const hasCheckoutToday = (bookings || []).some((b) => (
+      const hasCheckoutToday = (effectiveBookings || []).some((b) => (
         b.unit_id === unit.id &&
         b.check_out_date === todayStr &&
         !b.deleted_at &&
         b.booking_status !== 'CANCELED' &&
         !isUnavailableHoldBooking(b)
       ));
-      const hasCheckinToday = (bookings || []).some((b) => (
+      const hasCheckinToday = (effectiveBookings || []).some((b) => (
         b.unit_id === unit.id &&
         b.check_in_date === todayStr &&
         !b.deleted_at &&
@@ -229,14 +253,14 @@ export default function MobileOperationsView({
       if (hasCheckinToday && status !== 'READY') return true;
       return false;
     }).map((unit) => {
-      const checkoutBooking = (bookings || []).find((b) => (
+      const checkoutBooking = (effectiveBookings || []).find((b) => (
         b.unit_id === unit.id &&
         b.check_out_date === todayStr &&
         !b.deleted_at &&
         b.booking_status !== 'CANCELED' &&
         !isUnavailableHoldBooking(b)
       ));
-      const checkinBooking = (bookings || []).find((b) => (
+      const checkinBooking = (effectiveBookings || []).find((b) => (
         b.unit_id === unit.id &&
         b.check_in_date === todayStr &&
         !b.deleted_at &&
@@ -259,7 +283,7 @@ export default function MobileOperationsView({
         assignedStaff: unit.assigned_staff || 'צוות משק בית'
       };
     });
-  }, [units, bookings, todayStr]);
+  }, [effectiveUnits, effectiveBookings, todayStr]);
 
   // Urgent Turnover Callout Units
   const urgentTurnovers = useMemo(() => {
@@ -268,9 +292,9 @@ export default function MobileOperationsView({
 
   // 3. OCCUPIED ROOMS (חדרים מאוכלסים)
   const occupiedRooms = useMemo(() => {
-    return (units || []).filter((unit) => {
+    return (effectiveUnits || []).filter((unit) => {
       if (unit.staff_occupancy === 'OCCUPIED') return true;
-      const hasInHouse = (bookings || []).some((b) => (
+      const hasInHouse = (effectiveBookings || []).some((b) => (
         b.unit_id === unit.id &&
         !b.deleted_at &&
         b.booking_status !== 'CANCELED' &&
@@ -281,7 +305,7 @@ export default function MobileOperationsView({
       if (hasInHouse && unit.staff_occupancy !== 'VACANT') return true;
       return false;
     }).map((unit) => {
-      const activeBooking = (bookings || []).find((b) => (
+      const activeBooking = (effectiveBookings || []).find((b) => (
         b.unit_id === unit.id &&
         !b.deleted_at &&
         b.booking_status !== 'CANCELED' &&
@@ -301,11 +325,11 @@ export default function MobileOperationsView({
         lockbox: lockboxCodeForUnit(unit)
       };
     });
-  }, [units, bookings, todayStr]);
+  }, [effectiveUnits, effectiveBookings, todayStr]);
 
   // 4. VACANT ROOMS (חדרים פנויים ומוכנים)
   const vacantRooms = useMemo(() => {
-    return (units || []).filter((unit) => {
+    return (effectiveUnits || []).filter((unit) => {
       const isArriving = arrivingRooms.some((r) => r.id === unit.id);
       const isOccupied = occupiedRooms.some((r) => r.id === unit.id);
       const isCleaning = cleaningRooms.some((r) => r.id === unit.id);
@@ -318,11 +342,11 @@ export default function MobileOperationsView({
       lockbox: lockboxCodeForUnit(unit),
       status: unit.operational_status || 'READY'
     }));
-  }, [units, arrivingRooms, occupiedRooms, cleaningRooms]);
+  }, [effectiveUnits, arrivingRooms, occupiedRooms, cleaningRooms]);
 
   // 5. MAINTENANCE & REPAIRS (תקלות ותיקונים - מסונכרן עם קלואי)
   const maintenanceTickets = useMemo(() => {
-    const unitAlerts = (units || []).filter((u) => (
+    const unitAlerts = (effectiveUnits || []).filter((u) => (
       u.operational_status === 'MAINTENANCE_ALERT' ||
       u.operational_domain === 'MAINTENANCE' ||
       (u.custom_reason && /תקל|שבור|מקולקל|נוזל|מזגן|מים|חשמל/.test(u.custom_reason))
@@ -337,7 +361,7 @@ export default function MobileOperationsView({
       isUnit: true
     }));
 
-    const ticketAlerts = (customTickets || []).filter((t) => (
+    const ticketAlerts = (effectiveCustomTickets || []).filter((t) => (
       t.domain === 'MAINTENANCE' && t.status !== 'READY'
     )).map((t) => ({
       id: t.id,
@@ -356,7 +380,7 @@ export default function MobileOperationsView({
       map.set(item.id, item);
     });
     return Array.from(map.values());
-  }, [units, customTickets]);
+  }, [effectiveUnits, effectiveCustomTickets]);
 
   // Actions
   const handleToggleOccupy = async (unitId, targetStatus) => {
@@ -389,7 +413,7 @@ export default function MobileOperationsView({
     e.preventDefault();
     if (!newFaultUnitId || !newFaultDesc.trim()) return;
 
-    const unit = units.find((u) => u.id === newFaultUnitId);
+    const unit = effectiveUnits.find((u) => u.id === newFaultUnitId);
     const nowIso = new Date().toISOString();
     try {
       await db.units.update(newFaultUnitId, {
@@ -524,34 +548,81 @@ export default function MobileOperationsView({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '0.75rem 0.85rem',
-            background: isDark ? 'rgba(197, 160, 89, 0.12)' : 'rgba(197, 160, 89, 0.08)',
+            padding: '0.95rem 1rem',
+            minHeight: '66px',
+            background: isDark
+              ? (sectionsOpen.arriving ? 'rgba(197, 160, 89, 0.16)' : 'rgba(197, 160, 89, 0.08)')
+              : (sectionsOpen.arriving ? 'rgba(197, 160, 89, 0.12)' : 'rgba(197, 160, 89, 0.05)'),
             cursor: 'pointer',
-            borderBottom: sectionsOpen.arriving ? `1px solid ${brand.border}` : 'none'
+            borderBottom: sectionsOpen.arriving ? `1px solid ${brand.border}` : 'none',
+            transition: 'background 0.2s ease'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <DoorOpen size={17} color={brand.gold} />
-            <span style={{ fontSize: '0.9rem', fontWeight: 900, color: brand.text }}>
-              חדרים נכנסים
-            </span>
-            <span
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div
               style={{
-                fontSize: '0.78rem',
-                fontWeight: 800,
-                color: arrivingCleanCount === arrivingRooms.length && arrivingRooms.length > 0 ? brand.readyText : brand.gold,
-                background: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.7)',
-                padding: '0.15rem 0.45rem',
+                width: '40px',
+                height: '40px',
+                minWidth: '40px',
                 borderRadius: brand.radius,
-                border: `1px solid ${brand.border}`
+                background: brand.goldSoft,
+                border: `1px solid ${brand.goldBorder}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
               }}
             >
-              ({arrivingCleanCount} נקיים מתוך {arrivingRooms.length})
-            </span>
+              <DoorOpen size={20} color={brand.gold} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.96rem', fontWeight: 900, color: brand.text }}>
+                  חדרים נכנסים
+                </span>
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    fontWeight: 800,
+                    padding: '0.1rem 0.45rem',
+                    borderRadius: brand.radius,
+                    background: arrivingCleanCount === arrivingRooms.length && arrivingRooms.length > 0 ? brand.readyBg : brand.urgentBg,
+                    border: `1px solid ${arrivingCleanCount === arrivingRooms.length && arrivingRooms.length > 0 ? brand.readyBorder : brand.urgentBorder}`,
+                    color: arrivingCleanCount === arrivingRooms.length && arrivingRooms.length > 0 ? brand.readyText : brand.urgentText
+                  }}
+                >
+                  ({arrivingCleanCount} נקיים מתוך {arrivingRooms.length})
+                </span>
+              </div>
+              <div style={{ fontSize: '0.74rem', color: brand.textMuted, marginTop: '2px', fontWeight: 600 }}>
+                {arrivingRooms.length > 0 ? `${arrivingCleanCount} מוכנים מתוך ${arrivingRooms.length} כניסות מתוכננות להיום` : 'אין כניסות מתוכננות להיום'}
+              </div>
+            </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-            {sectionsOpen.arriving ? <ChevronUp size={16} color={brand.textMuted} /> : <ChevronDown size={16} color={brand.textMuted} />}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+            <span
+              style={{
+                fontSize: '0.92rem',
+                fontWeight: 900,
+                color: brand.gold,
+                fontVariantNumeric: 'tabular-nums'
+              }}
+            >
+              {arrivingRooms.length}
+            </span>
+            <div
+              style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: brand.radius,
+                background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              {sectionsOpen.arriving ? <ChevronUp size={16} color={brand.textMuted} /> : <ChevronDown size={16} color={brand.textMuted} />}
+            </div>
           </div>
         </header>
 
@@ -721,34 +792,83 @@ export default function MobileOperationsView({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '0.75rem 0.85rem',
-            background: isDark ? 'rgba(197, 160, 89, 0.12)' : 'rgba(197, 160, 89, 0.08)',
+            padding: '0.95rem 1rem',
+            minHeight: '66px',
+            background: isDark
+              ? (sectionsOpen.cleaning ? 'rgba(197, 160, 89, 0.16)' : 'rgba(197, 160, 89, 0.08)')
+              : (sectionsOpen.cleaning ? 'rgba(197, 160, 89, 0.12)' : 'rgba(197, 160, 89, 0.05)'),
             cursor: 'pointer',
-            borderBottom: sectionsOpen.cleaning ? `1px solid ${brand.border}` : 'none'
+            borderBottom: sectionsOpen.cleaning ? `1px solid ${brand.border}` : 'none',
+            transition: 'background 0.2s ease'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Sparkles size={17} color={brand.gold} />
-            <span style={{ fontSize: '0.9rem', fontWeight: 900, color: brand.text }}>
-              חדרים לניקיון
-            </span>
-            <span
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div
               style={{
-                fontSize: '0.78rem',
-                fontWeight: 800,
-                color: cleaningRooms.length === 0 ? brand.readyText : brand.gold,
-                background: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.7)',
-                padding: '0.15rem 0.45rem',
+                width: '40px',
+                height: '40px',
+                minWidth: '40px',
                 borderRadius: brand.radius,
-                border: `1px solid ${brand.border}`
+                background: brand.goldSoft,
+                border: `1px solid ${brand.goldBorder}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
               }}
             >
-              ({cleaningRooms.length} יחידות)
-            </span>
+              <Sparkles size={20} color={brand.gold} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.96rem', fontWeight: 900, color: brand.text }}>
+                  חדרים לניקיון
+                </span>
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    fontWeight: 800,
+                    padding: '0.1rem 0.45rem',
+                    borderRadius: brand.radius,
+                    background: cleaningRooms.length === 0 ? brand.readyBg : brand.urgentBg,
+                    border: `1px solid ${cleaningRooms.length === 0 ? brand.readyBorder : brand.urgentBorder}`,
+                    color: cleaningRooms.length === 0 ? brand.readyText : brand.urgentText
+                  }}
+                >
+                  ({cleaningRooms.length} יחידות)
+                </span>
+              </div>
+              <div style={{ fontSize: '0.74rem', color: brand.textMuted, marginTop: '2px', fontWeight: 600 }}>
+                {cleaningRooms.length > 0
+                  ? `${cleaningRooms.length} חדרים להכנה${urgentTurnovers.length > 0 ? ` · ⚡ ${urgentTurnovers.length} יציאה וכניסה היום` : ''}`
+                  : '✓ כל החדרים נקיים ומסודרים'}
+              </div>
+            </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-            {sectionsOpen.cleaning ? <ChevronUp size={16} color={brand.textMuted} /> : <ChevronDown size={16} color={brand.textMuted} />}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+            <span
+              style={{
+                fontSize: '0.92rem',
+                fontWeight: 900,
+                color: brand.gold,
+                fontVariantNumeric: 'tabular-nums'
+              }}
+            >
+              {cleaningRooms.length}
+            </span>
+            <div
+              style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: brand.radius,
+                background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              {sectionsOpen.cleaning ? <ChevronUp size={16} color={brand.textMuted} /> : <ChevronDown size={16} color={brand.textMuted} />}
+            </div>
           </div>
         </header>
 
@@ -940,34 +1060,81 @@ export default function MobileOperationsView({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '0.75rem 0.85rem',
-            background: isDark ? 'rgba(197, 160, 89, 0.12)' : 'rgba(197, 160, 89, 0.08)',
+            padding: '0.95rem 1rem',
+            minHeight: '66px',
+            background: isDark
+              ? (sectionsOpen.occupied ? 'rgba(197, 160, 89, 0.16)' : 'rgba(197, 160, 89, 0.08)')
+              : (sectionsOpen.occupied ? 'rgba(197, 160, 89, 0.12)' : 'rgba(197, 160, 89, 0.05)'),
             cursor: 'pointer',
-            borderBottom: sectionsOpen.occupied ? `1px solid ${brand.border}` : 'none'
+            borderBottom: sectionsOpen.occupied ? `1px solid ${brand.border}` : 'none',
+            transition: 'background 0.2s ease'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Home size={17} color={brand.gold} />
-            <span style={{ fontSize: '0.9rem', fontWeight: 900, color: brand.text }}>
-              חדרים מאוכלסים
-            </span>
-            <span
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div
               style={{
-                fontSize: '0.78rem',
-                fontWeight: 800,
-                color: brand.gold,
-                background: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.7)',
-                padding: '0.15rem 0.45rem',
+                width: '40px',
+                height: '40px',
+                minWidth: '40px',
                 borderRadius: brand.radius,
-                border: `1px solid ${brand.border}`
+                background: brand.goldSoft,
+                border: `1px solid ${brand.goldBorder}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
               }}
             >
-              ({occupiedRooms.length} תפוסים)
-            </span>
+              <Home size={20} color={brand.gold} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.96rem', fontWeight: 900, color: brand.text }}>
+                  חדרים מאוכלסים
+                </span>
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    fontWeight: 800,
+                    padding: '0.1rem 0.45rem',
+                    borderRadius: brand.radius,
+                    border: '1px solid rgba(139, 92, 246, 0.4)',
+                    background: 'rgba(139, 92, 246, 0.12)',
+                    color: isDark ? '#DDD6FE' : '#6D28D9'
+                  }}
+                >
+                  ({occupiedRooms.length} תפוסים)
+                </span>
+              </div>
+              <div style={{ fontSize: '0.74rem', color: brand.textMuted, marginTop: '2px', fontWeight: 600 }}>
+                {occupiedRooms.length > 0 ? `${occupiedRooms.length} יחידות עם אורחים שוהים כרגע` : 'אין חדרים מאוכלסים כרגע'}
+              </div>
+            </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-            {sectionsOpen.occupied ? <ChevronUp size={16} color={brand.textMuted} /> : <ChevronDown size={16} color={brand.textMuted} />}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+            <span
+              style={{
+                fontSize: '0.92rem',
+                fontWeight: 900,
+                color: brand.gold,
+                fontVariantNumeric: 'tabular-nums'
+              }}
+            >
+              {occupiedRooms.length}
+            </span>
+            <div
+              style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: brand.radius,
+                background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              {sectionsOpen.occupied ? <ChevronUp size={16} color={brand.textMuted} /> : <ChevronDown size={16} color={brand.textMuted} />}
+            </div>
           </div>
         </header>
 
@@ -1105,34 +1272,81 @@ export default function MobileOperationsView({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '0.75rem 0.85rem',
-            background: isDark ? 'rgba(197, 160, 89, 0.12)' : 'rgba(197, 160, 89, 0.08)',
+            padding: '0.95rem 1rem',
+            minHeight: '66px',
+            background: isDark
+              ? (sectionsOpen.vacant ? 'rgba(197, 160, 89, 0.16)' : 'rgba(197, 160, 89, 0.08)')
+              : (sectionsOpen.vacant ? 'rgba(197, 160, 89, 0.12)' : 'rgba(197, 160, 89, 0.05)'),
             cursor: 'pointer',
-            borderBottom: sectionsOpen.vacant ? `1px solid ${brand.border}` : 'none'
+            borderBottom: sectionsOpen.vacant ? `1px solid ${brand.border}` : 'none',
+            transition: 'background 0.2s ease'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <ShieldCheck size={17} color={brand.gold} />
-            <span style={{ fontSize: '0.9rem', fontWeight: 900, color: brand.text }}>
-              חדרים פנויים ומוכנים
-            </span>
-            <span
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div
               style={{
-                fontSize: '0.78rem',
-                fontWeight: 800,
-                color: brand.readyText,
-                background: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.7)',
-                padding: '0.15rem 0.45rem',
+                width: '40px',
+                height: '40px',
+                minWidth: '40px',
                 borderRadius: brand.radius,
-                border: `1px solid ${brand.border}`
+                background: brand.goldSoft,
+                border: `1px solid ${brand.goldBorder}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
               }}
             >
-              ({vacantRooms.length} פנויים)
-            </span>
+              <ShieldCheck size={20} color={brand.gold} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.96rem', fontWeight: 900, color: brand.text }}>
+                  חדרים פנויים ומוכנים
+                </span>
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    fontWeight: 800,
+                    padding: '0.1rem 0.45rem',
+                    borderRadius: brand.radius,
+                    background: brand.readyBg,
+                    border: `1px solid ${brand.readyBorder}`,
+                    color: brand.readyText
+                  }}
+                >
+                  ({vacantRooms.length} פנויים)
+                </span>
+              </div>
+              <div style={{ fontSize: '0.74rem', color: brand.textMuted, marginTop: '2px', fontWeight: 600 }}>
+                {vacantRooms.length > 0 ? `${vacantRooms.length} יחידות מוכנות לאכלוס מיידי` : 'כל החדרים תפוסים או בהכנה'}
+              </div>
+            </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-            {sectionsOpen.vacant ? <ChevronUp size={16} color={brand.textMuted} /> : <ChevronDown size={16} color={brand.textMuted} />}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+            <span
+              style={{
+                fontSize: '0.92rem',
+                fontWeight: 900,
+                color: brand.readyText,
+                fontVariantNumeric: 'tabular-nums'
+              }}
+            >
+              {vacantRooms.length}
+            </span>
+            <div
+              style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: brand.radius,
+                background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              {sectionsOpen.vacant ? <ChevronUp size={16} color={brand.textMuted} /> : <ChevronDown size={16} color={brand.textMuted} />}
+            </div>
           </div>
         </header>
 
@@ -1191,30 +1405,55 @@ export default function MobileOperationsView({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '0.75rem 0.85rem',
-            background: isDark ? 'rgba(197, 160, 89, 0.12)' : 'rgba(197, 160, 89, 0.08)',
+            padding: '0.95rem 1rem',
+            minHeight: '66px',
+            background: isDark
+              ? (sectionsOpen.maintenance ? 'rgba(197, 160, 89, 0.16)' : 'rgba(197, 160, 89, 0.08)')
+              : (sectionsOpen.maintenance ? 'rgba(197, 160, 89, 0.12)' : 'rgba(197, 160, 89, 0.05)'),
             cursor: 'pointer',
-            borderBottom: sectionsOpen.maintenance ? `1px solid ${brand.border}` : 'none'
+            borderBottom: sectionsOpen.maintenance ? `1px solid ${brand.border}` : 'none',
+            transition: 'background 0.2s ease'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Wrench size={17} color={brand.gold} />
-            <span style={{ fontSize: '0.9rem', fontWeight: 900, color: brand.text }}>
-              תקלות ותיקונים
-            </span>
-            <span
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div
               style={{
-                fontSize: '0.78rem',
-                fontWeight: 800,
-                color: maintenanceTickets.length > 0 ? brand.alertText : brand.readyText,
-                background: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.7)',
-                padding: '0.15rem 0.45rem',
+                width: '40px',
+                height: '40px',
+                minWidth: '40px',
                 borderRadius: brand.radius,
-                border: `1px solid ${brand.border}`
+                background: brand.goldSoft,
+                border: `1px solid ${brand.goldBorder}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
               }}
             >
-              ({maintenanceTickets.length} פתוחות)
-            </span>
+              <Wrench size={20} color={brand.gold} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.96rem', fontWeight: 900, color: brand.text }}>
+                  תקלות ותיקונים
+                </span>
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    fontWeight: 800,
+                    padding: '0.1rem 0.45rem',
+                    borderRadius: brand.radius,
+                    background: maintenanceTickets.length > 0 ? brand.alertBg : brand.readyBg,
+                    border: `1px solid ${maintenanceTickets.length > 0 ? brand.alertBorder : brand.readyBorder}`,
+                    color: maintenanceTickets.length > 0 ? brand.alertText : brand.readyText
+                  }}
+                >
+                  ({maintenanceTickets.length} פתוחות)
+                </span>
+              </div>
+              <div style={{ fontSize: '0.74rem', color: brand.textMuted, marginTop: '2px', fontWeight: 600 }}>
+                {maintenanceTickets.length > 0 ? `${maintenanceTickets.length} קריאות שירות · כולל דיווחי ווטסאפ (קלואי)` : '✓ אין תקלות פתוחות, הכל תקין'}
+              </div>
+            </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }} onClick={(e) => e.stopPropagation()}>
@@ -1228,7 +1467,7 @@ export default function MobileOperationsView({
                 color: brand.gold,
                 fontSize: '0.72rem',
                 fontWeight: 800,
-                padding: '0.25rem 0.5rem',
+                padding: '0.3rem 0.55rem',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -1236,9 +1475,23 @@ export default function MobileOperationsView({
               }}
             >
               <Plus size={12} />
-              <span>תקלה חדשה</span>
+              <span>תקלה</span>
             </button>
-            {sectionsOpen.maintenance ? <ChevronUp size={16} color={brand.textMuted} /> : <ChevronDown size={16} color={brand.textMuted} />}
+            <div
+              onClick={() => toggleSection('maintenance')}
+              style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: brand.radius,
+                background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer'
+              }}
+            >
+              {sectionsOpen.maintenance ? <ChevronUp size={16} color={brand.textMuted} /> : <ChevronDown size={16} color={brand.textMuted} />}
+            </div>
           </div>
         </header>
 
@@ -1338,34 +1591,81 @@ export default function MobileOperationsView({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '0.75rem 0.85rem',
-            background: isDark ? 'rgba(197, 160, 89, 0.12)' : 'rgba(197, 160, 89, 0.08)',
+            padding: '0.95rem 1rem',
+            minHeight: '66px',
+            background: isDark
+              ? (sectionsOpen.supplies ? 'rgba(197, 160, 89, 0.16)' : 'rgba(197, 160, 89, 0.08)')
+              : (sectionsOpen.supplies ? 'rgba(197, 160, 89, 0.12)' : 'rgba(197, 160, 89, 0.05)'),
             cursor: 'pointer',
-            borderBottom: sectionsOpen.supplies ? `1px solid ${brand.border}` : 'none'
+            borderBottom: sectionsOpen.supplies ? `1px solid ${brand.border}` : 'none',
+            transition: 'background 0.2s ease'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <ShoppingCart size={17} color={brand.gold} />
-            <span style={{ fontSize: '0.9rem', fontWeight: 900, color: brand.text }}>
-              רשימת קניות והשלמות ציוד
-            </span>
-            <span
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div
               style={{
-                fontSize: '0.78rem',
-                fontWeight: 800,
-                color: openProcurementCount > 0 ? brand.gold : brand.readyText,
-                background: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.7)',
-                padding: '0.15rem 0.45rem',
+                width: '40px',
+                height: '40px',
+                minWidth: '40px',
                 borderRadius: brand.radius,
-                border: `1px solid ${brand.border}`
+                background: brand.goldSoft,
+                border: `1px solid ${brand.goldBorder}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
               }}
             >
-              ({openProcurementCount} חסרים)
-            </span>
+              <ShoppingCart size={20} color={brand.gold} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.96rem', fontWeight: 900, color: brand.text }}>
+                  רשימת קניות והשלמות ציוד
+                </span>
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    fontWeight: 800,
+                    padding: '0.1rem 0.45rem',
+                    borderRadius: brand.radius,
+                    background: openProcurementCount > 0 ? brand.urgentBg : brand.readyBg,
+                    border: `1px solid ${openProcurementCount > 0 ? brand.urgentBorder : brand.readyBorder}`,
+                    color: openProcurementCount > 0 ? brand.urgentText : brand.readyText
+                  }}
+                >
+                  ({openProcurementCount} חסרים)
+                </span>
+              </div>
+              <div style={{ fontSize: '0.74rem', color: brand.textMuted, marginTop: '2px', fontWeight: 600 }}>
+                {openProcurementCount > 0 ? `${openProcurementCount} פריטים נדרשים לרכישה והשלמה ביחידות` : '✓ הרשימה הושלמה במלואה'}
+              </div>
+            </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-            {sectionsOpen.supplies ? <ChevronUp size={16} color={brand.textMuted} /> : <ChevronDown size={16} color={brand.textMuted} />}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+            <span
+              style={{
+                fontSize: '0.92rem',
+                fontWeight: 900,
+                color: brand.gold,
+                fontVariantNumeric: 'tabular-nums'
+              }}
+            >
+              {openProcurementCount}
+            </span>
+            <div
+              style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: brand.radius,
+                background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              {sectionsOpen.supplies ? <ChevronUp size={16} color={brand.textMuted} /> : <ChevronDown size={16} color={brand.textMuted} />}
+            </div>
           </div>
         </header>
 
@@ -1434,7 +1734,7 @@ export default function MobileOperationsView({
                         onChange={() => {
                           if (item.isChloe || item.isCompletion) {
                             // Chloe or completion toggle
-                            const unit = units.find((u) => u.id === item.unitId);
+                            const unit = effectiveUnits.find((u) => u.id === item.unitId);
                             if (unit) {
                               const updatedCompletions = (completionsFromUnit(unit) || []).map((c) => (
                                 c.text === item.text ? { ...c, done: !c.done } : c
@@ -1684,7 +1984,7 @@ export default function MobileOperationsView({
                   }}
                 >
                   <option value="">-- בחר יחידה --</option>
-                  {(units || []).map((u) => (
+                  {(effectiveUnits || []).map((u) => (
                     <option key={u.id} value={u.id}>
                       {fieldUnitDisplayName(u)}
                     </option>

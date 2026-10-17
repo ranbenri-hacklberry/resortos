@@ -17,6 +17,10 @@ import {
 import OfficePilotCard from './OfficePilotCard';
 import MobileOperationsView from './operations/MobileOperationsView';
 import { BOARD_AREA_FILTERS, unitMatchesBoardArea } from '../lib/dailyDutyReport';
+import {
+  getResortDefaultUnits,
+  getResortDefaultBookings
+} from '../lib/resortOperationalData';
 
 const RATING_KEYS_BY_DOMAIN = {
   HOUSEKEEPING: ['clean', 'showerToilets', 'linens', 'orderLook'],
@@ -196,6 +200,38 @@ export default function ResortOSOperations({
     return inventory.filter((unit) => unitMatchesBoardArea(unit, boardArea));
   }, [rawUnits, allowedUnitIds, boardArea]);
   const rawBookings = useLiveBookings(tenantId);
+
+  // Auto-seed Dexie with resort operational data if empty (fresh or remote browser)
+  useEffect(() => {
+    async function seedDexieIfEmpty() {
+      if (!tenantId) return;
+      try {
+        const uCount = await db.units.count();
+        if (uCount === 0) {
+          const defaultUnits = getResortDefaultUnits(tenantId);
+          await db.units.bulkPut(defaultUnits);
+        }
+        const bCount = await db.bookings.count();
+        if (bCount === 0) {
+          const defaultBookings = getResortDefaultBookings(tenantId);
+          await db.bookings.bulkPut(defaultBookings);
+        }
+      } catch (err) {
+        console.warn('Dexie auto-seed error:', err);
+      }
+    }
+    seedDexieIfEmpty();
+  }, [tenantId]);
+
+  const effectiveUnits = useMemo(() => {
+    if (units && units.length > 0) return units;
+    return getResortDefaultUnits(tenantId);
+  }, [units, tenantId]);
+
+  const effectiveBookings = useMemo(() => {
+    if (rawBookings && rawBookings.length > 0) return rawBookings;
+    return getResortDefaultBookings(tenantId);
+  }, [rawBookings, tenantId]);
 
   // Real-time Cloud Sync — soft poll; skip no-op Dexie writes in syncUnitOpsToDexie.
   useEffect(() => {
@@ -1179,8 +1215,8 @@ export default function ResortOSOperations({
             </div>
           )}
           <MobileOperationsView
-            units={units}
-            bookings={rawBookings}
+            units={effectiveUnits}
+            bookings={effectiveBookings}
             customTickets={customTickets}
             onStartTask={handleStartTask}
             onFinishTask={handleFinishTask}
