@@ -193,7 +193,7 @@ export default function DashboardApp() {
             backdropFilter: 'blur(20px)',
             WebkitBackdropFilter: 'blur(20px)',
             border: '1px solid rgba(197, 160, 89, 0.35)',
-            borderRadius: '24px',
+            borderRadius: '6px',
             padding: '2rem 1.5rem',
             boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.65)'
           }}
@@ -202,9 +202,9 @@ export default function DashboardApp() {
           <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
             <div 
               style={{
-                width: '56px',
-                height: '56px',
-                borderRadius: '16px',
+                width: '52px',
+                height: '52px',
+                borderRadius: '4px',
                 background: 'linear-gradient(135deg, #C5A059, #8C6B28)',
                 display: 'flex',
                 alignItems: 'center',
@@ -647,7 +647,7 @@ export default function DashboardApp() {
                   background: 'rgba(197, 160, 89, 0.22)',
                   color: '#F1D699',
                   padding: '0.3rem 0.65rem',
-                  borderRadius: '999px',
+                  borderRadius: '4px',
                   fontSize: '0.72rem',
                   fontWeight: 800,
                   cursor: 'pointer',
@@ -670,7 +670,7 @@ export default function DashboardApp() {
                 color: '#F1D699',
                 border: '1px solid rgba(197, 160, 89, 0.35)',
                 padding: '0.3rem 0.65rem',
-                borderRadius: '999px',
+                borderRadius: '4px',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '0.3rem'
@@ -688,7 +688,7 @@ export default function DashboardApp() {
                 background: 'rgba(255, 255, 255, 0.08)',
                 color: '#D4C5B9',
                 padding: '0.35rem 0.65rem',
-                borderRadius: '999px',
+                borderRadius: '4px',
                 fontSize: '0.72rem',
                 fontWeight: 700,
                 cursor: 'pointer',
@@ -719,7 +719,7 @@ export default function DashboardApp() {
               style={{
                 flex: 1,
                 border: 'none',
-                borderRadius: '10px',
+                borderRadius: '4px',
                 padding: '0.55rem 0.75rem',
                 fontSize: '0.82rem',
                 fontWeight: 800,
@@ -745,7 +745,7 @@ export default function DashboardApp() {
               style={{
                 flex: 1,
                 border: activeTab === 'financials' ? '1px solid #C5A059' : 'none',
-                borderRadius: '10px',
+                borderRadius: '4px',
                 padding: '0.55rem 0.75rem',
                 fontSize: '0.82rem',
                 fontWeight: 800,

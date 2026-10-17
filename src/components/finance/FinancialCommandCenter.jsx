@@ -590,10 +590,10 @@ export default function FinancialCommandCenter({
 
   // SVG Bizibox-style Cash Flow Chart Calculations
   const chartDays = activeDaysList;
-  const chartHeight = isDesktop ? 300 : 220;
-  const chartWidth = isWide ? 880 : (isDesktop ? 700 : Math.min(Math.max(windowWidth - 48, 320), 660));
-  const paddingX = 40;
-  const paddingY = 25;
+  const chartHeight = isDesktop ? 260 : 200;
+  const chartWidth = 800;
+  const paddingX = 35;
+  const paddingY = 22;
 
   const minVal = useMemo(() => {
     let min = 0;
@@ -677,14 +677,14 @@ export default function FinancialCommandCenter({
       style={{
         background: mBrand.containerBg,
         color: mBrand.text,
-        padding: isDesktop ? '1.25rem 1.5rem' : '0.75rem',
-        borderRadius: '24px',
-        border: `1px solid ${mBrand.cardBorder}`,
+        padding: isDesktop ? '1.25rem 1.5rem' : '0.65rem',
+        borderRadius: isDesktop ? '6px' : '0',
+        border: isDesktop ? `1px solid ${mBrand.cardBorder}` : 'none',
         fontFamily: GUEST_BRAND.fontBody,
         maxWidth: isDesktop ? '1580px' : '100%',
         margin: '0 auto',
         boxSizing: 'border-box',
-        boxShadow: mBrand.shadowLg
+        boxShadow: isDesktop ? mBrand.shadowLg : 'none'
       }}
     >
       {/* 1. TOP HEADER & BRAND COMMAND BAR */}
@@ -694,124 +694,56 @@ export default function FinancialCommandCenter({
           flexWrap: 'wrap',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: '0.85rem',
-          paddingBottom: '0.85rem',
-          borderBottom: `1px solid ${mBrand.cardBorder}`,
-          marginBottom: '1.25rem'
+          gap: '0.6rem',
+          paddingBottom: '0.65rem',
+          borderBottom: `1px solid ${mBrand.cardBorderSubtle}`,
+          marginBottom: '1rem'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-          {/* Miyalis Crest / Monogram Badge */}
-          <div
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <h2 style={{ margin: 0, fontSize: isDesktop ? '1.15rem' : '0.98rem', fontWeight: 900, color: mBrand.text }}>
+            יתרות עו״ש ותזרים 120 יום
+          </h2>
+          <span
             style={{
-              width: '46px',
-              height: '46px',
-              borderRadius: '14px',
-              background: `linear-gradient(135deg, ${GUEST_BRAND.wine}, #3E1E18)`,
-              border: `1.5px solid ${mBrand.gold}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: `0 4px 16px ${mBrand.gold}33`,
-              flexShrink: 0
+              fontSize: '0.68rem',
+              padding: '0.15rem 0.5rem',
+              borderRadius: '4px',
+              background: mBrand.badgeBg,
+              color: mBrand.badgeText,
+              fontWeight: 800,
+              border: `1px solid ${mBrand.cardBorderSubtle}`
             }}
           >
-            <span
-              style={{
-                fontFamily: GUEST_BRAND.fontMark,
-                fontSize: '1.4rem',
-                fontWeight: 700,
-                color: mBrand.gold,
-                lineHeight: 1
-              }}
-            >
-              M
-            </span>
-          </div>
-
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap' }}>
-              <span
-                style={{
-                  fontFamily: GUEST_BRAND.fontMark,
-                  fontSize: '0.72rem',
-                  letterSpacing: '0.14em',
-                  fontWeight: 700,
-                  color: mBrand.gold,
-                  textTransform: 'uppercase'
-                }}
-              >
-                MIALEES RESORT
-              </span>
-              <span style={{ fontSize: '0.7rem', color: mBrand.textCloudy }}>•</span>
-              <h1 style={{ margin: 0, fontSize: isDesktop ? '1.35rem' : '1.15rem', fontWeight: 900, letterSpacing: '-0.02em', color: mBrand.text }}>
-                חמ״ל פיננסי ותזרים 120 יום
-              </h1>
-              <span
-                style={{
-                  fontSize: '0.68rem',
-                  padding: '0.15rem 0.55rem',
-                  borderRadius: '20px',
-                  background: mBrand.badgeBg,
-                  color: mBrand.badgeText,
-                  fontWeight: 800,
-                  border: `1px solid ${mBrand.cardBorderSubtle}`
-                }}
-              >
-                {financeOnly ? 'דניאל · מנהל כספים' : 'קריאה בלבד'}
-              </span>
-            </div>
-            <div style={{ fontSize: '0.76rem', color: mBrand.textMuted, marginTop: '0.2rem' }}>
-              מזרחי טפחות · בנק דיסקונט · הבנק הבינלאומי (FIBI) · קופת מזומנים מקומית · סליקה והתראות מוקדמות
-            </div>
-          </div>
+            {financeOnly ? 'דניאל · מנהל כספים' : '3 בנקים במאוחד'}
+          </span>
         </div>
 
-        {/* Action Controls & Responsiveness indicators */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-          {/* Screen indicator pill */}
-          <div
+        {/* Action Controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+          {/* Refresh */}
+          <button
+            type="button"
+            onClick={fetchServerData}
+            disabled={isLoading}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '0.35rem',
-              fontSize: '0.72rem',
               padding: '0.35rem 0.65rem',
-              borderRadius: '10px',
-              background: mBrand.cardBgAlt,
-              color: mBrand.textMuted,
-              border: `1px solid ${mBrand.cardBorderSubtle}`
+              borderRadius: '4px',
+              border: `1px solid ${mBrand.cardBorder}`,
+              background: mBrand.cardBg,
+              color: mBrand.text,
+              fontSize: '0.76rem',
+              fontWeight: 700,
+              cursor: 'pointer'
             }}
-            title={isDesktop ? 'תצוגה מותאמת למסך נייח (Desktop)' : 'תצוגה מותאמת למסך נייד (Mobile)'}
+            title="רענן נתונים"
           >
-            {isDesktop ? <Monitor size={14} color={mBrand.gold} /> : <Smartphone size={14} color={mBrand.gold} />}
-            <span>{isDesktop ? 'מסך נייח' : 'מובייל'}</span>
-          </div>
-
-          {/* Theme switcher */}
-          {setTheme && (
-            <button
-              type="button"
-              onClick={() => setTheme(isLight ? 'dark' : 'light')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                padding: '0.42rem 0.65rem',
-                borderRadius: '10px',
-                border: `1px solid ${mBrand.cardBorder}`,
-                background: mBrand.cardBg,
-                color: mBrand.text,
-                fontSize: '0.78rem',
-                cursor: 'pointer',
-                fontWeight: 600
-              }}
-              title={isLight ? 'מעבר למצב לילה' : 'מעבר למצב יום'}
-            >
-              {isLight ? <Moon size={14} /> : <Sun size={14} color={mBrand.gold} />}
-              <span style={{ fontSize: '0.72rem' }}>{isLight ? 'לילה' : 'יום'}</span>
-            </button>
-          )}
+            <RefreshCw size={13} className={isLoading ? 'spin' : ''} />
+            <span>רענן</span>
+          </button>
 
           {/* WhatsApp / Check Capture */}
           <button
@@ -821,19 +753,19 @@ export default function FinancialCommandCenter({
               display: 'flex',
               alignItems: 'center',
               gap: '0.35rem',
-              padding: '0.45rem 0.8rem',
-              borderRadius: '10px',
+              padding: '0.35rem 0.65rem',
+              borderRadius: '4px',
               border: 'none',
               background: 'linear-gradient(135deg, #10B981, #059669)',
               color: '#FFFFFF',
-              fontSize: '0.8rem',
+              fontSize: '0.76rem',
               fontWeight: 800,
-              cursor: 'pointer',
-              boxShadow: '0 2px 10px rgba(16, 185, 129, 0.35)'
+              cursor: 'pointer'
             }}
+            title="קליטת שיק"
           >
-            <Camera size={14} />
-            קליטת שיק (Chloe)
+            <Camera size={13} />
+            <span>קליטת שיק</span>
           </button>
 
           {/* Manual Assumption */}
@@ -843,19 +775,20 @@ export default function FinancialCommandCenter({
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '0.35rem',
-              padding: '0.45rem 0.8rem',
-              borderRadius: '10px',
+              gap: '0.3rem',
+              padding: '0.35rem 0.65rem',
+              borderRadius: '4px',
               border: `1px solid ${mBrand.cardBorder}`,
               background: mBrand.cardBg,
               color: mBrand.text,
-              fontSize: '0.8rem',
+              fontSize: '0.76rem',
               fontWeight: 700,
               cursor: 'pointer'
             }}
+            title="הוספת הנחת תזרים ידנית"
           >
-            <Plus size={14} />
-            הנחה ידנית
+            <Plus size={13} />
+            <span>הנחה ידנית</span>
           </button>
 
           {/* Settings */}
@@ -865,64 +798,18 @@ export default function FinancialCommandCenter({
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '0.35rem',
-              padding: '0.45rem 0.65rem',
-              borderRadius: '10px',
+              padding: '0.35rem 0.5rem',
+              borderRadius: '4px',
               border: `1px solid ${mBrand.cardBorder}`,
               background: mBrand.cardBg,
-              color: mBrand.text,
-              fontSize: '0.8rem',
+              color: mBrand.textMuted,
+              fontSize: '0.76rem',
               cursor: 'pointer'
             }}
             title="הגדרות מסגרות וכריות ביטחון"
           >
-            <Settings size={15} />
+            <Settings size={14} />
           </button>
-
-          {/* Refresh */}
-          <button
-            type="button"
-            onClick={fetchServerData}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              padding: '0.45rem 0.65rem',
-              borderRadius: '10px',
-              border: `1px solid ${mBrand.cardBorder}`,
-              background: mBrand.cardBg,
-              color: mBrand.text,
-              fontSize: '0.8rem',
-              cursor: 'pointer'
-            }}
-            title="רענן נתונים"
-          >
-            <RefreshCw size={14} className={isLoading ? 'spin' : ''} />
-          </button>
-
-          {/* Logout if in session */}
-          {session?.onLogout && (
-            <button
-              type="button"
-              onClick={session.onLogout}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.3rem',
-                padding: '0.45rem 0.75rem',
-                borderRadius: '10px',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                background: 'rgba(239, 68, 68, 0.1)',
-                color: '#EF4444',
-                fontSize: '0.78rem',
-                fontWeight: 700,
-                cursor: 'pointer'
-              }}
-              title="התנתק"
-            >
-              <LogOut size={13} />
-              התנתק
-            </button>
-          )}
         </div>
       </div>
 
@@ -955,12 +842,12 @@ export default function FinancialCommandCenter({
                 border: isSelected
                   ? `2px solid ${cfg.color}`
                   : `1px solid ${mBrand.cardBorder}`,
-                borderRadius: '18px',
-                padding: '1.1rem',
+                borderRadius: '6px',
+                padding: '1rem',
                 cursor: 'pointer',
                 position: 'relative',
                 boxShadow: isSelected
-                  ? `0 8px 24px ${cfg.color}33`
+                  ? `0 4px 16px ${cfg.color}33`
                   : mBrand.shadow,
                 transition: 'all 0.2s ease'
               }}
@@ -969,11 +856,11 @@ export default function FinancialCommandCenter({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <div
                     style={{
-                      width: '12px',
-                      height: '12px',
+                      width: '10px',
+                      height: '10px',
                       borderRadius: '50%',
                       background: cfg.color,
-                      boxShadow: `0 0 10px ${cfg.color}88`
+                      boxShadow: `0 0 8px ${cfg.color}88`
                     }}
                   />
                   <span style={{ fontWeight: 800, fontSize: '0.98rem', color: mBrand.text }}>{cfg.name}</span>
@@ -981,8 +868,8 @@ export default function FinancialCommandCenter({
                 <span
                   style={{
                     fontSize: '0.72rem',
-                    padding: '0.15rem 0.55rem',
-                    borderRadius: '8px',
+                    padding: '0.15rem 0.5rem',
+                    borderRadius: '4px',
                     background: isCritical
                       ? 'rgba(239, 68, 68, 0.15)'
                       : isWarning
@@ -1103,8 +990,8 @@ export default function FinancialCommandCenter({
           style={{
             background: mBrand.cardBg,
             border: `1px solid ${mBrand.cardBorder}`,
-            borderRadius: '18px',
-            padding: '1.1rem',
+            borderRadius: '6px',
+            padding: '1rem',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
@@ -1115,20 +1002,20 @@ export default function FinancialCommandCenter({
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <div
                 style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '10px',
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '4px',
                   background: mBrand.goldBg,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center'
                 }}
               >
-                <Wallet size={17} color={mBrand.gold} />
+                <Wallet size={15} color={mBrand.gold} />
               </div>
               <div>
-                <span style={{ fontWeight: 800, fontSize: '0.98rem', color: mBrand.text }}>נזילות מאוחדת וקופת מזומנים</span>
-                <div style={{ fontSize: '0.7rem', color: mBrand.textMuted }}>3 בנקים + קופת מתחם (F2)</div>
+                <span style={{ fontWeight: 800, fontSize: '0.95rem', color: mBrand.text }}>נזילות מאוחדת וקופת מזומנים</span>
+                <div style={{ fontSize: '0.68rem', color: mBrand.textMuted }}>3 בנקים + קופת מתחם (F2)</div>
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -1147,15 +1034,15 @@ export default function FinancialCommandCenter({
                   display: 'flex',
                   alignItems: 'center',
                   gap: '0.35rem',
-                  padding: '0.4rem 0.75rem',
-                  borderRadius: '8px',
+                  padding: '0.35rem 0.65rem',
+                  borderRadius: '4px',
                   background: mBrand.primaryBtn,
                   color: mBrand.primaryBtnText,
                   border: 'none',
-                  fontSize: '0.76rem',
+                  fontSize: '0.74rem',
                   fontWeight: 800,
                   cursor: 'pointer',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
                 }}
                 title="העבר מזומן מהקופה המקומית לעו״ש בנקאי"
               >
@@ -1178,8 +1065,8 @@ export default function FinancialCommandCenter({
             <div
               style={{
                 background: mBrand.cardBgAlt,
-                padding: '0.75rem',
-                borderRadius: '14px',
+                padding: '0.65rem 0.75rem',
+                borderRadius: '4px',
                 border: `1px solid ${mBrand.cardBorderSubtle}`
               }}
             >
@@ -1205,8 +1092,8 @@ export default function FinancialCommandCenter({
             <div
               style={{
                 background: isLight ? '#F2FAF5' : 'rgba(16, 185, 129, 0.08)',
-                padding: '0.75rem',
-                borderRadius: '14px',
+                padding: '0.65rem 0.75rem',
+                borderRadius: '4px',
                 border: '1px solid rgba(16, 185, 129, 0.25)'
               }}
             >
@@ -1218,7 +1105,7 @@ export default function FinancialCommandCenter({
                   style={{
                     fontSize: '0.6rem',
                     padding: '0.1rem 0.35rem',
-                    borderRadius: '4px',
+                    borderRadius: '3px',
                     background: 'rgba(16, 185, 129, 0.2)',
                     color: '#10B981',
                     fontWeight: 800
@@ -1246,8 +1133,8 @@ export default function FinancialCommandCenter({
             <div
               style={{
                 background: mBrand.cardBgAlt,
-                padding: '0.75rem',
-                borderRadius: '14px',
+                padding: '0.65rem 0.75rem',
+                borderRadius: '4px',
                 border: `1px solid ${mBrand.cardBorderSubtle}`
               }}
             >
@@ -1273,8 +1160,8 @@ export default function FinancialCommandCenter({
             <div
               style={{
                 background: isLight ? '#FAF5F8' : 'rgba(242, 213, 221, 0.08)',
-                padding: '0.75rem',
-                borderRadius: '14px',
+                padding: '0.65rem 0.75rem',
+                borderRadius: '4px',
                 border: `1px solid ${mBrand.accentCandy}44`
               }}
             >
@@ -1322,8 +1209,8 @@ export default function FinancialCommandCenter({
             border: calculation.fundingRequirement.hasRequirement
               ? '1px solid rgba(239, 68, 68, 0.35)'
               : `1px solid ${mBrand.cardBorder}`,
-            borderRadius: '18px',
-            padding: '1.1rem',
+            borderRadius: '6px',
+            padding: '1rem',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
@@ -1345,8 +1232,8 @@ export default function FinancialCommandCenter({
               <span
                 style={{
                   fontSize: '0.7rem',
-                  padding: '0.2rem 0.55rem',
-                  borderRadius: '6px',
+                  padding: '0.15rem 0.5rem',
+                  borderRadius: '4px',
                   background: calculation.fundingRequirement.gapType === 'timing_gap'
                     ? '#F59E0B22'
                     : calculation.fundingRequirement.gapType === 'sustained_shortage'
@@ -1408,12 +1295,12 @@ export default function FinancialCommandCenter({
           flexWrap: 'wrap',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: '0.75rem',
+          gap: '0.65rem',
           background: mBrand.cardBg,
           border: `1px solid ${mBrand.cardBorder}`,
-          borderRadius: '16px',
-          padding: '0.75rem 1rem',
-          marginBottom: '1.25rem',
+          borderRadius: '6px',
+          padding: '0.65rem 0.85rem',
+          marginBottom: '1rem',
           boxShadow: mBrand.shadow
         }}
       >
@@ -1429,9 +1316,9 @@ export default function FinancialCommandCenter({
               onClick={() => setHorizonDays(days)}
               style={{
                 border: 'none',
-                borderRadius: '8px',
-                padding: '0.35rem 0.75rem',
-                fontSize: '0.76rem',
+                borderRadius: '4px',
+                padding: '0.3rem 0.65rem',
+                fontSize: '0.74rem',
                 fontWeight: horizonDays === days ? 900 : 600,
                 background: horizonDays === days ? mBrand.primaryBtn : mBrand.cardBgAlt,
                 color: horizonDays === days ? mBrand.primaryBtnText : mBrand.textMuted,
@@ -1453,13 +1340,13 @@ export default function FinancialCommandCenter({
               display: 'flex',
               alignItems: 'center',
               gap: '0.35rem',
-              padding: '0.4rem 0.8rem',
-              borderRadius: '8px',
+              padding: '0.35rem 0.65rem',
+              borderRadius: '4px',
               border: scenarioMode === 'baseline' ? `1px solid ${mBrand.gold}` : `1px solid ${mBrand.cardBorderSubtle}`,
               background: scenarioMode === 'baseline' ? mBrand.goldBg : 'transparent',
               color: scenarioMode === 'baseline' ? mBrand.gold : mBrand.textMuted,
               fontWeight: 800,
-              fontSize: '0.76rem',
+              fontSize: '0.74rem',
               cursor: 'pointer'
             }}
           >
@@ -1473,13 +1360,13 @@ export default function FinancialCommandCenter({
               display: 'flex',
               alignItems: 'center',
               gap: '0.35rem',
-              padding: '0.4rem 0.8rem',
-              borderRadius: '8px',
+              padding: '0.35rem 0.65rem',
+              borderRadius: '4px',
               border: scenarioMode === 'scenario' ? '1px solid #10B981' : `1px solid ${mBrand.cardBorderSubtle}`,
               background: scenarioMode === 'scenario' ? 'rgba(16, 185, 129, 0.15)' : 'transparent',
               color: scenarioMode === 'scenario' ? '#10B981' : mBrand.textMuted,
               fontWeight: 800,
-              fontSize: '0.76rem',
+              fontSize: '0.74rem',
               cursor: 'pointer'
             }}
           >
@@ -1494,8 +1381,8 @@ export default function FinancialCommandCenter({
         style={{
           display: 'grid',
           gridTemplateColumns: isDesktop ? '1fr 380px' : '1fr',
-          gap: '1rem',
-          marginBottom: '1.25rem',
+          gap: '0.85rem',
+          marginBottom: '1rem',
           alignItems: 'start'
         }}
       >
@@ -1504,8 +1391,8 @@ export default function FinancialCommandCenter({
           style={{
             background: mBrand.cardBg,
             border: `1px solid ${mBrand.cardBorder}`,
-            borderRadius: '18px',
-            padding: '1.1rem',
+            borderRadius: '6px',
+            padding: '1rem',
             position: 'relative',
             boxShadow: mBrand.shadow
           }}
@@ -1529,11 +1416,11 @@ export default function FinancialCommandCenter({
             </div>
           </div>
 
-          {/* SVG Chart */}
-          <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          {/* SVG Chart - Scaled 100% fluidly to mobile screen without horizontal overflow */}
+          <div style={{ width: '100%', overflow: 'hidden' }}>
             <svg
               viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-              style={{ width: '100%', minWidth: '580px', height: 'auto', display: 'block' }}
+              style={{ width: '100%', height: 'auto', display: 'block' }}
             >
               <defs>
                 <linearGradient id="chartGradientMiyalis" x1="0" y1="0" x2="0" y2="1">
@@ -1661,12 +1548,12 @@ export default function FinancialCommandCenter({
                   display: 'flex',
                   alignItems: 'center',
                   gap: '0.35rem',
-                  padding: '0.4rem 0.75rem',
-                  borderRadius: '8px',
+                  padding: '0.35rem 0.65rem',
+                  borderRadius: '4px',
                   border: `1px solid ${mBrand.cardBorder}`,
                   background: mBrand.cardBgAlt,
                   color: mBrand.text,
-                  fontSize: '0.75rem',
+                  fontSize: '0.74rem',
                   fontWeight: 700,
                   cursor: 'pointer'
                 }}
@@ -1687,8 +1574,8 @@ export default function FinancialCommandCenter({
             style={{
               background: mBrand.cardBg,
               border: `1px solid ${mBrand.cardBorder}`,
-              borderRadius: '18px',
-              padding: '1.1rem',
+              borderRadius: '6px',
+              padding: '1rem',
               display: 'flex',
               flexDirection: 'column',
               boxShadow: mBrand.shadow,
@@ -1708,7 +1595,7 @@ export default function FinancialCommandCenter({
                 style={{
                   fontSize: '0.72rem',
                   padding: '0.15rem 0.5rem',
-                  borderRadius: '6px',
+                  borderRadius: '4px',
                   background: mBrand.goldBg,
                   color: mBrand.gold,
                   fontWeight: 800
@@ -1726,7 +1613,7 @@ export default function FinancialCommandCenter({
                 gap: '0.4rem',
                 background: mBrand.cardBgAlt,
                 padding: '0.55rem',
-                borderRadius: '10px',
+                borderRadius: '4px',
                 marginBottom: '0.65rem',
                 fontSize: '0.68rem',
                 textAlign: 'center'
@@ -1765,7 +1652,7 @@ export default function FinancialCommandCenter({
                     style={{
                       background: mBrand.cardBgAlt,
                       border: `1px solid ${mBrand.cardBorderSubtle}`,
-                      borderRadius: '10px',
+                      borderRadius: '4px',
                       padding: '0.55rem 0.75rem'
                     }}
                   >
@@ -1898,7 +1785,7 @@ export default function FinancialCommandCenter({
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     padding: '0.65rem 0.85rem',
-                    borderRadius: '14px',
+                    borderRadius: '4px',
                     background: mBrand.cardBg,
                     border: `1px solid ${mBrand.cardBorderSubtle}`,
                     boxShadow: mBrand.shadow
@@ -1907,9 +1794,9 @@ export default function FinancialCommandCenter({
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
                     <div
                       style={{
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '10px',
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '4px',
                         background: evt.amount < 0 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
                         display: 'flex',
                         alignItems: 'center',
@@ -1917,9 +1804,9 @@ export default function FinancialCommandCenter({
                       }}
                     >
                       {evt.amount < 0 ? (
-                        <TrendingDown size={16} color="#EF4444" />
+                        <TrendingDown size={15} color="#EF4444" />
                       ) : (
-                        <TrendingUp size={16} color="#10B981" />
+                        <TrendingUp size={15} color="#10B981" />
                       )}
                     </div>
                     <div>
@@ -1970,7 +1857,7 @@ export default function FinancialCommandCenter({
                 textAlign: 'center',
                 color: '#10B981',
                 background: isLight ? '#F0FDF4' : 'rgba(16, 185, 129, 0.08)',
-                borderRadius: '16px',
+                borderRadius: '6px',
                 border: '1px solid rgba(16, 185, 129, 0.2)'
               }}
             >
@@ -1991,7 +1878,7 @@ export default function FinancialCommandCenter({
                   border: al.severity === 'critical'
                     ? '1px solid rgba(239, 68, 68, 0.3)'
                     : '1px solid rgba(245, 158, 11, 0.3)',
-                  borderRadius: '16px',
+                  borderRadius: '6px',
                   padding: '0.85rem 1rem'
                 }}
               >
@@ -2009,7 +1896,7 @@ export default function FinancialCommandCenter({
                       fontSize: '0.72rem',
                       fontWeight: 700,
                       padding: '0.15rem 0.45rem',
-                      borderRadius: '6px',
+                      borderRadius: '4px',
                       background: al.severity === 'critical' ? '#EF444422' : '#F59E0B22',
                       color: al.severity === 'critical' ? '#EF4444' : '#F59E0B'
                     }}
@@ -2028,7 +1915,7 @@ export default function FinancialCommandCenter({
                       fontSize: '0.75rem',
                       background: mBrand.cardBgAlt,
                       padding: '0.45rem 0.65rem',
-                      borderRadius: '8px',
+                      borderRadius: '4px',
                       marginBottom: '0.65rem'
                     }}
                   >
@@ -2050,8 +1937,8 @@ export default function FinancialCommandCenter({
                       display: 'flex',
                       alignItems: 'center',
                       gap: '0.35rem',
-                      padding: '0.35rem 0.75rem',
-                      borderRadius: '8px',
+                      padding: '0.35rem 0.65rem',
+                      borderRadius: '4px',
                       border: 'none',
                       background: '#10B981',
                       color: '#FFFFFF',
@@ -2082,7 +1969,7 @@ export default function FinancialCommandCenter({
                 textAlign: 'center',
                 color: mBrand.textMuted,
                 background: mBrand.cardBg,
-                borderRadius: '16px',
+                borderRadius: '6px',
                 border: `1px solid ${mBrand.cardBorder}`
               }}
             >
@@ -2096,7 +1983,7 @@ export default function FinancialCommandCenter({
                 style={{
                   background: mBrand.cardBg,
                   border: `1px solid ${mBrand.cardBorder}`,
-                  borderRadius: '14px',
+                  borderRadius: '4px',
                   padding: '0.75rem 1rem',
                   boxShadow: mBrand.shadow
                 }}
@@ -2113,7 +2000,7 @@ export default function FinancialCommandCenter({
                       fontSize: '0.72rem',
                       fontWeight: 700,
                       padding: '0.15rem 0.5rem',
-                      borderRadius: '6px',
+                      borderRadius: '4px',
                       background: audit.confirmed ? '#10B98122' : '#F59E0B22',
                       color: audit.confirmed ? '#10B981' : '#F59E0B'
                     }}
@@ -2179,7 +2066,7 @@ export default function FinancialCommandCenter({
                   background: mBrand.cardBgAlt,
                   color: mBrand.text,
                   padding: '0.35rem 0.65rem',
-                  borderRadius: '8px',
+                  borderRadius: '4px',
                   cursor: 'pointer',
                   fontWeight: 700
                 }}
@@ -2200,7 +2087,7 @@ export default function FinancialCommandCenter({
                     style={{
                       background: mBrand.cardBgAlt,
                       border: `1px solid ${mBrand.cardBorderSubtle}`,
-                      borderRadius: '12px',
+                      borderRadius: '4px',
                       padding: '0.75rem 0.85rem'
                     }}
                   >
@@ -2258,8 +2145,8 @@ export default function FinancialCommandCenter({
               maxWidth: '460px',
               background: mBrand.cardBg,
               color: mBrand.text,
-              borderRadius: '20px',
-              padding: '1.35rem',
+              borderRadius: '6px',
+              padding: '1.25rem',
               boxShadow: mBrand.shadowLg,
               border: `1px solid ${mBrand.cardBorder}`
             }}
@@ -2288,8 +2175,8 @@ export default function FinancialCommandCenter({
                     type="button"
                     onClick={() => setManualForm((p) => ({ ...p, type: 'expense' }))}
                     style={{
-                      padding: '0.55rem',
-                      borderRadius: '8px',
+                      padding: '0.5rem',
+                      borderRadius: '4px',
                       border: manualForm.type === 'expense' ? '2px solid #EF4444' : `1px solid ${mBrand.cardBorderSubtle}`,
                       background: manualForm.type === 'expense' ? 'rgba(239, 68, 68, 0.15)' : mBrand.cardBgAlt,
                       color: manualForm.type === 'expense' ? '#EF4444' : mBrand.textMuted,
@@ -2303,8 +2190,8 @@ export default function FinancialCommandCenter({
                     type="button"
                     onClick={() => setManualForm((p) => ({ ...p, type: 'income' }))}
                     style={{
-                      padding: '0.55rem',
-                      borderRadius: '8px',
+                      padding: '0.5rem',
+                      borderRadius: '4px',
                       border: manualForm.type === 'income' ? '2px solid #10B981' : `1px solid ${mBrand.cardBorderSubtle}`,
                       background: manualForm.type === 'income' ? 'rgba(16, 185, 129, 0.15)' : mBrand.cardBgAlt,
                       color: manualForm.type === 'income' ? '#10B981' : mBrand.textMuted,
@@ -2331,7 +2218,7 @@ export default function FinancialCommandCenter({
                   style={{
                     width: '100%',
                     padding: '0.55rem',
-                    borderRadius: '8px',
+                    borderRadius: '4px',
                     border: `1px solid ${mBrand.cardBorderSubtle}`,
                     background: mBrand.cardBgAlt,
                     color: mBrand.text,
@@ -2352,7 +2239,7 @@ export default function FinancialCommandCenter({
                   style={{
                     width: '100%',
                     padding: '0.55rem',
-                    borderRadius: '8px',
+                    borderRadius: '4px',
                     border: `1px solid ${mBrand.cardBorderSubtle}`,
                     background: mBrand.cardBgAlt,
                     color: mBrand.text,
@@ -2371,7 +2258,7 @@ export default function FinancialCommandCenter({
                   style={{
                     width: '100%',
                     padding: '0.55rem',
-                    borderRadius: '8px',
+                    borderRadius: '4px',
                     border: `1px solid ${mBrand.cardBorderSubtle}`,
                     background: mBrand.cardBgAlt,
                     color: mBrand.text,
@@ -2396,7 +2283,7 @@ export default function FinancialCommandCenter({
                   style={{
                     width: '100%',
                     padding: '0.55rem',
-                    borderRadius: '8px',
+                    borderRadius: '4px',
                     border: `1px solid ${mBrand.cardBorderSubtle}`,
                     background: mBrand.cardBgAlt,
                     color: mBrand.text,
@@ -2410,8 +2297,8 @@ export default function FinancialCommandCenter({
                   type="button"
                   onClick={() => setShowManualModal(false)}
                   style={{
-                    padding: '0.5rem 1rem',
-                    borderRadius: '8px',
+                    padding: '0.45rem 0.85rem',
+                    borderRadius: '4px',
                     border: `1px solid ${mBrand.cardBorderSubtle}`,
                     background: 'transparent',
                     color: mBrand.textMuted,
@@ -2423,8 +2310,8 @@ export default function FinancialCommandCenter({
                 <button
                   type="submit"
                   style={{
-                    padding: '0.5rem 1.25rem',
-                    borderRadius: '8px',
+                    padding: '0.45rem 1rem',
+                    borderRadius: '4px',
                     border: 'none',
                     background: mBrand.primaryBtn,
                     color: mBrand.primaryBtnText,
@@ -2462,8 +2349,8 @@ export default function FinancialCommandCenter({
               maxWidth: '460px',
               background: mBrand.cardBg,
               color: mBrand.text,
-              borderRadius: '20px',
-              padding: '1.35rem',
+              borderRadius: '6px',
+              padding: '1.25rem',
               boxShadow: mBrand.shadowLg,
               border: `1px solid ${mBrand.cardBorder}`
             }}
@@ -2472,16 +2359,16 @@ export default function FinancialCommandCenter({
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <div
                   style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '8px',
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '4px',
                     background: mBrand.goldBg,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center'
                   }}
                 >
-                  <ArrowDownLeft size={18} color={mBrand.gold} />
+                  <ArrowDownLeft size={16} color={mBrand.gold} />
                 </div>
                 <div>
                   <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.1rem', color: mBrand.text }}>הפקדת מזומן לבנק</h3>
@@ -2506,7 +2393,7 @@ export default function FinancialCommandCenter({
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 padding: '0.65rem 0.85rem',
-                borderRadius: '12px',
+                borderRadius: '4px',
                 background: isLight ? '#F2FAF5' : 'rgba(16, 185, 129, 0.12)',
                 border: '1px solid rgba(16, 185, 129, 0.3)',
                 marginBottom: '1rem'
@@ -2524,8 +2411,8 @@ export default function FinancialCommandCenter({
                   onClick={() => setDepositForm((p) => ({ ...p, amount: String(calculation.kpis.currentCashDrawer) }))}
                   style={{
                     fontSize: '0.72rem',
-                    padding: '0.3rem 0.65rem',
-                    borderRadius: '6px',
+                    padding: '0.25rem 0.55rem',
+                    borderRadius: '4px',
                     border: '1px solid #10B981',
                     background: 'transparent',
                     color: '#10B981',
@@ -2553,7 +2440,7 @@ export default function FinancialCommandCenter({
                   style={{
                     width: '100%',
                     padding: '0.55rem',
-                    borderRadius: '8px',
+                    borderRadius: '4px',
                     border: `1px solid ${mBrand.cardBorderSubtle}`,
                     background: mBrand.cardBgAlt,
                     color: mBrand.text,
@@ -2574,7 +2461,7 @@ export default function FinancialCommandCenter({
                   style={{
                     width: '100%',
                     padding: '0.55rem',
-                    borderRadius: '8px',
+                    borderRadius: '4px',
                     border: `1px solid ${mBrand.cardBorderSubtle}`,
                     background: mBrand.cardBgAlt,
                     color: mBrand.text,
@@ -2599,7 +2486,7 @@ export default function FinancialCommandCenter({
                   style={{
                     width: '100%',
                     padding: '0.55rem',
-                    borderRadius: '8px',
+                    borderRadius: '4px',
                     border: `1px solid ${mBrand.cardBorderSubtle}`,
                     background: mBrand.cardBgAlt,
                     color: mBrand.text,
@@ -2626,7 +2513,7 @@ export default function FinancialCommandCenter({
                   style={{
                     width: '100%',
                     padding: '0.55rem',
-                    borderRadius: '8px',
+                    borderRadius: '4px',
                     border: `1px solid ${mBrand.cardBorderSubtle}`,
                     background: mBrand.cardBgAlt,
                     color: mBrand.text,
@@ -2640,8 +2527,8 @@ export default function FinancialCommandCenter({
                   type="button"
                   onClick={() => setShowDepositModal(false)}
                   style={{
-                    padding: '0.5rem 1rem',
-                    borderRadius: '8px',
+                    padding: '0.45rem 0.85rem',
+                    borderRadius: '4px',
                     border: `1px solid ${mBrand.cardBorderSubtle}`,
                     background: 'transparent',
                     color: mBrand.textMuted,
@@ -2653,8 +2540,8 @@ export default function FinancialCommandCenter({
                 <button
                   type="submit"
                   style={{
-                    padding: '0.5rem 1.25rem',
-                    borderRadius: '8px',
+                    padding: '0.45rem 1rem',
+                    borderRadius: '4px',
                     border: 'none',
                     background: 'linear-gradient(135deg, #10B981, #059669)',
                     color: '#FFFFFF',
@@ -2692,8 +2579,8 @@ export default function FinancialCommandCenter({
               maxWidth: '480px',
               background: mBrand.cardBg,
               color: mBrand.text,
-              borderRadius: '20px',
-              padding: '1.35rem',
+              borderRadius: '6px',
+              padding: '1.25rem',
               boxShadow: mBrand.shadowLg,
               border: `1px solid ${mBrand.cardBorder}`,
               maxHeight: '90vh',
@@ -2719,7 +2606,7 @@ export default function FinancialCommandCenter({
                 <div
                   style={{
                     border: '2px dashed #10B981',
-                    borderRadius: '14px',
+                    borderRadius: '4px',
                     padding: '1.25rem',
                     textAlign: 'center',
                     marginBottom: '1rem',
@@ -2740,7 +2627,7 @@ export default function FinancialCommandCenter({
                       <img
                         src={captureForm.imagePreview}
                         alt="שיק"
-                        style={{ maxHeight: '140px', borderRadius: '8px', marginBottom: '0.5rem' }}
+                        style={{ maxHeight: '140px', borderRadius: '4px', marginBottom: '0.5rem' }}
                       />
                       <div style={{ fontSize: '0.78rem', color: '#10B981', fontWeight: 800 }}>
                         תמונה נטענה בהצלחה! לחץ להחלפה
@@ -2771,7 +2658,7 @@ export default function FinancialCommandCenter({
                       style={{
                         width: '100%',
                         padding: '0.5rem',
-                        borderRadius: '8px',
+                        borderRadius: '4px',
                         border: `1px solid ${mBrand.cardBorderSubtle}`,
                         background: mBrand.cardBgAlt,
                         color: mBrand.text,
@@ -2793,7 +2680,7 @@ export default function FinancialCommandCenter({
                       style={{
                         width: '100%',
                         padding: '0.5rem',
-                        borderRadius: '8px',
+                        borderRadius: '4px',
                         border: `1px solid ${mBrand.cardBorderSubtle}`,
                         background: mBrand.cardBgAlt,
                         color: mBrand.text,
@@ -2816,7 +2703,7 @@ export default function FinancialCommandCenter({
                       style={{
                         width: '100%',
                         padding: '0.5rem',
-                        borderRadius: '8px',
+                        borderRadius: '4px',
                         border: `1px solid ${mBrand.cardBorderSubtle}`,
                         background: mBrand.cardBgAlt,
                         color: mBrand.text,
@@ -2836,7 +2723,7 @@ export default function FinancialCommandCenter({
                       style={{
                         width: '100%',
                         padding: '0.5rem',
-                        borderRadius: '8px',
+                        borderRadius: '4px',
                         border: `1px solid ${mBrand.cardBorderSubtle}`,
                         background: mBrand.cardBgAlt,
                         color: mBrand.text,
@@ -2852,7 +2739,7 @@ export default function FinancialCommandCenter({
                     style={{
                       width: '100%',
                       padding: '0.65rem',
-                      borderRadius: '8px',
+                      borderRadius: '4px',
                       border: 'none',
                       background: '#10B981',
                       color: '#FFFFFF',
@@ -2870,7 +2757,7 @@ export default function FinancialCommandCenter({
                   style={{
                     background: capturePending.duplicatesFound ? '#FEF2F2' : '#F0FDF4',
                     border: capturePending.duplicatesFound ? '1px solid #EF4444' : '1px solid #10B981',
-                    borderRadius: '12px',
+                    borderRadius: '4px',
                     padding: '1rem',
                     marginBottom: '1rem',
                     color: capturePending.duplicatesFound ? '#991B1B' : '#065F46'
@@ -2898,7 +2785,7 @@ export default function FinancialCommandCenter({
                     style={{
                       flex: 1,
                       padding: '0.65rem',
-                      borderRadius: '8px',
+                      borderRadius: '4px',
                       border: `1px solid ${mBrand.cardBorderSubtle}`,
                       background: 'transparent',
                       color: mBrand.textMuted,
@@ -2913,7 +2800,7 @@ export default function FinancialCommandCenter({
                     style={{
                       flex: 1,
                       padding: '0.65rem',
-                      borderRadius: '8px',
+                      borderRadius: '4px',
                       border: 'none',
                       background: '#10B981',
                       color: '#FFFFFF',
@@ -2952,8 +2839,8 @@ export default function FinancialCommandCenter({
               maxWidth: '460px',
               background: mBrand.cardBg,
               color: mBrand.text,
-              borderRadius: '20px',
-              padding: '1.35rem',
+              borderRadius: '6px',
+              padding: '1.25rem',
               boxShadow: mBrand.shadowLg,
               border: `1px solid ${mBrand.cardBorder}`,
               maxHeight: '90vh',
@@ -2974,15 +2861,15 @@ export default function FinancialCommandCenter({
               </button>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.25rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', marginBottom: '1.25rem' }}>
               {BANK_IDS.map((bankId) => (
                 <div
                   key={bankId}
                   style={{
                     background: mBrand.cardBgAlt,
                     border: `1px solid ${mBrand.cardBorderSubtle}`,
-                    borderRadius: '12px',
-                    padding: '0.85rem'
+                    borderRadius: '4px',
+                    padding: '0.75rem'
                   }}
                 >
                   <div style={{ fontWeight: 800, fontSize: '0.88rem', marginBottom: '0.45rem', color: mBrand.text }}>
@@ -3009,7 +2896,7 @@ export default function FinancialCommandCenter({
                         style={{
                           width: '100%',
                           padding: '0.45rem',
-                          borderRadius: '6px',
+                          borderRadius: '4px',
                           border: `1px solid ${mBrand.cardBorderSubtle}`,
                           background: mBrand.cardBg,
                           color: mBrand.text,
@@ -3037,7 +2924,7 @@ export default function FinancialCommandCenter({
                         style={{
                           width: '100%',
                           padding: '0.45rem',
-                          borderRadius: '6px',
+                          borderRadius: '4px',
                           border: `1px solid ${mBrand.cardBorderSubtle}`,
                           background: mBrand.cardBg,
                           color: mBrand.text,
@@ -3053,8 +2940,8 @@ export default function FinancialCommandCenter({
                 style={{
                   background: mBrand.cardBgAlt,
                   border: `1px solid ${mBrand.cardBorderSubtle}`,
-                  borderRadius: '12px',
-                  padding: '0.85rem'
+                  borderRadius: '4px',
+                  padding: '0.75rem'
                 }}
               >
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, marginBottom: '0.25rem', color: mBrand.text }}>
@@ -3069,7 +2956,7 @@ export default function FinancialCommandCenter({
                   style={{
                     width: '100%',
                     padding: '0.45rem',
-                    borderRadius: '6px',
+                    borderRadius: '4px',
                     border: `1px solid ${mBrand.cardBorderSubtle}`,
                     background: mBrand.cardBg,
                     color: mBrand.text,
@@ -3087,8 +2974,8 @@ export default function FinancialCommandCenter({
                 type="button"
                 onClick={() => setShowSettingsModal(false)}
                 style={{
-                  padding: '0.5rem 1rem',
-                  borderRadius: '8px',
+                  padding: '0.45rem 0.85rem',
+                  borderRadius: '4px',
                   border: `1px solid ${mBrand.cardBorderSubtle}`,
                   background: 'transparent',
                   color: mBrand.textMuted,
@@ -3101,8 +2988,8 @@ export default function FinancialCommandCenter({
                 type="button"
                 onClick={handleSaveSettings}
                 style={{
-                  padding: '0.5rem 1.25rem',
-                  borderRadius: '8px',
+                  padding: '0.45rem 1rem',
+                  borderRadius: '4px',
                   border: 'none',
                   background: mBrand.primaryBtn,
                   color: mBrand.primaryBtnText,
@@ -3139,8 +3026,8 @@ export default function FinancialCommandCenter({
               maxWidth: '460px',
               background: mBrand.cardBg,
               color: mBrand.text,
-              borderRadius: '20px',
-              padding: '1.35rem',
+              borderRadius: '6px',
+              padding: '1.25rem',
               boxShadow: mBrand.shadowLg,
               border: `1px solid ${mBrand.cardBorder}`
             }}
@@ -3163,7 +3050,7 @@ export default function FinancialCommandCenter({
               style={{
                 background: isLight ? '#F0FDF4' : 'rgba(16, 185, 129, 0.08)',
                 border: '1px solid rgba(16, 185, 129, 0.3)',
-                borderRadius: '12px',
+                borderRadius: '4px',
                 padding: '1rem',
                 fontSize: '0.8rem',
                 lineHeight: '1.5',
@@ -3183,8 +3070,8 @@ export default function FinancialCommandCenter({
                 type="button"
                 onClick={() => setWhatsappAlertModal(null)}
                 style={{
-                  padding: '0.5rem 1rem',
-                  borderRadius: '8px',
+                  padding: '0.45rem 0.85rem',
+                  borderRadius: '4px',
                   border: `1px solid ${mBrand.cardBorderSubtle}`,
                   background: 'transparent',
                   color: mBrand.textMuted,
@@ -3198,8 +3085,8 @@ export default function FinancialCommandCenter({
                 disabled={whatsappSending || whatsappSentSuccess}
                 onClick={() => handleSendWhatsappAlert(whatsappAlertModal)}
                 style={{
-                  padding: '0.5rem 1.25rem',
-                  borderRadius: '8px',
+                  padding: '0.45rem 1rem',
+                  borderRadius: '4px',
                   border: 'none',
                   background: whatsappSentSuccess ? '#10B981' : '#25D366',
                   color: '#FFFFFF',
