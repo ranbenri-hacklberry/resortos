@@ -49,10 +49,10 @@ export function buildDemoCheckoutRow(stage = 'form') {
   return {
     id: `demo_${token.slice(9)}`,
     tenant_id: DEFAULT_TENANT_ID,
-    unit_id: 'k671',
-    guest_name: 'אורחת דמו',
+    unit_id: 'pilot-office',
+    guest_name: 'רני',
     guest_email: forStay ? 'demo@resortos.app' : '',
-    guest_phone: '0500000000',
+    guest_phone: '0548317887',
     check_in_date: checkIn,
     check_out_date: checkOut,
     adults_count: 2,

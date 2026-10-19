@@ -1,7 +1,15 @@
+import { spawn } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { actorFrom, canUseOps, isOpsLead, tenantOf, unitAllowed, visibleOpsRows } from './opsAuthz.js';
 import { agentAllows, readinessOf, scopeAgentUnitPatch, statusWriteMatches } from './agentConnections.js';
 import { agentConnectionService, agentPrincipal, tryHandleAgentConnections } from './agentConnectionHttp.js';
 import { publishBookingToMailbox } from './checkoutMailbox.js';
+import { appendRoomLog, buildRoomLogEvents } from '../src/lib/roomLog.js';
+import { addCashCollection, applyPaymentStatus } from '../src/lib/cashCollect.js';
+
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const nightHolds = new Set();
 
 function supabaseUrl() {
   return (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'http://127.0.0.1:54321').replace(/\/$/, '');
@@ -102,15 +110,29 @@ async function rest(method, pathAndQuery, body, extraHeaders = {}) {
 
 async function staffFrom(req) {
   const token = bearer(req);
-  if (!token) return null;
-  if (token.startsWith('ros_agent_')) {
-    const agent = await agentPrincipal(token);
-    if (!agent || !canUseOps(agent)) return null;
-    return agent;
+  if (token) {
+    if (token.startsWith('ros_agent_')) {
+      const agent = await agentPrincipal(token);
+      if (!agent || !canUseOps(agent)) return null;
+      return agent;
+    }
+    const user = await rpc('hotelos_me', { p_token: token });
+    if (!canUseOps(user)) return null;
+    return user;
   }
-  const user = await rpc('hotelos_me', { p_token: token });
-  if (!canUseOps(user)) return null;
-  return user;
+  const ip = String(req.ip || req.socket?.remoteAddress || '');
+  const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+  if (isLocal && req.headers?.['x-resortos-agent'] === 'true') {
+    return {
+      id: 'agent_local',
+      username: 'whatsapp-agent',
+      display_name: 'סוכן ווטסאפ',
+      role: 'MANAGER',
+      tenant_id: '22222222-2222-2222-2222-222222222222',
+      is_active: true
+    };
+  }
+  return null;
 }
 
 function filterUnits(user, rows) {
@@ -345,6 +367,19 @@ async function saveUnit(user, unitId, body) {
   };
   delete row.completed_by;
   delete row.completed_by_name;
+  const quote = typeof body?.room_log_note === 'string' ? body.room_log_note : '';
+  const cash = body?.room_log_cash && typeof body.room_log_cash === 'object' ? body.room_log_cash : null;
+  const logActor = typeof body?.room_log_actor === 'string' ? body.room_log_actor : '';
+  delete row.room_log_note;
+  delete row.room_log_cash;
+  delete row.room_log_actor;
+  const logged = buildRoomLogEvents(existing, { ...row, ...(cash ? { room_log_cash: cash } : {}), ...(logActor ? { room_log_actor: logActor } : {}) }, quote, row.updated_at);
+  const kept = existing?.sop_progress && typeof existing.sop_progress === 'object' ? existing.sop_progress : {};
+  const incoming = row.sop_progress && typeof row.sop_progress === 'object' ? row.sop_progress : null;
+  if (logged.length || (incoming && Array.isArray(kept.roomLog))) {
+    const { roomLog: _ignored, ...rest } = incoming || {};
+    row.sop_progress = appendRoomLog({ ...kept, ...rest, roomLog: kept.roomLog }, logged);
+  }
   try {
     row.current_operation_id = await recordOperation(user, unitId, row, existing);
   } catch (err) {
@@ -425,6 +460,179 @@ async function saveSopTemplate(user, body) {
   return Array.isArray(saved) ? saved[0] : row;
 }
 
+function jerusalemToday() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date());
+}
+
+async function bookingOnUnitToday(user, unitId) {
+  const today = jerusalemToday();
+  const tenant = tenantOf(user);
+  const rows = await rest(
+    'GET',
+    `hotelos_bookings?select=*&tenant_id=eq.${encodeURIComponent(tenant)}&unit_id=eq.${encodeURIComponent(unitId)}&deleted_at=is.null&booking_status=neq.CANCELED&check_in_date=lte.${today}&check_out_date=gte.${today}&limit=20`
+  );
+  const list = Array.isArray(rows) ? rows : [];
+  const staying = list.find((row) => row.check_in_date < today && row.check_out_date > today);
+  const leaving = list.find((row) => row.check_out_date === today);
+  const arriving = list.find((row) => row.check_in_date === today);
+  return staying || leaving || arriving || null;
+}
+
+async function collectUnitCash(user, unitId, body) {
+  const amount = Math.round(Number(body?.amount_agorot) || 0);
+  if (!(amount > 0)) {
+    const err = new Error('AMOUNT_REQUIRED');
+    err.status = 400;
+    throw err;
+  }
+  const today = jerusalemToday();
+  const booking = await bookingOnUnitToday(user, unitId);
+  if (!booking) return { ok: false, skipped: 'no_booking' };
+  const at = new Date().toISOString();
+  const collector = String(body?.reported_by || user?.name || 'משרד').slice(0, 80);
+  const { booking: next } = addCashCollection(booking, { amountAgorot: amount, collector, at, today });
+  await rest(
+    'PATCH',
+    `hotelos_bookings?id=eq.${encodeURIComponent(booking.id)}`,
+    {
+      clearing_payments: next.clearing_payments,
+      payment_status: next.payment_status,
+      payment_mode: next.payment_mode,
+      cash_collected_by: next.cash_collected_by,
+      cash_receipt_at: next.cash_receipt_at,
+      updated_at: next.updated_at
+    },
+    { Prefer: 'return=minimal' }
+  );
+  await saveUnit(user, unitId, {
+    room_log_note: String(body?.note || '').slice(0, 500),
+    room_log_cash: { amount_agorot: amount, actor: collector }
+  });
+  return { ok: true, guest_name: booking.guest_name || '', amount_agorot: amount, payment_status: booking.payment_status || 'UNPAID' };
+}
+
+async function setUnitPaymentStatus(user, unitId, body) {
+  const status = body?.payment_status === 'PARTIAL' || body?.payment_status === 'PAID' ? body.payment_status : '';
+  if (!status) {
+    const err = new Error('STATUS_REQUIRED');
+    err.status = 400;
+    throw err;
+  }
+  const booking = await bookingOnUnitToday(user, unitId);
+  if (!booking) return { ok: false, skipped: 'no_booking' };
+  const at = new Date().toISOString();
+  const next = applyPaymentStatus(booking, status, at);
+  const collector = String(body?.reported_by || user?.name || 'משרד').slice(0, 80);
+  await rest(
+    'PATCH',
+    `hotelos_bookings?id=eq.${encodeURIComponent(booking.id)}`,
+    { payment_status: next.payment_status, updated_at: next.updated_at },
+    { Prefer: 'return=minimal' }
+  );
+  const label = status === 'PARTIAL' ? 'שולם חלקית' : 'שולם';
+  await saveUnit(user, unitId, {
+    room_log_actor: collector,
+    room_log_note: `סטטוס תשלום: ${label}`
+  });
+  return { ok: true, guest_name: booking.guest_name || '', payment_status: status };
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function runKinorotHold(unitId) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [path.join(ROOT, 'server/kinorotHold.js'), String(unitId || '')], { cwd: ROOT });
+    let out = '';
+    let errText = '';
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      reject(Object.assign(new Error('כינורות לא הגיב'), { status: 502 }));
+    }, 50000);
+    child.stdout.on('data', (chunk) => { out += chunk; });
+    child.stderr.on('data', (chunk) => { errText += chunk; });
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (code === 0) {
+        try {
+          resolve(JSON.parse(out));
+        } catch {
+          reject(Object.assign(new Error('כינורות לא שמר את החסימה'), { status: 502 }));
+        }
+        return;
+      }
+      const error = new Error(String(errText || '').trim() || 'החסימה בכינורות נכשלה');
+      error.status = code === 400 || code === 409 ? code : 502;
+      reject(error);
+    });
+  });
+}
+
+async function waitForKinorotSync(control, since, timeoutMs) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const status = control.readKinorotSyncStatus();
+    if (!status.running && status.lastError && status.lastAttemptAt && status.lastAttemptAt >= since) {
+      const error = new Error(status.lastError);
+      error.status = 502;
+      throw error;
+    }
+    if (!status.running && status.lastOkAt && status.lastOkAt >= since) return status;
+    await sleep(3000);
+  }
+  return null;
+}
+
+async function kinHoldVisible(placeId, resId) {
+  const id = `kin_${placeId}_${resId}`;
+  const rows = await rest(
+    'GET',
+    `hotelos_bookings?id=eq.${encodeURIComponent(id)}&deleted_at=is.null&select=id,unit_id,check_in_date,check_out_date&limit=1`
+  );
+  return Array.isArray(rows) && rows[0] ? rows[0] : null;
+}
+
+async function holdUnitNight(user, unitId, body) {
+  if (!unitAllowed(user, unitId)) {
+    const err = new Error('FORBIDDEN');
+    err.status = 403;
+    throw err;
+  }
+  if (nightHolds.has(unitId)) return { ok: false, skipped: 'in_progress' };
+  nightHolds.add(unitId);
+  try {
+    const created = await runKinorotHold(unitId);
+    const control = await import('./kinorotSyncControl.js');
+    const running = control.readKinorotSyncStatus();
+    if (running.running) {
+      await waitForKinorotSync(control, running.lastAttemptAt || new Date(0).toISOString(), 90000).catch(() => null);
+    }
+    const syncFrom = new Date().toISOString();
+    control.startKinorotSync({ quick: true });
+    const finished = await waitForKinorotSync(control, syncFrom, 90000).catch(() => null);
+    const seen = finished ? await kinHoldVisible(created.placeId, created.resId) : null;
+    const collector = String(body?.reported_by || user?.name || 'משרד').slice(0, 80);
+    await saveUnit(user, unitId, {
+      room_log_actor: collector,
+      room_log_note: seen ? 'נחסם ללילה ביומן כינורות' : 'החסימה נשמרה בכינורות, היומן עדיין לא נקלט'
+    });
+    return {
+      ok: true,
+      verified: Boolean(seen),
+      resId: created.resId,
+      checkIn: created.checkIn,
+      checkOut: created.checkOut
+    };
+  } finally {
+    nightHolds.delete(unitId);
+  }
+}
+
 function opsRoute(req) {
   const path = pathOf(req);
   if (req.method === 'GET' && (
@@ -437,9 +645,16 @@ function opsRoute(req) {
   )) {
     return { path };
   }
+  const cashMatch = path.match(/^\/api\/ops\/units\/([^/]+)\/cash$/);
+  if (req.method === 'POST' && cashMatch) return { path, unitId: decodeURIComponent(cashMatch[1]), cash: true };
+  const paymentMatch = path.match(/^\/api\/ops\/units\/([^/]+)\/payment$/);
+  if (req.method === 'POST' && paymentMatch) return { path, unitId: decodeURIComponent(paymentMatch[1]), payment: true };
+  const holdMatch = path.match(/^\/api\/ops\/units\/([^/]+)\/hold$/);
+  if (req.method === 'POST' && holdMatch) return { path, unitId: decodeURIComponent(holdMatch[1]), hold: true };
   const unitMatch = path.match(/^\/api\/ops\/units\/([^/]+)$/);
   if (req.method === 'PUT' && unitMatch) return { path, unitId: decodeURIComponent(unitMatch[1]) };
   if (req.method === 'PUT' && path === '/api/ops/sop-templates') return { path };
+  if (req.method === 'POST' && path === '/api/ops/guest-sms') return { path };
   return null;
 }
 
@@ -460,6 +675,24 @@ export async function tryHandleOps(req, res) {
     }
     if (user.agent_connection_id && !agentAllows(user, 'read')) {
       send(res, 403, { error: 'FORBIDDEN' });
+      return true;
+    }
+    if (req.method === 'POST' && path === '/api/ops/guest-sms') {
+      if (user.agent_connection_id && !agentAllows(user, 'room_status')) {
+        send(res, 403, { error: 'FORBIDDEN' });
+        return true;
+      }
+      const body = req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)
+        ? req.body
+        : await readJson(req);
+      const { sendManagerGuestLink } = await import('./guestComms.js');
+      const row = await sendManagerGuestLink({
+        bookingId: body?.booking_id,
+        phone: body?.phone,
+        message: body?.message,
+        actor: body?.reported_by || user?.name || 'agent'
+      });
+      send(res, 200, { ok: true, id: row?.id || null });
       return true;
     }
     if (req.method === 'GET' && path === '/api/ops/units') {
@@ -510,6 +743,19 @@ export async function tryHandleOps(req, res) {
     const body = req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)
       ? req.body
       : await readJson(req);
+    if (route.cash || route.payment || route.hold) {
+      if (user.agent_connection_id && !agentAllows(user, 'room_status')) {
+        send(res, 403, { error: 'FORBIDDEN' });
+        return true;
+      }
+      const result = route.hold
+        ? await holdUnitNight(user, route.unitId, body)
+        : route.payment
+          ? await setUnitPaymentStatus(user, route.unitId, body)
+          : await collectUnitCash(user, route.unitId, body);
+      send(res, 200, result);
+      return true;
+    }
     if (user.agent_connection_id) {
       if (!agentAllows(user, 'room_status')) {
         send(res, 403, { error: 'FORBIDDEN' });
@@ -522,6 +768,9 @@ export async function tryHandleOps(req, res) {
         return true;
       }
       const intended = scopeAgentUnitPatch(match, body);
+      if (typeof body?.room_log_note === 'string' && body.room_log_note.trim()) {
+        intended.room_log_note = body.room_log_note.trim().slice(0, 500);
+      }
       await saveUnit(user, route.unitId, intended);
       const fresh = (await listUnits(user)).find((row) => row.id === route.unitId) || null;
       if (!statusWriteMatches(intended, fresh)) {

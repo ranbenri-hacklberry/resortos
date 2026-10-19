@@ -4,7 +4,7 @@ export const CARD_STATUS = {
   ready: 'מוכן',
   occupied: 'מאוכלס',
   dirty: 'לניקיון',
-  cleaning: 'בניקיון',
+  cleaning: 'בנקיון',
   inspection: 'ממתין לבדיקה',
   alert: 'התראה',
   hold: 'סגור',

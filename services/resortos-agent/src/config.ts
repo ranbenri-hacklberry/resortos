@@ -12,8 +12,10 @@ export interface CleanerProfile {
   /** Digits only, international format, e.g. 972501234567 */
   phone: string;
   name: string;
-  role?: 'MANAGER' | 'OPS_MANAGER' | 'HOUSEKEEPING' | 'MAINTENANCE';
+  role?: string;
   language: Lang;
+  /** WhatsApp Linked Device ID if assigned, e.g. 208190587302068 */
+  lid?: string;
 }
 
 export type RoomUsage = 'GUEST_ACCOMMODATION' | 'STAFF_ACCOMMODATION' | 'OFFICE' | 'STORAGE' | 'SERVICE_AREA';
@@ -52,7 +54,37 @@ export function isOfficeRoom(room?: RoomEntry | null): boolean {
   return room?.usage === 'OFFICE' || room?.id === 'pilot-office';
 }
 
+function loadEnvFile(file: string) {
+  if (!existsSync(file)) return;
+  for (const line of readFileSync(file, 'utf8').split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#') || !trimmed.includes('=')) continue;
+    const idx = trimmed.indexOf('=');
+    const key = trimmed.slice(0, idx).trim();
+    let value = trimmed.slice(idx + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
+    if (key && process.env[key] == null) process.env[key] = value;
+  }
+}
+
+for (const file of [process.env.AGENT_ENV_FILE, path.join(ROOT, '.env'), path.resolve(ROOT, '../../.env')]) {
+  if (file) loadEnvFile(file);
+}
+
 const env = (k: string, d: string): string => process.env[k] ?? d;
+
+function resolvePythonBin(): string {
+  if (process.env.PYTHON_BIN && existsSync(process.env.PYTHON_BIN)) return process.env.PYTHON_BIN;
+  for (const candidate of [
+    path.join(ROOT, '.venv', 'bin', 'python'),
+    path.join(ROOT, '.venv', 'bin', 'python3.11'),
+    '/opt/homebrew/opt/python@3.11/bin/python3.11',
+    '/opt/homebrew/bin/python3',
+  ]) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return path.join(ROOT, '.venv', 'bin', 'python');
+}
 
 export const config = {
   port: Number(env('AGENT_PORT', '8787')),
@@ -61,12 +93,12 @@ export const config = {
   dataDir: env('DATA_DIR', path.join(ROOT, 'data')),
   ollama: {
     url: env('OLLAMA_URL', 'http://localhost:11434'),
-    model: env('OLLAMA_MODEL', 'Julioa/Qwen3.8-27B-UD-Q3_K_XL:latest'),
+    model: env('OLLAMA_MODEL', 'gemma4:12b'),
     timeoutMs: Number(env('OLLAMA_TIMEOUT_MS', '120000')),
     keepAlive: env('OLLAMA_KEEP_ALIVE', '24h'),
   },
   stt: {
-    python: env('PYTHON_BIN', path.join(ROOT, '.venv', 'bin', 'python')),
+    python: resolvePythonBin(),
     script: path.join(ROOT, 'src', 'stt', 'transcriber.py'),
     model: env('WHISPER_MODEL', 'mlx-community/whisper-large-v3-turbo'),
     timeoutMs: Number(env('STT_TIMEOUT_MS', '30000')),
@@ -87,6 +119,10 @@ export const config = {
     minMs: Number(env('TYPING_MIN_MS', '800')),
     maxMs: Number(env('TYPING_MAX_MS', '3500')),
     msPerChar: Number(env('TYPING_MS_PER_CHAR', '35')),
+  },
+  gmail: {
+    user: env('GMAIL_USER', ''),
+    appPassword: env('GMAIL_APP_PASSWORD', ''),
   },
 };
 

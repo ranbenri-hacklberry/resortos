@@ -18,6 +18,7 @@ async function main() {
 
   const cards5x5: string[] = [];
   const cardsCompact: string[] = [];
+  const cardsSigns: string[] = [];
   const rows: string[] = [];
 
   for (const r of rooms) {
@@ -42,8 +43,9 @@ async function main() {
           <img src="${qrDataUrl}" alt="${code}" />
         </div>
         <div class="s5-bot">
-          <div class="s5-cta">סריקה לפתיחת כספת</div>
-          <div class="s5-th">สแกนเปิดตู้เซฟ</div>
+          <div class="s5-step1">1. סורקים במצלמה 📷</div>
+          <div class="s5-step2">2. לחצו <strong>"שלח"</strong> בווטסאפ ↗</div>
+          <div class="s5-th">สแกนแล้วกดส่งใน WhatsApp</div>
         </div>
       </div>
     `);
@@ -55,7 +57,30 @@ async function main() {
         <div class="sc-qr">
           <img src="${qrDataUrl}" alt="${code}" />
         </div>
-        <div class="sc-sub">${r.property?.split(' ')[0] || ''}</div>
+        <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
+      </div>
+    `);
+
+    // 3. Guest Welcome Standee Cards (4 per A4 page - 92x130mm, clear steps)
+    cardsSigns.push(`
+      <div class="sign-card">
+        <div class="sign-header">
+          <div class="sign-prop">${r.property || 'ResortOS'}</div>
+          <div class="sign-title">${r.name || r.id}</div>
+          <div class="sign-code-badge">${r.letterCode || r.name}</div>
+        </div>
+        <div class="sign-welcome">ברוכים הבאים לחופשה שלכם ✨</div>
+        <div class="sign-qr">
+          <img src="${qrDataUrl}" alt="${code}" />
+        </div>
+        <div class="sign-steps">
+          <div class="sign-step"><span class="step-num">1</span> סורקים את הקוד במצלמת הטלפון 📷</div>
+          <div class="sign-step sign-step-send"><span class="step-num">2</span> <strong>לוחצים על שליחה (Send ✈️)</strong> של ההודעה שמופיעה בווטסאפ</div>
+          <div class="sign-step"><span class="step-num">3</span> מקבלים מיד: קוד כספת 🔑 · סיסמת WiFi 📶 · דף אורח 📱</div>
+        </div>
+        <div class="sign-footer">
+          קלואי, העוזרת הדיגיטלית של המתחם, זמינה עבורכם בוואטסאפ 24/7 לכל שאלה
+        </div>
       </div>
     `);
 
@@ -275,16 +300,29 @@ async function main() {
       display: block;
     }
     .s5-bot {
-      line-height: 1.05;
+      line-height: 1.15;
+      width: 100%;
     }
-    .s5-cta {
-      font-size: 7px;
+    .s5-step1 {
+      font-size: 6.8px;
+      font-weight: 700;
+      color: #475569;
+    }
+    .s5-step2 {
+      font-size: 7.2px;
       font-weight: 800;
       color: #0f172a;
+      background: #e0f2fe;
+      border: 1px solid #bae6fd;
+      border-radius: 3px;
+      padding: 1px 3px;
+      margin-top: 1px;
+      display: inline-block;
     }
     .s5-th {
-      font-size: 6px;
+      font-size: 5.5px;
       color: #64748b;
+      margin-top: 1px;
     }
 
     /* ---- SINGLE-PAGE COMPACT VIEW (All 41 on 1 page) ---- */
@@ -323,10 +361,127 @@ async function main() {
       display: block;
     }
     .sc-sub {
-      font-size: 6.5px;
-      color: #64748b;
-      font-weight: 700;
+      font-size: 6px;
+      color: #0284c7;
+      font-weight: 800;
       line-height: 1;
+    }
+
+    /* ---- GUEST WELCOME SIGNS (4 per A4 page) ---- */
+    .view-signs {
+      display: none;
+    }
+    .grid-signs {
+      display: grid;
+      grid-template-columns: repeat(2, 92mm);
+      gap: 8mm 10mm;
+      justify-content: center;
+    }
+    .sign-card {
+      width: 92mm;
+      height: 130mm;
+      border: 1.5px solid #0f172a;
+      border-radius: 6mm;
+      padding: 5mm 5mm;
+      background: #ffffff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      text-align: center;
+      page-break-inside: avoid;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+    }
+    .sign-header {
+      width: 100%;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 2mm;
+    }
+    .sign-prop {
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748b;
+      letter-spacing: 0.3px;
+    }
+    .sign-title {
+      font-size: 15px;
+      font-weight: 900;
+      color: #0f172a;
+      margin-top: 1px;
+    }
+    .sign-code-badge {
+      display: inline-block;
+      margin-top: 2px;
+      padding: 2px 8px;
+      background: #0f172a;
+      color: #ffffff;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+    .sign-welcome {
+      font-size: 12px;
+      font-weight: 800;
+      color: #0284c7;
+      margin-top: 1.5mm;
+    }
+    .sign-qr img {
+      width: 36mm;
+      height: 36mm;
+      display: block;
+      margin: 1mm auto;
+    }
+    .sign-steps {
+      width: 100%;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 4mm;
+      padding: 2.5mm 3mm;
+      text-align: right;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5mm;
+    }
+    .sign-step {
+      font-size: 9px;
+      color: #334155;
+      line-height: 1.25;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .step-num {
+      width: 16px;
+      height: 16px;
+      background: #0f172a;
+      color: #ffffff;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9.5px;
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+    .sign-step-send {
+      background: #e0f2fe;
+      border: 1px solid #7dd3fc;
+      border-radius: 4px;
+      padding: 2px 4px;
+      color: #0369a1;
+      font-weight: 700;
+    }
+    .sign-step-send .step-num {
+      background: #0284c7;
+    }
+    .sign-footer {
+      font-size: 7.5px;
+      color: #64748b;
+      line-height: 1.2;
+      border-top: 1px solid #f1f5f9;
+      padding-top: 1.5mm;
+      width: 100%;
     }
 
     @media print {
@@ -349,6 +504,12 @@ async function main() {
       .sticker-compact {
         border: 1px dashed #475569 !important;
       }
+      .grid-signs {
+        gap: 6mm 8mm;
+      }
+      .sign-card {
+        border: 1.5px solid #0f172a !important;
+      }
     }
   </style>
 </head>
@@ -356,18 +517,20 @@ async function main() {
   <div class="container">
     <div class="header-bar">
       <div class="header-title">
-        <h1>🔑 לוח קודי כספות ומדבקות QR - ריזורט (41 יחידות)</h1>
-        <p>מספר הבוט בוואטסאפ: <strong>051-526-2612</strong> · הדפסה על מדבקות או גזירה</p>
+        <h1>🔑 לוח קודי כספות, מדבקות ושלטי QR - ריזורט (41 יחידות)</h1>
+        <p>מספר הבוט בוואטסאפ: <strong>051-526-2612</strong> · כולל הנחיות ברורות לסריקה ולחיצה על 'שלח' בוואטסאפ</p>
       </div>
       <div class="actions">
-        <button class="btn btn-green" onclick="showTab('5x5'); window.print();">🖨️ הדפס מדבקות 5×5 ס״מ</button>
-        <button class="btn" onclick="showTab('compact'); window.print();">📄 הדפס הכל בדף 1</button>
+        <button class="btn btn-green" onclick="showTab('5x5'); window.print();">🖨️ מדבקות 5×5 ס״מ</button>
+        <button class="btn" onclick="showTab('signs'); window.print();">🏷️ שלטי כניסה לאורח (4 בדף)</button>
+        <button class="btn" onclick="showTab('compact'); window.print();">📄 כל היחידות בדף 1</button>
       </div>
     </div>
 
     <div class="nav-tabs">
       <button class="tab-btn active" id="btn-tab-table" onclick="showTab('table')">📋 טבלת קודי כספות מרוכזת (41 יחידות)</button>
       <button class="tab-btn" id="btn-tab-5x5" onclick="showTab('5x5')">🔲 מדבקות 5×5 ס״מ לכספת (מומלץ - 2 דפים)</button>
+      <button class="tab-btn" id="btn-tab-signs" onclick="showTab('signs')">🏷️ שלטי כניסה ומעמד לאורח (4 בדף A4 - מומלץ לאורחים)</button>
       <button class="tab-btn" id="btn-tab-compact" onclick="showTab('compact')">📄 הכל בדף A4 יחיד (קומפקטי - 41 מדבקות בדף 1)</button>
     </div>
 
@@ -393,7 +556,7 @@ async function main() {
     <!-- Tab 2: 5x5 cm Stickers (Ideal for key safe boxes) -->
     <div class="view-5x5" id="view-5x5">
       <div style="background:#fff; padding:12px 18px; border-radius:10px; margin-bottom:14px; font-size:13.5px; color:#475569; display:flex; justify-content:space-between; align-items:center;">
-        <span>📏 <strong>גודל מדבקה:</strong> 4.6 ס״מ × 4.6 ס״מ (מותאם בדיוק לדלת של כספת מפתח פיזית). 2 דפי A4 סה״כ.</span>
+        <span>📏 <strong>גודל מדבקה:</strong> 4.6 ס״מ × 4.6 ס״מ (מותאם בדיוק לדלת של כספת מפתח פיזית). כולל הוראות ברורות לסריקה ולחיצה על "שלח".</span>
         <button class="btn btn-green" onclick="window.print()">🖨️ הדפס עכשיו</button>
       </div>
       <div class="grid-5x5">
@@ -401,7 +564,18 @@ async function main() {
       </div>
     </div>
 
-    <!-- Tab 3: Compact Single Page (All 41 on 1 A4 sheet) -->
+    <!-- Tab 3: Guest Welcome Signs (4 per A4 page) -->
+    <div class="view-signs" id="view-signs">
+      <div style="background:#fff; padding:12px 18px; border-radius:10px; margin-bottom:14px; font-size:13.5px; color:#475569; display:flex; justify-content:space-between; align-items:center;">
+        <span>🏷️ <strong>שלטי כניסה ומעמד שולחן לאורחים:</strong> 4 שלטים בדף A4 (גודל ~9.2 ס״מ × 13 ס״מ). אידיאלי למעמד כניסה או שולחן בבקתה עם 3 שלבי הדרכה מודגשים.</span>
+        <button class="btn btn-green" onclick="window.print()">🖨️ הדפס עכשיו</button>
+      </div>
+      <div class="grid-signs">
+        ${cardsSigns.join('\n')}
+      </div>
+    </div>
+
+    <!-- Tab 4: Compact Single Page (All 41 on 1 A4 sheet) -->
     <div class="view-compact" id="view-compact">
       <div style="background:#fff; padding:12px 18px; border-radius:10px; margin-bottom:14px; font-size:13.5px; color:#475569; display:flex; justify-content:space-between; align-items:center;">
         <span>📄 <strong>כל 41 המדבקות על דף A4 בודד:</strong> גודל קומפקטי ~3.1 ס״מ × 3.5 ס״מ. חוסך נייר.</span>
@@ -417,18 +591,22 @@ async function main() {
     function showTab(tab) {
       const vTable = document.getElementById('view-table');
       const v5x5 = document.getElementById('view-5x5');
+      const vSigns = document.getElementById('view-signs');
       const vCompact = document.getElementById('view-compact');
 
       const bTable = document.getElementById('btn-tab-table');
       const b5x5 = document.getElementById('btn-tab-5x5');
+      const bSigns = document.getElementById('btn-tab-signs');
       const bCompact = document.getElementById('btn-tab-compact');
 
       vTable.style.display = tab === 'table' ? 'block' : 'none';
       v5x5.style.display = tab === '5x5' ? 'block' : 'none';
+      vSigns.style.display = tab === 'signs' ? 'block' : 'none';
       vCompact.style.display = tab === 'compact' ? 'block' : 'none';
 
       bTable.classList.toggle('active', tab === 'table');
       b5x5.classList.toggle('active', tab === '5x5');
+      bSigns.classList.toggle('active', tab === 'signs');
       bCompact.classList.toggle('active', tab === 'compact');
     }
 

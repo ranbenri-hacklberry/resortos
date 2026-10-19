@@ -67,6 +67,10 @@ export const CATALOG_LOCKBOX = {
   k680: '2910', k681: '2920', k682: '2930', k683: '2940', k684: '2950'
 };
 
+export const UNIT_WIFI = {
+  'pilot-office': [{ ssid: 'ResortOS_5G', password: '0506102416' }]
+};
+
 export const CATALOG_WIFI = {
   taj: [{ ssid: 'LUTUS', password: '12345678' }],
   nurit: [{ ssid: 'MIALEES RESORT', password: 'MIAL2026' }],

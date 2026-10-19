@@ -1,6 +1,8 @@
 # resortos-agent
 
-Local WhatsApp operations agent: Baileys → ffmpeg → mlx-whisper → Qwen 2.5 (Ollama) → ResortOS API. 100% on-device.
+Local WhatsApp operations agent: Baileys → ffmpeg → mlx-whisper → the local Ollama model (`OLLAMA_MODEL`, default `gemma4:12b`) → ResortOS API. 100% on-device.
+
+What it does for the property is summarized in the root [README](../../README.md#the-whatsapp-agent).
 
 ## Install
 
@@ -17,7 +19,7 @@ python3.12 -m venv .venv
 
 # LLM
 brew services start ollama
-ollama pull qwen2.5:14b-instruct      # ~9GB; use qwen2.5:32b only if nothing else heavy is running
+ollama pull gemma4:12b
 ```
 
 ## Data & ResortOS pairing
@@ -50,7 +52,7 @@ npm run typecheck
 .venv/bin/python src/stt/transcriber.py --file sample.wav
 
 # LLM smoke test
-curl -s localhost:11434/api/chat -d '{"model":"qwen2.5:14b-instruct","stream":false,"messages":[{"role":"user","content":"ping"}]}' | head -c 200
+curl -s localhost:11434/api/chat -d '{"model":"gemma4:12b","stream":false,"messages":[{"role":"user","content":"ping"}]}' | head -c 200
 ```
 
 ## Run

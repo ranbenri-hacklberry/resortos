@@ -49,17 +49,16 @@ function shekel(amount: number): string {
 }
 
 function line(rate: RackRate): string {
-  return `• *${rate.label}* — אמצע ${shekel(rate.weekday)} · סוף ${shekel(rate.weekend)} · ${rate.occupancy} · ${rate.pool}`;
+  return `• *${rate.label}* — אמצ״ש ${shekel(rate.weekday)} · סופ״ש ${shekel(rate.weekend)} · ${rate.occupancy}`;
 }
 
 function unitLine(rate: RackRate, room?: RoomEntry): string {
   const name = room?.name || rate.label;
   return (
     `מחירון *${name}*\n` +
-    `אמצע שבוע: *${shekel(rate.weekday)}*\n` +
-    `סוף שבוע (חמישי ושישי): *${shekel(rate.weekend)}*\n` +
-    `תפוסה: ${rate.occupancy}\n` +
-    `בריכה: ${rate.pool}`
+    `אמצ״ש: *${shekel(rate.weekday)}*\n` +
+    `סופ״ש: *${shekel(rate.weekend)}*\n` +
+    `תפוסה: ${rate.occupancy}`
   );
 }
 
@@ -92,18 +91,17 @@ function ratesForUnits(ids: string[]): RackRate[] {
 function formatRates(title: string, rates: RackRate[], withClose = false): string {
   const body = rates.map(line).join('\n');
   const close = withClose
-    ? `\n• *${MIALIS_CLOSE.label}* — אמצע ${shekel(MIALIS_CLOSE.weekday)} · סוף ${shekel(MIALIS_CLOSE.weekend)}`
+    ? `\n• *${MIALIS_CLOSE.label}* — אמצ״ש ${shekel(MIALIS_CLOSE.weekday)} · סופ״ש ${shekel(MIALIS_CLOSE.weekend)}`
     : '';
-  return `מחירון *${title}*\nמחיר ללילה. סוף שבוע: חמישי ושישי.\n${body}${close}`;
+  return `מחירון *${title}*\nמחיר ללילה. סופ״ש: חמישי ושישי.\n${body}${close}`;
 }
 
 export function formatFullPriceList(): string {
   return (
     `מחירון מתחמים · מחיר ללילה\n` +
-    `סוף שבוע: חמישי ושישי.\n\n` +
+    `סופ״ש: חמישי ושישי.\n\n` +
     RACK_RATES.map(line).join('\n') +
-    `\n• *${MIALIS_CLOSE.label}* — אמצע ${shekel(MIALIS_CLOSE.weekday)} · סוף ${shekel(MIALIS_CLOSE.weekend)}\n\n` +
-    `בריכות קאסה נובה לא מחוממות. בקתה 2 במאיה בלי בריכה. בשאר המתחמים בלי בריכה פרטית יש בריכה מרכזית ב-28°.`
+    `\n• *${MIALIS_CLOSE.label}* — אמצ״ש ${shekel(MIALIS_CLOSE.weekday)} · סופ״ש ${shekel(MIALIS_CLOSE.weekend)}`
   );
 }
 
@@ -116,8 +114,8 @@ export function answerRackRate(text: string, rooms: RoomEntry[], contextRoomId?:
   if (mentionsMialisClose(text)) {
     return (
       `*${MIALIS_CLOSE.label}*\n` +
-      `אמצע שבוע: *${shekel(MIALIS_CLOSE.weekday)}*\n` +
-      `סוף שבוע (חמישי ושישי): *${shekel(MIALIS_CLOSE.weekend)}*`
+      `אמצ״ש: *${shekel(MIALIS_CLOSE.weekday)}*\n` +
+      `סופ״ש: *${shekel(MIALIS_CLOSE.weekend)}*`
     );
   }
 

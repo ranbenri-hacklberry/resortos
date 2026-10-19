@@ -1,4 +1,4 @@
-import { normalizeClearingPayment } from './clearingPayments';
+import { normalizeClearingPayment } from './clearingPayments.js';
 
 export function paymentStatusRank(status) {
   const s = String(status || 'UNPAID').toUpperCase();

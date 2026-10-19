@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { ARRIVAL_TODAY_LABEL, priorityDayCell, priorityDeskGuests, priorityShowsGuest, selectPriorityStay } from './priorityStay';
+import {
+  ARRIVAL_TODAY_LABEL,
+  priorityDayCell,
+  priorityDayOccupancy,
+  priorityDeskGuests,
+  priorityShowsGuest,
+  selectPriorityStay
+} from './priorityStay';
 
 const today = '2026-10-12';
 
@@ -179,3 +186,61 @@ describe('priorityDayCell', () => {
     ], 'k9', day).kind).toBe('stay');
   });
 });
+
+describe('priorityDayOccupancy', () => {
+  it('calculates the occupancy percentage and counts for all units on a given day', () => {
+    const day = '2026-10-15';
+    const testUnits = [{ id: 'u1' }, { id: 'u2' }, { id: 'u3' }, { id: 'u4' }];
+    const testBookings = [
+      booking({ id: 'b1', unit_id: 'u1', guest_name: 'אורח 1', check_in_date: '2026-10-14', check_out_date: '2026-10-16' }), // staying -> occupied
+      booking({ id: 'b2', unit_id: 'u2', guest_name: 'אורח 2', check_in_date: '2026-10-15', check_out_date: '2026-10-17' }), // check-in today -> occupied
+      booking({ id: 'b3', unit_id: 'u3', guest_name: 'אורח 3', check_in_date: '2026-10-13', check_out_date: '2026-10-15' }), // checkout today only -> vacant tonight
+      // u4 is completely empty -> vacant tonight
+    ];
+
+    const stats = priorityDayOccupancy(testBookings, testUnits, day);
+    expect(stats.total).toBe(4);
+    expect(stats.occupied).toBe(2);
+    expect(stats.percent).toBe(50);
+  });
+
+  it('excludes closed, hold and unavailable units from total and occupied counts', () => {
+    const day = '2026-10-15';
+    const testUnits = [
+      { id: 'u1' },
+      { id: 'u2' },
+      { id: 'u3' },
+      { id: 'u4' },
+      { id: 'u5', custom_reason: 'שיפוצים' },
+      { id: 'u6', operational_status: 'OUT_OF_ORDER' }
+    ];
+    const testBookings = [
+      booking({ id: 'b1', unit_id: 'u1', guest_name: 'אורח 1', check_in_date: '2026-10-14', check_out_date: '2026-10-16' }), // occupied
+      booking({ id: 'b2', unit_id: 'u2', guest_name: 'לא זמין', check_in_date: '2026-10-14', check_out_date: '2026-10-18' }), // hold -> excluded!
+      booking({ id: 'b3', unit_id: 'u3', guest_name: 'סגור', check_in_date: '2026-10-15', check_out_date: '2026-10-20' }), // hold -> excluded!
+      // u4 is completely empty -> available, vacant
+      // u5 has custom_reason: 'שיפוצים' -> excluded!
+      // u6 has operational_status: 'OUT_OF_ORDER' -> excluded!
+    ];
+
+    // Only u1 (occupied) and u4 (vacant) are available -> total = 2, occupied = 1, percent = 50%
+    const stats = priorityDayOccupancy(testBookings, testUnits, day);
+    expect(stats.total).toBe(2);
+    expect(stats.occupied).toBe(1);
+    expect(stats.percent).toBe(50);
+  });
+
+  it('respects draft weekMark unavailable', () => {
+    const day = '2026-10-15';
+    const testUnits = [{ id: 'u1' }, { id: 'u2' }];
+    const testBookings = [
+      booking({ id: 'b1', unit_id: 'u1', guest_name: 'אורח 1', check_in_date: '2026-10-14', check_out_date: '2026-10-16' })
+    ];
+    // u2 is drafted as unavailable
+    const stats = priorityDayOccupancy(testBookings, testUnits, day, { drafts: { u2: { weekMark: 'unavailable' } } });
+    expect(stats.total).toBe(1);
+    expect(stats.occupied).toBe(1);
+    expect(stats.percent).toBe(100);
+  });
+});
+

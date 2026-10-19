@@ -153,6 +153,9 @@ export const LOCKBOX_BY_UNIT = {
 
 /** Per-cabin overrides only. Missing keys inherit from the property. */
 export const UNIT_OVERRIDES = {
+  'pilot-office': {
+    access: { wifi: [{ ssid: 'ResortOS_5G', password: '0506102416' }] }
+  },
   'dome-blue': {
     content: {
       guides: {

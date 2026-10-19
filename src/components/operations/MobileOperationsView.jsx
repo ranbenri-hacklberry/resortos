@@ -690,13 +690,22 @@ export default function MobileOperationsView({
                           fontWeight: 800,
                           padding: '0.15rem 0.5rem',
                           borderRadius: brand.radius,
-                          border: `1px solid ${isClean ? brand.readyBorder : brand.border}`,
-                          background: isClean ? brand.readyBg : (isDark ? '#3D221C' : '#F5EFEB'),
-                          color: isClean ? brand.readyText : brand.textMuted
+                          border: isClean
+                            ? `1px solid ${brand.readyBorder}`
+                            : (room.status === 'IN_PROGRESS' ? '1px solid #F59E0B' : '1px solid #EF4444'),
+                          background: isClean
+                            ? brand.readyBg
+                            : (room.status === 'IN_PROGRESS'
+                              ? (isDark ? 'rgba(245, 158, 11, 0.18)' : '#FEF3C7')
+                              : (isDark ? 'rgba(239, 68, 68, 0.18)' : '#FEE2E2')),
+                          color: isClean
+                            ? brand.readyText
+                            : (room.status === 'IN_PROGRESS' ? '#D97706' : '#DC2626')
                         }}
                       >
-                        {isClean ? '✓ מוכן לאורח' : (room.status === 'IN_PROGRESS' ? '⚡ בניקיון' : '⏳ ממתין לניקיון')}
+                        {isClean ? '✓ מוכן לאורח' : (room.status === 'IN_PROGRESS' ? `בנקיון${room.staff ? ` | ${room.staff}` : ''}` : 'לניקוי')}
                       </div>
+
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78rem', color: brand.textMuted }}>
@@ -955,14 +964,17 @@ export default function MobileOperationsView({
                           fontWeight: 800,
                           padding: '0.15rem 0.45rem',
                           borderRadius: brand.radius,
-                          border: `1px solid ${isInProgress ? '#6366F1' : (isCompletions ? '#0D9488' : brand.border)}`,
-                          background: isInProgress ? 'rgba(99, 102, 241, 0.12)' : (isCompletions ? 'rgba(13, 148, 136, 0.12)' : (isDark ? '#3D221C' : '#F5EFEB')),
-                          color: isInProgress ? '#6366F1' : (isCompletions ? '#0D9488' : brand.textMuted)
+                          border: `1px solid ${isInProgress ? '#F59E0B' : (isCompletions ? '#0D9488' : '#EF4444')}`,
+                          background: isInProgress
+                            ? (isDark ? 'rgba(245, 158, 11, 0.18)' : '#FEF3C7')
+                            : (isCompletions ? 'rgba(13, 148, 136, 0.12)' : (isDark ? 'rgba(239, 68, 68, 0.18)' : '#FEE2E2')),
+                          color: isInProgress ? '#D97706' : (isCompletions ? '#0D9488' : '#DC2626')
                         }}
                       >
-                        {isInProgress ? '⚡ ניקיון בביצוע' : (isCompletions ? '📦 חסרות השלמות' : '⏳ ממתין לתחילת ניקיון')}
+                        {isInProgress ? `בנקיון${room.staff ? ` | ${room.staff}` : ''}` : (isCompletions ? '📦 חסרות השלמות' : 'לניקוי')}
                       </div>
                     </div>
+
 
                     {/* Guest Turnover Context */}
                     <div style={{ fontSize: '0.74rem', color: brand.textMuted }}>

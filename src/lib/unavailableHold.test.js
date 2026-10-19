@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { coveringStayOnDate, isPaintedStay } from './calendarOccupancy.js';
 import { mergeKinorotArrivals } from './bookingFinance.js';
 import { unitDisplayStatus } from './unitStatus.js';
-import { hideClosedOrRenovationUnit, isUnavailableHoldBooking } from './unavailableHold.js';
+import { coveringUnavailableHold, hideClosedOrRenovationUnit, isUnavailableHoldBooking } from './unavailableHold.js';
 
 const hold = {
   id: 'kin_671_1',
@@ -34,7 +34,15 @@ describe('unavailable Kinorot holds', () => {
     expect(isUnavailableHoldBooking({ ...hold, guest_name: 'מזגן מקולקל' })).toBe(true);
     expect(isUnavailableHoldBooking({ ...hold, guest_name: 'תפוס' })).toBe(true);
     expect(isUnavailableHoldBooking({ ...hold, guest_name: 'תפוס לתיקון' })).toBe(true);
+    expect(isUnavailableHoldBooking({ ...hold, guest_name: 'לא למכירה' })).toBe(true);
+    expect(isUnavailableHoldBooking({ ...hold, guest_name: 'לא להשכרה' })).toBe(true);
+    expect(isUnavailableHoldBooking({ ...hold, guest_name: 'בריכה לא עובדת' })).toBe(true);
+    expect(isUnavailableHoldBooking({ ...hold, guest_name: 'תקלה בבריכה' })).toBe(true);
+    expect(isUnavailableHoldBooking({ ...hold, guest_name: 'חסום' })).toBe(true);
+    expect(isUnavailableHoldBooking({ ...hold, guest_name: 'בעלים' })).toBe(true);
+    expect(isUnavailableHoldBooking({ ...hold, guest_name: 'לא פנוי' })).toBe(true);
     expect(isUnavailableHoldBooking({ ...hold, guest_name: 'דניאל ניחנקין' })).toBe(false);
+    expect(isUnavailableHoldBooking({ ...hold, guest_name: 'שירן עובדיה' })).toBe(false);
     expect(isUnavailableHoldBooking(guest)).toBe(false);
     expect(isUnavailableHoldBooking({ ...hold, id: 'local-1', special_requests: '' })).toBe(true);
   });
@@ -60,6 +68,14 @@ describe('unavailable Kinorot holds', () => {
     const range = { today: '2026-09-06', rangeStart: '2026-09-01', rangeEnd: '2026-09-25' };
     expect(hideClosedOrRenovationUnit({ id: 'k671' }, [hold], range)).toBe(true);
     expect(hideClosedOrRenovationUnit({ id: 'k672' }, [guest], range)).toBe(false);
+    const complexClose = { ...hold, id: 'close', guest_name: 'מתחם סגור לא לבצע לפני ששואלים את אדם', check_in_date: '2026-10-15', check_out_date: '2026-10-22' };
+    expect(coveringUnavailableHold([complexClose], 'k674', '2026-10-18')?.id).toBe('close');
+    expect(coveringUnavailableHold([
+      complexClose,
+      { ...guest, id: 'olga', unit_id: 'k673', guest_name: 'Olga Roubbakh', check_in_date: '2026-10-18', check_out_date: '2026-10-20' }
+    ], 'k673', '2026-10-18')).toBeNull();
+    expect(coveringUnavailableHold([complexClose], 'k680', '2026-10-18')).toBeNull();
+
     expect(hideClosedOrRenovationUnit({ id: 'k671' }, [hold, {
       ...guest,
       id: 'real',

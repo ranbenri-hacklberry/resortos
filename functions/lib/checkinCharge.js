@@ -173,7 +173,7 @@ export async function chargeSavedCardCheckin(booking, env) {
   }
   const info = stayInfo(booking);
   const charged = await chargeHypToken(env, {
-    terminal: 'A',
+    terminal: card.terminal || 'B',
     amount: quote.amount,
     token,
     exp_month: card.exp_month,
@@ -268,8 +268,9 @@ function appendClearingPayment(row, result, terminal) {
 function attachHypCard(stay, result, terminal) {
   const token = String(result?.token || '').trim();
   if (!token) return;
+  const cardcomToken = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token);
   stay.hyp_card = {
-    gateway: 'hyp',
+    gateway: cardcomToken ? 'cardcom' : 'hyp',
     token,
     last_4: String(result.last4 || '').slice(-4),
     card_brand: String(result.brand || ''),

@@ -133,7 +133,62 @@ function BookingCard({ booking, busy, onPay }) {
   );
 }
 
-function PaymentSheet({ booking, busy, hyp, error, payUrl, onClose, onSubmit, onUndo }) {
+function IdPhotoPanel({ token, sessionToken }) {
+  const [src, setSrc] = useState('');
+  const [state, setState] = useState('idle');
+
+  useEffect(() => () => {
+    if (src) URL.revokeObjectURL(src);
+  }, [src]);
+
+  if (!token) return null;
+
+  async function openPhoto() {
+    setState('loading');
+    try {
+      const res = await fetch(`/api/desk/id-photo/${encodeURIComponent(token)}`, {
+        headers: sessionToken ? { authorization: `Bearer ${sessionToken}` } : {}
+      });
+      if (res.status === 404) {
+        setState('empty');
+        return;
+      }
+      if (!res.ok) {
+        setState('error');
+        return;
+      }
+      const blob = await res.blob();
+      if (!String(blob.type || '').startsWith('image/')) {
+        setState('error');
+        return;
+      }
+      setSrc((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return URL.createObjectURL(blob);
+      });
+      setState('open');
+    } catch {
+      setState('error');
+    }
+  }
+
+  return (
+    <div className="desk-voucher">
+      <p className="desk-label">תעודת זהות</p>
+      {state === 'open' && src ? (
+        <img src={src} alt="תעודת זהות" style={{ width: '100%', maxHeight: 420, objectFit: 'contain', borderRadius: 12, background: '#111' }} />
+      ) : (
+        <button type="button" onClick={openPhoto} disabled={state === 'loading'}>
+          {state === 'loading' ? 'טוען…' : 'הצגת תעודת זהות'}
+        </button>
+      )}
+      {state === 'empty' ? <p className="desk-muted">האורח עוד לא העלה תעודה.</p> : null}
+      {state === 'error' ? <p className="desk-error">לא הצלחנו לפתוח את התעודה.</p> : null}
+    </div>
+  );
+}
+
+function PaymentSheet({ booking, busy, hyp, error, payUrl, sessionToken, onClose, onSubmit, onUndo }) {
   const paid = Math.max(0, Number(booking.paid_ils) || 0);
   const [total, setTotal] = useState(() => String(Math.max(0, Number(booking.total_ils) || 0)));
   const [due, setDue] = useState(() => String(Math.max(0, Number(booking.due_ils) || Math.max(0, (Number(booking.total_ils) || 0) - paid))));
@@ -209,6 +264,7 @@ function PaymentSheet({ booking, busy, hyp, error, payUrl, onClose, onSubmit, on
           )}
         </div>
         <p className="desk-muted">שולם ₪{paid} · נשאר ₪{fullyPaid ? 0 : Math.max(0, Math.round((totalIls - paid) * 100) / 100)}</p>
+        <IdPhotoPanel token={booking.checkout_token} sessionToken={sessionToken} />
 
         {payments.length ? (
           <ul className="desk-pay-list">
@@ -677,6 +733,7 @@ export default function DeskApp() {
           hyp={hyp}
           error={error}
           payUrl={payUrl}
+          sessionToken={session?.token || ''}
           onClose={() => { setPaying(null); setError(''); setPayUrl(''); }}
           onSubmit={submitPayment}
           onUndo={undoPayment}

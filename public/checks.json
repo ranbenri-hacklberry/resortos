@@ -262,6 +262,23 @@
       "method": "transfer"
     },
     {
+      "id": "nahi-rent-2026-10-25",
+      "check_number": null,
+      "payee": "נחי",
+      "due_date": "2026-10-25",
+      "amount": 2892,
+      "invoice_number": null,
+      "description": "שכר דירה",
+      "lines": [
+        {
+          "label": "שכר דירה",
+          "amount": 2892
+        }
+      ],
+      "series": null,
+      "method": "transfer"
+    },
+    {
       "id": "vat-2026-2026-10-30",
       "check_number": null,
       "payee": "מע״מ",

@@ -516,7 +516,19 @@ export default function AgentApp() {
         <section className="mt-4 rounded-2xl border border-slate-800 overflow-hidden bg-white">
           <div className="p-3 grid gap-2 bg-stone-100">
             <a className="text-center rounded-xl border border-stone-300 bg-white py-3 font-bold" href={`https://resortos.app/stay/${encodeURIComponent(lock.checkout_token)}`}>דף האורח</a>
-            <a className="text-center rounded-xl border border-stone-300 bg-white py-3 font-bold" href={`https://wa.me/?text=${encodeURIComponent(`קישור לשהות: https://resortos.app/stay/${lock.checkout_token}`)}`}>שלח קישור לאורח בוואטסאפ</a>
+            <a
+              className="text-center rounded-xl border border-stone-300 bg-white py-3 font-bold"
+              href={(() => {
+                const digits = String(guestPhone || '').replace(/\D/g, '');
+                const cleanTarget = digits ? (digits.startsWith('05') ? `972${digits.slice(1)}` : digits) : '';
+                const text = encodeURIComponent(`קישור לשהות: https://resortos.app/stay/${lock.checkout_token}`);
+                return cleanTarget ? `https://api.whatsapp.com/send?phone=${cleanTarget}&text=${text}` : `https://api.whatsapp.com/send?text=${text}`;
+              })()}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              שלח קישור לאורח בוואטסאפ
+            </a>
           </div>
         </section>
       ) : (

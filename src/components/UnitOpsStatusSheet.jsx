@@ -132,6 +132,9 @@ export default function UnitOpsStatusSheet({
             }}>
               {UNIT_OPS_CHOICES.filter((choice) => choice.key !== NEEDS_COMPLETIONS).map((choice) => {
                 const badge = UNIT_STATUS_BADGES[choice.key];
+                const displayLabel = choice.key === 'IN_PROGRESS' && assignee
+                  ? `בנקיון | ${assignee}`
+                  : badge.label;
                 return (
                   <button
                     key={choice.key}
@@ -149,7 +152,10 @@ export default function UnitOpsStatusSheet({
                       fontWeight: 800
                     }}
                   >
-                    <div style={{ fontSize: '0.95rem', color: badge.color }}>{badge.label}</div>
+                    <div style={{ fontSize: '0.95rem', color: badge.color, display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <span style={{ width: 7, height: 7, borderRadius: 999, backgroundColor: badge.color }} />
+                      <span>{displayLabel}</span>
+                    </div>
                     <div style={{ fontSize: '0.7rem', fontWeight: 700, color: themeStyles.textMuted, marginTop: 2 }}>
                       {choice.hint}
                     </div>
@@ -162,14 +168,19 @@ export default function UnitOpsStatusSheet({
           <>
         <div style={{ marginTop: 10 }}>
           <span style={{
-            fontSize: '0.72rem',
+            fontSize: '0.75rem',
             fontWeight: 800,
             color: shown.color,
             background: shown.bg,
+            border: shown.border ? `1px solid ${shown.border}` : `1px solid ${shown.color}33`,
             borderRadius: 999,
-            padding: '3px 9px'
+            padding: '3px 10px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6
           }}>
-            {shown.label}
+            <span style={{ width: 7, height: 7, borderRadius: 999, backgroundColor: shown.color }} />
+            <span>{shown.label}</span>
           </span>
         </div>
 
@@ -273,6 +284,9 @@ export default function UnitOpsStatusSheet({
           {UNIT_OPS_CHOICES.map((choice) => {
             const badge = UNIT_STATUS_BADGES[choice.key];
             const selected = current === choice.key;
+            const displayLabel = choice.key === 'IN_PROGRESS' && assignee
+              ? `בנקיון | ${assignee}`
+              : badge.label;
             return (
               <button
                 key={choice.key}
@@ -282,7 +296,7 @@ export default function UnitOpsStatusSheet({
                   minHeight: 72,
                   textAlign: 'right',
                   borderRadius: 14,
-                  border: selected ? `2px solid ${badge.color}` : `1px solid ${themeStyles.inputBorder}`,
+                  border: selected ? `2px solid ${badge.border || badge.color}` : `1px solid ${themeStyles.inputBorder}`,
                   background: selected
                     ? badge.bg
                     : (isLight ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.04)'),
@@ -292,7 +306,10 @@ export default function UnitOpsStatusSheet({
                   fontWeight: 800
                 }}
               >
-                <div style={{ fontSize: '1rem', color: badge.color }}>{badge.label}</div>
+                <div style={{ fontSize: '1rem', color: badge.color, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: badge.color, flexShrink: 0 }} />
+                  <span>{displayLabel}</span>
+                </div>
                 <div style={{ fontSize: '0.72rem', fontWeight: 700, color: themeStyles.textMuted, marginTop: 3 }}>
                   {choice.hint}
                 </div>

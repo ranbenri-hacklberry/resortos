@@ -1,10 +1,12 @@
 import type { WAMessage } from '@whiskeysockets/baileys';
-import { config, isStaffRoom, isOfficeRoom, type CleanerProfile, type Lang, type RoomEntry } from './config.js';
+import { config, isBookableRoom, isStaffRoom, isOfficeRoom, type CleanerProfile, type Lang, type RoomEntry } from './config.js';
 import type { InboundIntent } from './llm/client.js';
 import { resolveRoomByAlias } from './llm/client.js';
-import { AWAITING_INSPECTION_REASON, type ReadyResult, type BookingRow, type UnitRow } from './integration/resortos.js';
+import { AWAITING_INSPECTION_REASON, ResortOSError, type ReadyResult, type BookingRow, type UnitRow } from './integration/resortos.js';
 import type { Transcript } from './whatsapp/media.js';
+import { resolveStaffPhone } from './whatsapp/client.js';
 import { generateRoomQrPng } from './whatsapp/qrGenerator.js';
+import { consultCallDesk } from './calls/deskReply.js';
 import {
   getPendingCheck,
   setPendingCheck,
@@ -19,27 +21,55 @@ import {
   CLEANER_ASK_MAINTENANCE,
   CLEANER_CONFIRM_SUPPLIES,
   CLEANER_CONFIRM_MAINTENANCE,
-  managerActionMenu,
+  managerIssueMenu,
   managerStatusMenu,
+  withManagerActions,
 } from './llm/prompts.js';
-import { answerGuestQuestion, type GuestContext } from './guest/guestKnowledge.js';
+import { answerGuestQuestion, answerStaffPlaceQuestion, staffPlaceNeedsRoom, type GuestContext } from './guest/guestKnowledge.js';
 import { answerRackRate } from './pricing/priceList.js';
+import { exactStaticReply, lookupExact } from './pricing/exactLookup.js';
+import {
+  confirmAnswer,
+  proposeStatusChange,
+  statusConfirmText,
+  statusLabel,
+  textHasStatusWord,
+  type StatusChange,
+} from './manager/statusConfirm.js';
+import { cashConfirmText, cashShekelLabel, paymentStatusChoice, paymentStatusLabel, paymentStatusQuestion, proposeCashCollection } from './manager/cashCollection.js';
+import { holdConfirmText, holdDoneText, holdProgressText, proposesNightHold } from './manager/nightHold.js';
+import { placeDetail, placeMenuFor } from './guest/placeMenu.js';
 import {
   formatManagerInitialCard,
   answerManagerRoomQuestion,
   getRoomOccupancy,
 } from './manager/managerQuestions.js';
 import {
+  displayPhone,
+  guestLinkConfirm,
+  guestLinkPickText,
+  guestLinkSms,
+  linkChoice,
+  phoneFromReply,
+  type GuestLinkChoice,
+} from './manager/guestLink.js';
+import {
   matchManagerRoomIntent,
   normalizeSpokenHebrewNumbers,
   formatComplexClarificationPrompt,
   formatNumberClarificationPrompt,
+  bareUnitNumber,
+  complexOfRoom,
+  resolveRoomWithContext,
+  type RoomDialogContext,
 } from './manager/managerFuzzyMatcher.js';
 
 export type CleanerSessionState =
   | { role: 'CLEANER'; state: 'AWAITING_STATUS'; roomId: string }
   | { role: 'CLEANER'; state: 'AWAITING_SUPPLIES'; roomId: string }
-  | { role: 'CLEANER'; state: 'AWAITING_MAINTENANCE'; roomId: string };
+  | { role: 'CLEANER'; state: 'AWAITING_MAINTENANCE'; roomId: string }
+  | { role: 'CLEANER'; state: 'AWAITING_STATUS_CONFIRM'; roomId: string; change: StatusChange; sourceText?: string }
+  | { role: 'CLEANER'; state: 'AWAITING_PLACE'; placeIds: string[]; roomId?: string };
 
 export type ManagerSessionState =
   | { role: 'MANAGER'; state: 'AWAITING_ACTION'; roomId: string; bookingId?: string }
@@ -47,9 +77,23 @@ export type ManagerSessionState =
   | { role: 'MANAGER'; state: 'AWAITING_MAINTENANCE'; roomId: string }
   | { role: 'MANAGER'; state: 'AWAITING_ROOM_NOTE'; roomId: string }
   | { role: 'MANAGER'; state: 'AWAITING_GUEST_NOTE'; roomId: string; bookingId?: string }
-  | { role: 'MANAGER'; state: 'AWAITING_CLARIFICATION'; candidateRoomIds: string[]; pendingQuestion?: string };
+  | { role: 'MANAGER'; state: 'AWAITING_CLARIFICATION'; candidateRoomIds: string[]; pendingQuestion?: string }
+  | { role: 'MANAGER'; state: 'AWAITING_STATUS_CONFIRM'; roomId: string; change: StatusChange; sourceText?: string }
+  | { role: 'MANAGER'; state: 'AWAITING_CASH_CONFIRM'; roomId: string; shekels: number; sourceText?: string }
+  | { role: 'MANAGER'; state: 'AWAITING_PAYMENT_STATUS'; roomId: string }
+  | { role: 'MANAGER'; state: 'AWAITING_HOLD_CONFIRM'; roomId: string }
+  | { role: 'MANAGER'; state: 'AWAITING_PLACE'; placeIds: string[]; roomId?: string }
+  | { role: 'MANAGER'; state: 'AWAITING_ISSUE_KIND'; roomId: string }
+  | { role: 'MANAGER'; state: 'AWAITING_SUPPLIES'; roomId: string }
+  | { role: 'MANAGER'; state: 'AWAITING_GUEST_PICK'; roomId: string; choices: GuestLinkChoice[] }
+  | { role: 'MANAGER'; state: 'AWAITING_GUEST_PHONE'; roomId: string; bookingId: string; stayUrl: string; guestName: string }
+  | { role: 'MANAGER'; state: 'AWAITING_GUEST_LINK'; roomId: string; bookingId: string; phone: string; stayUrl: string; guestName: string };
 
-export type SessionState = CleanerSessionState | ManagerSessionState;
+export type GuestSessionState =
+  | { role: 'GUEST'; state: 'AWAITING_PLACE'; placeIds: string[]; bookingId?: string }
+  | { role: 'GUEST'; state: 'AWAITING_CALL_CONFIRM'; bookingId: string; unitId: string; roomName: string; guestName?: string | null; guestPhone?: string | null };
+
+export type SessionState = CleanerSessionState | ManagerSessionState | GuestSessionState;
 
 /** Narrow interfaces so everything is mockable in tests. */
 export interface PipelineDeps {
@@ -66,25 +110,48 @@ export interface PipelineDeps {
     listUnits?(): Promise<UnitRow[]>;
     listBookings?(p?: { from?: string; to?: string }): Promise<BookingRow[]>;
     publishBookingStay?(booking: BookingRow): Promise<boolean>;
-    markRoomReady(p: { unitId: string; reportedBy: string }): Promise<ReadyResult>;
-    approveRoomByManager?(p: { unitId: string; reportedBy: string }): Promise<ReadyResult>;
-    startCleaning?(p: { unitId: string; reportedBy: string }): Promise<ReadyResult>;
-    updateUnitStatus?(p: { unitId: string; status: string; reason?: string; reportedBy: string }): Promise<unknown>;
+    markRoomReady(p: { unitId: string; reportedBy: string; note?: string }): Promise<ReadyResult>;
+    approveRoomByManager?(p: { unitId: string; reportedBy: string; note?: string }): Promise<ReadyResult>;
+    startCleaning?(p: { unitId: string; reportedBy: string; note?: string }): Promise<ReadyResult>;
+    updateUnitStatus?(p: { unitId: string; status: string; reason?: string; reportedBy: string; note?: string }): Promise<unknown>;
+    setStaffOccupancy?(p: { unitId: string; occupancy: 'OCCUPIED' | 'VACANT'; reportedBy: string; note?: string }): Promise<ReadyResult>;
     updateUnitNote?(p: { unitId: string; note: string; reportedBy: string }): Promise<unknown>;
     updateBookingNote?(p: { bookingId: string; note: string; reportedBy: string }): Promise<unknown>;
+    collectCash?(p: { unitId: string; amountAgorot: number; reportedBy: string; note?: string }): Promise<{ ok: true; guest_name?: string; amount_agorot?: number } | { ok: false; skipped: string }>;
+    setPaymentStatus?(p: { unitId: string; status: 'PARTIAL' | 'PAID'; reportedBy: string }): Promise<{ ok: true; guest_name?: string; payment_status?: string } | { ok: false; skipped: string }>;
+    holdNight?(p: { unitId: string; reportedBy: string }): Promise<{ ok: true; verified: boolean } | { ok: false; skipped: string }>;
     reportMaintenance(p: { unitId: string; description: string; reportedBy: string }): Promise<unknown>;
     reportSupplies(p: { unitId: string; description: string; reportedBy: string }): Promise<unknown>;
+    sendGuestLinkSms?(p: { bookingId: string; phone: string; message: string; reportedBy?: string }): Promise<{ ok: true }>;
+    logGuestComm?(p: {
+      bookingId: string;
+      tenantId?: string | null;
+      channel?: string;
+      direction: 'inbound' | 'outbound';
+      phone?: string | null;
+      content: string;
+      status?: string;
+      metadata?: Record<string, unknown>;
+    }): Promise<void>;
+    requestGuestCall?(p: {
+      bookingId: string;
+      unitId: string;
+      guestName?: string | null;
+      guestPhone?: string | null;
+      cabin?: string | null;
+    }): Promise<void>;
   };
   cleaners: () => CleanerProfile[];
   rooms: () => RoomEntry[];
   log: { info: (...a: any[]) => void; warn: (...a: any[]) => void; error: (...a: any[]) => void };
 }
 
-export const phoneOf = (jid: string) => jid.split('@')[0].split(':')[0];
+export const phoneOf = (jid: string) => resolveStaffPhone(jid);
 
 export function normalizePhoneTail(raw?: string | null): string {
   if (!raw) return '';
-  const digits = raw.replace(/\D/g, '');
+  const resolved = resolveStaffPhone(raw);
+  const digits = resolved.replace(/\D/g, '');
   if (digits.startsWith('972')) return digits.slice(3).slice(-9);
   if (digits.startsWith('0')) return digits.slice(1).slice(-9);
   return digits.slice(-9);
@@ -98,6 +165,13 @@ export function phonesMatch(a?: string | null, b?: string | null): boolean {
   return Boolean(tailA && tailB && tailA.length >= 7 && tailA === tailB);
 }
 
+export function matchesCleaner(c: CleanerProfile, rawTarget?: string | null): boolean {
+  if (!rawTarget) return false;
+  const rawUser = String(rawTarget).split('@')[0].split(':')[0].replace(/\D/g, '');
+  if (c.lid && rawUser && c.lid === rawUser) return true;
+  return phonesMatch(c.phone, rawTarget);
+}
+
 export function getIsraelToday(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date());
 }
@@ -105,8 +179,51 @@ export function getIsraelToday(): string {
 const CLARIFY: Record<Lang, string> = {
   th: 'ขออภัยค่ะ ไม่เข้าใจ รบกวนส่งอีกครั้งนะคะ',
   ar: 'عذراً، ما فهمت عليك. ممكن تعيد الرسالة؟',
-  he: 'סליחה, לא הבנתי. אפשר לשלוח שוב?',
+  he: 'לא הבנתי. אפשר לשלוח שוב?',
 };
+
+export function firstName(full?: string | null): string {
+  return String(full || '').trim().split(/\s+/)[0]?.replace(/[,.!:]+$/g, '') || '';
+}
+
+const GREETING_PHRASE: Record<string, string> = {
+  'בוקר טוב': 'בוקר טוב',
+  'צהריים טובים': 'צהריים טובים',
+  'צהרים טובים': 'צהריים טובים',
+  'ערב טוב': 'ערב טוב',
+  'לילה טוב': 'לילה טוב',
+  'היי': 'היי',
+  'הי': 'היי',
+  'שלום': 'שלום',
+  'אהלן': 'אהלן',
+  'מה נשמע': 'מה נשמע',
+  'מה קורה': 'מה קורה',
+  'hi': 'היי',
+  'hello': 'היי',
+  'hey': 'היי',
+  'good morning': 'בוקר טוב',
+};
+
+/** A greeting by itself is answered in the same words, then an offer to help. */
+export function greetingReply(text: string, fullName?: string | null): string | null {
+  const who = firstName(fullName);
+  let cleaned = String(text || '').trim().replace(/[!?.,…]+$/g, '').replace(/\s+/g, ' ').trim();
+  if (who) cleaned = cleaned.replace(new RegExp(`\\s+${who}$`, 'i'), '').trim();
+  const phrase = GREETING_PHRASE[cleaned] || GREETING_PHRASE[cleaned.toLowerCase()];
+  if (!phrase) return null;
+  return who
+    ? `${phrase} ${who}, במה אוכל לעזור לך היום?`
+    : `${phrase}, במה אוכל לעזור היום?`;
+}
+
+/** A question with no facts opens with the person's name. */
+export function askByName(fullName: string | null | undefined, text: string): string {
+  const who = firstName(fullName);
+  const body = String(text || '').replace(/^(?:שלום|היי|הי|hello|hi|أهلاً|أهلا)\b[!,.،\s]*/i, '').trim();
+  if (!who) return body;
+  if (body.startsWith(`${who},`) || body.startsWith(`${who} `)) return body;
+  return `${who}, ${body}`;
+}
 
 const ASK_ROOM: Record<Lang, string> = {
   th: 'ขออภัยค่ะ ช่วยบอกชื่อกลุ่มบ้านและหมายเลขด้วยนะคะ เช่น "มูล 3" หรือ "ทัช 2"',
@@ -147,6 +264,18 @@ export function formatRoomDisplay(roomId: string, rooms: RoomEntry[]): string {
   return r.letterCode || (roomId.startsWith('k') ? `יחידה ${roomId.slice(1)}` : roomId);
 }
 
+/** Guest units with no stay tonight. A checkout today is free for a new arrival. */
+export function formatVacantToday(rooms: RoomEntry[], bookings: BookingRow[], today: string): string {
+  const occupied = new Set(
+    bookings
+      .filter((b) => !b.deleted_at && b.booking_status !== 'CANCELED' && (b.check_in_date || '') <= today && (b.check_out_date || '') > today)
+      .map((b) => b.unit_id)
+  );
+  const free = rooms.filter((room) => isBookableRoom(room) && !isStaffRoom(room) && !isOfficeRoom(room) && !occupied.has(room.id));
+  if (!free.length) return 'אין חדר פנוי להיום.';
+  return `פנויים להיום (${free.length}):\n${free.map((room) => `• ${formatRoomDisplay(room.id, rooms)}`).join('\n')}`;
+}
+
 export function formatRoomForWorker(roomId: string, lang: Lang, rooms: RoomEntry[]): string {
   const r = rooms.find((x) => x.id === roomId);
   const lockbox = r?.lockbox;
@@ -167,9 +296,48 @@ export function createPipeline(d: PipelineDeps) {
   const getSession = (phone: string) => sessionStates.get(normalizePhoneTail(phone));
   const setSession = (phone: string, s: SessionState) => sessionStates.set(normalizePhoneTail(phone), s);
   const clearSession = (phone: string) => sessionStates.delete(normalizePhoneTail(phone));
+  const roomMemory = new Map<string, { complexKey?: string; complexAge: number; statedUnit?: number; statedUnitAge: number }>();
+
+  function touchRoomMemory(phone: string) {
+    const row = roomMemory.get(phone);
+    if (!row) return;
+    row.complexAge += 1;
+    row.statedUnitAge += 1;
+  }
+
+  function rememberComplex(phone: string, complexKey: string) {
+    const row = roomMemory.get(phone) || { complexAge: 0, statedUnitAge: 99 };
+    row.complexKey = complexKey;
+    row.complexAge = 0;
+    roomMemory.set(phone, row);
+  }
+
+  function rememberStatedUnit(phone: string, unit: number) {
+    const row = roomMemory.get(phone) || { complexAge: 99, statedUnitAge: 0 };
+    row.statedUnit = unit;
+    row.statedUnitAge = 0;
+    roomMemory.set(phone, row);
+  }
+
+  function rememberRoom(phone: string, roomId: string) {
+    const complex = complexOfRoom(roomId);
+    if (complex) rememberComplex(phone, complex.key);
+  }
+
+  function dialogContext(phone: string, currentRoomId?: string): RoomDialogContext {
+    const row = roomMemory.get(phone);
+    const context: RoomDialogContext = {};
+    if (row?.complexKey && row.complexAge <= 2) context.complexKey = row.complexKey;
+    if (row?.statedUnit && row.statedUnitAge <= 2) context.statedUnit = row.statedUnit;
+    if (currentRoomId) {
+      const complex = complexOfRoom(currentRoomId);
+      if (complex) context.complexKey = complex.key;
+    }
+    return context;
+  }
 
   async function triggerRoomExit(p: { cleanerPhone: string; roomId: string }): Promise<{ ok: boolean; message?: string }> {
-    const cleaner = d.cleaners().find((c) => phonesMatch(c.phone, p.cleanerPhone));
+    const cleaner = d.cleaners().find((c) => matchesCleaner(c, p.cleanerPhone));
     if (!cleaner) return { ok: false, message: 'cleaner not found' };
     const r = d.rooms().find((x) => x.id === p.roomId);
     const roomLabel = cleaner.language === 'th' ? (r?.letterCode || r?.name || p.roomId) : (r?.name || r?.letterCode || p.roomId);
@@ -185,22 +353,437 @@ export function createPipeline(d: PipelineDeps) {
     const jid = msg.key.remoteJid;
     if (!jid) return { handled: false, reason: 'no jid' };
     const senderPhone = phoneOf(jid);
-    const cleaner = d.cleaners().find((c) => phonesMatch(c.phone, senderPhone));
+    const cleaner = d.cleaners().find((c) => matchesCleaner(c, jid) || matchesCleaner(c, senderPhone));
     const isManager = cleaner?.role === 'MANAGER' || cleaner?.role === 'OPS_MANAGER';
     const isWorker = Boolean(cleaner && !isManager);
     const sessionKey = normalizePhoneTail(senderPhone);
     const currentSession = sessionStates.get(sessionKey);
 
     let text = d.extractText(msg);
+    if (text?.trim()) {
+      const deskReply = await consultCallDesk(senderPhone, text.trim());
+      if (deskReply) {
+        await d.send(jid, deskReply);
+        return { handled: true };
+      }
+    }
     let transcript: Transcript | undefined;
     let lang: Lang = cleaner?.language || 'he';
+    let memoryNoted = false;
+
+    function noteManagerTurn(raw: string) {
+      if (!isManager || memoryNoted) return;
+      memoryNoted = true;
+      touchRoomMemory(sessionKey);
+      const unit = bareUnitNumber(raw);
+      if (unit) rememberStatedUnit(sessionKey, unit);
+      const peek = matchManagerRoomIntent(raw, d.rooms());
+      if (peek.type === 'RESOLVED') {
+        const key = complexOfRoom(peek.roomId)?.key;
+        if (key) rememberComplex(sessionKey, key);
+      } else if (peek.type === 'AMBIGUOUS_COMPLEX') {
+        rememberComplex(sessionKey, peek.complex.key);
+      }
+    }
+
+    async function showManagerRoom(roomId: string, pendingQuestion?: string) {
+      const r = d.rooms().find((x) => x.id === roomId);
+      const lockbox = r?.lockbox || '1357#';
+      const today = getIsraelToday();
+      const units = (await d.resortos.listUnits?.()) || [];
+      const unit = units.find((u) => u.id === roomId);
+      const bookings = (await d.resortos.listBookings?.({ from: today, to: today })) || [];
+      const roomLabel = formatRoomDisplay(roomId, d.rooms());
+      const occupancy = getRoomOccupancy(roomId, bookings, today);
+      if (occupancy.activeBooking && d.resortos.publishBookingStay) {
+        void d.resortos.publishBookingStay(occupancy.activeBooking).catch(() => {});
+      }
+      rememberRoom(sessionKey, roomId);
+      sessionStates.set(sessionKey, {
+        role: 'MANAGER',
+        state: 'AWAITING_ACTION',
+        roomId,
+        bookingId: occupancy.activeBooking?.id,
+      });
+      const asked = pendingQuestion && !bareUnitNumber(pendingQuestion)
+        && matchManagerRoomIntent(pendingQuestion, d.rooms()).type !== 'AMBIGUOUS_NUMBER'
+        ? pendingQuestion
+        : '';
+      const specific = asked ? answerManagerRoomQuestion(asked, roomLabel, lockbox, unit, occupancy, r) : null;
+      const body = specific || formatManagerInitialCard(roomLabel, lockbox, unit, occupancy, r);
+      if (!jid) return;
+      await d.send(jid, `🔍 נבחר: *${roomLabel}*\n\n${withManagerActions(body, roomLabel)}`);
+    }
+
+    function stayAction(roomId: string) {
+      sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_ACTION', roomId });
+    }
+
+    async function confirmGuestLink(roomId: string, choice: GuestLinkChoice) {
+      if (!choice.phone) {
+        sessionStates.set(sessionKey, {
+          role: 'MANAGER',
+          state: 'AWAITING_GUEST_PHONE',
+          roomId,
+          bookingId: choice.bookingId,
+          stayUrl: choice.stayUrl,
+          guestName: choice.guestName,
+        });
+        if (jid) await d.send(jid, `אין מספר שמור עבור ${choice.guestName}. כתוב את המספר, ואאשר לפני השליחה בסמס.`);
+        return;
+      }
+      sessionStates.set(sessionKey, {
+        role: 'MANAGER',
+        state: 'AWAITING_GUEST_LINK',
+        roomId,
+        bookingId: choice.bookingId,
+        phone: choice.phone,
+        stayUrl: choice.stayUrl,
+        guestName: choice.guestName,
+      });
+      if (jid) await d.send(jid, guestLinkConfirm(choice.guestName, choice.phone));
+    }
+
+    async function beginGuestLink(roomId: string) {
+      const today = getIsraelToday();
+      const next = new Date(`${today}T12:00:00+03:00`);
+      next.setDate(next.getDate() + 1);
+      const to = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(next);
+      const bookings = (await d.resortos.listBookings?.({ from: today, to })) || [];
+      const occupancy = getRoomOccupancy(roomId, bookings, today);
+      const roomLabel = formatRoomDisplay(roomId, d.rooms());
+      const choices = [
+        occupancy.inBooking ? linkChoice(occupancy.inBooking, 'נכנס היום') : null,
+        occupancy.stayingBooking ? linkChoice(occupancy.stayingBooking, 'שוהה') : null,
+        occupancy.outBooking ? linkChoice(occupancy.outBooking, 'יוצא היום') : null,
+      ].filter((choice): choice is GuestLinkChoice => Boolean(choice));
+      const unique = choices.filter((choice, index) => choices.findIndex((other) => other.bookingId === choice.bookingId) === index);
+      if (!unique.length) {
+        stayAction(roomId);
+        if (jid) await d.send(jid, `אין אורח עם קישור לדף אורח על *${roomLabel}*.`);
+        return;
+      }
+      for (const booking of [occupancy.inBooking, occupancy.stayingBooking, occupancy.outBooking]) {
+        if (booking && d.resortos.publishBookingStay) void d.resortos.publishBookingStay(booking).catch(() => {});
+      }
+      if (unique.length > 1) {
+        sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_GUEST_PICK', roomId, choices: unique });
+        if (jid) await d.send(jid, guestLinkPickText(unique));
+        return;
+      }
+      await confirmGuestLink(roomId, unique[0]);
+    }
+
+    async function deliverGuestLink(pending: { roomId: string; bookingId: string; phone: string; stayUrl: string }) {
+      const roomLabel = formatRoomDisplay(pending.roomId, d.rooms());
+      const message = guestLinkSms(roomLabel, pending.stayUrl);
+      try {
+        if (!d.resortos.sendGuestLinkSms) {
+          if (jid) await d.send(jid, 'השליחה בסמס לא זמינה כרגע.');
+        } else {
+          await d.resortos.sendGuestLinkSms({
+            bookingId: pending.bookingId,
+            phone: pending.phone,
+            message,
+            reportedBy: cleaner?.name || 'מנהל',
+          });
+          if (jid) await d.send(jid, `✅ הקישור נשלח בסמס למספר ${pending.phone}.`);
+        }
+      } catch (err) {
+        d.log.error({ err: String(err) }, 'guest link sms failed');
+        if (jid) await d.send(jid, 'לא הצלחתי לשלוח את הסמס. אפשר לנסות שוב.');
+      }
+      stayAction(pending.roomId);
+    }
+
+    async function guestOnRoom(roomId: string) {
+      const today = getIsraelToday();
+      const next = new Date(`${today}T12:00:00+03:00`);
+      next.setDate(next.getDate() + 1);
+      const to = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(next);
+      const bookings = (await d.resortos.listBookings?.({ from: today, to })) || [];
+      const occupancy = getRoomOccupancy(roomId, bookings, today);
+      return occupancy.stayingBooking || occupancy.outBooking || occupancy.inBooking;
+    }
+
+    async function askCashConfirm(roomId: string, shekels: number, sourceText?: string) {
+      const roomLabel = formatRoomDisplay(roomId, d.rooms());
+      const guest = await guestOnRoom(roomId).catch(() => undefined);
+      if (!guest) {
+        if (jid) await d.send(jid, `אין אורח על *${roomLabel}*, אז אין על מי לרשום גבייה.`);
+        return;
+      }
+      const quote = String(sourceText || '').trim();
+      sessionStates.set(sessionKey, {
+        role: 'MANAGER',
+        state: 'AWAITING_CASH_CONFIRM',
+        roomId,
+        shekels,
+        ...(quote ? { sourceText: quote } : {}),
+      });
+      if (!jid) return;
+      await d.send(jid, cashConfirmText(roomLabel, shekels, guest.guest_name || ''));
+    }
+
+    async function applyCash(roomId: string, shekels: number, sourceText?: string) {
+      const roomLabel = formatRoomDisplay(roomId, d.rooms());
+      const by = cleaner?.name || 'משרד';
+      const say = async (reply: string) => { if (jid) await d.send(jid, reply); };
+      let recorded = false;
+      try {
+        if (!d.resortos.collectCash) {
+          await say(`הבנתי גביית מזומן ${cashShekelLabel(shekels)} על *${roomLabel}*, אבל העדכון לא זמין כרגע.`);
+        } else {
+          const result = await d.resortos.collectCash({
+            unitId: roomId,
+            amountAgorot: Math.round(shekels * 100),
+            reportedBy: by,
+            note: sourceText,
+          });
+          if (!result.ok) {
+            await say(result.skipped === 'no_booking'
+              ? `אין אורח על *${roomLabel}*, לא רשמתי גבייה.`
+              : `לא רשמתי את הגבייה על *${roomLabel}*.`);
+          } else {
+            recorded = true;
+            const who = result.guest_name ? ` עבור ${result.guest_name}` : '';
+            await say(`✅ נרשמה גביית מזומן ${cashShekelLabel(shekels)}${who} בחדר *${roomLabel}*.\n\n${askByName(by, paymentStatusQuestion())}`);
+          }
+        }
+      } catch (err) {
+        d.log.error({ err: String(err) }, 'cash collection failed');
+        await say(`לא הצלחתי לרשום את הגבייה על *${roomLabel}*.`);
+      }
+      rememberRoom(sessionKey, roomId);
+      sessionStates.set(sessionKey, recorded
+        ? { role: 'MANAGER', state: 'AWAITING_PAYMENT_STATUS', roomId }
+        : { role: 'MANAGER', state: 'AWAITING_ACTION', roomId });
+    }
+
+    async function applyPaymentStatus(roomId: string, status: 'PARTIAL' | 'PAID') {
+      const roomLabel = formatRoomDisplay(roomId, d.rooms());
+      const by = cleaner?.name || 'משרד';
+      const label = paymentStatusLabel(status);
+      const say = async (reply: string) => { if (jid) await d.send(jid, reply); };
+      try {
+        if (!d.resortos.setPaymentStatus) {
+          await say(`הבנתי סטטוס תשלום ${label} על *${roomLabel}*, אבל העדכון לא זמין כרגע.`);
+        } else {
+          const result = await d.resortos.setPaymentStatus({ unitId: roomId, status, reportedBy: by });
+          if (!result.ok) {
+            await say(`לא עדכנתי את סטטוס התשלום על *${roomLabel}*.`);
+          } else {
+            const who = result.guest_name ? ` עבור ${result.guest_name}` : '';
+            await say(`✅ סטטוס תשלום: ${label}${who} בחדר *${roomLabel}*.`);
+          }
+        }
+      } catch (err) {
+        d.log.error({ err: String(err) }, 'payment status update failed');
+        await say(`לא הצלחתי לעדכן את סטטוס התשלום על *${roomLabel}*.`);
+      }
+      sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_ACTION', roomId });
+    }
+
+    async function askHoldConfirm(roomId: string) {
+      const roomLabel = formatRoomDisplay(roomId, d.rooms());
+      sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_HOLD_CONFIRM', roomId });
+      if (!jid) return;
+      await d.send(jid, holdConfirmText(roomLabel));
+    }
+
+    async function logGuestWhatsAppExchange(booking: BookingRow | undefined, inboundText: string, outboundText: string) {
+      if (!booking?.id || !d.resortos.logGuestComm) return;
+      const phone = displayPhone(senderPhone) || senderPhone || booking.guest_phone || '';
+      if (inboundText.trim()) {
+        await d.resortos.logGuestComm({
+          bookingId: booking.id,
+          direction: 'inbound',
+          phone,
+          content: inboundText.trim(),
+          status: 'received',
+        });
+      }
+      if (outboundText.trim()) {
+        await d.resortos.logGuestComm({
+          bookingId: booking.id,
+          direction: 'outbound',
+          phone,
+          content: outboundText.trim(),
+          status: 'sent',
+        });
+      }
+    }
+
+    async function offerPlaceMenu(raw: string, roomId?: string, guestBooking?: BookingRow): Promise<boolean> {
+      const heard = String(raw || '').trim();
+      if (!jid || !heard) return false;
+      const menu = await placeMenuFor(heard);
+      if (!menu) return false;
+      const role = !cleaner ? 'GUEST' as const : isManager ? 'MANAGER' as const : 'CLEANER' as const;
+      if (role === 'GUEST') {
+        sessionStates.set(sessionKey, { role: 'GUEST', state: 'AWAITING_PLACE', placeIds: menu.ids, bookingId: guestBooking?.id });
+        void logGuestWhatsAppExchange(guestBooking, heard, menu.text);
+      } else {
+        sessionStates.set(sessionKey, { role, state: 'AWAITING_PLACE', placeIds: menu.ids, ...(roomId ? { roomId } : {}) });
+      }
+      await d.send(jid, menu.text);
+      return true;
+    }
+
+    async function sendPlaceAnswer(raw: string, roomId?: string): Promise<boolean> {
+      if (await offerPlaceMenu(raw, roomId)) return true;
+      const heard = String(raw || '').trim();
+      if (!jid || !heard) return false;
+      const named = resolveRoomByAlias(heard, d.rooms());
+      const room = d.rooms().find((item) => item.id === (named || roomId));
+      const reply = answerStaffPlaceQuestion(heard, {
+        unitId: room?.id,
+        roomName: room ? formatRoomDisplay(room.id, d.rooms()) : undefined,
+        room,
+      });
+      if (reply) {
+        await d.send(jid, reply);
+        return true;
+      }
+      if (staffPlaceNeedsRoom(heard) && !room) {
+        await d.send(jid, askByName(cleaner?.name, 'על איזה חדר?'));
+        return true;
+      }
+      return false;
+    }
+
+    function startNightHold(roomId: string) {
+      const roomLabel = formatRoomDisplay(roomId, d.rooms());
+      const by = cleaner?.name || 'משרד';
+      const say = async (reply: string) => { if (jid) await d.send(jid, reply); };
+      void (async () => {
+        try {
+          if (!d.resortos.holdNight) {
+            await say(`הבנתי חסימה ללילה על *${roomLabel}*, אבל העדכון לא זמין כרגע.`);
+            return;
+          }
+          const result = await d.resortos.holdNight({ unitId: roomId, reportedBy: by });
+          if (!result.ok) {
+            await say(result.skipped === 'in_progress'
+              ? `החסימה של *${roomLabel}* כבר בתהליך.`
+              : `לא חסמתי את *${roomLabel}* ללילה.`);
+            return;
+          }
+          await say(holdDoneText(roomLabel, result.verified));
+        } catch (err) {
+          d.log.error({ err: String(err) }, 'night hold failed');
+          const detail = err instanceof ResortOSError ? err.code : '';
+          const known = /כינורות|תפוס|לא מחובר|לא הגיב/.test(detail) ? detail : '';
+          await say(known ? `${known}. *${roomLabel}* לא נחסם.` : `לא הצלחתי לחסום את *${roomLabel}* ללילה.`);
+        }
+      })();
+    }
+
+    async function askStatusConfirm(roomId: string, change: StatusChange, role: 'MANAGER' | 'CLEANER', sourceText?: string) {
+      const roomLabel = formatRoomDisplay(roomId, d.rooms());
+      const quote = String(sourceText || '').trim();
+      sessionStates.set(sessionKey, { role, state: 'AWAITING_STATUS_CONFIRM', roomId, change, ...(quote ? { sourceText: quote } : {}) });
+      if (!jid) return;
+      await d.send(jid, statusConfirmText(lang, roomLabel, change));
+    }
+
+    async function applyStatusChange(roomId: string, change: StatusChange, role: 'MANAGER' | 'CLEANER', sourceText?: string) {
+      const by = cleaner?.name || 'צוות';
+      const roomLabel = formatRoomDisplay(roomId, d.rooms());
+      const say = async (reply: string) => { if (jid) await d.send(jid, reply); };
+      try {
+        if (change === 'ready') {
+          const note = String(sourceText || '').trim() || undefined;
+          const result = role === 'MANAGER' && d.resortos.approveRoomByManager
+            ? await d.resortos.approveRoomByManager({ unitId: roomId, reportedBy: by, note })
+            : await d.resortos.markRoomReady({ unitId: roomId, reportedBy: by, note });
+          if (!result.ok) {
+            sessionStates.delete(sessionKey);
+            await say(result.skipped === 'maintenance_open'
+              ? `לא עדכנתי את *${roomLabel}*: יש תקלת תחזוקה פתוחה.`
+              : `לא עדכנתי את *${roomLabel}*.`);
+            return false;
+          }
+          await say(role === 'CLEANER'
+            ? (CLEANER_READY_THANKS[lang] || CLEANER_READY_THANKS.he)
+            : `✅ חדר ${roomLabel} אושר בהצלחה כמוכן לאורח (READY)!\nביקורת מנהל הושלמה בהצלחה.`);
+        } else if (change === 'occupied' || change === 'vacant') {
+          const occupancy = change === 'occupied' ? 'OCCUPIED' : 'VACANT';
+          if (!d.resortos.setStaffOccupancy) {
+            await say(`הבנתי ש*${roomLabel}* ${statusLabel(lang, change)}, אבל עדכון התפוסה לא זמין כרגע.`);
+            return false;
+          }
+          const result = await d.resortos.setStaffOccupancy({ unitId: roomId, occupancy, reportedBy: by, note: String(sourceText || '').trim() || undefined });
+          if (!result.ok) {
+            await say(`לא עדכנתי את *${roomLabel}*.`);
+            return false;
+          }
+          await say(`✅ *${roomLabel}* עודכן ל${statusLabel(lang, change)}.`);
+        } else if (change === 'cleaning' && d.resortos.startCleaning) {
+          const result = await d.resortos.startCleaning({ unitId: roomId, reportedBy: by, note: String(sourceText || '').trim() || undefined });
+          if (!result.ok) {
+            await say(`לא עדכנתי את *${roomLabel}*.`);
+            return false;
+          }
+          await say(`✅ *${roomLabel}* עודכן לבנקיון.`);
+        } else if (d.resortos.updateUnitStatus) {
+          await d.resortos.updateUnitStatus({
+            unitId: roomId,
+            status: 'DIRTY',
+            reason: 'ממתין לניקיון',
+            reportedBy: by,
+            note: String(sourceText || '').trim() || undefined,
+          });
+          await say(`✅ *${roomLabel}* עודכן לממתין לניקיון.`);
+        } else {
+          await say(`לא עדכנתי את *${roomLabel}*.`);
+          return false;
+        }
+        if (role === 'MANAGER') {
+          rememberRoom(sessionKey, roomId);
+          sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_ACTION', roomId });
+        } else {
+          sessionStates.delete(sessionKey);
+        }
+        return true;
+      } catch (err) {
+        d.log.error({ err: String(err) }, 'status update failed');
+        await say(`לא הצלחתי לעדכן את *${roomLabel}*. אפשר לנסות שוב.`);
+        return false;
+      }
+    }
+
+    async function takeStatusConfirm(raw: string, role: 'MANAGER' | 'CLEANER', currentRoomId?: string) {
+      const answer = confirmAnswer(raw);
+      const pending = sessionStates.get(sessionKey);
+      if (answer === 'yes' && pending?.state === 'AWAITING_STATUS_CONFIRM') {
+        const ok = await applyStatusChange(pending.roomId, pending.change, role, pending.sourceText);
+        return ok ? 'ok' : 'failed';
+      }
+      if (answer === 'no' && pending?.state === 'AWAITING_STATUS_CONFIRM') {
+        if (role === 'MANAGER') {
+          sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_ACTION', roomId: pending.roomId });
+        } else {
+          sessionStates.delete(sessionKey);
+        }
+        if (jid) await d.send(jid, `לא שיניתי את *${formatRoomDisplay(pending.roomId, d.rooms())}*.`);
+        return 'ok';
+      }
+      const next = proposeStatusChange(raw, d.rooms(), currentRoomId || (pending?.state === 'AWAITING_STATUS_CONFIRM' ? pending.roomId : undefined));
+      if (next) {
+        await askStatusConfirm(next.roomId, next.change, role, raw);
+        return 'ok';
+      }
+      return false;
+    }
+
     try {
       // 0A. Manager Financial Command Center Flows (WhatsApp Check Capture & Forecast)
       if (isManager) {
         const pendingCheck = getPendingCheck(senderPhone);
         if (pendingCheck) {
           const trimmed = text?.trim() || '';
-          if (/^(?:כן|אישור|מאשר|1|אישור שיק|בסדר|מאושר)$/i.test(trimmed)) {
+          if (confirmAnswer(trimmed) === 'yes' || /^(?:כן|אישור|מאשר|1|אישור שיק|בסדר|מאושר)$/i.test(trimmed)) {
             try {
               await fetch(`${config.resortos.baseUrl}/api/finance/checks/confirm`, {
                 method: 'POST',
@@ -329,10 +912,92 @@ export function createPipeline(d: PipelineDeps) {
       }
 
       // 0. Active Session Fast-Paths and Flows
+      if (currentSession?.state === 'AWAITING_PLACE') {
+        const picked = (text?.trim() || '').match(/^([1-9][0-9]?)\.?$/);
+        if (picked) {
+          const id = currentSession.placeIds[Number(picked[1]) - 1];
+          const detail = id ? await placeDetail(id) : '';
+          const replyText = detail || 'המספר לא ברשימה. בחרו שוב.';
+          if (currentSession.role === 'GUEST' && currentSession.bookingId) {
+            void logGuestWhatsAppExchange({ id: currentSession.bookingId } as BookingRow, text?.trim() || '', replyText);
+          }
+          await d.send(jid, replyText);
+          return { handled: true, transcript };
+        }
+        const roomId = 'roomId' in currentSession ? currentSession.roomId : undefined;
+        if (currentSession.role === 'MANAGER' && roomId) {
+          sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_ACTION', roomId });
+        } else if (currentSession.role === 'CLEANER' && roomId) {
+          sessionStates.set(sessionKey, { role: 'CLEANER', state: 'AWAITING_STATUS', roomId });
+        } else {
+          sessionStates.delete(sessionKey);
+        }
+        if (!text?.trim()) return { handled: true, transcript };
+        return handleInbound(msg);
+      }
+
+      if (currentSession?.role === 'GUEST' && currentSession.state === 'AWAITING_CALL_CONFIRM') {
+        const heard = (text?.trim() || '');
+        const ans = confirmAnswer(heard);
+        if (ans === 'yes' || /(?:תתקשר|להתקשר|תחזרו|תחזור|אשמח|כן|בטח|בבקשה)/i.test(heard)) {
+          sessionStates.delete(sessionKey);
+          const replyText = askByName(
+            currentSession.guestName,
+            `בשמחה! העברנו את הבקשה לצוות המתחם ונחזור אליכם טלפונית בהקדם. 📞`
+          );
+          void logGuestWhatsAppExchange(
+            { id: currentSession.bookingId, guest_phone: currentSession.guestPhone || senderPhone } as BookingRow,
+            heard,
+            replyText
+          );
+          if (d.resortos.requestGuestCall) {
+            void d.resortos.requestGuestCall({
+              bookingId: currentSession.bookingId,
+              unitId: currentSession.unitId,
+              guestName: currentSession.guestName,
+              guestPhone: currentSession.guestPhone || displayPhone(senderPhone) || senderPhone,
+              cabin: currentSession.roomName,
+            });
+          }
+          await d.send(jid, replyText);
+          return { handled: true, transcript };
+        }
+        if (ans === 'no') {
+          sessionStates.delete(sessionKey);
+          const replyText = askByName(
+            currentSession.guestName,
+            `בסדר גמור, אנחנו כאן לכל שאלה נוספת. שהות נעימה! 🌿`
+          );
+          void logGuestWhatsAppExchange(
+            { id: currentSession.bookingId, guest_phone: currentSession.guestPhone || senderPhone } as BookingRow,
+            heard,
+            replyText
+          );
+          await d.send(jid, replyText);
+          return { handled: true, transcript };
+        }
+        sessionStates.delete(sessionKey);
+      }
+
       if (currentSession?.role === 'CLEANER') {
+        if (currentSession.state === 'AWAITING_STATUS_CONFIRM') {
+          if (!text && d.isAudio(msg)) {
+            transcript = await d.transcribe(msg, cleaner?.language || 'he');
+            text = transcript.text;
+          }
+          const heard = text?.trim() || '';
+          if (!heard && d.isAudio(msg)) {
+            await d.send(jid, askByName(cleaner?.name, lang === 'th' ? 'ไม่ได้ยินข้อความเสียงค่ะ ช่วยส่งอีกครั้งได้ไหมคะ' : 'לא שמעתי את ההקלטה. אפשר להקליט שוב או לכתוב?'));
+            return { handled: true, transcript };
+          }
+          const taken = await takeStatusConfirm(heard, 'CLEANER', currentSession.roomId);
+          if (taken) return { handled: taken !== 'failed', transcript };
+          await d.send(jid, statusConfirmText(lang, formatRoomDisplay(currentSession.roomId, d.rooms()), currentSession.change));
+          return { handled: true, transcript };
+        }
         const trimmed = text?.trim() || '';
         if (currentSession.state === 'AWAITING_STATUS') {
-          if (trimmed === '1' || trimmed === '1.' || trimmed === '๑') {
+          if (trimmed === '1' || trimmed === '1.' || trimmed === '๑' || confirmAnswer(trimmed) === 'yes') {
             sessionStates.delete(sessionKey);
             let apiOk = true;
             let skipped: string | undefined;
@@ -345,7 +1010,7 @@ export function createPipeline(d: PipelineDeps) {
             }
             if (skipped) return { handled: false, reason: skipped };
             if (!apiOk) {
-              await d.send(jid, CLARIFY[lang]);
+              await d.send(jid, askByName(cleaner?.name, CLARIFY[lang]));
               return { handled: false, reason: 'resortos error' };
             }
             const reply = CLEANER_READY_THANKS[lang] || CLEANER_READY_THANKS.he;
@@ -363,15 +1028,18 @@ export function createPipeline(d: PipelineDeps) {
           }
           if (trimmed === '2' || trimmed === '2.' || trimmed === '๒') {
             sessionStates.set(sessionKey, { role: 'CLEANER', state: 'AWAITING_SUPPLIES', roomId: currentSession.roomId });
-            const reply = CLEANER_ASK_SUPPLIES[lang] || CLEANER_ASK_SUPPLIES.he;
+            const reply = askByName(cleaner?.name, CLEANER_ASK_SUPPLIES[lang] || CLEANER_ASK_SUPPLIES.he);
             await d.send(jid, reply);
             return { handled: true };
           }
           if (trimmed === '3' || trimmed === '3.' || trimmed === '๓') {
             sessionStates.set(sessionKey, { role: 'CLEANER', state: 'AWAITING_MAINTENANCE', roomId: currentSession.roomId });
-            const reply = CLEANER_ASK_MAINTENANCE[lang] || CLEANER_ASK_MAINTENANCE.he;
+            const reply = askByName(cleaner?.name, CLEANER_ASK_MAINTENANCE[lang] || CLEANER_ASK_MAINTENANCE.he);
             await d.send(jid, reply);
             return { handled: true };
+          }
+          if (trimmed && await sendPlaceAnswer(trimmed, currentSession.roomId)) {
+            return { handled: true, transcript };
           }
           // Voice or other free text falls through to normal intent extraction
           sessionStates.delete(sessionKey);
@@ -431,7 +1099,94 @@ export function createPipeline(d: PipelineDeps) {
         }
         const trimmed = text?.trim() || '';
 
+        if (currentSession.state === 'AWAITING_STATUS_CONFIRM') {
+          if (!trimmed && d.isAudio(msg)) {
+            await d.send(jid, askByName(cleaner?.name, 'לא שמעתי את ההקלטה. אפשר להקליט שוב או לכתוב?'));
+            return { handled: true, transcript };
+          }
+          const taken = await takeStatusConfirm(trimmed, 'MANAGER', currentSession.roomId);
+          if (taken) return { handled: taken !== 'failed', transcript };
+          await d.send(jid, statusConfirmText(lang, formatRoomDisplay(currentSession.roomId, d.rooms()), currentSession.change));
+          return { handled: true, transcript };
+        }
+
+        if (currentSession.state === 'AWAITING_HOLD_CONFIRM') {
+          if (!trimmed && d.isAudio(msg)) {
+            await d.send(jid, askByName(cleaner?.name, 'לא שמעתי את ההקלטה. אפשר להקליט שוב או לכתוב?'));
+            return { handled: true, transcript };
+          }
+          const answer = confirmAnswer(trimmed);
+          if (answer === 'yes') {
+            const roomLabel = formatRoomDisplay(currentSession.roomId, d.rooms());
+            sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_ACTION', roomId: currentSession.roomId });
+            await d.send(jid, holdProgressText(roomLabel));
+            startNightHold(currentSession.roomId);
+            return { handled: true, transcript };
+          }
+          if (answer === 'no') {
+            sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_ACTION', roomId: currentSession.roomId });
+            await d.send(jid, `לא חסמתי את *${formatRoomDisplay(currentSession.roomId, d.rooms())}*.`);
+            return { handled: true, transcript };
+          }
+          if (proposesNightHold(trimmed)) {
+            await askHoldConfirm(currentSession.roomId);
+            return { handled: true, transcript };
+          }
+          await d.send(jid, holdConfirmText(formatRoomDisplay(currentSession.roomId, d.rooms())));
+          return { handled: true, transcript };
+        }
+
+        if (currentSession.state === 'AWAITING_PAYMENT_STATUS') {
+          if (!trimmed && d.isAudio(msg)) {
+            await d.send(jid, askByName(cleaner?.name, 'לא שמעתי את ההקלטה. אפשר להקליט שוב או לכתוב?'));
+            return { handled: true, transcript };
+          }
+          const choice = paymentStatusChoice(trimmed);
+          if (choice === 'keep') {
+            sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_ACTION', roomId: currentSession.roomId });
+            await d.send(jid, `השארתי את סטטוס התשלום כמו שהוא על *${formatRoomDisplay(currentSession.roomId, d.rooms())}*.`);
+            return { handled: true, transcript };
+          }
+          if (choice === 'PARTIAL' || choice === 'PAID') {
+            await applyPaymentStatus(currentSession.roomId, choice);
+            return { handled: true, transcript };
+          }
+          await d.send(jid, askByName(cleaner?.name, paymentStatusQuestion()));
+          return { handled: true, transcript };
+        }
+
+        if (currentSession.state === 'AWAITING_CASH_CONFIRM') {
+          if (!trimmed && d.isAudio(msg)) {
+            await d.send(jid, askByName(cleaner?.name, 'לא שמעתי את ההקלטה. אפשר להקליט שוב או לכתוב?'));
+            return { handled: true, transcript };
+          }
+          const answer = confirmAnswer(trimmed);
+          if (answer === 'yes') {
+            await applyCash(currentSession.roomId, currentSession.shekels, currentSession.sourceText);
+            return { handled: true, transcript };
+          }
+          if (answer === 'no') {
+            sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_ACTION', roomId: currentSession.roomId });
+            await d.send(jid, `לא רשמתי גבייה על *${formatRoomDisplay(currentSession.roomId, d.rooms())}*.`);
+            return { handled: true, transcript };
+          }
+          const nextCash = proposeCashCollection(trimmed);
+          if (nextCash) {
+            await askCashConfirm(currentSession.roomId, nextCash.shekels, trimmed);
+            return { handled: true, transcript };
+          }
+          const guest = await guestOnRoom(currentSession.roomId).catch(() => undefined);
+          await d.send(jid, cashConfirmText(formatRoomDisplay(currentSession.roomId, d.rooms()), currentSession.shekels, guest?.guest_name || ''));
+          return { handled: true, transcript };
+        }
+
         if (currentSession.state === 'AWAITING_CLARIFICATION') {
+          noteManagerTurn(trimmed);
+          const remembered = resolveRoomWithContext(trimmed, d.rooms(), dialogContext(sessionKey));
+          if (remembered.type === 'RESOLVED' && !bareUnitNumber(trimmed)) {
+            await showManagerRoom(remembered.roomId, currentSession.pendingQuestion);
+            return { handled: true, transcript };
+          }
           const normalized = normalizeSpokenHebrewNumbers(trimmed);
           const choiceMatch = normalized.match(/^([1-9][0-9]?)\.?$/);
           if (choiceMatch) {
@@ -452,6 +1207,7 @@ export function createPipeline(d: PipelineDeps) {
               }
 
               // Update session to this room
+              rememberRoom(sessionKey, pickedRoomId);
               sessionStates.set(sessionKey, {
                 role: 'MANAGER',
                 state: 'AWAITING_ACTION',
@@ -462,13 +1218,13 @@ export function createPipeline(d: PipelineDeps) {
               if (currentSession.pendingQuestion) {
                 const answer = answerManagerRoomQuestion(currentSession.pendingQuestion, roomLabel, lockbox, unit, occupancy, r);
                 if (answer) {
-                  await d.send(jid, `🔍 נבחר: *${roomLabel}*\n\n${answer}`);
+                  await d.send(jid, `🔍 נבחר: *${roomLabel}*\n\n${withManagerActions(answer, roomLabel)}`);
                   return { handled: true, transcript };
                 }
               }
 
               const initialCard = formatManagerInitialCard(roomLabel, lockbox, unit, occupancy, r);
-              await d.send(jid, `🔍 נבחר: *${roomLabel}*\n\n${initialCard}`);
+              await d.send(jid, `🔍 נבחר: *${roomLabel}*\n\n${withManagerActions(initialCard, roomLabel)}`);
               return { handled: true, transcript };
             }
           }
@@ -478,6 +1234,26 @@ export function createPipeline(d: PipelineDeps) {
         const roomLabel = 'roomId' in currentSession ? formatRoomDisplay(currentSession.roomId, d.rooms()) : '';
 
         if (currentSession.state === 'AWAITING_ACTION') {
+          noteManagerTurn(trimmed);
+          const greet = greetingReply(trimmed, cleaner?.name);
+          if (greet) {
+            await d.send(jid, greet);
+            return { handled: true, transcript };
+          }
+          const cash = proposeCashCollection(trimmed);
+          if (cash) {
+            await askCashConfirm(currentSession.roomId, cash.shekels, trimmed);
+            return { handled: true, transcript };
+          }
+          if (proposesNightHold(trimmed)) {
+            await askHoldConfirm(currentSession.roomId);
+            return { handled: true, transcript };
+          }
+          const continued = resolveRoomWithContext(trimmed, d.rooms(), dialogContext(sessionKey, currentSession.roomId));
+          if (continued.type === 'RESOLVED' && continued.roomId !== currentSession.roomId) {
+            await showManagerRoom(continued.roomId);
+            return { handled: true, transcript };
+          }
           // Check if manager is switching to another room (e.g. typing "B2", scanning QR, or asking about a different room)
           const otherRoomId = resolveRoomByAlias(trimmed, d.rooms());
           const fuzzySwitch = matchManagerRoomIntent(trimmed, d.rooms());
@@ -485,48 +1261,44 @@ export function createPipeline(d: PipelineDeps) {
             sessionStates.delete(sessionKey);
           } else if (fuzzySwitch.type === 'RESOLVED' && fuzzySwitch.roomId !== currentSession.roomId) {
             sessionStates.delete(sessionKey);
-          } else if (fuzzySwitch.type === 'AMBIGUOUS_COMPLEX' || fuzzySwitch.type === 'AMBIGUOUS_NUMBER') {
+          } else if (fuzzySwitch.type === 'AMBIGUOUS_COMPLEX') {
             sessionStates.delete(sessionKey);
-          } else if (trimmed === '1' || /^עדכ[ןו]\s*סטטוס$|^סטטוס$/i.test(trimmed)) {
+          } else if (trimmed === '1' || trimmed === '1.' || /^שנה\s*סטטוס$|^עדכ[ןו]\s*סטטוס$|^סטטוס$/i.test(trimmed)) {
             sessionStates.set(sessionKey, { role: 'MANAGER', state: 'SELECT_STATUS', roomId: currentSession.roomId });
             await d.send(jid, managerStatusMenu(roomLabel));
             return { handled: true };
-          } else if (trimmed === '2' || /^מוכן$|^אישור$|^מאשר$/i.test(trimmed)) {
-            sessionStates.delete(sessionKey);
-            if (d.resortos.approveRoomByManager) {
-              await d.resortos.approveRoomByManager({ unitId: currentSession.roomId, reportedBy: cleaner?.name || 'מנהל' });
-            } else {
-              await d.resortos.markRoomReady({ unitId: currentSession.roomId, reportedBy: cleaner?.name || 'מנהל' });
-            }
-            const reply = `✅ חדר ${roomLabel} אושר בהצלחה כמוכן לאורח (READY)!\nביקורת מנהל הושלמה בהצלחה.`;
-            await d.send(jid, reply);
-            return {
-              handled: true,
-              intent: {
-                action: 'ROOM_READY',
-                room_id: currentSession.roomId,
-                room_raw: roomLabel,
-                issue_description_hebrew: null,
-                acknowledgement_reply_cleaner_language: reply,
-              },
-            };
-          } else if (trimmed === '3' || /^תקלה$/i.test(trimmed)) {
-            sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_MAINTENANCE', roomId: currentSession.roomId });
-            await d.send(jid, `מה התקלה בחדר ${roomLabel}? (אפשר להקליט או לכתוב) 🛠️`);
+          } else if (trimmed === '4' || trimmed === '4.' || /^שלח(?:י|ו)?\s*קישור|^קישור\s*לאורח|^שליחת\s*קישור/i.test(trimmed)) {
+            await beginGuestLink(currentSession.roomId);
+            return { handled: true, transcript };
+          } else if (/^הערת אורח$/i.test(trimmed)) {
+            sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_GUEST_NOTE', roomId: currentSession.roomId, bookingId: currentSession.bookingId });
+            await d.send(jid, askByName(cleaner?.name, `כתוב את ההערה עבור אורח חדר ${roomLabel}: 👤`));
             return { handled: true };
-          } else if (/^תקלה\s+(.+)$/i.test(trimmed)) {
-            const desc = trimmed.match(/^תקלה\s+(.+)$/i)![1].trim();
+          } else if (trimmed === '2' || trimmed === '2.' || /^הוסף\s*הערה$|^הערה$|^הערת חדר$/i.test(trimmed)) {
+            sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_ROOM_NOTE', roomId: currentSession.roomId });
+            await d.send(jid, askByName(cleaner?.name, `כתוב את ההערה עבור חדר ${roomLabel}: 📝`));
+            return { handled: true };
+          } else if (trimmed === '3' || trimmed === '3.' || /^דווח$|^אחזקה או חוסר$/i.test(trimmed)) {
+            sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_ISSUE_KIND', roomId: currentSession.roomId });
+            await d.send(jid, managerIssueMenu(roomLabel));
+            return { handled: true };
+          } else if (/^תקלה$/i.test(trimmed) || /^אחזקה$/i.test(trimmed)) {
+            sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_MAINTENANCE', roomId: currentSession.roomId });
+            await d.send(jid, askByName(cleaner?.name, `מה התקלה בחדר ${roomLabel}? (אפשר להקליט או לכתוב) 🛠️`));
+            return { handled: true };
+          } else if (/^חוסר$/i.test(trimmed)) {
+            sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_SUPPLIES', roomId: currentSession.roomId });
+            await d.send(jid, askByName(cleaner?.name, `מה חסר בחדר ${roomLabel}? (אפשר להקליט או לכתוב)`));
+            return { handled: true };
+          } else if (/^תקלה\s+(.+)$/i.test(trimmed) || /^אחזקה\s+(.+)$/i.test(trimmed)) {
+            const desc = trimmed.match(/^(?:תקלה|אחזקה)\s+(.+)$/i)![1].trim();
             sessionStates.delete(sessionKey);
             await d.resortos.reportMaintenance({ unitId: currentSession.roomId, description: desc, reportedBy: cleaner?.name || 'מנהל' });
             const reply = `🛠️ דיווח התקלה נרשם ונפתחה קריאת תחזוקה לחדר ${roomLabel}:\n"${desc}"`;
             await d.send(jid, reply);
             return { handled: true, intent: { action: 'MAINTENANCE_ISSUE', room_id: currentSession.roomId, room_raw: roomLabel, issue_description_hebrew: desc, acknowledgement_reply_cleaner_language: reply }, transcript };
-          } else if (trimmed === '4' || /^הערה$|^הערת חדר$/i.test(trimmed)) {
-            sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_ROOM_NOTE', roomId: currentSession.roomId });
-            await d.send(jid, `אנא כתוב את ההערה עבור חדר ${roomLabel}: 📝`);
-            return { handled: true };
-          } else if (/^(?:הערה|הערת חדר)\s+(.+)$/i.test(trimmed)) {
-            const note = trimmed.match(/^(?:הערה|הערת חדר)\s+(.+)$/i)![1].trim();
+          } else if (/^(?:הערה|הערת חדר|הוסף הערה)\s+(.+)$/i.test(trimmed)) {
+            const note = trimmed.match(/^(?:הערה|הערת חדר|הוסף הערה)\s+(.+)$/i)![1].trim();
             sessionStates.delete(sessionKey);
             if (d.resortos.updateUnitNote) {
               await d.resortos.updateUnitNote({ unitId: currentSession.roomId, note, reportedBy: cleaner?.name || 'מנהל' });
@@ -534,11 +1306,15 @@ export function createPipeline(d: PipelineDeps) {
             const reply = `📝 הערה נשמרה בהצלחה לחדר ${roomLabel}:\n"${note}"`;
             await d.send(jid, reply);
             return { handled: true, transcript };
-          } else if (trimmed === '5' || /^הערת אורח$/i.test(trimmed)) {
-            sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_GUEST_NOTE', roomId: currentSession.roomId, bookingId: currentSession.bookingId });
-            await d.send(jid, `אנא כתוב את ההערה עבור אורח חדר ${roomLabel}: 👤`);
-            return { handled: true };
+          } else if (/^מוכן$|^אישור$|^מאשר$/i.test(trimmed) || proposeStatusChange(trimmed, d.rooms(), currentSession.roomId)) {
+            const proposal = proposeStatusChange(trimmed, d.rooms(), currentSession.roomId)
+              || { roomId: currentSession.roomId, change: 'ready' as const };
+            await askStatusConfirm(proposal.roomId, proposal.change, 'MANAGER', trimmed);
+            return { handled: true, transcript };
           } else {
+            if (await sendPlaceAnswer(trimmed, currentSession.roomId)) {
+              return { handled: true, transcript };
+            }
             // Contextual Room Q&A
             const today = getIsraelToday();
             const bookings = (await d.resortos.listBookings?.({ from: today, to: today })) || [];
@@ -547,6 +1323,13 @@ export function createPipeline(d: PipelineDeps) {
             const r = d.rooms().find((x) => x.id === currentSession.roomId);
             const lockbox = r?.lockbox || '1357#';
             const occupancy = getRoomOccupancy(currentSession.roomId, bookings, today);
+
+            const exactHere = lookupExact(trimmed);
+            const exactReply = exactHere ? exactStaticReply(exactHere) : null;
+            if (exactReply) {
+              await d.send(jid, exactReply);
+              return { handled: true, transcript };
+            }
 
             const rackRate = answerRackRate(trimmed, d.rooms(), currentSession.roomId);
             if (rackRate) {
@@ -574,8 +1357,8 @@ export function createPipeline(d: PipelineDeps) {
             statusText = 'מוכן לאורח (READY) 🟢';
           } else if (trimmed === '2') {
             status = 'IN_PROGRESS';
-            reason = 'בניקיון';
-            statusText = 'בניקיון (IN_PROGRESS) 🟡';
+            reason = 'בנקיון';
+            statusText = 'בנקיון (IN_PROGRESS) 🟡';
           } else if (trimmed === '3') {
             status = 'DIRTY';
             reason = 'ממתין לניקיון';
@@ -596,6 +1379,93 @@ export function createPipeline(d: PipelineDeps) {
             await d.send(jid, reply);
             return { handled: true };
           }
+        } else if (currentSession.state === 'AWAITING_ISSUE_KIND') {
+          const maintenanceDesc = trimmed.match(/^(?:1|אחזקה|תקלה)(?:\s+(.+))?$/i);
+          const supplyDesc = trimmed.match(/^(?:2|חוסר)(?:\s+(.+))?$/i);
+          if (maintenanceDesc) {
+            const desc = maintenanceDesc[1]?.trim();
+            if (desc) {
+              sessionStates.delete(sessionKey);
+              await d.resortos.reportMaintenance({ unitId: currentSession.roomId, description: desc, reportedBy: cleaner?.name || 'מנהל' });
+              await d.send(jid, `🛠️ דיווח התקלה נרשם ונפתחה קריאת תחזוקה לחדר ${roomLabel}:\n"${desc}"`);
+              return { handled: true, transcript };
+            }
+            sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_MAINTENANCE', roomId: currentSession.roomId });
+            await d.send(jid, askByName(cleaner?.name, `מה התקלה בחדר ${roomLabel}? (אפשר להקליט או לכתוב) 🛠️`));
+            return { handled: true };
+          }
+          if (supplyDesc) {
+            const desc = supplyDesc[1]?.trim();
+            if (desc) {
+              sessionStates.delete(sessionKey);
+              await d.resortos.reportSupplies({ unitId: currentSession.roomId, description: desc, reportedBy: cleaner?.name || 'מנהל' });
+              await d.send(jid, `📦 דיווח החוסר נרשם לחדר ${roomLabel}:\n"${desc}"`);
+              return { handled: true, transcript };
+            }
+            sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_SUPPLIES', roomId: currentSession.roomId });
+            await d.send(jid, askByName(cleaner?.name, `מה חסר בחדר ${roomLabel}? (אפשר להקליט או לכתוב)`));
+            return { handled: true };
+          }
+          await d.send(jid, managerIssueMenu(roomLabel));
+          return { handled: true };
+        } else if (currentSession.state === 'AWAITING_SUPPLIES') {
+          if (!text && d.isAudio(msg)) {
+            transcript = await d.transcribe(msg, cleaner?.language || 'he');
+            text = transcript.text;
+          }
+          if (text?.trim()) {
+            sessionStates.delete(sessionKey);
+            await d.resortos.reportSupplies({ unitId: currentSession.roomId, description: text.trim(), reportedBy: cleaner?.name || 'מנהל' });
+            await d.send(jid, `📦 דיווח החוסר נרשם לחדר ${roomLabel}:\n"${text.trim()}"`);
+            return { handled: true, transcript };
+          }
+        } else if (currentSession.state === 'AWAITING_GUEST_PICK') {
+          const index = Number(trimmed) - 1;
+          const choice = currentSession.choices[index];
+          if (!choice) {
+            await d.send(jid, guestLinkPickText(currentSession.choices));
+            return { handled: true };
+          }
+          await confirmGuestLink(currentSession.roomId, choice);
+          return { handled: true, transcript };
+        } else if (currentSession.state === 'AWAITING_GUEST_PHONE') {
+          const phone = phoneFromReply(trimmed);
+          if (!phone) {
+            await d.send(jid, `כתוב מספר נייד ישראלי עבור ${currentSession.guestName}.`);
+            return { handled: true };
+          }
+          await confirmGuestLink(currentSession.roomId, {
+            bookingId: currentSession.bookingId,
+            phone,
+            stayUrl: currentSession.stayUrl,
+            guestName: currentSession.guestName,
+            label: '',
+          });
+          return { handled: true, transcript };
+        } else if (currentSession.state === 'AWAITING_GUEST_LINK') {
+          const nextPhone = phoneFromReply(trimmed);
+          if (nextPhone && nextPhone !== currentSession.phone) {
+            await confirmGuestLink(currentSession.roomId, {
+              bookingId: currentSession.bookingId,
+              phone: nextPhone,
+              stayUrl: currentSession.stayUrl,
+              guestName: currentSession.guestName,
+              label: '',
+            });
+            return { handled: true, transcript };
+          }
+          const answer = confirmAnswer(trimmed);
+          if (answer === 'yes') {
+            await deliverGuestLink(currentSession);
+            return { handled: true, transcript };
+          }
+          if (answer === 'no') {
+            stayAction(currentSession.roomId);
+            await d.send(jid, 'לא שלחתי את הקישור.');
+            return { handled: true, transcript };
+          }
+          await d.send(jid, guestLinkConfirm(currentSession.guestName, currentSession.phone));
+          return { handled: true };
         } else if (currentSession.state === 'AWAITING_MAINTENANCE') {
           if (!text && d.isAudio(msg)) {
             transcript = await d.transcribe(msg, cleaner?.language || 'he');
@@ -644,29 +1514,44 @@ export function createPipeline(d: PipelineDeps) {
         text = transcript.text;
         if (['th', 'ar', 'he'].includes(transcript.language)) lang = transcript.language as Lang;
       }
-      if (!text?.trim()) return { handled: false, reason: 'no text', transcript };
+      if (!text?.trim()) {
+        if (d.isAudio(msg) && jid) {
+          const missed = lang === 'th'
+            ? 'ไม่ได้ยินข้อความเสียงค่ะ ช่วยส่งอีกครั้งได้ไหมคะ'
+            : lang === 'ar'
+              ? 'ما سمعت التسجيل. ممكن تعيد؟'
+              : 'לא שמעתי את ההקלטה. אפשר להקליט שוב או לכתוב?';
+          await d.send(jid, askByName(cleaner?.name, missed));
+          return { handled: true, transcript };
+        }
+        return { handled: false, reason: 'no text', transcript };
+      }
 
-      // 1. Manager Quick Approval: "מוכן B1", "אישור B1", "מאשר B1", "מוכן תזמורת 1"
-      const approvalMatch = text.match(/^\s*(?:מוכן|אישור|מאשר|סיום)\s+(.+)$/i);
-      if (approvalMatch && isManager) {
-        const rawCode = approvalMatch[1].trim().replace(/_/g, ' ');
-        let resolvedId = resolveRoomByAlias(rawCode, d.rooms());
-        if (!resolvedId) {
-          const fuzzy = matchManagerRoomIntent(rawCode, d.rooms());
-          if (fuzzy.type === 'RESOLVED') resolvedId = fuzzy.roomId;
-        }
-        if (resolvedId) {
-          const r = d.rooms().find((x) => x.id === resolvedId);
-          if (d.resortos.approveRoomByManager) {
-            await d.resortos.approveRoomByManager({ unitId: resolvedId, reportedBy: cleaner.name });
-          } else {
-            await d.resortos.markRoomReady({ unitId: resolvedId, reportedBy: cleaner.name });
-          }
-          const roomLabel = r?.name || r?.letterCode || rawCode;
-          const reply = `✅ חדר ${roomLabel} אושר בהצלחה כמוכן לאורח (READY)!\nביקורת מנהל הושלמה בהצלחה.`;
-          await d.send(jid, reply);
-          return { handled: true, intent: { action: 'ROOM_READY', room_id: resolvedId, room_raw: rawCode, issue_description_hebrew: null, acknowledgement_reply_cleaner_language: reply }, transcript };
-        }
+      const greet = cleaner ? greetingReply(text, cleaner.name) : null;
+      if (greet && jid) {
+        await d.send(jid, greet);
+        return { handled: true, transcript };
+      }
+      const looseCash = isManager ? proposeCashCollection(text) : null;
+      if (looseCash && jid) {
+        const roomId = currentSession && 'roomId' in currentSession ? currentSession.roomId : undefined;
+        if (roomId) await askCashConfirm(roomId, looseCash.shekels, text);
+        else await d.send(jid, askByName(cleaner?.name, 'על איזה חדר הגבייה?'));
+        return { handled: true, transcript };
+      }
+      if (isManager && proposesNightHold(text) && jid) {
+        const named = resolveRoomByAlias(text, d.rooms());
+        const roomId = named || (currentSession && 'roomId' in currentSession ? currentSession.roomId : undefined);
+        if (roomId) await askHoldConfirm(roomId);
+        else await d.send(jid, askByName(cleaner?.name, 'על איזה חדר החסימה?'));
+        return { handled: true, transcript };
+      }
+
+      const contextRoomId = currentSession && 'roomId' in currentSession ? currentSession.roomId : undefined;
+      const proposal = cleaner ? proposeStatusChange(text, d.rooms(), contextRoomId) : null;
+      if (proposal) {
+        await askStatusConfirm(proposal.roomId, proposal.change, isManager ? 'MANAGER' : 'CLEANER', text);
+        return { handled: true, transcript };
       }
 
       // 2. Manager QR image request: "שלח QR של B1", "QR B1", etc.
@@ -686,6 +1571,7 @@ export function createPipeline(d: PipelineDeps) {
               const caption = `🔲 קוד QR לסריקה עבור חדר: ${r.letterCode || r.name}\n` +
                 `📍 מתחם: ${r.property || ''}\n` +
                 `🔑 קוד כספת מפתח: ${r.lockbox || 'ללא'}\n\n` +
+                `📲 הנחיה לסריקה: 1. סורקים במצלמה  2. לוחצים "שלח" (Send ✈️) על ההודעה שמופיעה בווטסאפ.\n\n` +
                 `מדבקת כספת רב-תכליתית: משמשת עובדים (הפעלת שעון ניקיון), מנהלים (כרטיס חדר מלא), ואורחים (קבלת קוד כספת ודף שהות).`;
               await d.sendImage(jid, png, caption);
               return { handled: true, transcript };
@@ -751,8 +1637,8 @@ export function createPipeline(d: PipelineDeps) {
         const dirtyList = Array.from(dirtyUnitMap.values());
         let reply = `🧹 *סטטוס ניקיונות למנהל:*\n\n`;
         if (inProg.length > 0) {
-          reply += `🟡 *בניקיון כרגע (${inProg.length}):*\n` +
-            inProg.map((u) => `• ${formatRoomDisplay(u.id, d.rooms())}${u.assigned_staff ? ` (מנקה: ${u.assigned_staff})` : ''}`).join('\n') + `\n\n`;
+          reply += `🟡 *בנקיון כרגע (${inProg.length}):*\n` +
+            inProg.map((u) => `• ${formatRoomDisplay(u.id, d.rooms())}${u.assigned_staff ? ` | מנקה: ${u.assigned_staff}` : ''}`).join('\n') + `\n\n`;
         }
         if (dirtyList.length > 0) {
           reply += `🔴 *ממתינים לניקיון (${dirtyList.length}):*\n` +
@@ -760,6 +1646,8 @@ export function createPipeline(d: PipelineDeps) {
         } else if (inProg.length === 0) {
           reply += `✨ אין כרגע חדרים שממתינים לניקיון! כל החדרים נקיים או מוכנים.`;
         }
+
+
         await d.send(jid, reply.trim());
         return { handled: true, intent: { action: 'QUERY_STATUS', room_id: null, room_raw: text, issue_description_hebrew: null, acknowledgement_reply_cleaner_language: reply }, transcript };
       }
@@ -819,6 +1707,7 @@ export function createPipeline(d: PipelineDeps) {
           }
 
           // Register manager session for room context (questions & actions)
+          rememberRoom(sessionKey, resolvedId);
           sessionStates.set(sessionKey, {
             role: 'MANAGER',
             state: 'AWAITING_ACTION',
@@ -826,7 +1715,7 @@ export function createPipeline(d: PipelineDeps) {
             bookingId: occupancy.activeBooking?.id,
           });
 
-          const managerReply = formatManagerInitialCard(roomLabel, lockbox, unit, occupancy, r);
+          const managerReply = withManagerActions(formatManagerInitialCard(roomLabel, lockbox, unit, occupancy, r), roomLabel);
 
           await d.send(jid, managerReply);
           return {
@@ -862,11 +1751,11 @@ export function createPipeline(d: PipelineDeps) {
           const roomLabel = cleaner.language === 'th' ? (r?.letterCode || r?.name || '') : (r?.name || r?.letterCode || '');
           let reply = '';
           if (cleaner.language === 'th') {
-            reply = `บันทึกเรียบร้อยค่ะ: คุณ${cleaner.name} เริ่มทำความสะอาดห้อง ${roomLabel} แล้วค่ะ ✅\n🔑 รหัสตู้เซฟกุญแจ: ${lockbox || 'ไม่มี'}`;
+            reply = `บันทึกเรียบร้อยค่ะ: คุณ${cleaner.name} เริ่มทำความสะอาดห้อง ${roomLabel} แล้วค่ะ ✅\n🔑 รหัสตู้เซฟกุญแจ: ${lockbox || 'ไม่มี'}\n\n📲 เมื่อทำความสะอาดเสร็จแล้ว ให้สแกน QR Code อีกครั้ง เพื่อส่งรายงานและตรวจปิดไฟ/แอร์นะคะ`;
           } else if (cleaner.language === 'ar') {
-            reply = `أهلاً ${cleaner.name}، تم تسجيل بدء تنظيف غرفة ${roomLabel} بنجاح! ✅\n🔑 كود صندوق المفتاح: ${lockbox || 'غير محدد'}`;
+            reply = `تم تسجيل بدء تنظيف غرفة ${roomLabel} بنجاح! ✅\n🔑 كود صندوق المفتاح: ${lockbox || 'غير محدد'}\n\n📲 عند الانتهاء من التنظيف، يرجى مسح رمز الـ QR مرة أخرى لتأكيد الإنهاء وإطفاء الأنوار والمكيفات.`;
           } else {
-            reply = `היי ${cleaner.name}, נרשם בהצלחה שהתחלת לנקות את חדר ${roomLabel}! ✅\n🔑 קוד כספת מפתח: ${lockbox || 'לא מוגדר'}`;
+            reply = `נרשם שהתחלת לנקות את ${roomLabel} ✅\n🔑 קוד כספת מפתח: ${lockbox || 'לא מוגדר'}\n\n📲 בסיום הניקיון, יש לסרוק את ה-QR שוב כדי לעדכן סיום ולבדוק כיבוי אורות ומזגנים.`;
           }
           await d.send(jid, reply);
           return {
@@ -895,12 +1784,12 @@ export function createPipeline(d: PipelineDeps) {
           const correctRoom = d.rooms().find((x) => x.id === otherBooking.unit_id);
           const correctLabel = correctRoom?.name || correctRoom?.letterCode || otherBooking.unit_id;
           const stayUrl = otherBooking.checkout_token ? `https://resortos.app/stay/${otherBooking.checkout_token}` : '';
-          const reply = `שלום ${otherBooking.guest_name || ''}! 🧭\n` +
-            `נראה שסרקת את כספת חדר ${r?.name || r?.letterCode}, אך ההזמנה שלך היא עבור ${correctLabel}!\n\n` +
+          const reply = `נראה שסרקת את כספת חדר ${r?.name || r?.letterCode}, וההזמנה שלך היא עבור ${correctLabel}.\n\n` +
             `אנא גש אל ${correctLabel} וסרוק את הכספת שם, או השתמש בקוד הכספת של החדר שלך:\n` +
             `🔑 קוד כספת מפתח עבור ${correctLabel}: ${correctRoom?.lockbox || 'לא מוגדר'}\n\n` +
             (stayUrl ? `📱 דף האורח הדיגיטלי שלך:\n${stayUrl}\n\n` : '') +
             `לכל שאלה אנו זמינים כאן בווטסאפ.`;
+          void logGuestWhatsAppExchange(otherBooking, text, reply);
           await d.send(jid, reply);
           return { handled: true, transcript };
         }
@@ -918,7 +1807,7 @@ export function createPipeline(d: PipelineDeps) {
             const isReady = unit?.operational_status === 'READY';
 
             if (isReady) {
-              const reply = `שלום ${roomBooking.guest_name || 'וברוכים הבאים'}, ברוכים הבאים ל${r?.property || 'נופים בלבן'}! 🌿✨\n` +
+              const reply = `ברוכים הבאים ל${r?.property || 'נופים בלבן'} 🌿\n` +
                 `שמחים שהגעתם, בקתה ${r?.name || r?.letterCode} מוכנה ומחכה לכם!\n\n` +
                 `🔑 *קוד כספת המפתח שלכם:* *${lockbox}*\n\n` +
                 `📍 *הוראות פתיחת הכספת:*\n` +
@@ -929,25 +1818,28 @@ export function createPipeline(d: PipelineDeps) {
                 (stayUrl ? `📱 *דף האורח הדיגיטלי שלכם* (קוד WiFi, שירותים, אטרקציות וצ'ק-אאוט):\n${stayUrl}\n\n` : '') +
                 `ℹ️ שעת צ'ק-אאוט: 11:00\n\n` +
                 `מאחלים לכם חופשה נפלאה ושלווה! לכל בקשה או שאלה במהלך השהות, פשוט כתבו לנו כאן בווטסאפ 🏡`;
+              void logGuestWhatsAppExchange(roomBooking, text, reply);
               await d.send(jid, reply);
               return { handled: true, transcript };
             } else {
-              const reply = `שלום ${roomBooking.guest_name || ''}, איזה כיף שהגעתם! 🌿\n` +
-                `בקתה ${r?.name || r?.letterCode} עוברת כרגע ניקיון והכנה קפדנית כדי שתהיה מושלמת עבורכם (שעת צ'ק-אין רשמית היא החל מ-15:00).\n\n` +
+              const reply = `בקתה ${r?.name || r?.letterCode} עדיין בהכנה. שעת צ'ק-אין היא מ-15:00 🌿\n\n` +
                 `ברגע שהבקתה תהיה מוכנה ומאושרת ע״י המנהל, נשלח לכם לכאן אוטומטית הודעה עם קוד הכספת והוראות הכניסה!\n\n` +
                 (stayUrl ? `בינתיים תוכלו להתעדכן בדף השהות הדיגיטלי שלכם:\n${stayUrl}\n\n` : '') +
                 `לכל שאלה אנו זמינים כאן בווטסאפ.`;
+              void logGuestWhatsAppExchange(roomBooking, text, reply);
               await d.send(jid, reply);
               return { handled: true, transcript };
             }
           } else if (isFuture) {
-            const reply = `שלום ${roomBooking.guest_name || ''}, ההזמנה שלכם לבקתה ${r?.name || r?.letterCode} רשומה לתאריך ${checkIn}.\n` +
+            const reply = `ההזמנה לבקתה ${r?.name || r?.letterCode} רשומה לתאריך ${checkIn}.\n` +
               `נשמח מאוד לארח אתכם במועד הגעתכם! 🌿\n\n` +
               (stayUrl ? `לצפייה בפרטי ההזמנה שלכם בדף האורח:\n${stayUrl}` : '');
+            void logGuestWhatsAppExchange(roomBooking, text, reply);
             await d.send(jid, reply);
             return { handled: true, transcript };
           } else {
-            const reply = `שלום ${roomBooking.guest_name || ''}, ההזמנה שלכם לבקתה ${r?.name || r?.letterCode} הסתיימה. שמחנו לארח אתכם ונשמח לראותכם שוב בעתיד! 🌿`;
+            const reply = `ההזמנה לבקתה ${r?.name || r?.letterCode} הסתיימה. שמחנו לארח אתכם 🌿`;
+            void logGuestWhatsAppExchange(roomBooking, text, reply);
             await d.send(jid, reply);
             return { handled: true, transcript };
           }
@@ -955,25 +1847,39 @@ export function createPipeline(d: PipelineDeps) {
 
         // Neither staff, manager, nor guest with booking
         if (isStaffRoom(r)) {
-          const reply = `שלום! מרחב זה (${r?.name || 'יחידה זו'}) הינו אזור תפעולי של מגורי צוות ואינו מיועד לאירוח אורחים 🏡\n\n` +
+          const reply = `מרחב זה (${r?.name || 'יחידה זו'}) הוא מגורי צוות, לא יחידת אירוח 🏡\n\n` +
             `אם הגעתם להתארח אצלנו, אנא השיבו להודעה זו עם שמכם המלא או מספר ההזמנה שלכם ונשמח להכווין אתכם לבקתה שלכם!`;
           await d.send(jid, reply);
           return { handled: true, transcript };
         }
         if (isOfficeRoom(r)) {
-          const reply = `שלום! מרחב זה הינו משרד ההנהלה והתפעול 🏢\n\n` +
+          const reply = `זה משרד ההנהלה והתפעול 🏢\n\n` +
             `לכל שאלה או סיוע בהזמנתכם, אנא השיבו להודעה זו ונשמח לעזור!`;
           await d.send(jid, reply);
           return { handled: true, transcript };
         }
-        const roomLabel = (r?.name && r.name.includes('משרד')) ? r.name : `בקתה ${r?.name || r?.letterCode}`;
-        const reply = `שלום! לא זוהתה הזמנה פעילה עבור מספר טלפון זה ב${roomLabel}.\n\n` +
+        const cabinName = r?.name || r?.letterCode || '';
+        const roomLabel = cabinName ? (cabinName.includes('משרד') ? cabinName : `בקתה ${cabinName}`) : 'היחידה';
+        const reply = `לא זוהתה הזמנה פעילה עבור מספר הטלפון הזה ב${roomLabel}.\n\n` +
           `אם הגעתם להתארח אצלנו או שההזמנה בוצעה במספר אחר, אנא השבו להודעה זו עם שמכם המלא או מספר ההזמנה, ונשמח לעזור לכם בהקדם! 🏡`;
         await d.send(jid, reply);
         return { handled: true, transcript };
       }
 
       if (cleaner && text?.trim()) {
+        if (/פנוי/.test(text) && matchManagerRoomIntent(text, d.rooms()).type === 'NONE') {
+          const today = getIsraelToday();
+          const bookings = (await d.resortos.listBookings?.({ from: today, to: today })) || [];
+          const reply = formatVacantToday(d.rooms(), bookings, today);
+          await d.send(jid, reply);
+          return { handled: true, intent: { action: 'QUERY_STATUS', room_id: null, room_raw: text, issue_description_hebrew: null, acknowledgement_reply_cleaner_language: reply }, transcript };
+        }
+        const known = lookupExact(text);
+        const staticReply = known ? exactStaticReply(known) : null;
+        if (staticReply) {
+          await d.send(jid, staticReply);
+          return { handled: true, intent: { action: 'QUERY_STATUS', room_id: null, room_raw: text, issue_description_hebrew: null, acknowledgement_reply_cleaner_language: staticReply }, transcript };
+        }
         const rackRate = answerRackRate(text.trim(), d.rooms());
         if (rackRate) {
           await d.send(jid, rackRate);
@@ -983,7 +1889,8 @@ export function createPipeline(d: PipelineDeps) {
 
       // 4b. Manager Fuzzy / Nickname / Complex Matching
       if (isManager) {
-        const fuzzy = matchManagerRoomIntent(text, d.rooms());
+        noteManagerTurn(text || '');
+        const fuzzy = resolveRoomWithContext(text, d.rooms(), dialogContext(sessionKey));
         if (fuzzy.type === 'RESOLVED') {
           const r = d.rooms().find((x) => x.id === fuzzy.roomId);
           const lockbox = r?.lockbox || '1357#';
@@ -999,6 +1906,7 @@ export function createPipeline(d: PipelineDeps) {
           }
 
           // Register manager session for room context (questions & actions)
+          rememberRoom(sessionKey, fuzzy.roomId);
           sessionStates.set(sessionKey, {
             role: 'MANAGER',
             state: 'AWAITING_ACTION',
@@ -1009,7 +1917,7 @@ export function createPipeline(d: PipelineDeps) {
           // Check if manager asked a specific question about the room
           const specificAnswer = answerManagerRoomQuestion(text, roomLabel, lockbox, unit, occupancy, r);
           const body = specificAnswer || formatManagerInitialCard(roomLabel, lockbox, unit, occupancy, r);
-          const managerReply = `🔍 זיהיתי: *${roomLabel}*\n\n${body}`;
+          const managerReply = `🔍 זיהיתי: *${roomLabel}*\n\n${withManagerActions(body, roomLabel)}`;
 
           await d.send(jid, managerReply);
           return {
@@ -1030,7 +1938,7 @@ export function createPipeline(d: PipelineDeps) {
             candidateRoomIds: fuzzy.candidateRooms.map((r) => r.id),
             pendingQuestion: text,
           });
-          const prompt = formatComplexClarificationPrompt(fuzzy.complex.officialName, fuzzy.candidateRooms, d.rooms());
+          const prompt = askByName(cleaner?.name, formatComplexClarificationPrompt(fuzzy.complex.officialName, fuzzy.candidateRooms, d.rooms()));
           await d.send(jid, prompt);
           return { handled: true, transcript };
         } else if (fuzzy.type === 'AMBIGUOUS_NUMBER') {
@@ -1040,7 +1948,7 @@ export function createPipeline(d: PipelineDeps) {
             candidateRoomIds: fuzzy.candidateRooms.map((r) => r.id),
             pendingQuestion: text,
           });
-          const prompt = formatNumberClarificationPrompt(fuzzy.number, fuzzy.candidateRooms, d.rooms());
+          const prompt = askByName(cleaner?.name, formatNumberClarificationPrompt(fuzzy.number, fuzzy.candidateRooms, d.rooms()));
           await d.send(jid, prompt);
           return { handled: true, transcript };
         }
@@ -1078,18 +1986,59 @@ export function createPipeline(d: PipelineDeps) {
             guestName: booking.guest_name,
           };
 
+          const greet = greetingReply(text, booking.guest_name);
+          if (greet) {
+            void logGuestWhatsAppExchange(booking, text, greet);
+            await d.send(jid, greet);
+            return { handled: true, transcript };
+          }
+
+          if (await offerPlaceMenu(text, undefined, booking)) return { handled: true, transcript };
+
           const guestReply = answerGuestQuestion(text, ctx);
           if (guestReply) {
+            void logGuestWhatsAppExchange(booking, text, guestReply);
             await d.send(jid, guestReply);
             return { handled: true, transcript };
           }
 
-          // Helpful fallback when not matching a specific known query
-          const fallbackReply = `שלום ${booking.guest_name || ''}! 🌿\n` +
-            `שמחים לעזור. קיבלנו את הודעתכם וצוות המתחם ישיב לכם כאן בהקדם.\n\n` +
+          if (/(?:תתקשר|להתקשר|תחזרו אלי|תחזור אלי|אפשר שיחה|שיחזרו אלי|דברו איתי)/i.test(text || '')) {
+            const callReply = askByName(
+              booking.guest_name,
+              `בשמחה! העברנו את הבקשה לצוות המתחם ונחזור אליכם טלפונית בהקדם. 📞`
+            );
+            void logGuestWhatsAppExchange(booking, text || '', callReply);
+            if (d.resortos.requestGuestCall) {
+              void d.resortos.requestGuestCall({
+                bookingId: booking.id,
+                unitId: booking.unit_id,
+                guestName: booking.guest_name,
+                guestPhone: booking.guest_phone || displayPhone(senderPhone) || senderPhone,
+                cabin: ctx.roomName,
+              });
+            }
+            await d.send(jid, callReply);
+            return { handled: true, transcript };
+          }
+
+          // Helpful fallback when not matching a specific known query: ask if guest wants us to call them
+          sessionStates.set(sessionKey, {
+            role: 'GUEST',
+            state: 'AWAITING_CALL_CONFIRM',
+            bookingId: booking.id,
+            unitId: booking.unit_id,
+            roomName: ctx.roomName,
+            guestName: booking.guest_name,
+            guestPhone: booking.guest_phone || displayPhone(senderPhone) || senderPhone,
+          });
+          const fallbackReply = askByName(
+            booking.guest_name,
+            `אין לי תשובה מדויקת לשאלה הזו כרגע — תרצו שנתקשר אליכם? (השיבו *כן* ונחזור אליכם בהקדם 📞)\n\n`
+          ) +
             `בינתיים, כל המידע על שהותכם ב${ctx.roomName} (קוד WiFi, שער הישוב, הוראות ג'קוזי, מסעדות, אטרקציות וצ'ק-אאוט) זמין תמיד בדף האורח שלכם:\n` +
             (stayUrl ? `📱 ${stayUrl}\n\n` : '') +
             `מאחלים לכם שהות נעימה ושלווה!`;
+          void logGuestWhatsAppExchange(booking, text, fallbackReply);
           await d.send(jid, fallbackReply);
           return { handled: true, transcript };
         }
@@ -1125,7 +2074,15 @@ export function createPipeline(d: PipelineDeps) {
         }
       }
 
-      const intent = await d.llm.extractIntent(text, lang, d.rooms());
+      if (cleaner && text?.trim()) {
+        const roomId = currentSession && 'roomId' in currentSession ? currentSession.roomId : undefined;
+        if (await sendPlaceAnswer(text, roomId)) return { handled: true, transcript };
+      }
+
+      const exactKind = text?.trim() ? lookupExact(text) : null;
+      const intent = exactKind === 'daily' && isManager
+        ? { action: 'QUERY_STATUS' as const, room_id: null, room_raw: text, issue_description_hebrew: null, acknowledgement_reply_cleaner_language: '' }
+        : await d.llm.extractIntent(text, lang, d.rooms());
       d.log.info({ cleaner: cleaner.name, action: intent.action, room: intent.room_id }, 'intent extracted');
 
       // Check if cleaner is specifically inquiring about the key safe / lockbox code
@@ -1147,8 +2104,21 @@ export function createPipeline(d: PipelineDeps) {
       // Every room-specific report needs a resolved unit. Otherwise ask the worker to say the complex/letter + number.
       const actionable = intent.action === 'ROOM_READY' || intent.action === 'CLEANING_STARTED' || intent.action === 'MAINTENANCE_ISSUE' || intent.action === 'SUPPLIES_NEEDED';
       if (actionable && !intent.room_id) {
-        await d.send(jid, ASK_ROOM[lang]);
+        await d.send(jid, askByName(cleaner?.name, ASK_ROOM[lang]));
         return { handled: false, intent, transcript, reason: 'room unresolved' };
+      }
+
+      if (intent.room_id && (intent.action === 'ROOM_READY' || intent.action === 'CLEANING_STARTED')) {
+        if (intent.action === 'ROOM_READY' && !textHasStatusWord(text)) {
+          if (isManager) {
+            await showManagerRoom(intent.room_id);
+          } else if (jid) {
+            await d.send(jid, `שמעתי: ${text.trim()}\nלא שיניתי סטטוס.`);
+          }
+          return { handled: true, intent, transcript };
+        }
+        await askStatusConfirm(intent.room_id, intent.action === 'CLEANING_STARTED' ? 'cleaning' : 'ready', isManager ? 'MANAGER' : 'CLEANER', text);
+        return { handled: true, intent, transcript };
       }
 
       let apiOk = true;
@@ -1177,7 +2147,7 @@ export function createPipeline(d: PipelineDeps) {
             statusReply = `أهلاً ${by}، تم تسجيل بدء تنظيف غرفة ${roomLabel} بنجاح! ✅` +
               (lockbox ? `\n🔑 كود صندوق المفتاح: ${lockbox}` : '');
           } else {
-            statusReply = `היי ${by}, נרשם בהצלחה שהתחלת לנקות את חדר ${roomLabel}! ✅` +
+            statusReply = `נרשם שהתחלת לנקות את חדר ${roomLabel} ✅` +
               (lockbox ? `\n🔑 קוד כספת מפתח: ${lockbox}` : '');
           }
         } else if (intent.action === 'MAINTENANCE_ISSUE') {
@@ -1189,68 +2159,7 @@ export function createPipeline(d: PipelineDeps) {
           if (cleaner.role === 'MANAGER' || cleaner.role === 'OPS_MANAGER') {
             const today = getIsraelToday();
             const bookings = (await d.resortos.listBookings?.({ from: today, to: today })) || [];
-            const rentableRooms = d.rooms().filter((r) => r.id !== 'pilot-office');
-            const totalRentable = rentableRooms.length || 40;
-
-            const checkIns = bookings.filter((b) => b.check_in_date === today && b.booking_status !== 'CANCELED' && !b.deleted_at);
-            const checkOuts = bookings.filter((b) => b.check_out_date === today && b.booking_status !== 'CANCELED' && !b.deleted_at);
-            const inIds = new Set(checkIns.map((b) => b.unit_id));
-            const outIds = new Set(checkOuts.map((b) => b.unit_id));
-            const turnovers = [...inIds].filter((id) => outIds.has(id));
-
-            const occupiedIds = new Set(
-              bookings
-                .filter((b) => b.booking_status !== 'CANCELED' && !b.deleted_at && (b.check_in_date || '') <= today && (b.check_out_date || '') >= today)
-                .map((b) => b.unit_id)
-            );
-            const occupancyPct = totalRentable > 0 ? Math.round((occupiedIds.size / totalRentable) * 100) : 0;
-
-            const awaitingInspection = all.filter(
-              (u) => u.operational_status === 'READY' &&
-              (u.custom_reason === AWAITING_INSPECTION_REASON || u.custom_reason?.includes('ביקורת') || u.custom_reason?.includes('בדיקה'))
-            );
-            const ready = all
-              .filter((u) => u.operational_status === 'READY' &&
-                u.custom_reason !== AWAITING_INSPECTION_REASON &&
-                !u.custom_reason?.includes('ביקורת') &&
-                !u.custom_reason?.includes('בדיקה') &&
-                !outIds.has(u.id)
-              )
-              .map((u) => formatRoomDisplay(u.id, d.rooms()));
-            const inProg = all
-              .filter((u) => u.operational_status === 'IN_PROGRESS')
-              .map((u) => `${formatRoomDisplay(u.id, d.rooms())}${u.assigned_staff ? ` (${u.assigned_staff})` : ''}`);
-
-            // Reconcile dirty: explicitly DIRTY units + today's checkouts that have not been cleaned/approved
-            const dirtyUnitIds = new Set(
-              all.filter((u) => u.operational_status === 'DIRTY').map((u) => u.id)
-            );
-            for (const outId of outIds) {
-              const u = all.find((x) => x.id === outId);
-              const isAwaiting = u?.operational_status === 'READY' && (u.custom_reason === AWAITING_INSPECTION_REASON || u.custom_reason?.includes('ביקורת'));
-              const isApproved = u?.operational_status === 'READY' && (u.custom_reason === 'אושר ע״י מנהל' || u.custom_reason === 'טופל');
-              const isInProg = u?.operational_status === 'IN_PROGRESS';
-              if (!isAwaiting && !isApproved && !isInProg) {
-                dirtyUnitIds.add(outId);
-              }
-            }
-            const dirty = Array.from(dirtyUnitIds).map((id) => formatRoomDisplay(id, d.rooms()));
-            const maint = all
-              .filter((u) => u.operational_status === 'MAINTENANCE_ALERT')
-              .map((u) => `${formatRoomDisplay(u.id, d.rooms())}: ${u.custom_reason || 'תקלה'}`);
-            const inspect = awaitingInspection.map((u) => formatRoomDisplay(u.id, d.rooms()));
-
-            statusReply = `📊 תמונת מצב יומית למנהל:\n` +
-              `🏨 תפוסה להיום: ${occupancyPct}% (${occupiedIds.size}/${totalRentable} חדרים)\n` +
-              `🔄 החלפות (יוצא ונכנס): ${turnovers.length}\n` +
-              `🚪 כניסות להיום: ${checkIns.length}\n` +
-              `👋 יציאות להיום: ${checkOuts.length}\n\n` +
-              `⚙️ סטטוס תפעולי:\n` +
-              `🔍 ממתינים לביקורת מנהל (${inspect.length}): ${inspect.join(', ') || 'אין'}\n` +
-              `🟢 מוכנים ומאושרים לאורח (${ready.length}): ${ready.join(', ') || 'אין'}\n` +
-              `🟡 בניקיון (${inProg.length}): ${inProg.join(', ') || 'אין'}\n` +
-              `🔴 ממתינים לניקיון (${dirty.length}): ${dirty.join(', ') || 'אין'}\n` +
-              `⚠️ תקלות (${maint.length}): ${maint.join(', ') || 'אין'}`;
+            statusReply = formatVacantToday(d.rooms(), bookings, today);
           } else {
             // HOUSEKEEPING: only rooms assigned to this cleaner OR unassigned rooms needing cleaning.
             // Also include checkout departures from today that haven't been started
@@ -1295,13 +2204,16 @@ export function createPipeline(d: PipelineDeps) {
         return { handled: false, intent, transcript, reason: skipped };
       }
       if (apiOk) {
-        const reply = statusReply || intent.acknowledgement_reply_cleaner_language || CLARIFY[lang];
-        await d.send(jid, reply);
+        const rawReply = statusReply || intent.acknowledgement_reply_cleaner_language || '';
+        const reply = rawReply
+          ? rawReply.replace(/^(?:שלום|היי|הי|hello|hi|أهلاً|أهلا)\b[!,.،\s]*/i, '').trim()
+          : askByName(cleaner?.name, CLARIFY[lang]);
+        await d.send(jid, /[?؟]$/.test(reply) ? askByName(cleaner?.name, reply) : reply);
       }
       return { handled: apiOk, intent, transcript, reason: apiOk ? undefined : 'resortos error' };
     } catch (e) {
       d.log.error({ err: String(e) }, 'inbound processing failed');
-      await d.send(jid, CLARIFY[lang]).catch(() => {});
+      await d.send(jid, askByName(cleaner?.name, CLARIFY[lang])).catch(() => {});
       return { handled: false, reason: String(e), transcript };
     }
   }
@@ -1310,7 +2222,7 @@ export function createPipeline(d: PipelineDeps) {
   async function handleDispatch(body: { cleaner_phone?: string; message_he?: string; action?: string; type?: string; room_id?: string }) {
     const phone = body.cleaner_phone?.replace(/\D/g, '');
     if (!phone) throw Object.assign(new Error('cleaner_phone required'), { status: 400 });
-    const cleaner = d.cleaners().find((c) => phonesMatch(c.phone, phone));
+    const cleaner = d.cleaners().find((c) => matchesCleaner(c, phone));
     if (!cleaner) throw Object.assign(new Error('unknown cleaner'), { status: 404 });
 
     if ((body.action === 'ROOM_EXIT' || body.type === 'ROOM_EXIT') && body.room_id) {

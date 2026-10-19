@@ -23,6 +23,7 @@ export async function onRequest(context) {
   const body = await request.json().catch(() => ({}));
   const token = String(body.token || body.reservationId || '').trim();
   if (!/^tok_[A-Za-z0-9_-]+$/.test(token)) return json({ error: 'INVALID_TOKEN' }, 400);
+  if (body.guest_approved !== true) return json({ error: 'GUEST_APPROVAL_REQUIRED' }, 409);
   const innerUrl = new URL(`/api/checkout/${token}/stay`, request.url);
   const inner = new Request(innerUrl, {
     method: 'POST',

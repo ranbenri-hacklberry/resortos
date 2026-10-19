@@ -147,6 +147,13 @@ export async function saveAttendanceSettings(payload) {
   });
 }
 
+export async function setOutboundCalls(id, enabled) {
+  return authFetch(`/staff/${encodeURIComponent(id)}/outbound`, {
+    method: 'POST',
+    body: JSON.stringify({ outbound_calls: Boolean(enabled) })
+  });
+}
+
 export async function updateStaffAccount(id, payload) {
   const result = await authFetch(`/staff/${encodeURIComponent(id)}`, {
     method: 'PATCH',

@@ -20,12 +20,9 @@ export function isPriorityOnly(role) {
   return role === 'PRIORITY';
 }
 
-/** Finance-only staff (Daniel). Matches Priority-style dedicated screen isolation. */
-export function isFinanceOnly(role, username = '', displayName = '') {
-  const r = String(role || '').toUpperCase();
-  const u = String(username || '').toLowerCase();
-  const d = String(displayName || '').toLowerCase();
-  return r === 'FINANCE' || u === 'daniel' || u.includes('דניאל') || d === 'daniel' || d.includes('דניאל');
+/** Finance-only staff. The role on the employee row is the source of truth. */
+export function isFinanceOnly(role) {
+  return String(role || '').toUpperCase() === 'FINANCE';
 }
 
 /** Status edits on the Priority screen. Priority matches a manager; other roles stay as they are. */
@@ -42,7 +39,7 @@ export function canSeeFinancials(role, username = '', displayName = '') {
     r === 'OPS_MANAGER' ||
     r === 'OWNER' ||
     r === 'FINANCE' ||
-    isFinanceOnly(role, username, displayName) ||
+    isFinanceOnly(role) ||
     u === 'max' ||
     u.includes('מקס') ||
     d.includes('מקס') ||

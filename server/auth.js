@@ -308,6 +308,22 @@ export async function createStaff(req, res) {
   }
 }
 
+export async function setOutboundCalls(req, res) {
+  try {
+    const token = bearerToken(req);
+    if (!token) return res.status(401).json({ error: 'UNAUTHORIZED' });
+    const result = await rpc('hotelos_set_outbound_calls', {
+      p_token: token,
+      p_staff_id: String(req.params?.id || ''),
+      p_enabled: req.body?.outbound_calls === true
+    });
+    if (result?.error) return mapStaffError(result, res);
+    return res.json(result);
+  } catch (err) {
+    return sendError(res, err);
+  }
+}
+
 export async function updateStaff(req, res) {
   try {
     const token = bearerToken(req);

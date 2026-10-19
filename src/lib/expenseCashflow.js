@@ -23,7 +23,7 @@ export function domainIdFor(label, payee = '') {
   if (/מס הכנסה/.test(text)) return 'mas';
   if (/מע["״']?מ/.test(text)) return 'vat';
   if (/כינורות/.test(text)) return 'kinorot';
-  if (/שכירות/.test(text)) return 'rent';
+  if (/שכירות|שכר דירה/.test(text)) return 'rent';
   if (/ארנונה|מים|חשמל/.test(text)) return 'utilities';
   if (/משכורות/.test(text)) return 'salaries';
   if (/רכב/.test(text)) return 'cars';

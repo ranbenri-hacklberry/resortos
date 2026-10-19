@@ -1,5 +1,7 @@
-import { kinorotSettlementKind } from './bookingPaid';
+import { hasRecordedReceipt, isFullyPaid, kinorotSettlementKind } from './bookingPaid';
+import { israelToday } from './cabinAccess';
 import { mergeClearingPayments, normalizeClearingPayment } from './clearingPayments';
+import { formatStayHourLabel, stayHoursFromBooking } from './kinorotStayHours';
 import { db } from './resortos-db';
 import { pushBookingToCloud } from './cloudDb';
 
@@ -23,6 +25,48 @@ export function priorityStatusKey(booking) {
   if (status === 'PAID') return 'PAID';
   if (status === 'PARTIAL' || status === 'DEPOSIT_PAID') return 'PARTIAL';
   return 'UNPAID';
+}
+
+function israelClock(now) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Jerusalem',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23'
+  }).formatToParts(now);
+  return {
+    hour: Number(parts.find((part) => part.type === 'hour')?.value),
+    minute: Number(parts.find((part) => part.type === 'minute')?.value)
+  };
+}
+
+function isAtCheckin(booking, now) {
+  const ymd = String(booking?.check_in_date || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd) || israelToday(now) !== ymd) return false;
+  const label = formatStayHourLabel(stayHoursFromBooking(booking).checkin) || '15:00';
+  const match = label.match(/^(\d{2}):(\d{2})$/);
+  const hour = match ? Number(match[1]) : 15;
+  const minute = match ? Number(match[2]) : 0;
+  const clock = israelClock(now);
+  return clock.hour > hour || (clock.hour === hour && clock.minute >= minute);
+}
+
+function hasPaymentRecord(booking) {
+  if (kinorotSettlementKind(booking)) return true;
+  if (String(booking?.payment_mode || '').trim()) return true;
+  if (hasRecordedReceipt(booking)) return true;
+  const status = String(booking?.payment_status || '').toUpperCase();
+  return Boolean(status && status !== 'UNPAID');
+}
+
+/** Shekel on the Priority board only during check-in, and only while payment is still open. */
+export function priorityShekelMark(booking, now = new Date()) {
+  if (!booking || !isAtCheckin(booking, now)) return '';
+  if (isFullyPaid(booking) || kinorotSettlementKind(booking)) return '';
+  const mode = String(booking.payment_mode || '').toUpperCase();
+  if (mode === 'CASH') return 'blink';
+  if (!hasPaymentRecord(booking)) return 'steady';
+  return '';
 }
 
 export function priorityMethodLabel(methodKey) {

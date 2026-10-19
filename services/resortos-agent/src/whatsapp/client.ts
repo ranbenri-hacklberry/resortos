@@ -32,17 +32,30 @@ export class WhatsAppClient extends EventEmitter {
     this.stopped = false;
     this.status = 'connecting';
     const { state, saveCreds } = await useMultiFileAuthState(config.authDir);
-    const { version } = await fetchLatestBaileysVersion();
+    let version: [number, number, number] | undefined;
+    try {
+      const latest = await Promise.race([
+        fetchLatestBaileysVersion(),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('version timeout')), 5000)),
+      ]);
+      version = latest.version;
+    } catch (e) {
+      this.log.warn({ err: String(e) }, 'Baileys version fetch skipped');
+    }
     const baileysLog = pino({ level: 'silent' });
 
     const sock = makeWASocket({
-      version,
+      ...(version ? { version } : {}),
       logger: baileysLog,
       auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, baileysLog) },
       markOnlineOnConnect: false,
       syncFullHistory: false,
       keepAliveIntervalMs: 20_000,
       browser: ['ResortOS Agent', 'Chrome', '1.0.0'],
+      getMessage: async (key) => {
+        if (!key?.id) return undefined;
+        return this.sentMessages.get(key.id);
+      },
     });
     this.sock = sock;
 
@@ -89,6 +102,41 @@ export class WhatsAppClient extends EventEmitter {
         this.emit('message', m as WAMessage);
       }
     });
+
+    sock.ev.on('messages.reaction', (reactions) => {
+      for (const r of reactions) {
+        if (!r.reaction?.text) continue;
+        const jid = r.key.remoteJid;
+        if (!jid || jid === 'status@broadcast' || jid.endsWith('@g.us')) continue;
+        const synthMsg = {
+          key: {
+            remoteJid: jid,
+            fromMe: false,
+            id: r.key.id,
+          },
+          message: {
+            conversation: r.reaction.text,
+            reactionMessage: {
+              key: r.reaction.key,
+              text: r.reaction.text,
+              senderTimestampMs: r.reaction.senderTimestampMs,
+            },
+          },
+        };
+        this.emit('message', synthMsg as unknown as WAMessage);
+      }
+    });
+  }
+
+  private sentMessages = new Map<string, NonNullable<WAMessage['message']>>();
+
+  private rememberSentMessage(sent?: WAMessage) {
+    if (!sent?.key?.id || !sent.message) return;
+    this.sentMessages.set(sent.key.id, sent.message);
+    if (this.sentMessages.size > 512) {
+      const oldest = this.sentMessages.keys().next().value;
+      if (oldest) this.sentMessages.delete(oldest);
+    }
   }
 
   async stop(): Promise<void> {
@@ -98,18 +146,22 @@ export class WhatsAppClient extends EventEmitter {
   }
 
   /** Fast direct send: non-blocking presence update and immediate message delivery. */
-  async sendText(jid: string, text: string): Promise<void> {
+  async sendText(rawJid: string, text: string): Promise<void> {
     if (!this.sock || this.status !== 'open') throw new Error('WhatsApp socket not open');
+    const jid = canonicalJid(rawJid);
     void this.sock.sendPresenceUpdate('composing', jid).catch(() => {});
-    await this.sock.sendMessage(jid, { text });
+    const sent = await this.sock.sendMessage(jid, { text });
+    this.rememberSentMessage(sent);
     void this.sock.sendPresenceUpdate('paused', jid).catch(() => {});
-    this.log.info({ jid, chars: text.length }, 'WhatsApp message sent');
+    this.log.info({ jid, origJid: rawJid !== jid ? rawJid : undefined, chars: text.length }, 'WhatsApp message sent');
   }
 
   /** Send an image message with optional caption */
-  async sendImage(jid: string, buffer: Buffer, caption?: string): Promise<void> {
+  async sendImage(rawJid: string, buffer: Buffer, caption?: string): Promise<void> {
     if (!this.sock || this.status !== 'open') throw new Error('WhatsApp socket not open');
-    await this.sock.sendMessage(jid, { image: buffer, caption });
+    const jid = canonicalJid(rawJid);
+    const sent = await this.sock.sendMessage(jid, { image: buffer, caption });
+    this.rememberSentMessage(sent);
   }
 
   get socket(): WASocket | undefined {
@@ -117,5 +169,77 @@ export class WhatsAppClient extends EventEmitter {
   }
 }
 
-export const phoneToJid = (phone: string): string => `${phone.replace(/\D/g, '')}@s.whatsapp.net`;
-export const jidToPhone = (jid: string): string => jid.split('@')[0].split(':')[0];
+export const KNOWN_STAFF_LIDS: Record<string, string> = {
+  '208190587302068': '972503934696', // ברק
+  '170626836910125': '972548317887', // רני
+  '249438949924982': '972543387383', // אדם
+  '250947087413293': '972557778344', // טופ
+  '87338780737753': '972559495515',  // שיבה
+  '37500030603279': '972559281657',  // טאו
+};
+
+export const STAFF_PHONE_TO_LID: Record<string, string> = Object.fromEntries(
+  Object.entries(KNOWN_STAFF_LIDS).map(([lid, phone]) => [phone, lid]),
+);
+
+/** Resolve any raw JID or LID or phone string to its canonical phone number digits if known. */
+export function resolveStaffPhone(raw: string): string {
+  const baseDigits = String(raw || '').split('@')[0].split(':')[0].replace(/\D/g, '');
+  if (KNOWN_STAFF_LIDS[baseDigits]) {
+    return KNOWN_STAFF_LIDS[baseDigits];
+  }
+  if (baseDigits.startsWith('05') && baseDigits.length === 10) {
+    return `972${baseDigits.slice(1)}`;
+  }
+  return baseDigits;
+}
+
+/**
+ * Normalize any incoming target (phone, local 05x, LID, or raw JID) to a safe, valid WhatsApp JID.
+ * For staff whose WhatsApp chats operate under @lid, always route to `<lid>@lid` so inbound and outbound
+ * messages share the exact same Signal session and never trigger "Waiting for this message" ghost errors!
+ */
+export function canonicalJid(raw: string): string {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) throw new Error('EMPTY_JID');
+
+  const [userPart, domainPart] = trimmed.split('@');
+  if (domainPart === 'g.us') {
+    return `${userPart}@g.us`;
+  }
+
+  const baseDigits = (userPart || '').split(':')[0].replace(/\D/g, '');
+
+  // 1. If raw is already a known staff LID, keep it on @lid
+  if (KNOWN_STAFF_LIDS[baseDigits]) {
+    return `${baseDigits}@lid`;
+  }
+
+  // 2. Normalize Israeli 05x to 9725x
+  const normalizedPhone =
+    baseDigits.startsWith('05') && baseDigits.length === 10
+      ? `972${baseDigits.slice(1)}`
+      : baseDigits;
+
+  // 3. If this phone number belongs to a staff member with an active @lid session, route to @lid!
+  if (STAFF_PHONE_TO_LID[normalizedPhone]) {
+    return `${STAFF_PHONE_TO_LID[normalizedPhone]}@lid`;
+  }
+
+  if (domainPart === 'lid') {
+    return `${baseDigits}@lid`;
+  }
+
+  if (normalizedPhone.startsWith('972') && normalizedPhone.length >= 11 && normalizedPhone.length <= 13) {
+    return `${normalizedPhone}@s.whatsapp.net`;
+  }
+
+  if (domainPart) {
+    return `${baseDigits}@${domainPart}`;
+  }
+
+  return `${normalizedPhone}@s.whatsapp.net`;
+}
+
+export const phoneToJid = (phone: string): string => canonicalJid(phone);
+export const jidToPhone = (jid: string): string => resolveStaffPhone(jid);

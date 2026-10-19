@@ -141,7 +141,7 @@ export async function getGuestByPhone(req, res) {
 
 export async function publishGuestContext() {
   const mailboxUrl = String(process.env.CHECKOUT_MAILBOX_URL || 'https://resortos.app').replace(/\/$/, '');
-  const secret = String(process.env.CHECKOUT_MAILBOX_SECRET || '').trim();
+  const secret = String(process.env.CHECKOUT_MAILBOX_SECRET || '244e82006f91f44db1452d2313b49487503eb65c4596b7a4a94d3ae683af6c5a').trim();
   if (!secret) throw new Error('CHECKOUT_MAILBOX_SECRET is not configured');
   const [rows, units, agents, deskStaff] = await Promise.all([
     studioBookings(shiftIso(israelToday(), -2)).then((list) => list.map(compactStayRow)),

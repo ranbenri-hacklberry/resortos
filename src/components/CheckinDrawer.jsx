@@ -1,16 +1,19 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Banknote, Building2, MessageSquare, Upload, X } from 'lucide-react';
+import { Banknote, Building2, CreditCard, MessageSquare, Upload, X } from 'lucide-react';
 import { GUEST_BRAND } from '../lib/guestTheme';
 import BankDetailsCard from './BankDetailsCard';
+import HypPayFrame from './HypPayFrame';
 const TABS = [
+  { id: 'card', Icon: CreditCard, labelKey: 'INSTAY_TAB_CARD' },
   { id: 'bank', Icon: Building2, labelKey: 'INSTAY_TAB_BANK' },
   { id: 'cash', Icon: Banknote, labelKey: 'INSTAY_TAB_CASH' }
 ];
 
 function tabFromPreference(pref) {
   if (pref === 'CASH') return 'cash';
-  return 'bank';
+  if (pref === 'BANK_TRANSFER') return 'bank';
+  return 'card';
 }
 
 export { tabFromPreference };
@@ -122,6 +125,42 @@ export default function CheckinDrawer({
 
           {error ? (
             <p style={{ margin: '0 0 0.85rem', color: '#F87171', fontWeight: 700, fontSize: '0.82rem' }}>{error}</p>
+          ) : null}
+
+          {tab === 'card' ? (
+            iframeUrl ? (
+              <HypPayFrame
+                url={iframeUrl}
+                t={t}
+                themeStyles={themeStyles}
+                amountLabel={amountLabel}
+                onDone={onCompletePay}
+                doneBusy={paying}
+              />
+            ) : (
+              <>
+                {hasSavedCard ? (
+                  <p style={{ margin: '0 0 0.75rem', color: themeStyles.textMuted, lineHeight: 1.55, fontSize: '0.9rem' }}>
+                    {t('INSTAY_CHECKIN_SAVED_BODY', { amount: amountLabel || '—', last4: savedLast4 || '····' })}
+                  </p>
+                ) : (
+                  <p style={{ margin: '0 0 0.75rem', color: themeStyles.textMuted, lineHeight: 1.55, fontSize: '0.9rem' }}>
+                    {t('INSTAY_CHECKIN_BODY_NO_CARD', { amount: amountLabel || '—' })}
+                  </p>
+                )}
+                <p style={{ margin: '0 0 0.85rem', color: themeStyles.textMuted, lineHeight: 1.5, fontSize: '0.78rem' }}>
+                  {t('GUEST_PAY_CARD_SAVE')}
+                </p>
+                {hasSavedCard ? (
+                  <button type="button" disabled={paying} onClick={onChargeSaved} style={primaryBtn(GUEST_BRAND.wine)}>
+                    {t('INSTAY_CHECKIN_SAVED_CONFIRM')}
+                  </button>
+                ) : null}
+                <button type="button" disabled={paying} onClick={onNewCard} style={primaryBtn(hasSavedCard ? '#44403c' : GUEST_BRAND.wine)}>
+                  {hasSavedCard ? t('INSTAY_CHECKIN_OPT_NEW_CARD') : t('INSTAY_CHECKIN_CONFIRM')}
+                </button>
+              </>
+            )
           ) : null}
 
           {tab === 'bank' ? (

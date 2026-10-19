@@ -16,7 +16,7 @@ export interface Transcript {
 export const isAudioMessage = (m: WAMessage): boolean => !!m.message?.audioMessage;
 
 export const extractText = (m: WAMessage): string | null =>
-  m.message?.conversation ?? m.message?.extendedTextMessage?.text ?? null;
+  m.message?.conversation ?? m.message?.extendedTextMessage?.text ?? m.message?.reactionMessage?.text ?? null;
 
 /** Convert an Opus/OGG buffer to 16 kHz mono WAV (what Whisper expects). Returns the wav path. */
 export async function oggToWav(buf: Buffer): Promise<string> {
@@ -57,6 +57,11 @@ export class Transcriber {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     this.proc = proc;
+    proc.on('error', (err) => {
+      process.stderr.write(`[stt] spawn error: ${err.message}\n`);
+      this.ready = false;
+      this.proc = undefined;
+    });
     createInterface({ input: proc.stdout }).on('line', (line) => {
       let msg: { id?: string; ready?: boolean; error?: string } & Partial<Transcript>;
       try {

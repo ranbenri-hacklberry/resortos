@@ -1,8 +1,9 @@
 [
   {
     "phone": "972503934696",
+    "lid": "208190587302068",
     "name": "ברק",
-    "role": "HOUSEKEEPING",
+    "role": "OPS_MANAGER",
     "language": "he"
   },
   {
@@ -12,49 +13,36 @@
     "language": "ar"
   },
   {
-    "phone": "972526046069",
-    "name": "אוסנת",
-    "role": "HOUSEKEEPING",
-    "language": "he"
-  },
-  {
     "phone": "972557778344",
+    "lid": "250947087413293",
     "name": "טופ",
     "role": "HOUSEKEEPING",
     "language": "th"
   },
   {
     "phone": "972559495515",
+    "lid": "87338780737753",
     "name": "שיבה",
     "role": "HOUSEKEEPING",
     "language": "th"
   },
   {
     "phone": "972559281657",
+    "lid": "37500030603279",
     "name": "טאו",
     "role": "HOUSEKEEPING",
     "language": "th"
   },
   {
-    "phone": "972506983399",
-    "name": "רני",
-    "role": "MANAGER",
-    "language": "he"
-  },
-  {
     "phone": "972548317887",
-    "name": "רני",
-    "role": "MANAGER",
-    "language": "he"
-  },
-  {
-    "phone": "170626836910125",
+    "lid": "170626836910125",
     "name": "רני",
     "role": "MANAGER",
     "language": "he"
   },
   {
     "phone": "972543387383",
+    "lid": "249438949924982",
     "name": "אדם",
     "role": "MANAGER",
     "language": "he"

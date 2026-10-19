@@ -253,7 +253,9 @@ function smsErrorText(err) {
   }
   if (code === 'SMS_PHONE_INVALID') return 'מספר הטלפון לא תקין לשליחת סמס.';
   if (code === 'NOT_ENOUGH_CREDIT') return 'אין יתרת סמס בחשבון מיקרופיי.';
-  return 'שליחת הסמס נכשלה. נסו שוב.';
+  if (code === 'NOT_FOUND') return 'שליחת הסמס נכשלה: ההזמנה עדיין לא נמצאה במסד הנתונים.';
+  if (code === 'UNAUTHORIZED') return 'שליחת הסמס נכשלה: נדרשת התחברות מחדש למערכת.';
+  return code ? `שליחת הסמס נכשלה (${code}). נסו שוב.` : 'שליחת הסמס נכשלה. נסו שוב.';
 }
 
 function openWhatsAppChat(phone, encodedText) {
@@ -536,6 +538,28 @@ function withDispatchNights(data, nights, restrictions) {
   };
 }
 
+function phoneTailDigits(raw) {
+  const digits = String(raw || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('972')) return digits.slice(3).slice(-9);
+  if (digits.startsWith('0')) return digits.slice(1).slice(-9);
+  return digits.slice(-9);
+}
+
+function findCallForCalendarBooking(calls, booking) {
+  if (!Array.isArray(calls) || !calls.length || !booking) return null;
+  const active = calls.filter((c) => !c.acked_at);
+  if (!active.length) return null;
+  return active.find((c) => {
+    if (c.booking_id && c.booking_id === booking.id) return true;
+    if (c.unit_id && (c.unit_id === booking.cabin_id || c.unit_id === booking.unit_id)) return true;
+    const pA = phoneTailDigits(c.guest_phone);
+    const pB = phoneTailDigits(booking.guest_phone || booking.phone);
+    if (pA && pB && pA.length >= 7 && pA === pB) return true;
+    return false;
+  }) || null;
+}
+
 export default function ResortOSCalendar({
   tenantId = DEMO_TENANT_ID,
   theme = 'dark',
@@ -543,6 +567,40 @@ export default function ResortOSCalendar({
   canSeePayments = true,
   sessionUser = null
 }) {
+  const [guestCalls, setGuestCalls] = useState([]);
+  useEffect(() => {
+    let stop = false;
+    const pullCalls = async () => {
+      const token = localStorage.getItem('hotelos_token') || localStorage.getItem('resortos_token') || '';
+      try {
+        const response = await fetch('/api/ops/call-me', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (stop) return;
+        const rows = Array.isArray(data.calls) ? data.calls : [];
+        setGuestCalls(rows.filter((c) => !c.acked_at));
+      } catch {}
+    };
+    pullCalls();
+    const timer = setInterval(pullCalls, 5000);
+    return () => {
+      stop = true;
+      clearInterval(timer);
+    };
+  }, []);
+
+  const ackCalendarCall = useCallback(async (callToken) => {
+    const auth = localStorage.getItem('hotelos_token') || localStorage.getItem('resortos_token') || '';
+    setGuestCalls((rows) => rows.filter((r) => r.token !== callToken));
+    await fetch('/api/ops/call-me/ack', {
+      method: 'POST',
+      headers: { ...(auth ? { Authorization: `Bearer ${auth}` } : {}), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: callToken })
+    }).catch(() => {});
+  }, []);
+
   const pushUnitToCloud = useCallback((patch, options = {}) => (
     pushUnitOps(patch, { ...options, viaEdge: true })
   ), []);
@@ -1374,21 +1432,51 @@ export default function ResortOSCalendar({
       checkInDate: dispatchModalData.check_in_date,
       checkoutUrl
     });
+    const tokenHdr = getStoredToken();
     if (channel === 'sms') {
+      const smsMsg = guestStaySmsText({
+        unitName,
+        checkInDate: dispatchModalData.check_in_date,
+        checkoutUrl
+      });
       try {
-        await sendStaffSms({
-          phone: dispatchModalData.guest_phone,
-          message: guestStaySmsText({
-            unitName,
-            checkInDate: dispatchModalData.check_in_date,
-            checkoutUrl
+        const resp = await fetch('/api/guest-comms/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            ...(tokenHdr ? { Authorization: `Bearer ${tokenHdr}` } : {})
+          },
+          body: JSON.stringify({
+            booking_id: pendingBooking.id,
+            phone: dispatchModalData.guest_phone,
+            message: smsMsg,
+            channel: 'sms',
+            kind: 'stay_link'
           })
         });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.error || 'SMS_FAILED');
       } catch (err) {
         window.alert(smsErrorText(err));
         return;
       }
     } else {
+      fetch('/api/guest-comms/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...(tokenHdr ? { Authorization: `Bearer ${tokenHdr}` } : {})
+        },
+        body: JSON.stringify({
+          booking_id: pendingBooking.id,
+          phone: dispatchModalData.guest_phone,
+          message: stayText,
+          channel: 'whatsapp',
+          kind: 'stay_link'
+        })
+      }).catch(() => {});
       const formattedPhone = toWhatsAppPhone(dispatchModalData.guest_phone);
       openWhatsAppChat(formattedPhone, encodeURIComponent(stayText));
     }
@@ -1583,7 +1671,9 @@ export default function ResortOSCalendar({
       };
       await db.bookings.put(nextBooking);
       await pushBookingToCloud(nextBooking);
-      await publishGuestMailbox(nextBooking);
+      await publishGuestMailbox(nextBooking).catch((err) => {
+        console.warn('[publishGuestMailbox]', err?.message || err);
+      });
       setEditingBooking(nextBooking);
       const checkoutUrl = guestStayUrl(token);
       if (channel === 'sms') {
@@ -1598,6 +1688,7 @@ export default function ResortOSCalendar({
           },
           body: JSON.stringify({
             booking_id: nextBooking.id,
+            phone: rawPhone,
             message,
             channel: 'sms',
             kind: 'stay_link'
@@ -1620,15 +1711,30 @@ export default function ResortOSCalendar({
         setEditingBooking(stamped);
         window.alert('הסמס נשלח.');
       } else {
+        const waText = initialGuestWhatsAppText({
+          unitName,
+          checkInDate,
+          checkoutUrl
+        });
+        const tokenHdr = getStoredToken();
+        fetch('/api/guest-comms/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            ...(tokenHdr ? { Authorization: `Bearer ${tokenHdr}` } : {})
+          },
+          body: JSON.stringify({
+            booking_id: nextBooking.id,
+            phone: rawPhone,
+            message: waText,
+            channel: 'whatsapp',
+            kind: 'stay_link'
+          })
+        }).catch(() => {});
         openWhatsAppChat(
           phone,
-          encodeURIComponent(
-            initialGuestWhatsAppText({
-              unitName,
-              checkInDate,
-              checkoutUrl
-            })
-          )
+          encodeURIComponent(waText)
         );
       }
     } catch (err) {
@@ -2688,14 +2794,17 @@ export default function ResortOSCalendar({
               ? 'UNAVAILABLE'
               : (room.key === 'occupied'
                 ? 'OCCUPIED'
-                : room.key === 'dirty'
-                  ? 'DIRTY'
-                  : room.key === 'inspect'
-                    ? 'NEEDS_COMPLETIONS'
-                    : room.key === 'alert'
-                      ? 'MAINTENANCE_ALERT'
-                      : 'READY');
+                : room.key === 'in_progress'
+                  ? 'IN_PROGRESS'
+                  : room.key === 'dirty'
+                    ? 'DIRTY'
+                    : room.key === 'inspect'
+                      ? 'NEEDS_COMPLETIONS'
+                      : room.key === 'alert'
+                        ? 'MAINTENANCE_ALERT'
+                        : 'READY');
             const cube = unitNameFrame(frameKey, isLight);
+
             const lockbox = lockboxCodeForUnit(unit);
 
             return (
@@ -2962,6 +3071,30 @@ export default function ResortOSCalendar({
                     }}>
                       {hold ? holdLabel : guestCardFirstName(booking.guest_name || 'אורח')}
                     </span>
+                    {(() => {
+                      const activeCall = findCallForCalendarBooking(guestCalls, booking);
+                      if (!activeCall) return null;
+                      return (
+                        <span
+                          role="button"
+                          title={`האורח ביקש שיחה${activeCall.transferredName ? ` (הועבר ל${activeCall.transferredName})` : ''} · לחץ לסימון כנפתר`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            ackCalendarCall(activeCall.token);
+                          }}
+                          style={{
+                            fontSize: 10,
+                            cursor: 'pointer',
+                            animation: 'call-pulse 1.6s infinite ease-in-out',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            flexShrink: 0
+                          }}
+                        >
+                          📞
+                        </span>
+                      );
+                    })()}
                     {!hold && bookingGuestHeadcount(booking) > 0 ? (
                       <span
                         aria-label={`${bookingGuestHeadcount(booking)} אורחים`}
@@ -3859,6 +3992,44 @@ export default function ResortOSCalendar({
 
               {!isEditingBookingDetails ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                  {(() => {
+                    const activeCall = findCallForCalendarBooking(guestCalls, editingBooking);
+                    if (!activeCall) return null;
+                    return (
+                      <div style={{
+                        background: '#FEF2F2',
+                        border: '1px solid #FECACA',
+                        borderRadius: 10,
+                        padding: '8px 12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 8,
+                        flexWrap: 'wrap'
+                      }}>
+                        <span style={{ color: '#991B1B', fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 15 }}>📞</span>
+                          <span>האורח ביקש שיחה {activeCall.transferredName ? `(הועבר ל${activeCall.transferredName})` : '(ממתין למענה)'}</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => ackCalendarCall(activeCall.token)}
+                          style={{
+                            background: '#DC2626',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            borderRadius: 6,
+                            padding: '4px 10px',
+                            fontWeight: 700,
+                            fontSize: 12,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          דיברתי עם האורח (סמן כנפתר)
+                        </button>
+                      </div>
+                    );
+                  })()}
                   <div>
                     <div style={{ fontSize: '1.12rem', fontWeight: 900, lineHeight: 1.25, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                       <span>{editFormData.guest_name || '—'}</span>

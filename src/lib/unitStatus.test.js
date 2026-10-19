@@ -17,20 +17,24 @@ describe('priority room status', () => {
     expect(priorityRoomStatus({ operational_status: 'READY', custom_reason: 'מוכן לאורח', quality_inspections: oldInspect }).label).toBe('מוכן');
     expect(priorityRoomStatus({ operational_status: 'READY', custom_reason: 'ממתין לביקורת מנהל' }).label).toBe('ממתין לבדיקה');
     expect(priorityRoomStatus({ operational_status: 'DIRTY' }).label).toBe('לניקוי');
+    expect(priorityRoomStatus({ operational_status: 'IN_PROGRESS' }).label).toBe('בנקיון');
+    expect(priorityRoomStatus({ operational_status: 'IN_PROGRESS', assigned_staff: 'שיבה' }).label).toBe('בנקיון | שיבה');
     expect(priorityRoomStatus({ operational_status: 'READY', staff_occupancy: 'OCCUPIED' }).label).toBe('מאוכלס');
   });
 });
 
 describe('unit name frames', () => {
-  it('uses green ready, orange dirty, red fault, purple occupied', () => {
+  it('uses green ready, red dirty, yellow in_progress, red fault, purple occupied', () => {
     expect(unitNameFrame('READY', false).border).toBe('#4ADE80');
     expect(unitNameFrame('NEEDS_COMPLETIONS', false).border).toBe('#2DD4BF');
-    expect(unitNameFrame('DIRTY', false).border).toBe('#FB923C');
+    expect(unitNameFrame('DIRTY', false).border).toBe('#EF4444');
+    expect(unitNameFrame('IN_PROGRESS', false).border).toBe('#F59E0B');
     expect(unitNameFrame('MAINTENANCE_ALERT', false).border).toBe('#F87171');
     expect(unitNameFrame('OCCUPIED', false).border).toBe('#8B5CF6');
     expect(unitNameFrame('UNAVAILABLE', false).border).toBe('#D6D3D1');
     expect(unitNameFrame('UNAVAILABLE', false).dashed).toBe(true);
   });
+
 
   it('marks checkout day as leaving, never occupied', () => {
     const leaving = [{

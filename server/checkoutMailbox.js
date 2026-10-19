@@ -4,8 +4,10 @@ function mailboxUrl() {
   return (process.env.CHECKOUT_MAILBOX_URL || 'https://resortos.app').replace(/\/$/, '');
 }
 
+const DEFAULT_MAILBOX_SECRET = '244e82006f91f44db1452d2313b49487503eb65c4596b7a4a94d3ae683af6c5a';
+
 function mailboxSecret() {
-  return process.env.CHECKOUT_MAILBOX_SECRET || '';
+  return process.env.CHECKOUT_MAILBOX_SECRET || DEFAULT_MAILBOX_SECRET;
 }
 
 function mailboxHeaders(json = false) {
@@ -171,6 +173,19 @@ export async function publishBookingToMailbox(booking) {
     method: 'PUT',
     headers: mailboxHeaders(true),
     body: JSON.stringify(booking)
+  });
+}
+
+export async function fetchGuestCalls() {
+  const data = await mailboxFetch('/api/checkout/calls', { headers: mailboxHeaders() });
+  return Array.isArray(data?.calls) ? data.calls : [];
+}
+
+export async function ackGuestCall(token) {
+  return mailboxFetch('/api/checkout/call-ack', {
+    method: 'POST',
+    headers: mailboxHeaders(true),
+    body: JSON.stringify({ t: token })
   });
 }
 

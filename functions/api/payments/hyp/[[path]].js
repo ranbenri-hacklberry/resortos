@@ -87,23 +87,20 @@ export async function onRequest(context) {
     const lpId = hypLowProfileIdFromParams(returned);
     const failed = hypReturnLooksFailed(returned);
     if (action === 'receipt' || !validToken) {
-      if (validToken && lpId && !failed) {
+      if (validToken && !failed) {
         try {
-          const lp = await getHypLowProfileResult(env, lpId, { order: token });
-          if (lp.paid) {
-            const innerSearch = new URLSearchParams({
-              ...lp.params,
-              LowProfileId: lpId,
-              ReturnValue: token,
-              Order: token
-            }).toString();
-            const innerUrl = new URL(`/api/checkout/${token}/hyp?${innerSearch}`, request.url);
-            await checkoutOnRequest({
-              ...context,
-              request: new Request(innerUrl, { method: 'GET' }),
-              params: { path: [token, 'hyp'] }
-            });
-          }
+          const innerSearch = new URLSearchParams({
+            ...returned,
+            ...(lpId ? { LowProfileId: lpId } : {}),
+            ReturnValue: token,
+            Order: token
+          }).toString();
+          const innerUrl = new URL(`/api/checkout/${token}/hyp?${innerSearch}`, request.url);
+          await checkoutOnRequest({
+            ...context,
+            request: new Request(innerUrl, { method: 'GET' }),
+            params: { path: [token, 'hyp'] }
+          });
         } catch (err) {
           console.warn('[hyp receipt]', err?.message || err);
         }

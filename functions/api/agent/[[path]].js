@@ -305,10 +305,15 @@ export async function onRequest(context) {
         },
         stay_links: stayLinksForParties(token, body.cabin_parties),
         ops_whatsapp: opsPhone
-          ? `https://wa.me/972${opsPhone.replace(/^0/, '')}?text=${encodeURIComponent(text)}`
+          ? `https://api.whatsapp.com/send?phone=972${opsPhone.replace(/^0/, '')}&text=${encodeURIComponent(text)}`
           : '',
         guest_whatsapp: token
-          ? `https://wa.me/?text=${encodeURIComponent(`לינק לתשלום מקדמה: ${guestPayLink(token)}`)}`
+          ? (() => {
+              const digits = String(body.guest_phone || '').replace(/\D/g, '');
+              const waPhone = digits ? (digits.startsWith('05') ? `972${digits.slice(1)}` : digits) : '';
+              const payload = encodeURIComponent(`לינק לתשלום מקדמה: ${guestPayLink(token)}`);
+              return waPhone ? `https://api.whatsapp.com/send?phone=${waPhone}&text=${payload}` : `https://api.whatsapp.com/send?text=${payload}`;
+            })()
           : '',
         alert: text
       });

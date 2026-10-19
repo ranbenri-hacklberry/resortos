@@ -8,7 +8,8 @@ import {
   parsePriorityShekels,
   priorityMethodKey,
   priorityMethodLabel,
-  priorityPayLabel
+  priorityPayLabel,
+  priorityShekelMark
 } from './priorityPayment';
 
 const today = '2026-10-12';
@@ -24,6 +25,41 @@ function stay(partial = {}) {
     ...partial
   };
 }
+
+describe('priority shekel mark', () => {
+  const arrival = {
+    check_in_date: '2026-10-16',
+    check_out_date: '2026-10-17',
+    payment_status: 'UNPAID',
+    total_price_agorot: 100000
+  };
+  const beforeCheckin = new Date('2026-10-16T11:30:00Z');
+  const afterCheckin = new Date('2026-10-16T12:30:00Z');
+
+  it('blinks for open cash only once check-in time has arrived', () => {
+    expect(priorityShekelMark({ ...arrival, payment_mode: 'CASH' }, beforeCheckin)).toBe('');
+    expect(priorityShekelMark({ ...arrival, payment_mode: 'CASH' }, afterCheckin)).toBe('blink');
+    expect(priorityShekelMark({
+      ...arrival,
+      payment_mode: 'CASH',
+      payment_status: 'PAID',
+      clearing_payments: [{ source: 'CASH', accountKey: 'CASH', amount_agorot: 100000, txn: 'cash1' }]
+    }, afterCheckin)).toBe('');
+    expect(priorityShekelMark({ ...arrival, payment_mode: 'CARD' }, afterCheckin)).toBe('');
+  });
+
+  it('hides the shekel before check-in, including tomorrow', () => {
+    const tomorrow = { ...arrival, check_in_date: '2026-10-17' };
+    expect(priorityShekelMark(tomorrow, afterCheckin)).toBe('');
+    expect(priorityShekelMark({ ...tomorrow, payment_mode: 'CASH' }, afterCheckin)).toBe('');
+    expect(priorityShekelMark(arrival, new Date('2026-10-17T12:30:00Z'))).toBe('');
+  });
+
+  it('shows a steady shekel at check-in when nothing was recorded', () => {
+    expect(priorityShekelMark(arrival, beforeCheckin)).toBe('');
+    expect(priorityShekelMark(arrival, afterCheckin)).toBe('steady');
+  });
+});
 
 describe('priority payment', () => {
   it('formats the grid cell for an unpaid stay and a paid cash stay', () => {

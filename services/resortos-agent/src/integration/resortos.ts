@@ -6,13 +6,19 @@ import { config } from '../config.js';
  *  - GET /api/ops/units                -> { units: [{ id, operational_status, ... }] }
  *  - PUT /api/ops/units/:unitId        -> agents may only change AGENT_STATUS_FIELDS:
  *      operational_status, operational_domain, custom_reason, quality_inspections,
- *      cleaning_started_at, assigned_staff, is_escalated.
+ *      cleaning_started_at, assigned_staff, staff_occupancy, is_escalated.
+ *      room_log_note is stripped into the room history and is not a column.
  *    The server re-reads the unit and answers 409 STATUS_NOT_VERIFIED if the write did not stick.
  *  There is no separate "maintenance ticket" endpoint: an issue is a unit with
  *  operational_status=MAINTENANCE_ALERT / operational_domain=MAINTENANCE (same as tasksService.createStaffTask).
  */
 
 export const AWAITING_INSPECTION_REASON = 'ממתין לביקורת מנהל';
+
+function roomLogNote(note?: string) {
+  const text = String(note || '').trim().slice(0, 500);
+  return text ? { room_log_note: text } : {};
+}
 
 export interface UnitRow {
   id: string;
@@ -61,15 +67,16 @@ export class ResortOSClient {
     this.bookingsCache.clear();
   }
 
-  private async req<T>(method: 'GET' | 'PUT', path: string, body?: unknown): Promise<T> {
+  private async req<T>(method: 'GET' | 'PUT' | 'POST', path: string, body?: unknown, timeoutMs?: number): Promise<T> {
     const res = await this.fetchImpl(`${config.resortos.baseUrl}${path}`, {
       method,
       headers: {
         'content-type': 'application/json',
+        'x-resortos-agent': 'true',
         ...(config.resortos.token ? { authorization: `Bearer ${config.resortos.token}` } : {}),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(config.resortos.timeoutMs),
+      signal: AbortSignal.timeout(timeoutMs ?? config.resortos.timeoutMs),
     });
     const text = await res.text();
     let data: any = {};
@@ -78,7 +85,7 @@ export class ResortOSClient {
     return data as T;
   }
 
-  private async postgrest<T>(method: 'GET' | 'PATCH', table: string, query: string, body?: unknown): Promise<T> {
+  private async postgrest<T>(method: 'GET' | 'PATCH' | 'POST', table: string, query: string, body?: unknown): Promise<T> {
     const res = await this.fetchImpl(`${config.supabase.url}/rest/v1/${table}${query}`, {
       method,
       headers: {
@@ -172,7 +179,8 @@ export class ResortOSClient {
       return await this.req('PUT', `/api/ops/units/${encodeURIComponent(unitId)}`, patch);
     } catch (e: any) {
       if (e?.status === 401 || e?.status === 403 || e?.code === 'ECONNREFUSED' || e?.name === 'TimeoutError' || String(e).includes('Timeout')) {
-        await this.postgrest('PATCH', 'unit_operations', `?id=eq.${encodeURIComponent(unitId)}`, patch);
+        const { room_log_note: _quote, ...rest } = patch;
+        await this.postgrest('PATCH', 'unit_operations', `?id=eq.${encodeURIComponent(unitId)}`, rest);
         return;
       }
       throw e;
@@ -182,7 +190,7 @@ export class ResortOSClient {
   /**
    * Manager approves the room directly (READY for guest check-in, clearing awaiting inspection).
    */
-  async approveRoomByManager(p: { unitId: string; reportedBy: string }): Promise<ReadyResult> {
+  async approveRoomByManager(p: { unitId: string; reportedBy: string; note?: string }): Promise<ReadyResult> {
     const unit = (await this.listUnits()).find((u) => u.id === p.unitId);
     if (!unit) return { ok: false, skipped: 'unit_not_found' };
     await this.putUnit(p.unitId, {
@@ -192,6 +200,7 @@ export class ResortOSClient {
       assigned_staff: p.reportedBy,
       cleaning_started_at: null,
       is_escalated: false,
+      ...roomLogNote(p.note),
     });
     return { ok: true };
   }
@@ -200,7 +209,7 @@ export class ResortOSClient {
    * Cleaner says "ready". The ResortOS workflow has a manager-inspection step, so we mark READY with the
    * standard "awaiting inspection" reason instead of a final green. Never overrides an open maintenance alert.
    */
-  async markRoomReady(p: { unitId: string; reportedBy: string }): Promise<ReadyResult> {
+  async markRoomReady(p: { unitId: string; reportedBy: string; note?: string }): Promise<ReadyResult> {
     const unit = (await this.listUnits()).find((u) => u.id === p.unitId);
     if (!unit) return { ok: false, skipped: 'unit_not_found' };
     if (unit.operational_status === 'MAINTENANCE_ALERT') return { ok: false, skipped: 'maintenance_open' };
@@ -210,12 +219,13 @@ export class ResortOSClient {
       custom_reason: AWAITING_INSPECTION_REASON,
       assigned_staff: p.reportedBy,
       cleaning_started_at: null,
+      ...roomLogNote(p.note),
     });
     return { ok: true };
   }
 
   /** Cleaner starts cleaning -> assigns cleaner and sets status to IN_PROGRESS. */
-  async startCleaning(p: { unitId: string; reportedBy: string }): Promise<ReadyResult> {
+  async startCleaning(p: { unitId: string; reportedBy: string; note?: string }): Promise<ReadyResult> {
     const unit = (await this.listUnits()).find((u) => u.id === p.unitId);
     if (!unit) return { ok: false, skipped: 'unit_not_found' };
     if (unit.operational_status === 'MAINTENANCE_ALERT') return { ok: false, skipped: 'maintenance_open' };
@@ -224,6 +234,7 @@ export class ResortOSClient {
       operational_domain: 'HOUSEKEEPING',
       assigned_staff: p.reportedBy,
       cleaning_started_at: new Date().toISOString(),
+      ...roomLogNote(p.note),
     });
     return { ok: true };
   }
@@ -236,6 +247,7 @@ export class ResortOSClient {
       custom_reason: p.description,
       is_escalated: true,
       assigned_staff: p.reportedBy,
+      ...roomLogNote(p.description),
     });
   }
 
@@ -249,13 +261,21 @@ export class ResortOSClient {
       operational_domain: 'HOUSEKEEPING',
       custom_reason: `חוסר: ${p.description}`,
       assigned_staff: p.reportedBy,
+      ...roomLogNote(p.description),
     });
   }
 
   /**
    * Manager updates unit operational status (READY, IN_PROGRESS, DIRTY, MAINTENANCE_ALERT).
    */
-  async updateUnitStatus(p: { unitId: string; status: string; reason?: string; reportedBy: string }): Promise<ReadyResult> {
+  async setStaffOccupancy(p: { unitId: string; occupancy: 'OCCUPIED' | 'VACANT'; reportedBy: string; note?: string }): Promise<ReadyResult> {
+    const unit = (await this.listUnits()).find((u) => u.id === p.unitId);
+    if (!unit) return { ok: false, skipped: 'unit_not_found' };
+    await this.putUnit(p.unitId, { staff_occupancy: p.occupancy, assigned_staff: p.reportedBy, ...roomLogNote(p.note) });
+    return { ok: true };
+  }
+
+  async updateUnitStatus(p: { unitId: string; status: string; reason?: string; reportedBy: string; note?: string }): Promise<ReadyResult> {
     const unit = (await this.listUnits()).find((u) => u.id === p.unitId);
     if (!unit) return { ok: false, skipped: 'unit_not_found' };
     const patch: Record<string, unknown> = {
@@ -273,10 +293,11 @@ export class ResortOSClient {
     } else if (p.status === 'DIRTY') {
       patch.operational_domain = 'HOUSEKEEPING';
       patch.cleaning_started_at = null;
-    } else if (p.status === 'MAINTENANCE_ALERT') {
+    } else     if (p.status === 'MAINTENANCE_ALERT') {
       patch.operational_domain = 'MAINTENANCE';
       patch.is_escalated = true;
     }
+    Object.assign(patch, roomLogNote(p.note));
     await this.putUnit(p.unitId, patch);
     return { ok: true };
   }
@@ -288,12 +309,60 @@ export class ResortOSClient {
     await this.putUnit(p.unitId, {
       custom_reason: p.note,
       assigned_staff: p.reportedBy,
+      ...roomLogNote(p.note),
     });
+  }
+
+  async collectCash(p: { unitId: string; amountAgorot: number; reportedBy: string; note?: string }): Promise<{ ok: true; guest_name?: string; amount_agorot?: number } | { ok: false; skipped: string }> {
+    this.clearCache();
+    const data = await this.req<{ ok?: boolean; skipped?: string; guest_name?: string; amount_agorot?: number }>(
+      'POST',
+      `/api/ops/units/${encodeURIComponent(p.unitId)}/cash`,
+      {
+        amount_agorot: p.amountAgorot,
+        reported_by: p.reportedBy,
+        note: p.note || '',
+      }
+    );
+    if (data?.ok) return { ok: true, guest_name: data.guest_name, amount_agorot: data.amount_agorot };
+    return { ok: false, skipped: data?.skipped || 'failed' };
+  }
+
+  async setPaymentStatus(p: { unitId: string; status: 'PARTIAL' | 'PAID'; reportedBy: string }): Promise<{ ok: true; guest_name?: string; payment_status?: string } | { ok: false; skipped: string }> {
+    this.clearCache();
+    const data = await this.req<{ ok?: boolean; skipped?: string; guest_name?: string; payment_status?: string }>(
+      'POST',
+      `/api/ops/units/${encodeURIComponent(p.unitId)}/payment`,
+      { payment_status: p.status, reported_by: p.reportedBy }
+    );
+    if (data?.ok) return { ok: true, guest_name: data.guest_name, payment_status: data.payment_status };
+    return { ok: false, skipped: data?.skipped || 'failed' };
+  }
+
+  async holdNight(p: { unitId: string; reportedBy: string }): Promise<{ ok: true; verified: boolean; checkIn?: string; checkOut?: string } | { ok: false; skipped: string }> {
+    const data = await this.req<{ ok?: boolean; skipped?: string; verified?: boolean; checkIn?: string; checkOut?: string }>(
+      'POST',
+      `/api/ops/units/${encodeURIComponent(p.unitId)}/hold`,
+      { reported_by: p.reportedBy },
+      160000
+    );
+    if (data?.ok) return { ok: true, verified: Boolean(data.verified), checkIn: data.checkIn, checkOut: data.checkOut };
+    return { ok: false, skipped: data?.skipped || 'failed' };
   }
 
   /**
    * Save note for guest / booking.
    */
+  async sendGuestLinkSms(p: { bookingId: string; phone: string; message: string; reportedBy?: string }): Promise<{ ok: true }> {
+    await this.req('POST', '/api/ops/guest-sms', {
+      booking_id: p.bookingId,
+      phone: p.phone,
+      message: p.message,
+      reported_by: p.reportedBy || '',
+    }, 20000);
+    return { ok: true };
+  }
+
   async updateBookingNote(p: { bookingId: string; note: string; reportedBy: string }): Promise<void> {
     this.clearCache();
     try {
@@ -302,6 +371,54 @@ export class ResortOSClient {
       });
     } catch {
       // Non-critical, fallback gracefully
+    }
+  }
+
+  async logGuestComm(p: {
+    bookingId: string;
+    tenantId?: string | null;
+    channel?: string;
+    direction: 'inbound' | 'outbound';
+    phone?: string | null;
+    content: string;
+    status?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<void> {
+    if (!p.bookingId || !p.content?.trim()) return;
+    try {
+      await this.postgrest('POST', 'guest_communications', '', {
+        booking_id: p.bookingId,
+        tenant_id: p.tenantId || null,
+        channel: p.channel || 'whatsapp',
+        direction: p.direction,
+        recipient_phone: p.phone || null,
+        content: p.content.trim(),
+        status: p.status || (p.direction === 'inbound' ? 'received' : 'sent'),
+        sent_at: new Date().toISOString(),
+        metadata: { kind: 'whatsapp', ...(p.metadata || {}) },
+      });
+    } catch {
+      // Non-critical
+    }
+  }
+
+  async requestGuestCall(p: {
+    bookingId: string;
+    unitId: string;
+    guestName?: string | null;
+    guestPhone?: string | null;
+    cabin?: string | null;
+  }): Promise<void> {
+    try {
+      await this.req('POST', '/api/ops/call-me/request', {
+        booking_id: p.bookingId,
+        unit_id: p.unitId,
+        guest_name: p.guestName || '',
+        guest_phone: p.guestPhone || '',
+        cabin: p.cabin || '',
+      }, 15000);
+    } catch {
+      // Non-critical
     }
   }
 }

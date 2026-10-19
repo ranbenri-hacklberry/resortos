@@ -9,7 +9,7 @@ export const LANG_NAME: Record<Lang, string> = {
 const REPLY_STYLE: Record<Lang, string> = {
   th: 'Polite, natural Thai spoken by hotel management to cleaning staff. Always use polite particles (ค่ะ for female/default, or ครับ). Warm and supportive tone (e.g. "รับทราบค่ะ บันทึกเรียบร้อยแล้วค่ะ").',
   ar: 'Natural, warm Levantine colloquial Arabic (الله يعطيك العافية، تمام سجلت...). Do not use stiff Modern Standard / MSA words.',
-  he: 'Short, friendly, professional Israeli hospitality tone (מעולה, עודכן במערכת / רשמתי ושלחנו איש אחזקה).',
+  he: 'Short, friendly, professional Israeli hospitality tone (מעולה, עודכן במערכת / רשמתי ושלחנו איש אחזקה). Never open with שלום or היי. If the reply states a fact, give only the fact. If you must ask because something is missing, start with the person\'s first name.',
 };
 
 export function inboundSystemPrompt(workerLang: Lang, rooms: RoomEntry[]): string {
@@ -81,28 +81,31 @@ GUIDELINES:
 export const CLEANER_EXIT_MENU: Record<Lang, (room: string) => string> = {
   he: (room) =>
     `סיום ניקיון ${room}:\n` +
-    `1 - הכל מוכן ותקין 🟢\n` +
+    `💡 האם סגרתם אורות ומזגנים?\n\n` +
+    `1 - הכל מוכן, תקין והאורות/מזגנים כובו 🟢\n` +
     `2 - חסר ציוד / מצעים / מגבות 🟡\n` +
     `3 - יש תקלה שדורשת תיקון 🔴\n` +
-    `(ניתן להשיב 1, 2, 3 או לשלוח הקלטה קולית)`,
+    `(ניתן להשיב 1, 2, 3 או לשלוח הקלטה קולית / אימוג׳י 👍)`,
   th: (room) =>
     `ทำความสะอาด ${room} เสร็จแล้ว:\n` +
-    `1 - เรียบร้อยสมบูรณ์ทุกอย่าง 🟢\n` +
+    `💡 ปิดไฟและปิดแอร์เรียบร้อยแล้วใช่ไหมคะ?\n\n` +
+    `1 - เรียบร้อยสมบูรณ์ ปิดไฟ/แอร์แล้ว 🟢\n` +
     `2 - ขาดของ / ผ้าปู / ผ้าเช็ดตัว 🟡\n` +
     `3 - มีจุดชำรุดเสียหายต้องซ่อม 🔴\n` +
-    `(ตอบ 1, 2, 3 หรือส่งข้อความเสียงได้ค่ะ)`,
+    `(ตอบ 1, 2, 3 หรือส่งข้อความเสียง / 👍 ได้ค่ะ)`,
   ar: (room) =>
     `إنهاء تنظيف ${room}:\n` +
-    `1 - كل شيء جاهز וتمام 🟢\n` +
+    `💡 هل تم إطفاء الأنوار والمكيفات؟\n\n` +
+    `1 - كل شيء جاهز וتمام وتم إطفاء الكهرباء/المكيفات 🟢\n` +
     `2 - ناقص أغراض / شراشف / مناشف 🟡\n` +
     `3 - في عطل بحاجة لتصليح 🔴\n` +
-    `(تقدر تجاوب 1، 2، 3 أو تبعت رسالة صوتية)`,
+    `(تقدر تجاوب 1، 2، 3 أو تبعت رسالة صوتية / 👍)`,
 };
 
 export const CLEANER_READY_THANKS: Record<Lang, string> = {
-  he: 'תודה רבה! החדר עודכן כמוכן (READY) במערכת ✅ תודה על העבודה המעולה!',
-  th: 'ขอบคุณมากค่ะ! อัปเดตห้องเป็นพร้อมใช้งาน (READY) ในระบบเรียบร้อยค่ะ ✅ ขอบคุณที่ตั้งใจทำงานนะคะ!',
-  ar: 'شكراً كتير! تم تحديث الغرفة كجاهزة (READY) في النظام بنجاح ✅ يعطيك ألف عافية!',
+  he: 'תודה רבה! החדר עודכן כמוכן (READY) במערכת ✅ (ווידאנו כיבוי אורות ומזגנים). תודה על העבודה המעולה!',
+  th: 'ขอบคุณมากค่ะ! อัปเดตห้องเป็นพร้อมใช้งาน (READY) ในระบบเรียบร้อยค่ะ ✅ (ตรวจเช็คปิดไฟและเครื่องปรับอากาศแล้ว) ขอบคุณที่ตั้งใจทำงานนะคะ!',
+  ar: 'شكراً كتير! تم تحديث الغرفة كجاهزة (READY) في النظام بنجاح ✅ (تم التأكد من إطفاء الأنوار والمكيفات). يعطيك ألف عافية!',
 };
 
 export const CLEANER_ASK_SUPPLIES: Record<Lang, string> = {
@@ -134,18 +137,25 @@ export const CLEANER_CONFIRM_MAINTENANCE: Record<Lang, string> = {
 // ========================
 
 export function managerActionMenu(roomLabel: string): string {
-  return `⚡ אפשרויות לחדר ${roomLabel} (השב מספר):\n` +
-    `1 - עדכון סטטוס חדר ⚙️\n` +
-    `2 - ביקורת ניקיון (אישור חדר) 🟢\n` +
-    `3 - דיווח על תקלה 🔴\n` +
-    `4 - הוספת הערה לחדר 📝\n` +
-    `5 - הוספת הערה לאורח 👤`;
+  return `אפשרויות לחדר ${roomLabel} (השב מספר):\n` +
+    `1 - שנה סטטוס\n` +
+    `2 - הוסף הערה\n` +
+    `3 - דווח אחזקה או חוסר\n` +
+    `4 - שליחת קישור לאורח`;
+}
+
+export function withManagerActions(body: string, roomLabel: string): string {
+  return `${body}\n\n${managerActionMenu(roomLabel)}`;
+}
+
+export function managerIssueMenu(roomLabel: string): string {
+  return `מה לדווח על ${roomLabel}?\n1 - אחזקה\n2 - חוסר`;
 }
 
 export function managerStatusMenu(roomLabel: string): string {
   return `בחר סטטוס חדש לחדר ${roomLabel} (השב מספר):\n` +
     `1 - מוכן לאורח (READY) 🟢\n` +
-    `2 - בניקיון (IN_PROGRESS) 🟡\n` +
+    `2 - בנקיון (IN_PROGRESS) 🟡\n` +
     `3 - ממתין לניקיון (DIRTY) 🔴\n` +
     `4 - תקלת תחזוקה (MAINTENANCE) ⚠️`;
 }

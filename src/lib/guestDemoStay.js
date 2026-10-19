@@ -21,30 +21,31 @@ const DEMO_CODES = {
   door_pin: '2310',
   gate_code: '#2464',
   gate_mode: 'code',
-  wifi_ssid: 'MIALEES RESORT',
-  wifi_password: 'MIAL2026',
-  wifi_networks: [{ ssid: 'MIALEES RESORT', password: 'MIAL2026' }],
+  wifi_ssid: 'ResortOS_5G',
+  wifi_password: '0506102416',
+  wifi_networks: [{ ssid: 'ResortOS_5G', password: '0506102416' }],
   folio: [],
   checkout_time: '11:00',
   field_rep_phone: '0547136676',
   guest_checked_in_at: '2026-08-20T12:00:00.000Z'
 };
 
-/** Local demo booking — no checkout_token, so the real mailbox is never called. */
+/** Local demo booking — points to pilot-office (the demo office with smart lock & sensors) */
 export function demoGuestBooking(phase) {
   const today = israelToday();
   const base = {
     id: 'demo_stay',
-    guest_name: 'אורחת דמו',
-    guest_phone: '0500000000',
-    unit_id: 'k671',
+    guest_name: 'נטשה',
+    guest_phone: '0548076123',
+    unit_id: 'pilot-office',
     adults_count: 2,
     children_count: 1,
     total_price_agorot: 500,
     deposit_agorot: 100,
     payment_status: 'PAID',
     payment_mode: 'CREDIT_DEPOSIT',
-    channel_source: 'DIRECT'
+    channel_source: 'DIRECT',
+    checkout_token: 'tok_pilot_office_demo'
   };
 
   if (phase === 'stay') {

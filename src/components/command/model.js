@@ -4,7 +4,7 @@ export const STATUS_LABEL = {
   ready: 'מוכן',
   occupied: 'מאוכלס',
   dirty: 'ממתין לניקיון',
-  cleaning: 'בניקיון',
+  cleaning: 'בנקיון',
   inspection: 'ממתין לבדיקה',
   alert: 'התראה',
   hold: 'סגור',

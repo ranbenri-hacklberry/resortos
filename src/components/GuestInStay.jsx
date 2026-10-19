@@ -10,7 +10,6 @@ import {
   LogOut,
   MapPin,
   Minus,
-  MessageSquare,
   Plus,
   Receipt,
   Shirt,
@@ -34,10 +33,11 @@ import { guidesFromContent } from '../lib/guestProfile';
 import { guestCabinStoreEnabled } from '../lib/guestFeatures';
 import { stayAction } from '../lib/guestCheckoutApi';
 import { selfCheckoutWindow } from '../lib/guestComms';
-import { googleReviewUrl, guestHostWhatsAppHref } from '../lib/stayProperty';
+import { googleReviewUrl } from '../lib/stayProperty';
 import { cleanGuestCabinName } from '../lib/units';
-import { LOCKBOX_BY_UNIT, PROPERTY_SEED, UNIT_PROPERTY } from '../lib/guestProfileSeed';
+import { LOCKBOX_BY_UNIT, PROPERTY_SEED, UNIT_OVERRIDES, UNIT_PROPERTY } from '../lib/guestProfileSeed';
 import GuestAreaGuide from './GuestAreaGuide';
+import GuestReach from './GuestReach';
 
 function LiveText({ text }) {
   const translated = useDynamicText(text, null, 'he');
@@ -48,6 +48,8 @@ function wifiNetworks(stay, booking) {
   if (Array.isArray(stay?.wifi_networks) && stay.wifi_networks.length) return stay.wifi_networks;
   if (stay?.wifi_password) return [{ ssid: stay.wifi_ssid, password: stay.wifi_password }];
   const unitId = booking?.unit_id || stay?.unit_id || '';
+  const unitWifi = UNIT_OVERRIDES[unitId]?.access?.wifi;
+  if (Array.isArray(unitWifi) && unitWifi.length) return unitWifi;
   const propId = UNIT_PROPERTY[unitId];
   const catalog = PROPERTY_SEED[propId]?.access?.wifi;
   if (Array.isArray(catalog) && catalog.length) return catalog;
@@ -115,34 +117,14 @@ const STORE_LOOK = {
 };
 
 const JACUZZI_ILLUSTRATED_STEPS = [
-  {
-    step: 1,
-    title: 'הנחת פקק הגומי',
-    image: '/guides/jacuzzi/jacuzzi-1-rubber-plug.jpg',
-    text: 'מניחים את פקק הגומי הדק על פתח הניקוז בקרקעית הג׳קוזי ומוודאים שהוא אטום היטב.'
-  },
-  {
-    step: 2,
-    title: 'מילוי מים מעל לג׳טים',
-    image: '/guides/jacuzzi/jacuzzi-2-full.jpg',
-    text: 'פותחים מים וממלאים את הג׳קוזי עד שכל פתחי הסילונים (הג׳טים) מכוסים לחלוטין במים.'
-  },
-  {
-    step: 3,
-    title: 'הפעלת המתג בקיר',
-    image: '/guides/jacuzzi/jacuzzi-2-on.jpg',
-    text: 'רק כשהג׳קוזי מלא ומכסה את הג׳טים, לוחצים על המתג בקיר. הנורה האדומה תידלק.'
-  },
-  {
-    step: 4,
-    title: 'כיבוי וריקון המים',
-    image: '/guides/jacuzzi/jacuzzi-4-drain.jpg',
-    text: 'בסיום השימוש מכבים את המתג בקיר ומשחררים את פקק הגומי לריקון מלא לפני הצ׳ק־אאוט.'
-  }
+  { step: 1, image: '/guides/jacuzzi/jacuzzi-1-rubber-plug.jpg' },
+  { step: 2, image: '/guides/jacuzzi/jacuzzi-2-full.jpg' },
+  { step: 3, image: '/guides/jacuzzi/jacuzzi-2-on.jpg' },
+  { step: 4, image: '/guides/jacuzzi/jacuzzi-4-drain.jpg' }
 ];
 
 export default function GuestInStay({ booking, unitName, stay, themeStyles, onStayUpdate }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [guideOpen, setGuideOpen] = useState(null);
   const [folioOpen, setFolioOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -166,14 +148,6 @@ export default function GuestInStay({ booking, unitName, stay, themeStyles, onSt
   const gateCode = stay?.gate_code || (String(booking?.unit_id || '').startsWith('k') ? '#2464' : null);
   const nightCallGate = Boolean(stay?.gate_night_call) && isVillageGateNight();
   const hasGate = stay?.gate_mode === 'code' || stay?.gate_mode === 'dial' || (stay?.gate_mode === 'call' && nightCallGate) || nightCallGate || Boolean(gateCode);
-  const hostWa = guestHostWhatsAppHref(
-    t('GUEST_HOST_WHATSAPP', {
-      name: booking.guest_name || t('GUEST_FALLBACK'),
-      cabin: booking.unit_id || '',
-      dates: `${booking.check_in_date || ''}–${booking.check_out_date || ''}`
-    })
-  );
-
   async function copy(key, value) {
     const ok = await copyText(value);
     if (ok) {
@@ -247,29 +221,74 @@ export default function GuestInStay({ booking, unitName, stay, themeStyles, onSt
           {t('INSTAY_WELCOME', { name: booking.guest_name || t('GUEST_FALLBACK') })}
         </h2>
         <div style={{ marginTop: 6, fontWeight: 800, color: themeStyles.textMuted }}>
-          {`ברוכים הבאים ל${cleanGuestCabinName(unitName)}`}
+          {t('GUEST_WELCOME_TO', { cabin: cleanGuestCabinName(unitName) })}
         </div>
       </div>
 
       {doorPin ? (
-      <div
-        style={{
-          ...card,
-          background: 'linear-gradient(165deg, #1C1917, #292524)',
-          color: '#F8F4EA',
-          border: 'none'
-        }}
-      >
-        <div style={{ fontSize: '0.75rem', fontWeight: 800, opacity: 0.7 }}>{t('INSTAY_DOOR_PIN')}</div>
-        <div style={{ fontSize: '2.35rem', fontWeight: 900, letterSpacing: '0.28em', margin: '8px 0 10px', fontVariantNumeric: 'tabular-nums' }}>
-          {doorPin}
+      <div style={{ display: 'grid', gridTemplateColumns: checkoutDay ? '1fr 1fr' : '1fr', gap: 10, alignItems: 'stretch' }}>
+        <div
+          style={{
+            ...card,
+            minWidth: 0,
+            background: 'linear-gradient(165deg, #1C1917, #292524)',
+            color: '#F8F4EA',
+            border: 'none',
+            display: 'flex',
+            flexDirection: 'column'
+          }}
+        >
+          <div style={{ fontSize: '0.75rem', fontWeight: 800, opacity: 0.7 }}>{t('INSTAY_DOOR_PIN')}</div>
+          <div style={{
+            fontSize: checkoutDay ? '1.65rem' : '2.35rem',
+            fontWeight: 900,
+            letterSpacing: checkoutDay ? '0.06em' : '0.28em',
+            margin: '8px 0 10px',
+            fontVariantNumeric: 'tabular-nums',
+            lineHeight: 1.1,
+            overflowWrap: 'anywhere'
+          }}>
+            {doorPin}
+          </div>
+          <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {checkoutDay ? null : <span style={{ fontSize: '0.78rem', opacity: 0.7 }}>{t('INSTAY_PIN_UNTIL')}</span>}
+            <button type="button" onClick={() => copy('pin', doorPin)} style={ghostBtn('#F8F4EA', 'rgba(255,255,255,0.16)')}>
+              <Copy size={14} /> {copied === 'pin' ? t('INSTAY_COPIED') : t('INSTAY_COPY_PIN')}
+            </button>
+          </div>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: '0.78rem', opacity: 0.7 }}>{t('INSTAY_PIN_UNTIL')}</span>
-          <button type="button" onClick={() => copy('pin', doorPin)} style={ghostBtn('#F8F4EA', 'rgba(255,255,255,0.16)')}>
-            <Copy size={14} /> {copied === 'pin' ? t('INSTAY_COPIED') : t('INSTAY_COPY_PIN')}
+        {checkoutDay ? (
+          <button
+            type="button"
+            disabled={!checkoutWindow.open || Boolean(busy)}
+            onClick={() => { if (checkoutWindow.open) setCheckoutOpen(true); }}
+            style={{
+              minWidth: 0,
+              height: '100%',
+              border: 'none',
+              borderRadius: 18,
+              padding: '1rem 0.75rem',
+              fontWeight: 900,
+              fontSize: '0.95rem',
+              lineHeight: 1.25,
+              textAlign: 'center',
+              cursor: checkoutWindow.open ? 'pointer' : 'default',
+              background: checkoutWindow.open ? 'linear-gradient(135deg, #FBBF24, #D97706)' : '#292524',
+              color: checkoutWindow.open ? '#1C1917' : '#F8F4EA',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8
+            }}
+          >
+            <LogOut size={22} style={i18n.dir() === 'rtl' ? { transform: 'scaleX(-1)' } : undefined} />
+            <span>{t('INSTAY_CHECKOUT_BTN')}</span>
+            {checkoutWindow.open ? null : (
+              <span dir="ltr" style={{ fontSize: '0.75rem', fontWeight: 800, opacity: 0.8 }}>{t('INSTAY_CHECKOUT_BTN_AT')}</span>
+            )}
           </button>
-        </div>
+        ) : null}
       </div>
       ) : null}
 
@@ -326,13 +345,15 @@ export default function GuestInStay({ booking, unitName, stay, themeStyles, onSt
       </div>
 
       <div style={card}>
-        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: themeStyles.textMuted, display: 'flex', gap: 6, alignItems: 'center' }}>
-          <MessageSquare size={14} /> {t('GUEST_WHATSAPP_HOST')}
-        </div>
-        <div style={{ fontSize: '0.82rem', color: themeStyles.textMuted, marginTop: 4 }}>{t('INSTAY_FIELD_REP_HINT')}</div>
-        <a href={hostWa} target="_blank" rel="noopener noreferrer" style={{ ...ghostBtn(themeStyles.textPrimary, themeStyles.inputBg), textDecoration: 'none', border: `1px solid ${themeStyles.inputBorder}`, marginTop: 10 }}>
-          <MessageSquare size={14} /> {t('GUEST_WHATSAPP_HOST')}
-        </a>
+        <GuestReach
+          token={booking.checkout_token}
+          unitId={booking.unit_id}
+          cabin={cleanGuestCabinName(unitName || booking.unit_id)}
+          guestName={booking.guest_name}
+          dates={`${booking.check_in_date || ''}–${booking.check_out_date || ''}`}
+          themeStyles={themeStyles}
+          t={t}
+        />
       </div>
 
       <section>
@@ -381,7 +402,7 @@ export default function GuestInStay({ booking, unitName, stay, themeStyles, onSt
                       >
                         <img
                           src={s.image}
-                          alt={s.title}
+                          alt={t(`INSTAY_JACUZZI_${s.step}_TITLE`)}
                           loading="lazy"
                           style={{
                             width: '100%',
@@ -400,14 +421,14 @@ export default function GuestInStay({ booking, unitName, stay, themeStyles, onSt
                               padding: '2px 7px',
                               borderRadius: 6
                             }}>
-                              {`שלב ${s.step}`}
+                              {t('INSTAY_GUIDE_STEP', { step: s.step })}
                             </span>
                             <span style={{ fontWeight: 800, fontSize: '0.92rem' }}>
-                              <LiveText text={s.title} />
+                              {t(`INSTAY_JACUZZI_${s.step}_TITLE`)}
                             </span>
                           </div>
                           <div style={{ marginTop: 4, fontSize: '0.84rem', color: themeStyles.textMuted, lineHeight: 1.45 }}>
-                            <LiveText text={s.text} />
+                            {t(`INSTAY_JACUZZI_${s.step}_TEXT`)}
                           </div>
                         </div>
                       </div>
@@ -554,7 +575,7 @@ export default function GuestInStay({ booking, unitName, stay, themeStyles, onSt
         <span style={{ color: '#F59E0B', fontWeight: 900, fontSize: '1.05rem' }}>{ils(folioTotal)}</span>
       </button>
 
-      {checkoutWindow.open ? (
+      {checkoutDay && doorPin ? null : checkoutWindow.open ? (
         <button
           type="button"
           onClick={() => setCheckoutOpen(true)}

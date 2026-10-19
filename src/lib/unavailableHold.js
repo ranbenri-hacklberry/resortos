@@ -11,11 +11,13 @@ function foldFinals(value) {
 export function unavailableHoldLabel(text) {
   const folded = foldFinals(text);
   if (folded.includes('שיפוצ')) return String(text || '').includes('שיפוצים') ? 'שיפוצים' : 'שיפוץ';
-  if (folded.includes('לא זמינ')) return 'לא זמין';
+  if (folded.includes('לא למכיר') || folded.includes('לא להשכר')) return 'לא למכירה';
+  if (folded.includes('לא זמינ') || folded.includes('לא פנו')) return 'לא זמין';
   if (folded.includes('לא נקי')) return 'לא נקי';
   if (folded.includes('סגור')) return 'סגור';
-  if (folded.includes('מקולקל')) return 'מקולקל';
+  if (folded.includes('מקולקל') || folded.includes('בריכה לא עובד') || folded.includes('תקלה בבריכ') || folded.includes('תחזוק')) return 'מקולקל';
   if (folded.includes('תפוס')) return 'תפוס';
+  if (folded.includes('חסומ') || folded.includes('בעלימ')) return 'לא זמין';
   return '';
 }
 
@@ -65,8 +67,37 @@ export function isUnavailableHoldCollectionRow(row) {
   return Boolean(unavailableHoldLabel(`${row?.guestName || ''} ${row?.notes || ''}`));
 }
 
-export function coveringUnavailableHold(bookings, unitId, today) {
+const NURIT_UNITS = new Set(['k671', 'k673', 'k674', 'k675', 'k676', 'k677', 'k678', 'k679']);
+
+function realStayCovers(bookings, unitId, today) {
+  return (bookings || []).some((booking) => (
+    booking?.unit_id === unitId
+    && !booking.deleted_at
+    && booking.booking_status !== 'CANCELED'
+    && !isUnavailableHoldBooking(booking)
+    && booking.check_in_date
+    && booking.check_out_date
+    && booking.check_in_date <= today
+    && today < booking.check_out_date
+  ));
+}
+
+function complexClosureHold(bookings, unitId, today) {
+  if (!NURIT_UNITS.has(unitId) || realStayCovers(bookings, unitId, today)) return null;
   return (bookings || []).find((booking) => (
+    booking?.unit_id !== unitId
+    && NURIT_UNITS.has(booking.unit_id)
+    && isUnavailableHoldBooking(booking)
+    && foldFinals(holdHay(booking)).includes('מתחמ סגור')
+    && booking.check_in_date
+    && booking.check_out_date
+    && booking.check_in_date <= today
+    && today < booking.check_out_date
+  )) || null;
+}
+
+export function coveringUnavailableHold(bookings, unitId, today) {
+  const direct = (bookings || []).find((booking) => (
     booking.unit_id === unitId
     && isUnavailableHoldBooking(booking)
     && booking.check_in_date
@@ -74,4 +105,5 @@ export function coveringUnavailableHold(bookings, unitId, today) {
     && booking.check_in_date <= today
     && today < booking.check_out_date
   )) || null;
+  return direct || complexClosureHold(bookings, unitId, today);
 }

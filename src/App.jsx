@@ -351,10 +351,9 @@ function App() {
 
   // Finance-only dedicated view for Daniel
   const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-  const isFinanceOnlyUser = isFinanceOnly(sessionUser.role, sessionUser.username, sessionUser.display_name)
+  const isFinanceOnlyUser = isFinanceOnly(sessionUser.role)
     || urlParams?.get('view') === 'finance'
-    || urlParams?.get('role') === 'finance'
-    || urlParams?.get('user') === 'daniel';
+    || urlParams?.get('role') === 'finance';
 
   if (isFinanceOnlyUser) {
     return (

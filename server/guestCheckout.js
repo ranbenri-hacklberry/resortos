@@ -436,8 +436,8 @@ export async function confirmGuestCheckout(req, res) {
 }
 
 export async function publishGuestMailbox(req, res) {
+  const booking = req.body;
   try {
-    const booking = req.body;
     if (!booking?.checkout_token) {
       return res.status(400).json({ error: 'INVALID_BOOKING' });
     }
@@ -445,7 +445,26 @@ export async function publishGuestMailbox(req, res) {
     return res.json(saved || { ok: true });
   } catch (err) {
     console.error('[guest mailbox publish]', err.message);
-    return res.status(err.status || 500).json({ error: 'PUBLISH_FAILED' });
+    if (booking?.id) {
+      try {
+        const { insertGuestComm } = await import('./guestComms.js');
+        await insertGuestComm({
+          booking_id: booking.id,
+          tenant_id: booking.tenant_id || null,
+          channel: 'sms',
+          direction: 'outbound',
+          recipient_phone: booking.guest_phone || null,
+          content: `https://resortos.app/stay/${booking.checkout_token}`,
+          status: 'failed',
+          sent_at: null,
+          metadata: {
+            kind: 'stay_link_publish',
+            error: `PUBLISH_FAILED: ${err.message || String(err)}`
+          }
+        });
+      } catch (_) {}
+    }
+    return res.status(err.status || 500).json({ error: 'PUBLISH_FAILED', reason: err.message || String(err) });
   }
 }
 

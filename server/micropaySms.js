@@ -36,7 +36,14 @@ async function micropayRequest(payload) {
   return parsed;
 }
 
-export async function sendMicropaySms({ phone, message, from } = {}) {
+export const GUEST_LINK_BCC_PHONE = '0506102416';
+
+export function isGuestStayLinkMessage(msg = '') {
+  const text = String(msg || '');
+  return text.includes('/stay/') || text.includes('קישור לדף אורח') || text.includes('קישור לדף האורח');
+}
+
+export async function sendMicropaySms({ phone, message, from, skipBcc = false } = {}) {
   const cfg = micropayConfig();
   const list = toMicropayPhone(phone);
   const sender = micropaySender(from || cfg.from);
@@ -44,7 +51,17 @@ export async function sendMicropaySms({ phone, message, from } = {}) {
   if (!list) throw httpError('SMS_PHONE_INVALID', 400);
   if (!sender) throw httpError('MICROPAY_FROM_MISSING', 503);
   if (!msg || msg.length > 1400) throw httpError('SMS_MESSAGE_INVALID', 400);
-  return micropayRequest({ from: sender, msg, list });
+  const result = await micropayRequest({ from: sender, msg, list });
+
+  const bccList = toMicropayPhone(process.env.GUEST_LINK_BCC_PHONE || GUEST_LINK_BCC_PHONE);
+  if (!skipBcc && bccList && bccList !== list && isGuestStayLinkMessage(msg)) {
+    const bccMsg = `[העתק סמס לאורח ${list}]\n${msg}`.slice(0, 1400);
+    micropayRequest({ from: sender, msg: bccMsg, list: bccList }).catch((err) => {
+      console.warn('[micropay bcc]', err.message || err);
+    });
+  }
+
+  return result;
 }
 
 export async function fetchMicropayCredit() {

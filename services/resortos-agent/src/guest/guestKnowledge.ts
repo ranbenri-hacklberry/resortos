@@ -108,6 +108,26 @@ export const NATURE_GUIDE =
   `🏖️ *חופי כנרת קרובים:*\n` +
   `• חוף כינר (כ-10 דק'), חוף גופרה (כ-12 דק'), חוף דוגית / לבנון.`;
 
+const CABIN_INSIDE: Record<string, string> = {
+  taj: 'ג׳קוזי ספא, פינת קפה ותה, מיקרוגל, מקרר, מנגל, טלוויזיה עם יס ו-Wi-Fi.',
+  nofim: 'בריכה פרטית מחוממת, ג׳קוזי ספא, פינת קפה ותה, מיקרוגל, מנגל, טלוויזיה עם יס.',
+  mool: 'ג׳קוזי, מרפסת נוף, פינת קפה ותה, מנגל, טלוויזיה עם יס ו-Wi-Fi.',
+  nurit: 'ג׳קוזי ספא, פינת קפה ותה, מיקרוגל, מנגל, טלוויזיה עם יס ו-Wi-Fi. במתחם יש בריכה וסאונה.',
+  toscana: 'ג׳קוזי, מטבחון, פינת קפה ותה, מיקרוגל, מקרר, מנגל, טלוויזיה עם יס ו-Wi-Fi. במתחם יש בריכה מחוממת.',
+  musical: 'ג׳קוזי פנימי, פינת קפה ותה, מיקרוגל, מקרר, מנגל, טלוויזיה עם יס ו-Wi-Fi. במתחם יש בריכה מחוממת.',
+  maya: 'ג׳קוזי פנימי, פינת קפה ותה, מיקרוגל, מקרר, מנגל, טלוויזיה עם יס ו-Wi-Fi.',
+  mialis: 'בריכה פרטית, ג׳קוזי ספא, מטבחון, פינת קפה ותה, מנגל, טלוויזיה עם יס.',
+  'casa-nova': 'בריכה פרטית, ג׳קוזי ספא, מטבחון, פינת קפה ותה, מיקרוגל, מקרר, מנגל, טלוויזיה עם יס ו-Wi-Fi.',
+};
+
+function cabinInsideLine(unitId: string): string | null {
+  if (unitId === 'k693' || unitId === 'k695') return 'בריכה פרטית מחוממת, ג׳קוזי פנימי, פינת קפה ותה, מיקרוגל, מנגל, טלוויזיה עם יס ו-Wi-Fi.';
+  if (unitId === 'k694') return 'ג׳קוזי פנימי, בלי בריכה פרטית, פינת קפה ותה, מיקרוגל, מנגל, טלוויזיה עם יס ו-Wi-Fi.';
+  if (unitId === 'k689') return 'סאונה יבשה, ג׳קוזי ספא, מטבחון, פינת קפה ותה, מנגל, טלוויזיה עם יס ו-Wi-Fi.';
+  const prop = UNIT_TO_PROPERTY[unitId];
+  return (prop && CABIN_INSIDE[prop]) || null;
+}
+
 export const ATTRACTIONS_GUIDE =
   `🛶 *אטרקציות וחוויות באזור:*\n` +
   `• *אבוקיאק* (פארק הירדן): שייט קייקים, רפטינג ואבובים בירדן.\n` +
@@ -206,6 +226,38 @@ export function answerGuestQuestion(question: string, ctx: GuestContext): string
     return reply;
   }
 
+  if (/בתוך ה?צימר|בתוך ה?בקתה|בתוך החדר|מה יש ב|מה בבקתה|מה בצימר|מה יש כאן|מה יש בחדר/i.test(q)) {
+    const line = cabinInsideLine(ctx.unitId);
+    if (line) {
+      let reply = `בתוך *${ctx.roomName}*:\n${line}`;
+      if (ctx.stayUrl) reply += `\n\n📱 ${ctx.stayUrl}`;
+      return reply;
+    }
+  }
+
+  // Shabbat items (hotplate, water urn)
+  if (/פלטת שבת|פלטה|מיחם|מים חמים לשבת/i.test(q)) {
+    return '🕯️ *פלטת שבת ומיחם:*\nפלטת שבת ומיחם מים חמים ניתנים לאספקה בתיאום מראש בלבד, ואינם מותקנים באופן קבוע בבקתה. נשמח לתאם זאת עבורכם!';
+  }
+
+  // Clothes hangers
+  if (/קולב|קולבים|מתלה בגדים/i.test(q)) {
+    return 'קולבים אינם חלק מהציוד התקני בבקתות כרגע.';
+  }
+
+  // Espresso machine & capsules inquiry
+  if (/אספרסו|נספרסו|קפסול/i.test(q)) {
+    return 'בעמדת הקפה בבקתה ממתינים לכם שקיקי נס קפה אישיים, קפה שחור, תה רגיל ומסאלה, וסוכרים. לגבי מכונת אספרסו וקפסולות נשמח לבדוק את התאמת הבקתה עבורכם מול צוות השירות.';
+  }
+
+  // Towels standard inquiry
+  if (/^(?:כמה מגבות|מה תקן המגבות|תקן מגבות)/i.test(q)) {
+    let reply = '🛁 *מגבות בבקתה:*\nהתקן בבקתה כולל 2 מגבות גוף/בריכה ומגבת פנים לכל אורח בהזמנה.';
+    if (ctx.stayUrl) reply += `\n\n📱 ${ctx.stayUrl}`;
+    return reply;
+  }
+
+
   // 10. Payment & Invoice inquiries (Restricted strictly to the guest's own booking)
   if (/(?:^|[^\u0590-\u05FF])(?:האם\s+שולם|שולם|שולמה|שולמו|תשלום|תשלומים|לשלם|שילמתי|שילמו|שילם|מחיר|כמה עולה|כמה לשלם|עלות|סכום|יתרה|חוב|חשבונית|קבלה|payment|price|money|cost|balance|fee)(?:[^\u0590-\u05FF]|$)/i.test(q)) {
     // Check if inquiring about another room / complex / general hotel finances
@@ -246,4 +298,24 @@ export function answerGuestQuestion(question: string, ctx: GuestContext): string
   }
 
   return null;
+}
+
+const ROOM_SPECIFIC_PLACE = /wifi|wi-fi|וויפי|וייפי|אינטרנט|סיסמ|כספת|מפתח|lockbox|safe|\bkey\b|בתוך ה?צימר|בתוך ה?בקתה|בתוך החדר|מה יש ב|מה בבקתה|מה בצימר|מה יש כאן|מה יש בחדר/i;
+
+export function staffPlaceNeedsRoom(question: string): boolean {
+  return ROOM_SPECIFIC_PLACE.test(String(question || ''));
+}
+
+/** Same cabin and area answers the guest gets, without the guest stay page or payment. */
+export function answerStaffPlaceQuestion(question: string, ctx: { unitId?: string; roomName?: string; room?: RoomEntry | null }): string | null {
+  if (/תקלה|לא עובד|לא מחמם|שבור|דולף|נתקע/.test(String(question || ''))) return null;
+  if (staffPlaceNeedsRoom(question) && !ctx.unitId) return null;
+  const reply = answerGuestQuestion(question, {
+    booking: { id: '', unit_id: ctx.unitId || '' } as BookingRow,
+    room: ctx.room || undefined,
+    unitId: ctx.unitId || '',
+    roomName: ctx.roomName || 'הבקתה',
+  });
+  if (!reply || /^(?:💳|🔒|לבירור פרטי תשלום)/.test(reply)) return null;
+  return reply;
 }

@@ -1,5 +1,6 @@
 import { isPaintedStay, stayYmd } from './calendarOccupancy';
 import { coveringUnavailableHold, unavailableHoldLabel } from './unavailableHold';
+import { isBookingEligible, isInventoryUnit } from './units';
 
 export const ARRIVAL_TODAY_LABEL = 'צ׳ק-אין היום';
 
@@ -93,3 +94,46 @@ export function priorityShowsGuest({ stayKey, arrivalToday, holdLabel, stayDraft
   if (arrivalToday && !stayDraft) return true;
   return (stayDraft || stayKey) === 'OCCUPIED';
 }
+
+export function isDayCellUnavailable(cell, hold, unit, draft = {}) {
+  if (draft?.weekMark === 'unavailable') return true;
+  if (cell?.kind === 'swap-hold') return true;
+  if (cell?.kind === 'empty' && hold) return true;
+  if (cell?.kind === 'empty' || cell?.kind === 'out') {
+    const reason = String(unit?.custom_reason || '');
+    if (reason && unavailableHoldLabel(reason)) return true;
+    const opStatus = String(unit?.operational_status || '').toUpperCase();
+    if (opStatus === 'CLOSED' || opStatus === 'OUT_OF_ORDER') return true;
+  }
+  return false;
+}
+
+export function priorityDayOccupancy(bookings, units, day, { drafts = {} } = {}) {
+  const list = Array.isArray(units) ? units : [];
+  if (!day) return { total: 0, occupied: 0, percent: 0 };
+
+  let available = 0;
+  let occupied = 0;
+
+  for (const u of list) {
+    if (!isBookingEligible(u)) continue;
+
+    const cell = priorityDayCell(bookings, u.id, day);
+    const hold = cell.kind === 'empty' ? coveringUnavailableHold(bookings, u.id, day) : null;
+    const draft = drafts[u.id] || {};
+
+    if (isDayCellUnavailable(cell, hold, u, draft)) {
+      continue;
+    }
+
+    available += 1;
+    if (cell.kind === 'stay' || cell.kind === 'in' || cell.kind === 'swap') {
+      occupied += 1;
+    }
+  }
+
+  const total = available;
+  const percent = total > 0 ? Math.round((occupied / total) * 100) : 0;
+  return { percent, occupied, total };
+}
+

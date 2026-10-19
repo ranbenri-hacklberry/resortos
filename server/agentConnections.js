@@ -25,6 +25,7 @@ export const AGENT_STATUS_FIELDS = [
   'quality_inspections',
   'cleaning_started_at',
   'assigned_staff',
+  'staff_occupancy',
   'is_escalated',
 ];
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Calendar, Clock, CreditCard, Map, MessageSquare, Navigation } from 'lucide-react';
+import { Calendar, Clock, CreditCard, Map, Navigation } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
   googleMapsUrl,
@@ -15,6 +15,7 @@ import { localizedUnitName } from '../lib/units';
 import GuestAreaGuide from './GuestAreaGuide';
 import GuestInStay from './GuestInStay';
 import CheckinDrawer, { tabFromPreference } from './CheckinDrawer';
+import GuestReach from './GuestReach';
 import { listenHypParentBreakout } from '../lib/guestPayBrowser';
 
 function displayDate(iso) {
@@ -146,12 +147,6 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
     dates: datesLabel
   });
 
-  function messageHost() {
-    const href = guestHostWhatsAppHref(hostWhatsAppText);
-    if (!href) return;
-    window.location.href = href;
-  }
-
   const cabinReady = Boolean(stay?.cabin_ready) && liveStatus === 'CHECKED_IN';
   const guestCheckedIn = Boolean(stay?.guest_checked_in_at);
   const today = israelToday(now);
@@ -229,11 +224,12 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
           setCheckinStep(tabFromPreference(booking.balance_payment_preference, hasSavedCard));
           setCheckinError(t('INSTAY_CHECKIN_FAILED'));
         } else if (hyp === 'ok') {
-          const intent = booking.stay?.hyp_intent || stay?.hyp_intent || {};
-          const checkinReturn = intent.stage === 'checkin';
+          const fresh = await fetchGuestCheckout(booking.checkout_token, booking.unit_id);
+          const intent = fresh?.stay?.hyp_intent || booking.stay?.hyp_intent || stay?.hyp_intent || {};
+          const checkinReturn = intent.stage === 'checkin' || intent.purpose === 'balance';
           const row = checkinReturn
-            ? await stayAction(booking.checkout_token, { action: 'guest_checkin_complete', unit_id: booking.unit_id }).catch(() => fetchGuestCheckout(booking.checkout_token, booking.unit_id))
-            : await fetchGuestCheckout(booking.checkout_token, booking.unit_id);
+            ? await stayAction(booking.checkout_token, { action: 'guest_checkin_complete', unit_id: booking.unit_id }).catch(() => fresh)
+            : fresh;
           if (stop) return;
           if (row?.stay) setStay(row.stay);
           if (row?.payment) setPayment(row.payment);
@@ -291,12 +287,18 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
       if (next?.payment) setPayment(next.payment);
       if (next?.booking_status) setLiveStatus(next.booking_status);
       if (action === 'guest_checkin' && (next?.payment?.pay_url || next?.payment?.iframe_url)) {
-        setPayment((prev) => (prev ? { ...prev, pay_url: null, iframe_url: null } : prev));
-        setCheckinError(t('INSTAY_CHECKIN_FAILED'));
+        setCheckinStep('card');
+        setCheckinOpen(true);
         return;
       }
       if (action === 'guest_checkin' && !next?.payment?.iframe_url && !next?.payment?.pay_url) {
-        setCheckinOpen(false);
+        const due = Number(next?.stay?.checkin_quote?.amount || next?.payment?.quote?.amount || 0);
+        if (due > 0.5) {
+          setCheckinError(t('INSTAY_CHECKIN_FAILED'));
+          setCheckinOpen(true);
+        } else {
+          setCheckinOpen(false);
+        }
       }
       if (action === 'guest_checkin_cash' || action === 'guest_checkin_bank' || action === 'guest_checkin_cash_pin') {
         setCheckinOpen(false);
@@ -319,7 +321,7 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
         setCheckinError(t('INSTAY_CHECKIN_PIN_BAD'));
       } else if (err?.payload?.error === 'NO_SAVED_CARD' || err?.payload?.error === 'HYP_NO_TOKEN' || String(err?.payload?.error || '').includes('TOKEN')) {
         setCheckinError(t('INSTAY_CHECKIN_SAVED_FAILED'));
-        setCheckinStep(hasSavedCard ? 'saved' : 'card');
+        setCheckinStep('card');
       } else if (err?.message === 'INVALID_PROOF' || err?.payload?.error === 'INVALID_PROOF') {
         setCheckinError(t('INSTAY_CHECKIN_PROOF_BAD'));
       } else {
@@ -496,9 +498,12 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
             padding: '0.95rem 1rem'
           }}
         >
-          <div style={{ fontWeight: 900, color: '#F59E0B', marginBottom: 6 }}>{t('INSTAY_WAIT_TITLE')}</div>
+          <div style={{ fontWeight: 900, color: '#B45309', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span>🧹</span>
+            <span>{stay?.operational_status === 'IN_PROGRESS' ? t('INSTAY_IN_PROGRESS_TITLE') : t('INSTAY_WAIT_TITLE')}</span>
+          </div>
           <p style={{ margin: 0, color: themeStyles.textMuted, lineHeight: 1.55, fontSize: '0.88rem' }}>
-            {t('INSTAY_WAIT_BODY')}
+            {stay?.operational_status === 'IN_PROGRESS' ? t('INSTAY_IN_PROGRESS_BODY') : t('INSTAY_WAIT_BODY')}
           </p>
         </div>
       ) : null}
@@ -508,7 +513,7 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
           {t('GUEST_HELLO', { name: booking.guest_name || t('GUEST_FALLBACK') })}
         </div>
         <h2 style={{ margin: 0, fontSize: '1.45rem', fontWeight: 900, lineHeight: 1.3 }}>
-          {`ברוכים הבאים ל${cabin}`}
+          {t('GUEST_WELCOME_TO', { cabin })}
         </h2>
       </div>
 
@@ -544,10 +549,15 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
             {t('GUEST_MAPS')}
           </ActionBtn>
           <div style={{ gridColumn: '1 / -1' }}>
-            <ActionBtn onClick={messageHost} bg="#DCEFE3" color="#1B4332">
-              <MessageSquare size={15} />
-              {t('GUEST_WHATSAPP_HOST')}
-            </ActionBtn>
+            <GuestReach
+              token={booking.checkout_token}
+              unitId={booking.unit_id}
+              cabin={cabin}
+              guestName={booking.guest_name}
+              dates={datesLabel}
+              themeStyles={themeStyles}
+              t={t}
+            />
           </div>
         </div>
       </div>
@@ -591,7 +601,7 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
           setCheckinError('');
           setPayment((prev) => (prev ? { ...prev, pay_url: null, iframe_url: null } : prev));
         }}
-        onChargeSaved={() => runCheckin('guest_checkin', { use_saved_card: true })}
+        onChargeSaved={() => runCheckin('guest_checkin', { use_saved_card: true, guest_approved: true })}
         onNewCard={() => runCheckin('guest_checkin')}
         onCompletePay={() => runCheckin('guest_checkin_complete')}
         bankProof={bankProof}

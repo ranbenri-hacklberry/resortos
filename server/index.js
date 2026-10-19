@@ -140,6 +140,10 @@ app.post('/api/auth/agents', upsertAgent);
 app.post('/api/auth/agents/:id/deactivate', deactivateAgent);
 app.post('/api/auth/staff', createStaff);
 app.patch('/api/auth/staff/:id', updateStaff);
+app.post('/api/auth/staff/:id/outbound', async (req, res) => {
+  const { setOutboundCalls } = await import('./auth.js');
+  return setOutboundCalls(req, res);
+});
 app.post('/api/auth/staff/:id/deactivate', deactivateStaff);
 
 function sendFinanceError(res, err) {
@@ -147,6 +151,52 @@ function sendFinanceError(res, err) {
   if (status >= 500) console.error('[open-finance]', err.message);
   res.status(status).json({ error: err.message || 'OPEN_FINANCE_FAILED' });
 }
+
+app.get('/api/priority/meetings', requireManagerStaff, async (req, res) => {
+  try {
+    const { getManagerCalendar } = await import('./managerMeetings.js');
+    res.json(getManagerCalendar());
+  } catch (err) {
+    res.status(Number(err.status) || 500).json({ error: err.message || 'MEETINGS_FAILED' });
+  }
+});
+
+app.post('/api/priority/meetings', requireManagerStaff, async (req, res) => {
+  try {
+    const { addConfirmedMeeting, addProposedMeeting } = await import('./managerMeetings.js');
+    const meetings = Array.isArray(req.body?.slots) && req.body.slots.length
+      ? addProposedMeeting(req.body)
+      : addConfirmedMeeting(req.body);
+    res.json({ meetings });
+  } catch (err) {
+    res.status(Number(err.status) || 500).json({ error: err.message || 'MEETING_SAVE_FAILED' });
+  }
+});
+
+app.post('/api/priority/meetings/:id/vote', requireManagerStaff, async (req, res) => {
+  try {
+    const { castMeetingVote } = await import('./managerMeetings.js');
+    const meetings = castMeetingVote({
+      id: req.params.id,
+      person: req.body?.person,
+      date: req.body?.date,
+      time: req.body?.time,
+      vote: req.body?.vote
+    });
+    res.json({ meetings });
+  } catch (err) {
+    res.status(Number(err.status) || 500).json({ error: err.message || 'MEETING_VOTE_FAILED' });
+  }
+});
+
+app.post('/api/priority/meetings/:id/status', requireManagerStaff, async (req, res) => {
+  try {
+    const { updateMeetingStatus } = await import('./managerMeetings.js');
+    res.json({ meetings: updateMeetingStatus(req.params.id, req.body?.status) });
+  } catch (err) {
+    res.status(Number(err.status) || 500).json({ error: err.message || 'MEETING_STATUS_FAILED' });
+  }
+});
 
 app.get('/api/priority/cashflow', requireManagerStaff, async (req, res) => {
   try {
@@ -376,6 +426,69 @@ app.get('/api/ops/stay-status', requireStaff, async (req, res) => {
   return handleStayStatus(req, res);
 });
 
+app.get('/api/ops/call-me', requireStaff, async (_req, res) => {
+  const { openGuestCalls } = await import('./callMe.js');
+  res.json({ calls: openGuestCalls() });
+});
+
+app.post('/api/ops/call-me/request', requireStaff, async (req, res) => {
+  try {
+    const { createLocalGuestCall } = await import('./callMe.js');
+    const call = await createLocalGuestCall({
+      bookingId: req.body?.booking_id,
+      unitId: req.body?.unit_id,
+      guestName: req.body?.guest_name,
+      guestPhone: req.body?.guest_phone,
+      cabin: req.body?.cabin
+    });
+    res.json({ ok: true, call });
+  } catch (err) {
+    res.status(Number(err.status) || 502).json({ error: err.message || 'CALL_REQUEST_FAILED' });
+  }
+});
+
+app.post('/api/ops/call-me/ack', requireStaff, async (req, res) => {
+  try {
+    const { confirmGuestCall } = await import('./callMe.js');
+    res.json({ ok: true, call: await confirmGuestCall(req.body?.token) });
+  } catch (err) {
+    res.status(Number(err.status) || 502).json({ error: err.message || 'CALL_ACK_FAILED' });
+  }
+});
+
+app.post('/api/ops/call-me/transfer', requireStaff, async (req, res) => {
+  try {
+    const { transferGuestCall } = await import('./callMe.js');
+    res.json({ ok: true, call: await transferGuestCall(req.body?.token, req.body?.to) });
+  } catch (err) {
+    res.status(Number(err.status) || 502).json({ error: err.message || 'CALL_TRANSFER_FAILED' });
+  }
+});
+
+app.get('/api/internal/staff', async (req, res) => {
+  const ip = req.ip || req.socket?.remoteAddress || '';
+  const local = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+  if (!local) return res.status(403).json({ error: 'FORBIDDEN' });
+  try {
+    const { listAgentStaff } = await import('./agentStaff.js');
+    res.json({ staff: listAgentStaff() });
+  } catch (err) {
+    res.status(503).json({ error: err.message || 'STAFF_UNAVAILABLE' });
+  }
+});
+
+app.post('/api/internal/call-me/reply', async (req, res) => {
+  const ip = req.ip || req.socket?.remoteAddress || '';
+  const local = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+  if (!local) return res.status(403).json({ error: 'FORBIDDEN' });
+  try {
+    const { replyFromWhatsApp } = await import('./callMe.js');
+    res.json(await replyFromWhatsApp(req.body?.phone, req.body?.text));
+  } catch (err) {
+    res.status(502).json({ error: err.message || 'CALL_REPLY_FAILED' });
+  }
+});
+
 app.post('/api/guest/self-checkout-effects', async (req, res) => {
   try {
     const secret = String(process.env.CHECKOUT_MAILBOX_SECRET || '').trim();
@@ -478,6 +591,9 @@ app.listen(PORT, BIND_HOST, () => {
     import('./guestCheckout.js')
         .then((checkout) => checkout.startCheckoutMailboxPoller())
         .catch((err) => console.warn('[checkout mailbox]', err.message));
+    import('./callMe.js')
+        .then((calls) => calls.startGuestCallPoller())
+        .catch((err) => console.warn('[call-me]', err.message));
     import('./guestContext.js')
         .then((guest) => guest.startGuestContextSync())
         .catch((err) => console.warn('[guest-context]', err.message));

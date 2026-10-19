@@ -576,6 +576,19 @@ function staffAuthPlugin(env) {
             import('./server/guestContext.js').then((mod) => mod.scheduleGuestContextPush()).catch(() => {});
             return sendJson(res, 201, result);
           }
+          const staffOutbound = path.match(/^\/api\/auth\/staff\/([^/]+)\/outbound$/);
+          if (req.method === 'POST' && staffOutbound) {
+            const token = bearerToken(req);
+            if (!token) return sendJson(res, 401, { error: 'UNAUTHORIZED' });
+            const body = await readJsonBody(req);
+            const result = await rpc('hotelos_set_outbound_calls', {
+              p_token: token,
+              p_staff_id: decodeURIComponent(staffOutbound[1]),
+              p_enabled: body?.outbound_calls === true
+            });
+            if (result?.error) return sendStaffRpcError(res, result);
+            return sendJson(res, 200, result);
+          }
           const staffPatch = path.match(/^\/api\/auth\/staff\/([^/]+)$/);
           if (req.method === 'PATCH' && staffPatch) {
             const token = bearerToken(req);
@@ -778,6 +791,41 @@ function openFinancePlugin(env) {
       const serverModuleUrl = (name) => pathToFileURL(path.join(server.config.root, 'server', name)).href;
       server.middlewares.use(async (req, res, next) => {
         const path = requestPath(req);
+        if (path === '/api/priority/meetings' || path.startsWith('/api/priority/meetings/')) {
+          try {
+            await staffUser(req, ['MANAGER', 'PRIORITY']);
+            const { getManagerCalendar, addConfirmedMeeting, addProposedMeeting, castMeetingVote, updateMeetingStatus } = await import(serverModuleUrl('managerMeetings.js'));
+            if (req.method === 'GET' && path === '/api/priority/meetings') {
+              return sendJson(res, 200, getManagerCalendar());
+            }
+            if (req.method === 'POST' && path === '/api/priority/meetings') {
+              const body = await readJsonBody(req);
+              const meetings = Array.isArray(body?.slots) && body.slots.length
+                ? addProposedMeeting(body)
+                : addConfirmedMeeting(body);
+              return sendJson(res, 200, { meetings });
+            }
+            const vote = path.match(/^\/api\/priority\/meetings\/([^/]+)\/vote$/);
+            if (req.method === 'POST' && vote) {
+              const body = await readJsonBody(req);
+              return sendJson(res, 200, {
+                meetings: castMeetingVote({ id: decodeURIComponent(vote[1]), ...body })
+              });
+            }
+            const statusPath = path.match(/^\/api\/priority\/meetings\/([^/]+)\/status$/);
+            if (req.method === 'POST' && statusPath) {
+              const body = await readJsonBody(req);
+              return sendJson(res, 200, {
+                meetings: updateMeetingStatus(decodeURIComponent(statusPath[1]), body?.status)
+              });
+            }
+            return sendJson(res, 404, { error: 'NOT_FOUND' });
+          } catch (err) {
+            const status = Number(err.status) || 502;
+            if (!res.headersSent) sendJson(res, status, { error: err.message || 'MEETINGS_FAILED' });
+          }
+          return;
+        }
         if (req.method === 'GET' && path === '/api/priority/cashflow') {
           try {
             await staffUser(req, ['MANAGER', 'PRIORITY']);
@@ -968,7 +1016,10 @@ function guestCommsPlugin(env) {
         const isSend = urlPath === '/api/guest-comms/send' && req.method === 'POST';
         const isStatus = urlPath === '/api/ops/stay-status' && req.method === 'GET';
         const isEffects = urlPath === '/api/guest/self-checkout-effects' && req.method === 'POST';
-        if (!isList && !isSend && !isStatus && !isEffects) {
+        const isCalls = urlPath === '/api/ops/call-me' && req.method === 'GET';
+        const isCallAck = urlPath === '/api/ops/call-me/ack' && req.method === 'POST';
+        const isCallTransfer = urlPath === '/api/ops/call-me/transfer' && req.method === 'POST';
+        if (!isList && !isSend && !isStatus && !isEffects && !isCalls && !isCallAck && !isCallTransfer) {
           next();
           return;
         }
@@ -990,6 +1041,14 @@ function guestCommsPlugin(env) {
               checked_out_at: body.checked_out_at
             });
             return sendJson(res, 200, { ok: true });
+          }
+          if (isCalls || isCallAck || isCallTransfer) {
+            await requireStaff(req);
+            const calls = await import('./server/callMe.js');
+            if (isCalls) return sendJson(res, 200, { calls: calls.openGuestCalls() });
+            const body = await readJsonBody(req);
+            if (isCallTransfer) return sendJson(res, 200, { ok: true, call: await calls.transferGuestCall(body.token, body.to) });
+            return sendJson(res, 200, { ok: true, call: await calls.confirmGuestCall(body.token) });
           }
           const staff = await requireStaff(req);
           req.staff = staff;

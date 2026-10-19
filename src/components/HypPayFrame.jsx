@@ -13,10 +13,25 @@ export default function HypPayFrame({
 
   useEffect(() => {
     if (!url) return undefined;
+    try {
+      const back = new URL(window.location.href);
+      back.searchParams.set('hyp', 'ok');
+      sessionStorage.setItem('guest-pay-return', back.toString());
+    } catch (_) {}
     const id = window.setInterval(() => {
       try {
         const href = iframeRef.current?.contentWindow?.location?.href || '';
         if (!href || href === 'about:blank') return;
+        if (/\/api\/payments\/hyp\/receipt/.test(href)) {
+          const landed = new URL(href);
+          const token = landed.searchParams.get('Order') || landed.searchParams.get('ReturnValue') || '';
+          if (/^tok_[A-Za-z0-9_-]+$/.test(token)) {
+            window.location.replace(`/stay/${encodeURIComponent(token)}?hyp=ok`);
+            return;
+          }
+          onDone?.();
+          return;
+        }
         if (/\/api\/payments\/hyp\/success|\/api\/checkout\/.+\/hyp|\/stay\//.test(href)) {
           window.location.replace(href);
         }
@@ -61,7 +76,7 @@ export default function HypPayFrame({
               color: themeStyles?.textMuted
             }}
           >
-            Hyp
+            Cardcom
           </span>
         </div>
         {amountLabel ? (
@@ -85,7 +100,7 @@ export default function HypPayFrame({
           src={url}
           allow="payment"
           referrerPolicy="origin"
-          sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+          sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation"
           style={{
             width: '100%',
             height,

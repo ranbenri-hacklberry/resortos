@@ -11,7 +11,7 @@ test('demo form is ₪5 stay and ₪1 deposit, unpaid', () => {
   assert.equal(row.payment_status, 'UNPAID');
   assert.equal(row.booking_status, 'PENDING');
   assert.match(row.checkout_token, /^tok_demo_/);
-  assert.equal(row.unit_id, 'k671');
+  assert.equal(row.unit_id, 'pilot-office');
 });
 
 test('demo stay is deposit-paid so check-in charges the ₪4 balance', () => {

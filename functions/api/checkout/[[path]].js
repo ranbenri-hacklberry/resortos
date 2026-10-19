@@ -27,6 +27,15 @@ import {
   verifyHypReturn
 } from '../../lib/hypPay.js';
 import { persistReservationPaymentMethod, stripCardSecrets } from '../../lib/reservationPaymentMethods.js';
+import {
+  idPhotoKeyBytes,
+  idPhotoKvKey,
+  idPhotoTtlSeconds,
+  openIdPhoto,
+  sealIdPhoto,
+  sniffIdPhoto,
+  stripIdPhoto
+} from '../../lib/idPhoto.js';
 import { allCabinsPaid, applyPaySplitView, resolveStayUnitId } from '../../lib/paySplit.js';
 import { verifyStaffPin } from '../../lib/staffPin.js';
 import { normalizeBalancePreference } from '../../lib/balancePref.js';
@@ -35,6 +44,7 @@ import { applyPaidArrivalCheckin, stayExpiresAt, stayLinkExpired } from '../../.
 import {
   CATALOG_LOCKBOX,
   CATALOG_WIFI,
+  UNIT_WIFI,
   RAMOT_GATE_CODE,
   UNIT_PROPERTY
 } from '../../lib/unitNames.js';
@@ -104,12 +114,18 @@ async function persistStay(env, token, row, stay, payment) {
 }
 
 async function recoverHypPaymentIfNeeded(env, token, row) {
-  if (!row || hypDepositPaid(row) || hypAlreadyPaid(row)) return row;
+  if (!row || hypAlreadyPaid(row)) return row;
   if (row.booking_status === 'CANCELED') return row;
   const intent = row.stay?.hyp_intent;
-  const waiting = row.payment_status === 'UNPAID'
+  const balanceDue = Boolean(intent?.lowProfileId)
+    && !stayFullyPaid(row)
+    && (intent.purpose === 'balance' || intent.purpose === 'extra' || intent.stage === 'checkin');
+  if (hypDepositPaid(row) && !balanceDue) return row;
+  const waiting = balanceDue
+    || row.payment_status === 'UNPAID'
     || row.booking_status === 'PENDING'
-    || intent?.status === 'redirected';
+    || intent?.status === 'redirected'
+    || (intent?.status === 'paid' && balanceDue);
   if (!waiting) return row;
   try {
     if (intent?.lowProfileId) {
@@ -337,8 +353,14 @@ function publicBooking(row) {
 function publicPayment(row) {
   const payment = row?.payment;
   if (!payment || typeof payment !== 'object') return payment || null;
-  const paid = hypDepositPaid(row) || hypAlreadyPaid(row) || row.stay?.hyp_intent?.status === 'paid';
-  if (!paid) return payment;
+  const purpose = payment.purpose || row.stay?.hyp_intent?.purpose || '';
+  const balanceSettled = hypAlreadyPaid(row) || Boolean(row.balance_paid || row.stay?.balance_paid);
+  const thisChargePaid = purpose === 'deposit'
+    ? hypDepositPaid(row)
+    : purpose === 'balance' || purpose === 'extra'
+      ? balanceSettled
+      : balanceSettled || row.stay?.hyp_intent?.status === 'paid';
+  if (!thisChargePaid) return payment;
   const next = { ...payment };
   delete next.pay_url;
   delete next.iframe_url;
@@ -348,17 +370,19 @@ function publicPayment(row) {
 function publicStay(stay, row) {
   const isReady = stay && (Boolean(stay.cabin_ready) || String(stay.operational_status || '').toUpperCase() === 'READY');
   const inStay = Boolean(row) && (row.booking_status === 'CHECKED_IN' || row.booking_status === 'CHECKED_OUT' || Boolean(stay?.guest_checked_in_at));
-  const allowPin = Boolean(row) && (stayFullyPaid(row) || inStay);
+  const allowPin = Boolean(row) && (inStay || (isReady && stayFullyPaid(row)));
 
   const unitId = row?.unit_id || stay?.unit_id || '';
   const propId = UNIT_PROPERTY[unitId] || '';
-  const defaultWifi = CATALOG_WIFI[propId] || [];
+  const defaultWifi = (UNIT_WIFI[unitId] && UNIT_WIFI[unitId].length)
+    ? UNIT_WIFI[unitId]
+    : (CATALOG_WIFI[propId] || []);
   const wifiList = (Array.isArray(stay?.wifi_networks) && stay.wifi_networks.length)
     ? stay.wifi_networks
     : (stay?.wifi_ssid ? [{ ssid: stay.wifi_ssid, password: stay.wifi_password || '' }] : defaultWifi);
   const gateCode = stay?.gate_code || (unitId.startsWith('k') ? RAMOT_GATE_CODE : null);
 
-  const baseStay = (stay && typeof stay === 'object') ? stay : { folio: [], checkout_time: '11:00' };
+  const baseStay = stripIdPhoto((stay && typeof stay === 'object') ? stay : { folio: [], checkout_time: '11:00' });
 
   return stripCardSecrets({
     ...baseStay,
@@ -420,6 +444,94 @@ const INBOX_TABLE = `CREATE TABLE IF NOT EXISTS checkout_inbox (
   token TEXT PRIMARY KEY,
   created_at TEXT NOT NULL
 )`;
+
+const CALLS_TABLE = `CREATE TABLE IF NOT EXISTS guest_calls (
+  token TEXT PRIMARY KEY,
+  booking_id TEXT,
+  unit_id TEXT,
+  guest_name TEXT,
+  guest_phone TEXT,
+  cabin TEXT,
+  requested_at TEXT,
+  acked_at TEXT
+)`;
+
+function callToken() {
+  const bytes = new Uint8Array(9);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function escapeHtml(value) {
+  return String(value || '').replace(/[&<>"']/g, (ch) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+}
+
+function callAckPage({ title, body, token, done }) {
+  const form = done ? '' : `<form method="POST" action="/api/checkout/call-ack"><input type="hidden" name="t" value="${escapeHtml(token)}"><button type="submit" style="margin-top:24px;font-size:22px;padding:16px 28px;border:0;border-radius:14px;background:#1c1917;color:#fff;font-weight:800">דיברתי עם האורח</button></form>`;
+  return new Response(`<!doctype html><html lang="he" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;font-family:sans-serif;background:#fff7ed"><div><h1 style="font-size:32px;margin:0 0 8px">${escapeHtml(title)}</h1><p style="font-size:18px;line-height:1.5">${escapeHtml(body)}</p>${form}</div></body></html>`, {
+    headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }
+  });
+}
+
+async function ensureCallsTable(env) {
+  if (!hasStayDb(env)) return false;
+  await env.STAY_DB.prepare(CALLS_TABLE).run();
+  return true;
+}
+
+async function openCallForBooking(env, bookingId) {
+  if (!bookingId || !await ensureCallsTable(env)) return null;
+  return env.STAY_DB.prepare(
+    `SELECT token, requested_at, acked_at FROM guest_calls
+     WHERE booking_id = ?1 AND (acked_at IS NULL OR acked_at = '')
+     ORDER BY requested_at DESC LIMIT 1`
+  ).bind(bookingId).first();
+}
+
+async function insertCall(env, row) {
+  if (!await ensureCallsTable(env)) return false;
+  await env.STAY_DB.prepare(
+    `INSERT INTO guest_calls (token, booking_id, unit_id, guest_name, guest_phone, cabin, requested_at, acked_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, '')`
+  ).bind(
+    row.token,
+    row.booking_id,
+    row.unit_id,
+    row.guest_name,
+    row.guest_phone,
+    row.cabin,
+    row.requested_at
+  ).run();
+  return true;
+}
+
+async function listRecentCalls(env) {
+  if (!await ensureCallsTable(env)) return [];
+  const since = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+  const result = await env.STAY_DB.prepare(
+    `SELECT token, booking_id, unit_id, guest_name, guest_phone, cabin, requested_at, acked_at
+     FROM guest_calls WHERE requested_at >= ?1 ORDER BY requested_at DESC LIMIT 40`
+  ).bind(since).all();
+  return result?.results || [];
+}
+
+async function findCall(env, token) {
+  if (!await ensureCallsTable(env)) return null;
+  return env.STAY_DB.prepare(
+    'SELECT token, booking_id, unit_id, guest_name, guest_phone, cabin, requested_at, acked_at FROM guest_calls WHERE token = ?1'
+  ).bind(token).first();
+}
+
+async function ackCallRow(env, token) {
+  const existing = await findCall(env, token);
+  if (!existing || existing.acked_at) return existing;
+  const at = new Date().toISOString();
+  await env.STAY_DB.prepare('UPDATE guest_calls SET acked_at = ?1 WHERE token = ?2').bind(at, token).run();
+  existing.acked_at = at;
+  return existing;
+}
 
 async function ensureInboxTable(env) {
   if (!hasStayDb(env)) return false;
@@ -552,6 +664,61 @@ export async function persistGuestRow(env, token, stored) {
     kvWrite
   ]);
   return Boolean(dbOk || kvOk);
+}
+
+function idPhotoHeaders(mime) {
+  return {
+    'content-type': mime,
+    'cache-control': 'private, no-store',
+    'x-content-type-options': 'nosniff',
+    'content-disposition': 'inline; filename="id-photo"',
+    'referrer-policy': 'no-referrer'
+  };
+}
+
+async function readIdPhotoUpload(request) {
+  const type = String(request.headers.get('content-type') || '');
+  if (!type.includes('multipart/form-data')) return null;
+  const form = await request.formData().catch(() => null);
+  const file = form?.get('file');
+  if (!file || typeof file.arrayBuffer !== 'function') return null;
+  return new Uint8Array(await file.arrayBuffer());
+}
+
+export async function saveGuestIdPhoto(env, token, row, bytes) {
+  const mime = sniffIdPhoto(bytes);
+  if (!mime) return { error: 'BAD_IMAGE', status: 400 };
+  const key = idPhotoKeyBytes(env?.ID_PHOTO_KEY);
+  if (!key || !env?.CHECKOUT_KV) return { error: 'ID_PHOTO_UNAVAILABLE', status: 503 };
+  if (row?.booking_status === 'CHECKED_OUT' || row?.booking_status === 'CANCELED') {
+    return { error: 'CLOSED', status: 409 };
+  }
+  const sealed = await sealIdPhoto(bytes, key);
+  const packed = JSON.stringify({ v: 1, ...sealed });
+  const savedPhoto = await kvPut(env, idPhotoKvKey(token), packed, {
+    expirationTtl: idPhotoTtlSeconds(row?.check_out_date)
+  });
+  if (!savedPhoto) return { error: 'ID_PHOTO_UNAVAILABLE', status: 503 };
+  const receivedAt = new Date().toISOString();
+  const stored = {
+    ...row,
+    stay: stripIdPhoto({ ...(row.stay || {}), id_photo_received_at: receivedAt }),
+    updated_at: receivedAt
+  };
+  await persistGuestRow(env, token, stored);
+  return { ok: true, received_at: receivedAt };
+}
+
+export async function loadGuestIdPhoto(env, token) {
+  const key = idPhotoKeyBytes(env?.ID_PHOTO_KEY);
+  if (!key) return null;
+  const packed = await kvGet(env, idPhotoKvKey(token));
+  if (!packed || packed.v !== 1 || !packed.iv || !packed.ct) return null;
+  try {
+    return await openIdPhoto(packed, key);
+  } catch {
+    return null;
+  }
 }
 
 export async function readBooking(env, token) {
@@ -726,6 +893,36 @@ async function handleCheckout(context) {
     return json(publicBooking(stored));
   }
 
+  if (head === 'calls' && method === 'GET') {
+    if (!isAdmin(request, env)) return json({ error: 'UNAUTHORIZED' }, 401);
+    return json({ calls: await listRecentCalls(env) });
+  }
+
+  if (head === 'call-ack' && (method === 'GET' || method === 'POST')) {
+    let ackToken = '';
+    if (method === 'GET') {
+      ackToken = new URL(request.url).searchParams.get('t') || '';
+    } else {
+      const ct = String(request.headers.get('content-type') || '');
+      if (ct.includes('application/json')) {
+        const body = await request.json().catch(() => ({}));
+        ackToken = String(body.t || '');
+      } else {
+        ackToken = new URLSearchParams(await request.text()).get('t') || '';
+      }
+    }
+    if (!/^[a-f0-9]{18}$/.test(ackToken)) {
+      return callAckPage({ title: 'הקישור לא תקין', body: '', token: '', done: true });
+    }
+    const found = method === 'POST' ? await ackCallRow(env, ackToken) : await findCall(env, ackToken);
+    if (!found) return callAckPage({ title: 'הבקשה לא נמצאה', body: '', token: '', done: true });
+    const who = [found.guest_name, found.cabin].filter(Boolean).join(' · ');
+    if (found.acked_at) {
+      return callAckPage({ title: 'נרשם', body: who ? `דיברת עם ${who}` : 'דיברת עם האורח', token: '', done: true });
+    }
+    return callAckPage({ title: 'אישור שיחה', body: who, token: ackToken, done: false });
+  }
+
   if (head === 'inbox' && method === 'GET') {
     if (!isAdmin(request, env)) return json({ error: 'UNAUTHORIZED' }, 401);
     try {
@@ -756,6 +953,23 @@ async function handleCheckout(context) {
   }
 
   const token = head;
+  if (TOKEN_RE.test(token) && segments[1] === 'id-photo' && segments.length === 2) {
+    const row = await readBooking(env, token);
+    if (!row || row.booking_status === 'CANCELED') return json({ error: 'NOT_FOUND' }, 404);
+    if (stayLinkExpired(row)) return json({ error: 'EXPIRED' }, 410);
+    if (method === 'GET') {
+      if (!isAdmin(request, env)) return json({ error: 'UNAUTHORIZED' }, 401);
+      const photo = await loadGuestIdPhoto(env, token);
+      if (!photo) return json({ error: 'NOT_FOUND' }, 404);
+      return new Response(photo.bytes, { status: 200, headers: idPhotoHeaders(photo.mime) });
+    }
+    if (method !== 'POST') return json({ error: 'METHOD' }, 405);
+    const bytes = await readIdPhotoUpload(request);
+    const saved = await saveGuestIdPhoto(env, token, row, bytes || new Uint8Array());
+    if (saved.error) return json({ error: saved.error }, saved.status);
+    return json({ ok: true, received_at: saved.received_at });
+  }
+
   if (TOKEN_RE.test(token) && segments[1] === 'stay' && method === 'POST') {
     const row = await readBooking(env, token);
     if (!row || row.booking_status === 'CANCELED') return json({ error: 'NOT_FOUND' }, 404);
@@ -775,6 +989,7 @@ async function handleCheckout(context) {
       || action === 'hyp_verify'
       || action === 'guest_deposit';
     if (
+      action !== 'call_me' &&
       !checkinAction &&
       row.booking_status !== 'CONFIRMED' &&
       row.booking_status !== 'CHECKED_IN' &&
@@ -782,7 +997,24 @@ async function handleCheckout(context) {
     ) {
       return json({ error: 'NOT_CONFIRMED' }, 409);
     }
-    if (action === 'folio_add' && body.item?.title) {
+    if (action === 'call_me') {
+      const now = new Date().toISOString();
+      const existing = await openCallForBooking(env, row.id);
+      const recent = existing && Date.now() - Date.parse(existing.requested_at) < 10 * 60 * 1000;
+      if (!recent) {
+        const savedCall = await insertCall(env, {
+          token: callToken(),
+          booking_id: String(row.id || ''),
+          unit_id: String(row.unit_id || unitId || ''),
+          guest_name: String(row.guest_name || ''),
+          guest_phone: String(row.guest_phone || ''),
+          cabin: String(body.cabin || '').slice(0, 80),
+          requested_at: now
+        });
+        if (!savedCall) return json({ error: 'CALL_STORE_FAILED' }, 503);
+        stay.call_requested_at = now;
+      }
+    } else if (action === 'folio_add' && body.item?.title) {
       stay.folio.unshift({
         id: String(body.item.id || ('folio_' + Date.now())),
         title: String(body.item.title),
@@ -969,6 +1201,9 @@ async function handleCheckout(context) {
             applyHypPaid(row, stay, stay.hyp || {}, { purpose: 'balance', stage: 'checkin', terminal: 'A', cabinId: unitId });
           }
         } else if (body.use_saved_card) {
+          if (body.guest_approved !== true) {
+            return json({ error: 'GUEST_APPROVAL_REQUIRED', message: 'החיוב של הכרטיס השמור מחכה לאישור האורח.' }, 409);
+          }
           stay.hyp_intent = {
             purpose: 'balance',
             terminal: row.stay?.hyp_card?.terminal || 'A',
@@ -1018,6 +1253,7 @@ async function handleCheckout(context) {
             at: new Date().toISOString()
           };
           const started = await startCardCheckin(view, env, hypChargeReturn(body));
+          if (started.terminal) stay.hyp_intent.terminal = started.terminal;
           if (started.lowProfileId) stay.hyp_intent.lowProfileId = started.lowProfileId;
           stay.checkin_quote = started.quote;
           stay.payment_choice = 'CARD';

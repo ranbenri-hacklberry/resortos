@@ -10,6 +10,8 @@
     "dev": "tsx watch src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "id-server": "tsx src/idValidation/idOcrServer.ts",
+    "benchmark-id": "tsx scripts/benchmark-id-ocr.ts",
     "connect": "tsx scripts/connect.ts",
     "sync-cleaners": "tsx scripts/sync-cleaners.ts"
   },

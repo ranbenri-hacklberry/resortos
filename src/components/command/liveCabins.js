@@ -70,8 +70,9 @@ export function commandStatus(unit, booking) {
   if (room.key === 'alert') return 'alert';
   if (room.key === 'occupied') return 'occupied';
   if (room.key === 'inspect') return 'inspection';
-  if (room.key === 'dirty') return 'dirty';
+  if (room.key === 'dirty' || room.key === 'in_progress') return 'dirty';
   return 'ready';
+
 }
 
 function heClock(iso) {

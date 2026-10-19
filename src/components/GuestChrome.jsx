@@ -7,7 +7,8 @@ import GuestBrandMark from './GuestBrandMark';
 const LANGS = [
   { code: 'he', label: 'עב' },
   { code: 'en', label: 'EN' },
-  { code: 'ar', label: 'عر' }
+  { code: 'ar', label: 'عر' },
+  { code: 'ru', label: 'RU' }
 ];
 
 export default function GuestChrome({ theme, onThemeChange, themeStyles, center = null }) {

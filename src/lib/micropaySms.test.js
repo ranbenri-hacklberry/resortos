@@ -38,4 +38,11 @@ describe('micropay SMS helpers', () => {
     expect(text).toContain('03/09/2026');
     expect(text).toContain('https://resortos.app/s/abc');
   });
+
+  it('detects guest stay link messages for BCC to 0506102416', async () => {
+    const { GUEST_LINK_BCC_PHONE, isGuestStayLinkMessage } = await import('../../server/micropaySms.js');
+    expect(GUEST_LINK_BCC_PHONE).toBe('0506102416');
+    expect(isGuestStayLinkMessage('שלום! הקישור לדף האורח ב-רמות 1:\nhttps://resortos.app/stay/tok123')).toBe(true);
+    expect(isGuestStayLinkMessage('שלום! קוד השער לכניסה לרכב: 1234.')).toBe(false);
+  });
 });

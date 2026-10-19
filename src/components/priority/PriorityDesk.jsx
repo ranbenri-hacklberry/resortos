@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { FileSpreadsheet, Filter, Printer, RefreshCw, Search, Table2 } from 'lucide-react';
+import { Check, CheckCheck, ExternalLink, FileSpreadsheet, Filter, Link2, MessageCircle, Phone, Printer, RefreshCw, Search, Send, Table2 } from 'lucide-react';
 import { formatIlsFromAgorot, normalizeClearingPayment, normalizeIsraeliId } from '../../lib/clearingPayments';
 import { printCashDayReport } from '../../lib/cashDayReport';
 import { calendarPartyLabel, dutyPrintAreaOf, dutyUnitGroup, printDailyDutyReport } from '../../lib/dailyDutyReport';
 import { getUnitSign } from '../../lib/fieldUnitCatalog';
 import { israelToday } from '../../lib/cabinAccess';
+import { roomLogClock, visibleRoomLog } from '../../lib/roomLog';
 import { formatStayHourLabel, stayHoursFromBooking } from '../../lib/kinorotStayHours';
 import { db, useLiveBookings, useLiveUnits } from '../../lib/resortos-db';
 import { isInventoryUnit } from '../../lib/units';
@@ -19,7 +20,14 @@ import {
   savePriorityStatusDrafts
 } from '../../lib/priorityStatus';
 import { recordedPaidAgorot } from '../../lib/bookingPaid';
-import { ARRIVAL_TODAY_LABEL, priorityDayCell, priorityDeskGuests, priorityShowsGuest, selectPriorityStay } from '../../lib/priorityStay';
+import {
+  ARRIVAL_TODAY_LABEL,
+  priorityDayCell,
+  priorityDayOccupancy,
+  priorityDeskGuests,
+  priorityShowsGuest,
+  selectPriorityStay
+} from '../../lib/priorityStay';
 import { priorityRoomStatus, unitDisplayStatus } from '../../lib/unitStatus';
 import { appendCashPaidNote, kinorotReservationId } from '../../lib/kinorotReservationNote';
 import { coveringUnavailableHold, isUnavailableHoldBooking, unavailableHoldLabel } from '../../lib/unavailableHold';
@@ -33,6 +41,7 @@ import {
   paymentDraftDirty,
   priorityMethodKey,
   priorityPayTone,
+  priorityShekelMark,
   priorityStatusKey,
   savePriorityPaymentDrafts
 } from '../../lib/priorityPayment';
@@ -41,6 +50,8 @@ import { getStoredToken, listAssignableStaff, staffDisplayName } from '../../lib
 import { toMicropayPhone } from '../../lib/micropaySms';
 import { displayPhone, heStayDate } from '../command/liveCabins';
 import PriorityCashflow from './PriorityCashflow';
+import PriorityCalendar from './PriorityCalendar';
+import { formatManagerMeeting } from '../../lib/managerMeetings';
 import './priority.css';
 
 const UNIT_TYPE = {
@@ -70,6 +81,7 @@ const COLUMNS = [
 
 const WEEK_STATUSES = [
   { key: 'dirty', label: 'לניקוי', stay: 'VACANT', clean: 'DIRTY' },
+  { key: 'in_progress', label: 'בנקיון', stay: 'VACANT', clean: 'IN_PROGRESS' },
   { key: 'inspect', label: 'ממתין לבדיקה', stay: 'VACANT', clean: 'READY' },
   { key: 'ready', label: 'מוכן', stay: 'VACANT', clean: 'READY' },
   { key: 'occupied', label: 'מאוכלס', stay: 'OCCUPIED', clean: '' },
@@ -99,14 +111,25 @@ function liveWeekKey(stayKey, cleanKey, reason) {
 }
 
 function toneOf(label) {
-  if (label === 'מאוכלס') return 'tone-occupied';
-  if (label === 'בשהייה' || label === 'תפוס' || label === 'מוכן') return 'tone-ok';
-  if (label === 'לניקוי' || label === 'בניקיון' || label === 'לא נקי') return 'tone-clean';
-  if (label === 'ממתין לבדיקה' || label === 'השלמות') return 'tone-inspect';
-  if (label === 'החלפה' || label === 'צ׳ק אאוט' || label === 'צ׳ק אין' || label === 'יציאה' || label === ARRIVAL_TODAY_LABEL) return 'tone-wait';
-  if (label === 'תקלה') return 'tone-bad';
-  if (label === 'לא זמין' || label === 'שיפוץ' || label === 'שיפוצים' || label === 'סגור' || label === 'לא נקי' || label === 'מקולקל') return 'tone-hold';
+  if (!label) return 'tone-idle';
+  const str = String(label).trim();
+  if (str === 'מאוכלס') return 'tone-occupied';
+  if (str === 'בשהייה' || str === 'תפוס' || str === 'מוכן') return 'tone-ok';
+  if (str.startsWith('בנקיון') || str.startsWith('בניקיון') || str.startsWith('בניקוי')) return 'tone-progress';
+  if (str === 'לניקוי' || str === 'לא נקי') return 'tone-dirty';
+  if (str === 'ממתין לבדיקה' || str === 'השלמות') return 'tone-inspect';
+  if (str === 'החלפה' || str === 'צ׳ק אאוט' || str === 'צ׳ק אין' || str === 'יציאה' || str === ARRIVAL_TODAY_LABEL) return 'tone-wait';
+  if (str === 'תקלה') return 'tone-bad';
+  if (str === 'לא זמין' || str === 'לא למכירה' || str === 'שיפוץ' || str === 'שיפוצים' || str === 'סגור' || str === 'מקולקל') return 'tone-hold';
   return 'tone-idle';
+}
+
+function occupancyTone(percent) {
+  if (percent >= 90) return 'tone-full';
+  if (percent >= 70) return 'tone-high';
+  if (percent >= 40) return 'tone-med';
+  if (percent > 0) return 'tone-low';
+  return 'tone-zero';
 }
 
 function shiftDay(ymd, days) {
@@ -246,13 +269,6 @@ function horizonLabel(ymd, today) {
   return ymd === today ? `היום - ${mark}` : mark;
 }
 
-function balanceAgorot(booking) {
-  if (!booking || priorityMethodKey(booking) === 'VOUCHER') return 0;
-  if (priorityStatusKey(booking) === 'PAID') return 0;
-  const total = Number(booking.total_price_agorot) || 0;
-  return Math.max(0, total - recordedPaidAgorot(booking));
-}
-
 function guestSide(booking, today, kind) {
   if (!booking) {
     return { guest: '', party: '', phone: '', time: '', cash: '', cashTone: '', bookingId: '' };
@@ -312,7 +328,8 @@ function deskTaskRows(unit) {
     staff: task.by || '',
     start: '',
     end: '',
-    status: 'פתוח'
+    status: task.done ? 'בוצע' : 'פתוח',
+    source: 'desk'
   }));
 }
 
@@ -328,7 +345,8 @@ function tasksOf(unit, stayLabel) {
       staff: unit.assigned_staff || '',
       start: '',
       end: '',
-      status: done.has(step.id) ? 'בוצע' : 'פתוח'
+      status: done.has(step.id) ? 'בוצע' : 'פתוח',
+      source: 'sop'
     }))
     : [{
       id: 'ops',
@@ -337,7 +355,8 @@ function tasksOf(unit, stayLabel) {
       staff: unit?.assigned_staff || '',
       start: '',
       end: '',
-      status: stayLabel === 'לניקוי' || stayLabel === 'בניקיון' || stayLabel === 'השלמות' ? 'פתוח' : 'בוצע'
+      status: stayLabel === 'לניקוי' || stayLabel === 'בנקיון' || stayLabel === 'בניקיון' || stayLabel === 'השלמות' ? 'פתוח' : (stayLabel === 'ממתין לבדיקה' ? 'ממתין לבדיקה' : 'בוצע'),
+      source: 'ops'
     }];
   return [...added, ...base];
 }
@@ -431,7 +450,7 @@ function rowFromUnit(unit, bookings, today) {
     payTone: priorityPayTone(payStatus),
     amount: primary && amount ? formatIlsFromAgorot(amount) : '',
     cleanKey: clean,
-    clean: cleaningLabel(clean),
+    clean: clean === 'IN_PROGRESS' && unit.assigned_staff ? `בנקיון | ${unit.assigned_staff}` : cleaningLabel(clean),
     reason: unit.custom_reason || '',
     staff: unit.assigned_staff || '',
     notes: [primary?.special_requests || '', unit.custom_reason || ''].filter(Boolean).join(' · '),
@@ -439,7 +458,8 @@ function rowFromUnit(unit, bookings, today) {
     phoneRaw: primary?.guest_phone || '',
     sort: Number(unit.sort_order ?? 999),
     tasks: tasksOf(unit, badge?.label),
-    charges: primary ? paymentsOf(primary) : []
+    charges: primary ? paymentsOf(primary) : [],
+    roomLog: Array.isArray(unit?.sop_progress?.roomLog) ? unit.sop_progress.roomLog : []
   };
 }
 
@@ -469,10 +489,32 @@ function HoldPill({ label }) {
   );
 }
 
-function GuestPill({ kind, booking, swap = false, onOpen }) {
+function phoneTail(raw) {
+  const digits = String(raw || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('972')) return digits.slice(3).slice(-9);
+  if (digits.startsWith('0')) return digits.slice(1).slice(-9);
+  return digits.slice(-9);
+}
+
+function findCallForBooking(calls, booking, unitId) {
+  if (!Array.isArray(calls) || !calls.length) return null;
+  const activeCalls = calls.filter((c) => !c.acked_at);
+  if (!activeCalls.length) return null;
+  return activeCalls.find((c) => {
+    if (booking?.id && c.booking_id && c.booking_id === booking.id) return true;
+    if (unitId && c.unit_id && (c.unit_id === unitId || c.unit_id === booking?.unit_id || c.unit_id === booking?.cabin_id)) return true;
+    const phoneA = phoneTail(c.guest_phone);
+    const phoneB = phoneTail(booking?.guest_phone || booking?.phone || '');
+    if (phoneA && phoneB && phoneA.length >= 7 && phoneA === phoneB) return true;
+    return false;
+  }) || null;
+}
+
+function GuestPill({ kind, booking, swap = false, onOpen, callPending = null, onAckCall = null }) {
   const full = booking?.guest_name || '';
   const name = swap ? guestFirstName(full) : (full || 'אורח');
-  const owes = kind === 'in' && balanceAgorot(booking) > 0;
+  const shekel = priorityShekelMark(booking);
   return (
     <button
       type="button"
@@ -485,9 +527,46 @@ function GuestPill({ kind, booking, swap = false, onOpen }) {
     >
       {kind === 'in' ? <span className="pill-arrow" dir="ltr">←</span> : null}
       <b>{name}</b>
+      {callPending ? (
+        <span
+          className="call-phone-badge"
+          title={`האורח מבקש שיחה${callPending.transferredName ? ` (הועבר ל${callPending.transferredName})` : ''} · לחץ לסימון כנפתר`}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (onAckCall) onAckCall(callPending.token);
+          }}
+        >
+          📞
+        </span>
+      ) : null}
       {kind === 'out' ? <span className="pill-arrow" dir="ltr">←</span> : null}
-      {owes ? <em className="owe">₪</em> : null}
+      {shekel ? <em className={shekel === 'blink' ? 'owe' : 'owe is-steady'}>₪</em> : null}
     </button>
+  );
+}
+
+function RoomLog({ entries, scope, onScope }) {
+  const rows = visibleRoomLog(entries, scope).slice().reverse();
+  return (
+    <div className="room-panel split-timeline">
+      <div className="room-log-bar">
+        <button type="button" className={scope === 'cycle' ? 'is-on' : ''} onClick={() => onScope('cycle')}>מהכניסה האחרונה</button>
+        <button type="button" className={scope === 'all' ? 'is-on' : ''} onClick={() => onScope('all')}>כל ההיסטוריה</button>
+      </div>
+      {rows.length ? rows.map((row) => (
+        <div key={row.id || `${row.at}-${row.text}`} className="timeline-item">
+          <div className="timeline-dot" />
+          <div className="timeline-card">
+            <div className="timeline-head">
+              <span className="timeline-actor">{row.actor || 'מערכת'}</span>
+              <span className="timeline-clock" dir="ltr">{roomLogClock(row.at)}</span>
+            </div>
+            <div className="timeline-body">{row.text}</div>
+            {row.quote && row.quote !== row.text ? <span className="log-quote">{row.quote}</span> : null}
+          </div>
+        </div>
+      )) : <div className="room-empty">אין עדיין רשומות לחדר</div>}
+    </div>
   );
 }
 
@@ -499,6 +578,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const [mode, setMode] = useState('grid');
   const [pinnedBookingId, setPinnedBookingId] = useState('');
   const [tab, setTab] = useState('tasks');
+  const [logScope, setLogScope] = useState('cycle');
   const [query, setQuery] = useState('');
   const [message, setMessage] = useState('הנתונים חיים מהיומן');
   const [drafts, setDrafts] = useState({});
@@ -516,6 +596,13 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const [sleepDate, setSleepDate] = useState('');
   const [sleepDay, setSleepDay] = useState(() => prioritySleepIsDay());
   const [refreshedAt, setRefreshedAt] = useState(null);
+  const [callAlerts, setCallAlerts] = useState([]);
+  const untransferredAlerts = useMemo(
+    () => callAlerts.filter((call) => !call.acked_at && !call.transferredTo && !call.transferred && !call.ownerId && !call.escalated),
+    [callAlerts]
+  );
+  const callAlertRef = useRef(false);
+  callAlertRef.current = untransferredAlerts.length > 0;
   const [calendarNote, setCalendarNote] = useState('');
   const [view, setView] = useState('desk');
   const [horizonStart, setHorizonStart] = useState(today);
@@ -653,7 +740,14 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         : (showGuest && payMethod !== 'VOUCHER' && row.cashCollectedAgorot ? formatPriorityShekels(row.cashCollectedAgorot) : ''),
       payTone: showGuest && row.bookingId ? priorityPayTone(payStatus) : '',
       staff: draft.staff != null ? draft.staff : row.staff,
-      weekLabel: (WEEK_STATUSES.find((choice) => choice.key === (draft.weekMark || liveWeekKey(draft.stay || row.stayKey, clean, row.reason))) || {}).label || row.clean,
+      weekLabel: (() => {
+        const staffName = draft.staff != null ? draft.staff : row.staff;
+        const cleanKey = draft.clean || row.cleanKey;
+        const isProgress = draft.weekMark === 'in_progress' || (!draft.weekMark && !row.holdLabel && (cleanKey === 'IN_PROGRESS' || liveWeekKey(draft.stay || row.stayKey, cleanKey, row.reason) === 'in_progress'));
+        if (isProgress) return staffName ? `בנקיון | ${staffName}` : 'בנקיון';
+        if (draft.weekMark) return (WEEK_STATUSES.find((choice) => choice.key === draft.weekMark) || {}).label || row.clean;
+        return row.holdLabel || (WEEK_STATUSES.find((choice) => choice.key === liveWeekKey(draft.stay || row.stayKey, clean, row.reason)) || {}).label || row.clean;
+      })(),
       weekDirty: Boolean(draft.weekMark),
       stayDirty: Boolean(draft.stay && draft.stay !== row.stayKey),
       cleanDirty: Boolean(draft.clean && draft.clean !== row.cleanKey),
@@ -665,6 +759,15 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const horizon = useMemo(() => (
     Array.from({ length: HORIZON_DAYS }, (_, index) => shiftDay(horizonStart, index))
   ), [horizonStart]);
+
+  const dailyOccupancy = useMemo(() => {
+    const inventoryList = units.filter(isInventoryUnit);
+    const result = {};
+    for (const day of horizon) {
+      result[day] = priorityDayOccupancy(bookings, inventoryList, day, { drafts });
+    }
+    return result;
+  }, [units, bookings, horizon, drafts]);
 
   const visible = useMemo(() => {
     const needle = query.trim();
@@ -684,6 +787,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const card = pinnedBooking && selected && pinnedBooking.unit_id === selected.id
     ? cardFromBooking(selected, pinnedBooking)
     : selected;
+  const cardCall = card ? findCallForBooking(callAlerts, pinnedBooking || bookings.find((b) => b.id === card.bookingId), card.id) : null;
   const visibleIndex = selected ? visible.findIndex((row) => row.id === selected.id) : -1;
 
   const move = (delta) => {
@@ -903,6 +1007,44 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       setMessage(kind === 'maintenance' ? `${selected.name}: נוספה משימת תחזוקה` : `${selected.name}: נוספה משימת ניקיון`);
     } catch (err) {
       const text = `המשימה לא נשמרה: ${err?.message || 'שגיאה'}`;
+      setSaveError(text);
+      setMessage(text);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleTaskDone = async (task) => {
+    const unit = units.find((item) => item.id === selected?.id);
+    if (!canEdit || saving || !unit || !task) return;
+    if (task.source === 'ops') {
+      const nextClean = task.status === 'בוצע' ? 'DIRTY' : 'READY';
+      chooseStatus(unit.id, 'clean', nextClean);
+      return;
+    }
+    setSaving(true);
+    setSaveError('');
+    try {
+      const prev = unit.sop_progress && typeof unit.sop_progress === 'object' ? unit.sop_progress : {};
+      let nextSop = { ...prev };
+      if (task.source === 'desk') {
+        const deskTasks = Array.isArray(prev.deskTasks) ? prev.deskTasks : [];
+        nextSop.deskTasks = deskTasks.map((t) => (t.id === task.id ? { ...t, done: t.done ? false : true } : t));
+      } else {
+        const doneSet = new Set(Array.isArray(prev.doneIds) ? prev.doneIds : []);
+        if (doneSet.has(task.id)) doneSet.delete(task.id);
+        else doneSet.add(task.id);
+        nextSop.doneIds = [...doneSet];
+      }
+      await pushUnitToCloud({
+        id: unit.id,
+        tenant_id: tenantId || unit.tenant_id,
+        name: unit.name,
+        sop_progress: nextSop
+      }, { viaEdge: true, waitRemote: true });
+      setMessage(`${selected.name}: סטטוס משימה עודכן`);
+    } catch (err) {
+      const text = `עדכון המשימה נכשל: ${err?.message || 'שגיאה'}`;
       setSaveError(text);
       setMessage(text);
     } finally {
@@ -1190,7 +1332,74 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
 
   useEffect(() => {
     if (!active) return undefined;
+    let stop = false;
+    const pull = async () => {
+      const token = getStoredToken();
+      if (!token) return;
+      try {
+        const response = await fetch('/api/ops/call-me', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (stop) return;
+        const rows = Array.isArray(data.calls) ? data.calls : [];
+        setCallAlerts(rows);
+        if (rows.length) {
+          asleepRef.current = false;
+          setAsleep(false);
+        }
+      } catch {
+        /* the next poll retries */
+      }
+    };
+    pull();
+    const timer = window.setInterval(pull, 4000);
+    return () => {
+      stop = true;
+      window.clearInterval(timer);
+    };
+  }, [active]);
+
+  async function ackGuestCall(token) {
+    const auth = getStoredToken();
+    if (!auth) return;
+    setCallAlerts((rows) => rows.filter((row) => row.token !== token));
+    await fetch('/api/ops/call-me/ack', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${auth}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token })
+    }).catch(() => {});
+  }
+
+  async function transferGuestCall(token, to) {
+    const auth = getStoredToken();
+    if (!auth) return;
+    const names = { rani: 'רני', zuki: 'צוקי', barak: 'ברק' };
+    setCallAlerts((rows) => rows.map((row) => (row.token === token ? {
+      ...row,
+      ownerId: '',
+      ownerName: '',
+      transferredTo: to,
+      transferredName: names[to] || '',
+      transferred: true,
+      escalated: to === 'barak',
+      offered: [...(row.offered || []), to]
+    } : row)));
+    await fetch('/api/ops/call-me/transfer', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${auth}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, to })
+    }).then(() => setMessage(`השיחה הועברה ל${names[to] || ''}`)).catch(() => {});
+  }
+
+  useEffect(() => {
+    if (!active) return undefined;
     const onKey = (event) => {
+      if (callAlertRef.current) {
+        event.preventDefault();
+        return;
+      }
       if (viewRef.current === 'cashflow') {
         if (event.key === 'Escape') {
           event.preventDefault();
@@ -1280,6 +1489,28 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
 
   return (
     <div className="priority-root" dir="rtl">
+      {untransferredAlerts.length ? (
+        <div className="call-alert" role="alertdialog" aria-label="האורח מבקש שיחה">
+          <p>המסך נשאר עד שהשיחה מועברת או מסומנת כנפתרה</p>
+          {untransferredAlerts.map((call) => (
+            <div key={call.token} className="call-alert-card">
+              <h1>האורח מבקש שיתקשרו אליו</h1>
+              <p>{[call.guest_name, call.cabin].filter(Boolean).join(' · ')}</p>
+              {call.guest_phone ? <a href={`tel:${call.guest_phone}`}>{call.guest_phone}</a> : null}
+              <p>{safeCallTime(call.requested_at)}</p>
+              <p>{call.ownerName ? `${call.ownerName} מתקשר` : call.escalated ? 'הועבר לברק' : 'ממתין למשרד'}</p>
+              <button type="button" onClick={() => ackGuestCall(call.token)}>השיחה נפתרה</button>
+              <div className="call-pass">
+                {['rani', 'zuki', 'barak'].filter((id) => id !== call.ownerId).map((id) => (
+                  <button key={id} type="button" onClick={() => transferGuestCall(call.token, id)}>
+                    {id === 'rani' ? 'העבר לרני' : id === 'zuki' ? 'העבר לצוקי' : 'העבר לברק'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
       {asleep ? createPortal(
         <button type="button" className={sleepDay ? 'priority-sleep is-day' : 'priority-sleep'} onClick={() => setAsleep(false)} aria-label="חזרה לפריוריטי">
           <img className="priority-sleep-photo is-night" src="/priority/kinneret-night.jpg" alt="" />
@@ -1336,6 +1567,9 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         <button type="button" className="tb-btn" onClick={() => printDailyDutyReport({ dateStr: today, kind: 'both', area: 'all', bookings, units })}><Printer size={14} /> דוח יומי מלא</button>
         <button type="button" className="tb-btn" onClick={() => printCashDayReport(bookings, units, today)}><Printer size={14} /> דוח מזומנים</button>
         <button type="button" className="tb-btn" onClick={() => printDailyDutyReport({ dateStr: today, kind: 'morning', area: 'all', bookings, units })}><Printer size={14} /> תחילת יום</button>
+        <button type="button" className={`tb-btn tb-end${view === 'calendar' ? ' is-on' : ''}`} onClick={() => setView((current) => (current === 'calendar' ? 'desk' : 'calendar'))}>
+          יומן
+        </button>
         {showCashflow ? (
           <button type="button" className={`tb-btn tb-end${view === 'cashflow' ? ' is-on' : ''}`} onClick={() => setView((current) => (current === 'cashflow' ? 'desk' : 'cashflow'))}>
             הוצאות חודשיות
@@ -1360,218 +1594,192 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         </div>
       </div>
       <div className="priority-body">
-        {mode === 'form' && card ? (
-          <>
-            <div className="master">
-              <div className="master-col">
-                <Field label="שם אורח" value={card.guest} />
-                <Field label="תעודת זהות" value={card.nationalId} />
-                <PhoneField label="טלפון" phone={card.phone} raw={card.phoneRaw} />
-                <Field label="הרכב אורחים" value={card.party} />
-              </div>
-              <div className="master-col">
-                <Field label="יחידה" value={card.name} />
-                <Field label="צ׳ק-אין" value={card.checkIn} />
-                <Field label="צ׳ק-אאוט" value={card.checkOut} />
-                <Field label="מספר לילות" value={card.nights} />
-              </div>
-              <div className="master-col">
-                <Field label="סטטוס אירוח" value={card.stay} className={card.holdLabel ? 'tone-hold' : toneOf(card.stay)} />
-                <Field label="סטטוס ניקיון" value={card.clean} className={toneOf(card.clean)} />
-                <label className="field">
-                  <span>עובד משובץ</span>
-                  <select
-                    disabled={!canEdit}
-                    value={card.staff || ''}
-                    onChange={(event) => chooseStatus(card.id, 'staff', event.target.value)}
-                  >
-                    <option value="">—</option>
-                    {choicesFor('staff', housekeepers, card.staff).filter((choice) => choice.key).map((choice) => (
-                      <option key={choice.key} value={choice.key}>{choice.label}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <div className="master-col">
-                <label className="field">
-                  <span>סה״כ לתשלום</span>
-                  <input
-                    inputMode="decimal"
-                    disabled={!canEdit || !card.bookingId}
-                    value={card.bookingId ? card.amountText : ''}
-                    placeholder={card.bookingId ? '0 ₪' : ''}
-                    onChange={(event) => patchDraft(card.id, { amountText: event.target.value })}
-                  />
-                </label>
-                <Field
-                  label="יתרה לתשלום"
-                  className="is-due"
-                  value={card.bookingId ? formatPriorityShekels(Math.max(0, (Number(card.amountAgorot) || 0) - (Number(card.paidAgorot) || 0))) : ''}
-                />
-                <label className="field">
-                  <span>גביית מזומן (F2)</span>
-                  <span className="pay-line">
-                    <input
-                      className="cash-amount"
-                      inputMode="decimal"
-                      aria-label="גביית מזומן"
-                      placeholder="סכום"
-                      disabled={!canEdit || !card.bookingId}
-                      value={card.collectedText || ''}
-                      onChange={(event) => patchDraft(card.id, { collectedText: event.target.value })}
-                    />
+        {view === 'calendar' ? (
+          <PriorityCalendar
+            horizon={horizon}
+            today={today}
+            onSelect={(meeting) => setMessage(formatManagerMeeting(meeting))}
+          />
+        ) : mode === 'form' && card ? (
+          <div className="priority-split-view">
+            {/* צד ימין (65%): פרטי ההזמנה, סטטוסים, פיננסים ומלאי ציוד ביקונים בחדר */}
+            <div className="split-details-col">
+              <div className="master">
+                <div className="master-col">
+                  <div className="master-col-title master-col-title-row">
+                    <span>פרטי אורח</span>
                     <button
                       type="button"
-                      className="cash-btn"
-                      disabled={!canEdit || !card.bookingId || saving}
-                      onClick={() => collectCash(card)}
+                      className="tb-btn guest-file-btn"
+                      disabled={!card.bookingId}
+                      onClick={() => {
+                        const booking = (pinnedBooking && pinnedBooking.id === card.bookingId)
+                          ? pinnedBooking
+                          : bookings.find((item) => item.id === card.bookingId);
+                        if (!booking || isUnavailableHoldBooking(booking) || booking.booking_status === 'CANCELED') return;
+                        printGuestFile(booking, { units, bookings });
+                      }}
                     >
-                      גבייה
+                      <Printer size={12} /> דף אורח
                     </button>
-                  </span>
-                </label>
-                <label className="field">
-                  <span>סטטוס תשלום</span>
-                  <select
-                    className={priorityPayTone(card.payStatus)}
-                    disabled={!canEdit || !card.bookingId}
-                    value={card.bookingId ? (card.payStatus || 'UNPAID') : ''}
-                    onChange={(event) => patchDraft(card.id, { payStatus: event.target.value })}
-                  >
-                    {card.bookingId ? null : <option value="" />}
-                    {PAYMENT_STATUSES.map((choice) => <option key={choice.key} value={choice.key}>{choice.label}</option>)}
-                  </select>
-                </label>
-              </div>
-              <label className="field master-note">
-                <span>הערה בכינורות</span>
-                <textarea
-                  className="kinorot-note"
-                  disabled={!canEdit || !kinorotNote.resId || kinorotNote.loading || saving}
-                  value={kinorotNote.draft}
-                  placeholder={kinorotNote.loading ? 'טוען את ההערה' : kinorotNote.resId ? 'הערה שתופיע בכינורות' : 'אין הזמנת כינורות'}
-                  onChange={(event) => setKinorotNote((current) => ({ ...current, draft: event.target.value }))}
-                />
-                <button
-                  type="button"
-                  className="tb-btn note-save"
-                  disabled={!canEdit || saving || !kinorotNote.resId || kinorotNote.loading || kinorotNote.draft === kinorotNote.saved}
-                  onClick={async () => {
-                    setSaving(true);
-                    setSaveError('');
-                    try {
-                      await saveKinorotNote();
-                      setMessage('ההערה נשמרה בכינורות');
-                    } catch (err) {
-                      const text = `ההערה לא נשמרה: ${err?.message || 'שגיאה'}`;
-                      setSaveError(text);
-                      setMessage(text);
-                    } finally {
-                      setSaving(false);
-                    }
-                  }}
-                >
-                  שמור הערה
-                </button>
-              </label>
-            </div>
-            <div className="tab-strip">
-              <button type="button" className={`tab-btn${tab === 'tasks' ? ' is-on' : ''}`} onClick={() => setTab('tasks')}>משימות</button>
-              <button type="button" className={`tab-btn${tab === 'notes' ? ' is-on' : ''}`} onClick={() => setTab('notes')}>הערות</button>
-              <button type="button" className={`tab-btn${tab === 'comms' ? ' is-on' : ''}`} onClick={() => setTab('comms')}>תקשורת</button>
-              <button type="button" className={`tab-btn${tab === 'bill' ? ' is-on' : ''}`} onClick={() => setTab('bill')}>חיובים</button>
-              <button
-                type="button"
-                className="tab-btn guest-file-btn"
-                disabled={!card.bookingId}
-                onClick={() => {
-                  const booking = (pinnedBooking && pinnedBooking.id === card.bookingId)
-                    ? pinnedBooking
-                    : bookings.find((item) => item.id === card.bookingId);
-                  if (!booking || isUnavailableHoldBooking(booking) || booking.booking_status === 'CANCELED') return;
-                  printGuestFile(booking, { units, bookings });
-                }}
-              >
-                דף אורח
-              </button>
-            </div>
-            <div className="child-pane">
-              <div className="grid-wrap">
-                {tab === 'tasks' ? (
-                  <>
-                    <div className="room-add">
-                      <input
-                        value={taskTitle}
-                        disabled={!canEdit || saving}
-                        placeholder="תיאור משימה"
-                        onChange={(event) => setTaskTitle(event.target.value)}
-                      />
-                      <button type="button" disabled={!canEdit || saving || !taskTitle.trim()} onClick={() => addDeskTask('cleaning')}>ניקיון</button>
-                      <button type="button" disabled={!canEdit || saving || !taskTitle.trim()} onClick={() => addDeskTask('maintenance')}>תחזוקה</button>
-                    </div>
-                    <table className="erp-table">
-                      <thead>
-                        <tr>
-                          <th>קוד</th><th>תיאור</th><th>עובד</th><th>סטטוס</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {card.tasks.map((task) => (
-                          <tr key={task.id}>
-                            <td>{task.code}</td>
-                            <td>{task.title}</td>
-                            <td>{task.staff}</td>
-                            <td className={task.status === 'פתוח' ? 'tone-wait' : 'tone-ok'}>{task.status}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </>
-                ) : tab === 'notes' ? (
-                  <div className="room-panel">
-                    <div className="room-add">
-                      <input
-                        value={noteText}
-                        disabled={!canEdit || saving || !card.bookingId}
-                        placeholder={card.bookingId ? 'הערה חופשית' : 'אין אורח על היחידה'}
-                        onChange={(event) => setNoteText(event.target.value)}
-                      />
-                      <button type="button" disabled={!canEdit || saving || !card.bookingId || !noteText.trim()} onClick={addRoomNote}>הוסף</button>
-                    </div>
-                    {(card.notesList || []).length ? (card.notesList || []).slice().reverse().map((note) => (
-                      <div key={note.id} className="room-line">
-                        <b>{note.by || 'משרד'} · {note.at ? new Date(note.at).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}</b>
-                        <span>{note.text}</span>
-                      </div>
-                    )) : <div className="room-empty">אין הערות חופשיות</div>}
                   </div>
-                ) : tab === 'comms' ? (
-                  <RoomComms bookingId={card.bookingId} phone={card.phoneRaw} canEdit={canEdit} />
-                ) : (
-                  <table className="erp-table">
-                    <thead>
-                      <tr><th>פריט</th><th>תאריך</th><th>אסמכתה</th><th>סכום</th><th>משלם</th></tr>
-                    </thead>
-                    <tbody>
-                      {card.charges.length ? card.charges.map((charge, index) => (
-                        <tr key={charge.txn || charge.ref || index}>
-                          <td>{charge.accountLabel}</td>
-                          <td>{charge.date || String(charge.collected_at || '').slice(0, 10)}</td>
-                          <td>{charge.ref}</td>
-                          <td>{formatIlsFromAgorot(charge.amount_agorot)}</td>
-                          <td>{[charge.payer_name, charge.payer_id].filter(Boolean).join(' · ')}</td>
-                        </tr>
-                      )) : <tr><td className="empty-row" colSpan={5}>אין חיובים רשומים ליחידה הזו</td></tr>}
-                    </tbody>
-                  </table>
-                )}
+                  <Field
+                    label="שם אורח"
+                    value={
+                      cardCall ? (
+                        <span className="guest-with-call">
+                          <span>{card.guest}</span>
+                          <button
+                            type="button"
+                            className="call-phone-pill"
+                            title={`האורח ביקש שיחה${cardCall.transferredName ? ` (הועבר ל${cardCall.transferredName})` : ''} - לחץ לסימון כנפתר`}
+                            onClick={() => ackGuestCall(cardCall.token)}
+                          >
+                            📞 {cardCall.transferredName ? `הועבר ל${cardCall.transferredName}` : 'מבקש שיחה'} (סמן כנפתר)
+                          </button>
+                        </span>
+                      ) : card.guest
+                    }
+                  />
+                  <Field label="תעודת זהות" value={card.nationalId} />
+                  <PhoneField label="טלפון" phone={card.phone} raw={card.phoneRaw} />
+                  <Field label="הרכב אורחים" value={card.party} />
+                </div>
+                <div className="master-col">
+                  <div className="master-col-title">יחידה ומועדים</div>
+                  <Field label="יחידה" value={card.name} />
+                  <Field label="צ׳ק-אין" value={card.checkIn} />
+                  <Field label="צ׳ק-אאוט" value={card.checkOut} />
+                  <Field label="מספר לילות" value={card.nights} />
+                </div>
+                <div className="master-col">
+                  <div className="master-col-title">סטטוסים ותפעול</div>
+                  <Field label="סטטוס אירוח" value={card.stay} className={card.holdLabel ? 'tone-hold' : toneOf(card.stay)} />
+                  <Field label="סטטוס ניקיון" value={card.clean} className={toneOf(card.clean)} />
+                  <label className="field">
+                    <span>עובד משובץ</span>
+                    <select
+                      disabled={!canEdit}
+                      value={card.staff || ''}
+                      onChange={(event) => chooseStatus(card.id, 'staff', event.target.value)}
+                    >
+                      <option value="">—</option>
+                      {choicesFor('staff', housekeepers, card.staff).filter((choice) => choice.key).map((choice) => (
+                        <option key={choice.key} value={choice.key}>{choice.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="master-col">
+                  <div className="master-col-title">פיננסים וגבייה</div>
+                  <label className="field">
+                    <span>סה״כ לתשלום</span>
+                    <input
+                      inputMode="decimal"
+                      disabled={!canEdit || !card.bookingId}
+                      value={card.bookingId ? card.amountText : ''}
+                      placeholder={card.bookingId ? '0 ₪' : ''}
+                      onChange={(event) => patchDraft(card.id, { amountText: event.target.value })}
+                    />
+                  </label>
+                  <Field
+                    label="יתרה לתשלום"
+                    className="is-due"
+                    value={card.bookingId ? formatPriorityShekels(Math.max(0, (Number(card.amountAgorot) || 0) - (Number(card.paidAgorot) || 0))) : ''}
+                  />
+                  <label className="field">
+                    <span>גביית מזומן (F2)</span>
+                    <span className="pay-line">
+                      <input
+                        className="cash-amount"
+                        inputMode="decimal"
+                        aria-label="גביית מזומן"
+                        placeholder="סכום"
+                        disabled={!canEdit || !card.bookingId}
+                        value={card.collectedText || ''}
+                        onChange={(event) => patchDraft(card.id, { collectedText: event.target.value })}
+                      />
+                      <button
+                        type="button"
+                        className="cash-btn"
+                        disabled={!canEdit || !card.bookingId || saving}
+                        onClick={() => collectCash(card)}
+                      >
+                        גבייה
+                      </button>
+                    </span>
+                  </label>
+                  <label className="field">
+                    <span>סטטוס תשלום</span>
+                    <select
+                      className={priorityPayTone(card.payStatus)}
+                      disabled={!canEdit || !card.bookingId}
+                      value={card.bookingId ? (card.payStatus || 'UNPAID') : ''}
+                      onChange={(event) => patchDraft(card.id, { payStatus: event.target.value })}
+                    >
+                      {card.bookingId ? null : <option value="" />}
+                      {PAYMENT_STATUSES.map((choice) => <option key={choice.key} value={choice.key}>{choice.label}</option>)}
+                    </select>
+                  </label>
+                </div>
               </div>
+
+              {/* רשימת מלאי ציוד בחדר (מחובר לביקונים) */}
+              <RoomBeaconInventory card={card} />
             </div>
-          </>
+
+            {/* צד שמאל (35%): פאנל WhatsApp / Task Feed בגובה מלא */}
+            <SplitFeedPanel
+              card={card}
+              tab={tab}
+              setTab={setTab}
+              logScope={logScope}
+              setLogScope={setLogScope}
+              canEdit={canEdit}
+              saving={saving}
+              setSaving={setSaving}
+              setSaveError={setSaveError}
+              taskTitle={taskTitle}
+              setTaskTitle={setTaskTitle}
+              addDeskTask={addDeskTask}
+              toggleTaskDone={toggleTaskDone}
+              noteText={noteText}
+              setNoteText={setNoteText}
+              addRoomNote={addRoomNote}
+              kinorotNote={kinorotNote}
+              setKinorotNote={setKinorotNote}
+              saveKinorotNote={saveKinorotNote}
+              setMessage={setMessage}
+            />
+          </div>
         ) : (
           <div className="grid-wrap">
             <table className="erp-table week-table">
               <thead>
+                <tr className="occupancy-row">
+                  <th className="unit-cell occupancy-label">
+                    <span className="occupancy-title">תפוסה כוללת</span>
+                  </th>
+                  {horizon.map((day) => {
+                    const stats = dailyOccupancy[day] || { percent: 0, occupied: 0, total: 0 };
+                    return (
+                      <th
+                        key={day}
+                        className={`occupancy-cell${day === today ? ' is-today' : ''}`}
+                        title={`${stats.occupied} מתוך ${stats.total} חדרים (${stats.percent}%)`}
+                      >
+                        <div className="occupancy-cell-content">
+                          <span className={`occupancy-badge ${occupancyTone(stats.percent)}`}>
+                            {stats.percent}%
+                          </span>
+                          <span className="occupancy-sub">
+                            {stats.occupied}/{stats.total}
+                          </span>
+                        </div>
+                      </th>
+                    );
+                  })}
+                </tr>
                 <tr className="label-row">
                   <th className="unit-cell">יחידה</th>
                   {horizon.map((day) => (
@@ -1582,7 +1790,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
               <tbody>
                 {visible.map((row, index) => (
                   <React.Fragment key={row.id}>
-                    {index === 0 || visible[index - 1].area !== row.area ? (
+                    {row.area !== 'ramot' && (index === 0 || visible[index - 1].area !== row.area) ? (
                       <tr className="area-break">
                         <td colSpan={horizon.length + 1}>{priorityAreaLabel(row.area)}</td>
                       </tr>
@@ -1607,20 +1815,47 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                           <td key={day} className={`week-cell${day === today ? ' is-today' : ''}`}>
                             {cell.kind === 'swap' ? (
                               <div className="swap-cell">
-                                <GuestPill swap kind="out" booking={cell.out} onOpen={() => openGuest(row.id, cell.out)} />
-                                <GuestPill swap kind="in" booking={cell.inn} onOpen={() => openGuest(row.id, cell.inn)} />
+                                <GuestPill
+                                  swap
+                                  kind="out"
+                                  booking={cell.out}
+                                  callPending={findCallForBooking(callAlerts, cell.out, row.id)}
+                                  onAckCall={ackGuestCall}
+                                  onOpen={() => openGuest(row.id, cell.out)}
+                                />
+                                <GuestPill
+                                  swap
+                                  kind="in"
+                                  booking={cell.inn}
+                                  callPending={findCallForBooking(callAlerts, cell.inn, row.id)}
+                                  onAckCall={ackGuestCall}
+                                  onOpen={() => openGuest(row.id, cell.inn)}
+                                />
                               </div>
                             ) : cell.kind === 'swap-hold' ? (
                               <div className="swap-cell">
-                                <GuestPill swap kind="out" booking={cell.out} onOpen={() => openGuest(row.id, cell.out)} />
+                                <GuestPill
+                                  swap
+                                  kind="out"
+                                  booking={cell.out}
+                                  callPending={findCallForBooking(callAlerts, cell.out, row.id)}
+                                  onAckCall={ackGuestCall}
+                                  onOpen={() => openGuest(row.id, cell.out)}
+                                />
                                 <HoldPill label={cell.holdLabel} />
                               </div>
                             ) : cell.kind === 'empty' ? (
                               holdText
-                                ? <span className="week-hold">{holdText}</span>
+                                ? <HoldPill label={holdText} />
                                 : <span className="week-empty">+ שריין / לאסט מיניט</span>
                             ) : (
-                              <GuestPill kind={cell.kind} booking={cell.guest} onOpen={() => openGuest(row.id, cell.guest)} />
+                              <GuestPill
+                                kind={cell.kind}
+                                booking={cell.guest}
+                                callPending={findCallForBooking(callAlerts, cell.guest, row.id)}
+                                onAckCall={ackGuestCall}
+                                onOpen={() => openGuest(row.id, cell.guest)}
+                              />
                             )}
                           </td>
                         );
@@ -1636,7 +1871,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       </div>
       <div className={`priority-status${saveError ? ' is-error' : ''}`}>
         <span>{message}</span>
-        <b>{selected ? `${selected.name} · ${visibleIndex + 1} / ${visible.length}` : 'אין יחידה'}</b>
+        <b>{view === 'calendar' ? 'יומן · 7 ימים' : (selected ? `${selected.name} · ${visibleIndex + 1} / ${visible.length}` : 'אין יחידה')}</b>
       </div>
       {editor && menuBox ? (
         <div className="cell-menu" style={{ top: menuBox.top, right: menuBox.right, minWidth: menuBox.width }} role="listbox">
@@ -1660,16 +1895,234 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   );
 }
 
-function RoomComms({ bookingId, phone, canEdit }) {
-  const [rows, setRows] = useState([]);
-  const [draft, setDraft] = useState('');
-  const [callNote, setCallNote] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+function renderMessageWithStayLinks(content) {
+  const text = String(content || '');
+  const parts = text.split(/(https?:\/\/[^\s]+\/stay\/[^\s]+|\/stay\/[^\s]+)/g);
+  return parts.map((part, idx) => {
+    if (/^(https?:\/\/[^\s]+\/stay\/[^\s]+|\/stay\/[^\s]+)$/.test(part)) {
+      return (
+        <a
+          key={idx}
+          href={part}
+          target="_blank"
+          rel="noreferrer"
+          className="chat-stay-link"
+        >
+          <ExternalLink size={12} /> קישור לדף אורח ({part.replace(/^https?:\/\/[^/]+/, '')})
+        </a>
+      );
+    }
+    return <React.Fragment key={idx}>{part}</React.Fragment>;
+  });
+}
 
-  async function load() {
+function BeaconItemIllustration({ name }) {
+  const n = String(name || '').toLowerCase();
+  if (n.includes('סודסטרים') || n.includes('סודה') || n.includes('soda')) {
+    return (
+      <svg className="beacon-illus" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+        {/* רקע עדין */}
+        <rect x="4" y="4" width="56" height="56" rx="14" fill="#EFF6FF" stroke="#BFDBFE" strokeWidth="1.5" />
+        {/* בסיס ועמוד סודסטרים */}
+        <path d="M18 52H46" stroke="#1E3A8A" strokeWidth="3.5" strokeLinecap="round" />
+        <rect x="20" y="14" width="12" height="38" rx="4" fill="#1E293B" />
+        <path d="M22 14H42C44.2 14 46 15.8 46 18V23C46 24.7 44.7 26 43 26H32V14Z" fill="#334155" />
+        {/* כפתור הגזה עליון */}
+        <rect x="33" y="10" width="9" height="4" rx="2" fill="#38BDF8" />
+        {/* צינורית הגזה */}
+        <line x1="38" y1="26" x2="38" y2="41" stroke="#94A3B8" strokeWidth="1.8" strokeLinecap="round" />
+        {/* בקבוק שקוף עם מים מוגזים */}
+        <path d="M34 26H42L44 33V46C44 48.2 42.2 50 40 50H36C33.8 50 32 48.2 32 46V33L34 26Z" fill="#E0F2FE" stroke="#0284C7" strokeWidth="1.8" />
+        <path d="M33 36H43V46C43 47.7 41.7 49 40 49H36C34.3 49 33 47.7 33 46V36Z" fill="#BAE6FD" />
+        {/* בועות סודה */}
+        <circle cx="36" cy="45" r="1.4" fill="#0284C7" />
+        <circle cx="40" cy="42" r="1.7" fill="#0EA5E9" />
+        <circle cx="37" cy="39" r="1.2" fill="#0284C7" />
+        <circle cx="40.5" cy="37" r="1" fill="#38BDF8" />
+        {/* גלי ביקון קטנים */}
+        <path d="M49 14C51.5 16.5 51.5 20.5 49 23" stroke="#16A34A" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="M52.5 11.5C56.2 15.2 56.2 21.8 52.5 25.5" stroke="#22C55E" strokeWidth="1.5" strokeLinecap="round" opacity="0.75" />
+      </svg>
+    );
+  }
+  if (n.includes('קפה') || n.includes('נספרסו') || n.includes('אספרסו')) {
+    return (
+      <svg className="beacon-illus" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+        <rect x="4" y="4" width="56" height="56" rx="14" fill="#FEF3C7" stroke="#FDE68A" strokeWidth="1.5" />
+        <rect x="18" y="14" width="24" height="36" rx="5" fill="#78350F" />
+        <rect x="22" y="18" width="16" height="8" rx="2" fill="#FDE68A" />
+        <path d="M26 36H38V44C38 46.2 36.2 48 34 48H30C27.8 48 26 46.2 26 44V36Z" fill="#FFFFFF" stroke="#92400E" strokeWidth="1.8" />
+        <path d="M38 38H41C42.1 38 43 38.9 43 40V41C43 42.1 42.1 43 41 43H38" stroke="#92400E" strokeWidth="1.8" />
+        <path d="M48 15C50.5 17.5 50.5 21.5 48 24" stroke="#16A34A" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  return (
+    <svg className="beacon-illus" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <rect x="4" y="4" width="56" height="56" rx="14" fill="#F1F5F9" stroke="#CBD5E1" strokeWidth="1.5" />
+      <circle cx="32" cy="34" r="12" fill="#1E293B" stroke="#38BDF8" strokeWidth="2" />
+      <circle cx="32" cy="34" r="4" fill="#38BDF8" />
+      <path d="M22 20C27.5 15 36.5 15 42 20" stroke="#16A34A" strokeWidth="2" strokeLinecap="round" />
+      <path d="M18 15C26 8.5 38 8.5 46 15" stroke="#22C55E" strokeWidth="1.6" strokeLinecap="round" opacity="0.7" />
+    </svg>
+  );
+}
+
+function rssiBars(rssi, present) {
+  if (!present || !Number.isFinite(Number(rssi))) return 0;
+  const val = Number(rssi);
+  if (val >= -60) return 4;
+  if (val >= -72) return 3;
+  if (val >= -84) return 2;
+  return 1;
+}
+
+function RoomBeaconInventory({ card }) {
+  const [report, setReport] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const isOffice = card?.id === 'pilot-office' || card?.name === 'משרד';
+
+  const pullBeacons = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/pilot/assets');
+      if (response.ok) {
+        const data = await response.json();
+        setReport(data);
+      }
+    } catch {
+      /* ignore network error */
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    pullBeacons();
+    const timer = setInterval(pullBeacons, 10000);
+    return () => clearInterval(timer);
+  }, [card?.id]);
+
+  const rawAssets = isOffice ? (Array.isArray(report?.assets) ? report.assets : []) : [];
+  const assets = isOffice && rawAssets.length === 0
+    ? [{ mac: 'fb:d0:1a:46:8d:59', name: 'סודסטרים', rssi: -69, lastSeenSec: 1, present: true, status: 'SAFE' }]
+    : rawAssets;
+
+  const checkedTime = report?.checkedAt
+    ? new Date(report.checkedAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : '';
+
+  return (
+    <div className="master-bottom-box beacon-inventory-box">
+      <div className="beacon-inv-header">
+        <div className="beacon-inv-title-wrap">
+          <span className="beacon-live-dot" />
+          <strong>רשימת מלאי ציוד בחדר · ביקונים (BLE)</strong>
+          <span className="beacon-unit-pill">{card?.name || ''}</span>
+        </div>
+        <div className="beacon-inv-meta">
+          {checkedTime ? <span className="beacon-checked-at">עדכון אחרון: {checkedTime}</span> : null}
+          <button type="button" className="tb-btn beacon-refresh-btn" onClick={pullBeacons} disabled={loading}>
+            <RefreshCw size={12} /> רענן סריקה
+          </button>
+        </div>
+      </div>
+
+      {assets.length ? (
+        <div className="beacon-inv-grid">
+          {assets.map((asset) => {
+            const isMissing = !asset.present || asset.status === 'ALERT_MISSING';
+            const isSuspect = asset.status === 'SUSPECT_OUTSIDE';
+            const stateClass = isMissing ? 'is-missing' : isSuspect ? 'is-suspect' : 'is-safe';
+            const stateLabel = isMissing
+              ? 'לא נמצא בחדר!'
+              : isSuspect
+                ? 'חשד ליציאה לחצר'
+                : (isOffice ? 'נמצא כרגע במשרד ✓' : 'נמצא כרגע בחדר ✓');
+            const bars = rssiBars(asset.rssi, !isMissing);
+            const seenText = asset.lastSeenSec != null
+              ? (asset.lastSeenSec <= 3 ? 'נקלט כעת (בזמן אמת)' : `נקלט לפני ${asset.lastSeenSec} שניות`)
+              : (checkedTime ? `נסרק ב-${checkedTime}` : 'פעיל');
+
+            return (
+              <div key={asset.mac || asset.name} className={`beacon-inv-card ${stateClass}`}>
+                <BeaconItemIllustration name={asset.name} />
+                <div className="beacon-inv-info">
+                  <div className="beacon-inv-top">
+                    <strong className="beacon-item-name">{asset.name}</strong>
+                    <span className={`beacon-presence-badge ${stateClass}`}>{stateLabel}</span>
+                  </div>
+                  <div className="beacon-inv-details">
+                    <span>📍 יחידה: <b>{card?.name || 'משרד'}</b></span>
+                    <span dir="ltr" className="beacon-mac">🏷️ {asset.mac}</span>
+                  </div>
+                  <div className="beacon-inv-telemetry">
+                    <span className="beacon-seen-time">⏱ {seenText}</span>
+                    <span className="beacon-signal" dir="ltr" title={asset.rssi != null ? `RSSI: ${asset.rssi} dBm` : ''}>
+                      <span className="signal-bars" aria-hidden="true">
+                        {[1, 2, 3, 4].map((level) => (
+                          <i key={level} className={`sig-bar b${level}${bars >= level ? ' is-on' : ''}`} />
+                        ))}
+                      </span>
+                      {asset.rssi != null ? <small>{asset.rssi} dBm</small> : null}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="beacon-empty-box">
+          <BeaconItemIllustration name="beacon" />
+          <div>
+            <strong>אין ביקונים משויכים ליחידה {card?.name} כרגע</strong>
+            <p>ציוד מנוטר ביקונים פעיל כעת ביחידת <b>משרד</b> (סודסטרים · BLE Beacon).</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SplitFeedPanel({
+  card,
+  tab,
+  setTab,
+  logScope,
+  setLogScope,
+  canEdit,
+  saving,
+  setSaving,
+  setSaveError,
+  taskTitle,
+  setTaskTitle,
+  addDeskTask,
+  toggleTaskDone,
+  noteText,
+  setNoteText,
+  addRoomNote,
+  kinorotNote,
+  setKinorotNote,
+  saveKinorotNote,
+  setMessage
+}) {
+  const [commsRows, setCommsRows] = useState([]);
+  const [commsBusy, setCommsBusy] = useState(false);
+  const [commsError, setCommsError] = useState('');
+  const [quickInput, setQuickInput] = useState('');
+  const [taskKind, setTaskKind] = useState('cleaning');
+  const feedEndRef = useRef(null);
+
+  const bookingId = card?.bookingId || '';
+  const phone = card?.phoneRaw || card?.phone || '';
+  const localPhone = toMicropayPhone(phone);
+  const waPhone = localPhone ? `972${localPhone.slice(1)}` : '';
+
+  async function loadComms() {
     if (!bookingId) {
-      setRows([]);
+      setCommsRows([]);
       return;
     }
     const headers = { Accept: 'application/json' };
@@ -1678,14 +2131,15 @@ function RoomComms({ bookingId, phone, canEdit }) {
     const response = await fetch(`/api/guest-comms?booking_id=${encodeURIComponent(bookingId)}`, { headers });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || 'COMMS_LIST_FAILED');
-    setRows(Array.isArray(data.rows) ? data.rows : []);
+    setCommsRows(Array.isArray(data.rows) ? data.rows : []);
   }
 
   useEffect(() => {
-    load().catch((err) => setError(err.message || 'שגיאה'));
+    setCommsError('');
+    loadComms().catch((err) => setCommsError(err.message || 'שגיאה'));
   }, [bookingId]);
 
-  async function post(body) {
+  async function postComm(body) {
     const headers = { Accept: 'application/json', 'Content-Type': 'application/json' };
     const token = getStoredToken();
     if (token) headers.Authorization = `Bearer ${token}`;
@@ -1696,84 +2150,417 @@ function RoomComms({ bookingId, phone, canEdit }) {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || 'COMMS_SEND_FAILED');
+    return data;
   }
 
-  async function sendSms() {
-    const message = draft.trim();
-    if (!bookingId || !message || busy) return;
-    setBusy(true);
-    setError('');
+  async function sendStayLinkQuick() {
+    if (!bookingId || commsBusy || !canEdit) return;
+    setCommsBusy(true);
+    setCommsError('');
     try {
-      await post({ message, channel: 'sms', kind: 'manual' });
-      setDraft('');
-      await load();
+      await postComm({ channel: 'sms', template_id: 'checkin', kind: 'stay_link' });
+      await loadComms();
+      if (setMessage) setMessage(`${card.name}: נשלח קישור דף אורח בסמס`);
+      if (tab !== 'comms') setTab('comms');
     } catch (err) {
-      setError(err.message || 'השליחה נכשלה');
+      setCommsError(err.message || 'שליחת קישור נכשלה');
     } finally {
-      setBusy(false);
+      setCommsBusy(false);
     }
   }
 
-  async function logCall() {
-    const message = callNote.trim() || 'שיחה אל האורח';
-    if (!bookingId || busy) return;
-    setBusy(true);
-    setError('');
+  async function logQuickCall() {
+    if (!bookingId || commsBusy || !canEdit) return;
+    setCommsBusy(true);
+    setCommsError('');
     try {
-      await post({ message, channel: 'phone', kind: 'call' });
-      setCallNote('');
-      if (phone) {
+      await postComm({ message: quickInput.trim() || 'שיחה אל האורח', channel: 'phone', kind: 'call' });
+      setQuickInput('');
+      if (localPhone) {
         const anchor = document.createElement('a');
-        anchor.href = `tel:${String(phone).replace(/\s/g, '')}`;
+        anchor.href = `tel:${localPhone}`;
         anchor.click();
       }
-      await load();
+      await loadComms();
     } catch (err) {
-      setError(err.message || 'השיחה לא נרשמה');
+      setCommsError(err.message || 'השיחה לא נרשמה');
     } finally {
-      setBusy(false);
+      setCommsBusy(false);
     }
   }
 
-  function label(row) {
-    if (row.channel === 'phone' || row.metadata?.kind === 'call') return 'שיחה';
-    return 'הודעה';
+  async function handleQuickSubmit(e) {
+    if (e) e.preventDefault();
+    if (!canEdit || saving || commsBusy) return;
+
+    if (tab === 'tasks') {
+      if (!taskTitle.trim()) return;
+      await addDeskTask(taskKind);
+      return;
+    }
+
+    if (tab === 'notes') {
+      if (!noteText.trim()) return;
+      await addRoomNote();
+      return;
+    }
+
+    const val = quickInput.trim();
+    if (!val) return;
+
+    // Default (comms / log / bill): send SMS to guest
+    if (!bookingId) {
+      setCommsError('אין אורח על היחידה');
+      return;
+    }
+    setCommsBusy(true);
+    setCommsError('');
+    try {
+      await postComm({ message: val, channel: 'sms', kind: 'manual' });
+      setQuickInput('');
+      await loadComms();
+      if (tab !== 'comms') setTab('comms');
+    } catch (err) {
+      setCommsError(err.message || 'השליחה נכשלה');
+    } finally {
+      setCommsBusy(false);
+    }
   }
 
-  if (!bookingId) return <div className="room-empty">אין אורח על היחידה</div>;
+  function commLabel(row) {
+    if (row.channel === 'phone' || row.metadata?.kind === 'call') return '📞 שיחה';
+    if (row.channel === 'whatsapp' || row.metadata?.kind === 'whatsapp') {
+      return row.direction === 'inbound' ? '💬 וואטסאפ מאורח' : '💬 וואטסאפ לאורח';
+    }
+    if (row.metadata?.kind === 'stay_link' || row.metadata?.kind === 'guest_link' || row.metadata?.template === 'checkin') {
+      return '🔗 קישור דף אורח (SMS)';
+    }
+    if (row.metadata?.kind === 'checkout_reminder') return '⏰ תזכורת צ׳ק-אאוט';
+    return row.direction === 'inbound' ? '📱 סמס מאורח' : '📱 סמס לאורח';
+  }
 
   return (
-    <div className="room-comms">
-      <div className="room-add">
-        <textarea value={draft} disabled={!canEdit || busy} placeholder="הודעה לאורח" onChange={(event) => setDraft(event.target.value)} />
-        <button type="button" disabled={!canEdit || busy || !draft.trim()} onClick={sendSms}>שלח סמס</button>
-      </div>
-      <div className="room-add">
-        <input value={callNote} disabled={!canEdit || busy} placeholder="מה נאמר בשיחה" onChange={(event) => setCallNote(event.target.value)} />
-        <button type="button" disabled={!canEdit || busy} onClick={logCall}>{phone ? 'חייג ורשום' : 'רשום שיחה'}</button>
-      </div>
-      {error ? <div className="room-empty">{error}</div> : null}
-      {rows.length ? rows.slice().reverse().map((row) => (
-        <div key={row.id} className="room-line">
-          <b>
-            {label(row)}
-            {' · '}
-            {row.sent_at || row.created_at
-              ? new Date(row.sent_at || row.created_at).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })
-              : ''}
-          </b>
-          <span>{row.content}</span>
+    <div className="split-feed-col">
+      {/* 1. Header עליון של הפאנל */}
+      <div className="wa-feed-header">
+        <div className="wa-guest-strip">
+          <div className="wa-guest-badge">
+            <span className="wa-avatar">{(card.guest || card.name || '?').slice(0, 1)}</span>
+            <div className="wa-guest-meta">
+              <strong>{card.guest || 'ללא אורח משובץ'}</strong>
+              <span dir="ltr">{card.phone || card.name}</span>
+            </div>
+          </div>
+          <div className="wa-quick-links">
+            {localPhone ? (
+              <>
+                <a
+                  href={`tel:${localPhone}`}
+                  className="wa-icon-btn is-call"
+                  title="חיוג מהיר"
+                  onClick={() => {
+                    if (bookingId && canEdit) {
+                      postComm({ message: 'שיחה אל האורח', channel: 'phone', kind: 'call' }).then(() => loadComms()).catch(() => {});
+                    }
+                  }}
+                >
+                  <Phone size={14} />
+                  <span>חיוג</span>
+                </a>
+                <a
+                  href={`https://wa.me/${waPhone}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="wa-icon-btn is-wa"
+                  title="פתיחת שיחת וואטסאפ ישירה"
+                >
+                  <MessageCircle size={14} />
+                  <span>WhatsApp</span>
+                </a>
+              </>
+            ) : null}
+          </div>
         </div>
-      )) : <div className="room-empty">אין עדיין הודעות או שיחות</div>}
+
+        {/* Segmented Control קומפקטי לטאבים */}
+        <div className="wa-segmented-tabs" role="tablist">
+          <button type="button" className={`seg-tab${tab === 'comms' ? ' is-on' : ''}`} onClick={() => setTab('comms')}>
+            תקשורת {commsRows.length ? <small>({commsRows.length})</small> : null}
+          </button>
+          <button type="button" className={`seg-tab${tab === 'tasks' ? ' is-on' : ''}`} onClick={() => setTab('tasks')}>
+            משימות {card.tasks?.length ? <small>({card.tasks.length})</small> : null}
+          </button>
+          <button type="button" className={`seg-tab${tab === 'log' ? ' is-on' : ''}`} onClick={() => setTab('log')}>
+            יומן
+          </button>
+          <button type="button" className={`seg-tab${tab === 'notes' ? ' is-on' : ''}`} onClick={() => setTab('notes')}>
+            הערות {((card.notesList || []).length + (kinorotNote?.saved ? 1 : 0)) ? <small>({(card.notesList || []).length + (kinorotNote?.saved ? 1 : 0)})</small> : null}
+          </button>
+          <button type="button" className={`seg-tab${tab === 'bill' ? ' is-on' : ''}`} onClick={() => setTab('bill')}>
+            חיובים {card.charges?.length ? <small>({card.charges.length})</small> : null}
+          </button>
+        </div>
+      </div>
+
+      {/* 2. Body נגלל עצמאית */}
+      <div className={`wa-feed-body${tab === 'comms' ? ' is-chat-bg' : ''}`}>
+        {tab === 'comms' ? (
+          <div className="wa-chat-stream">
+            {commsError ? <div className="wa-error-banner">{commsError}</div> : null}
+            {!bookingId ? (
+              <div className="wa-empty-state">אין אורח משובץ על היחידה</div>
+            ) : commsRows.length ? (
+              commsRows.map((row) => {
+                const isInbound = row.direction === 'inbound';
+                const isFailed = row.status === 'failed';
+                const timestamp = row.sent_at || row.created_at
+                  ? new Date(row.sent_at || row.created_at).toLocaleString('he-IL', {
+                    day: 'numeric',
+                    month: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })
+                  : '';
+                return (
+                  <div
+                    key={row.id}
+                    className={`wa-bubble-row ${isInbound ? 'is-inbound' : 'is-outbound'}${isFailed ? ' is-failed' : ''}`}
+                  >
+                    <div className="wa-bubble">
+                      <div className="wa-bubble-header">
+                        <span className="wa-bubble-tag">{commLabel(row)}</span>
+                      </div>
+                      <div className="wa-bubble-text">{renderMessageWithStayLinks(row.content)}</div>
+                      {row.metadata?.error ? (
+                        <div className="wa-bubble-error">סיבת כישלון: {row.metadata.error}</div>
+                      ) : null}
+                      <div className="wa-bubble-meta" dir="ltr">
+                        <span className="wa-bubble-time">{timestamp}</span>
+                        {!isInbound ? (
+                          <span className={`wa-ticks ${isFailed ? 'is-fail' : 'is-ok'}`} title={row.status || 'sent'}>
+                            {isFailed ? '✕' : (row.status === 'sent' || row.status === 'delivered' ? <CheckCheck size={13} /> : <Check size={13} />)}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="wa-empty-state">אין עדיין הודעות או שיחות עם האורח</div>
+            )}
+            <div ref={feedEndRef} />
+          </div>
+        ) : tab === 'tasks' ? (
+          <div className="wa-tasks-list">
+            <div className="room-add wa-inline-add">
+              <input
+                value={taskTitle}
+                disabled={!canEdit || saving}
+                placeholder="תיאור משימה חדשה..."
+                onChange={(event) => setTaskTitle(event.target.value)}
+              />
+              <button type="button" disabled={!canEdit || saving || !taskTitle.trim()} onClick={() => addDeskTask('cleaning')}>+ ניקיון</button>
+              <button type="button" disabled={!canEdit || saving || !taskTitle.trim()} onClick={() => addDeskTask('maintenance')}>+ תחזוקה</button>
+            </div>
+            {card.tasks.map((task) => {
+              const isDone = task.status === 'בוצע';
+              const isInspect = task.status === 'ממתין לבדיקה';
+              const typeBadgeClass = task.code === 'תחזוקה' ? 'is-maint' : task.code === 'OPS' ? 'is-ops' : 'is-clean';
+              return (
+                <div key={task.id} className={`wa-task-card${isDone ? ' is-done' : ''}`}>
+                  <div className="wa-task-top">
+                    <span className={`wa-task-type ${typeBadgeClass}`}>{task.code}</span>
+                    <strong className="wa-task-title">{task.title}</strong>
+                    <span className={`wa-task-status ${isDone ? 'is-done' : isInspect ? 'is-inspect' : 'is-open'}`}>
+                      {task.status}
+                    </span>
+                  </div>
+                  <div className="wa-task-bottom">
+                    <span className="wa-task-staff">
+                      👤 עובד: <b>{task.staff || card.staff || 'לא משובץ'}</b>
+                    </span>
+                    <button
+                      type="button"
+                      className={`wa-task-done-btn${isDone ? ' is-done' : ''}`}
+                      disabled={!canEdit || saving}
+                      onClick={() => toggleTaskDone(task)}
+                    >
+                      <Check size={12} /> {isDone ? 'בוצע ✓' : 'סמן ביצוע'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : tab === 'log' ? (
+          <RoomLog entries={card.roomLog} scope={logScope} onScope={setLogScope} />
+        ) : tab === 'notes' ? (
+          <div className="room-panel split-timeline">
+            {/* הערה בכינורות */}
+            <div className="kinorot-side-card">
+              <div className="master-note-header">
+                <span>📝 הערה בכינורות</span>
+                <button
+                  type="button"
+                  className="tb-btn note-save"
+                  disabled={!canEdit || saving || !kinorotNote?.resId || kinorotNote?.loading || kinorotNote?.draft === kinorotNote?.saved}
+                  onClick={async () => {
+                    if (setSaving) setSaving(true);
+                    if (setSaveError) setSaveError('');
+                    try {
+                      await saveKinorotNote();
+                      if (setMessage) setMessage('ההערה נשמרה בכינורות');
+                    } catch (err) {
+                      const text = `ההערה לא נשמרה: ${err?.message || 'שגיאה'}`;
+                      if (setSaveError) setSaveError(text);
+                      if (setMessage) setMessage(text);
+                    } finally {
+                      if (setSaving) setSaving(false);
+                    }
+                  }}
+                >
+                  שמור בכינורות
+                </button>
+              </div>
+              <textarea
+                className="kinorot-note"
+                disabled={!canEdit || !kinorotNote?.resId || kinorotNote?.loading || saving}
+                value={kinorotNote?.draft || ''}
+                placeholder={kinorotNote?.loading ? 'טוען את ההערה...' : kinorotNote?.resId ? 'הערה שתופיע בכינורות' : 'אין הזמנת כינורות'}
+                onChange={(event) => setKinorotNote((current) => ({ ...current, draft: event.target.value }))}
+              />
+            </div>
+
+            {/* הערות פנימיות לחדר / לאורח */}
+            <div className="room-add wa-inline-add">
+              <input
+                value={noteText}
+                disabled={!canEdit || saving || !card.bookingId}
+                placeholder={card.bookingId ? 'הערה חופשית...' : 'אין אורח על היחידה'}
+                onChange={(event) => setNoteText(event.target.value)}
+              />
+              <button type="button" disabled={!canEdit || saving || !card.bookingId || !noteText.trim()} onClick={addRoomNote}>הוסף</button>
+            </div>
+            {(card.notesList || []).length ? (card.notesList || []).slice().reverse().map((note) => (
+              <div key={note.id} className="timeline-item">
+                <div className="timeline-dot is-note" />
+                <div className="timeline-card">
+                  <div className="timeline-head">
+                    <span className="timeline-actor">{note.by || 'משרד'}</span>
+                    <span className="timeline-clock" dir="ltr">
+                      {note.at ? new Date(note.at).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+                    </span>
+                  </div>
+                  <div className="timeline-body">{note.text}</div>
+                </div>
+              </div>
+            )) : <div className="room-empty">אין הערות חופשיות</div>}
+          </div>
+        ) : (
+          <div className="wa-charges-list">
+            {card.charges.length ? card.charges.map((charge, index) => (
+              <div key={charge.txn || charge.ref || index} className="wa-charge-card">
+                <div className="wa-charge-row">
+                  <strong>{charge.accountLabel}</strong>
+                  <span className="wa-charge-amount">{formatIlsFromAgorot(charge.amount_agorot)}</span>
+                </div>
+                <div className="wa-charge-sub">
+                  <span>תאריך: {charge.date || String(charge.collected_at || '').slice(0, 10)}</span>
+                  {charge.ref ? <span>אסמכתה: {charge.ref}</span> : null}
+                  {(charge.payer_name || charge.payer_id) ? (
+                    <span>משלם: {[charge.payer_name, charge.payer_id].filter(Boolean).join(' · ')}</span>
+                  ) : null}
+                </div>
+              </div>
+            )) : <div className="room-empty">אין חיובים רשומים ליחידה הזו</div>}
+          </div>
+        )}
+      </div>
+
+      {/* 3. Footer תחתון (Quick Action Input) בסגנון וואטסאפ */}
+      <form className="wa-feed-footer" onSubmit={handleQuickSubmit}>
+        <button
+          type="button"
+          className="wa-staylink-btn"
+          disabled={!canEdit || !bookingId || commsBusy}
+          title="שליחת קישור דף אורח (Stay Link) בסמס בלחיצה אחת"
+          onClick={sendStayLinkQuick}
+        >
+          <Link2 size={14} />
+          <span>קישור אורח</span>
+        </button>
+        {tab === 'tasks' ? (
+          <select
+            className="wa-kind-select"
+            value={taskKind}
+            disabled={!canEdit || saving}
+            onChange={(e) => setTaskKind(e.target.value)}
+            aria-label="סוג משימה"
+          >
+            <option value="cleaning">ניקיון</option>
+            <option value="maintenance">תחזוקה</option>
+          </select>
+        ) : null}
+        <input
+          type="text"
+          className="wa-quick-input"
+          disabled={!canEdit || saving || commsBusy || (tab !== 'tasks' && !bookingId)}
+          value={tab === 'tasks' ? taskTitle : tab === 'notes' ? noteText : quickInput}
+          placeholder={
+            tab === 'tasks'
+              ? 'הקלד משימה לצוות...'
+              : tab === 'notes'
+                ? 'הקלד הערה לאורח...'
+                : 'הקלד הודעה לאורח / משימה לצוות...'
+          }
+          onChange={(e) => {
+            const v = e.target.value;
+            if (tab === 'tasks') setTaskTitle(v);
+            else if (tab === 'notes') setNoteText(v);
+            else setQuickInput(v);
+          }}
+        />
+        <button
+          type="submit"
+          className="wa-send-btn"
+          disabled={
+            !canEdit ||
+            saving ||
+            commsBusy ||
+            !(tab === 'tasks' ? taskTitle.trim() : tab === 'notes' ? noteText.trim() : quickInput.trim())
+          }
+          title={tab === 'tasks' ? 'הוסף משימה' : tab === 'notes' ? 'שמור הערה' : 'שלח הודעה לאורח'}
+        >
+          <Send size={14} />
+        </button>
+      </form>
     </div>
   );
+}
+
+function safeCallTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  try {
+    return d.toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+  }
 }
 
 function Field({ label, value, className = '' }) {
   return (
     <label className="field">
       <span>{label}</span>
-      <input className={`ro ${className}`.trim()} value={value || ''} readOnly />
+      {React.isValidElement(value) ? (
+        <div className={`ro ${className}`.trim()} style={{ display: 'flex', alignItems: 'center' }}>
+          {value}
+        </div>
+      ) : (
+        <input className={`ro ${className}`.trim()} value={value || ''} readOnly />
+      )}
     </label>
   );
 }

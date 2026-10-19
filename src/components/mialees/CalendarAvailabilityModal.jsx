@@ -670,7 +670,7 @@ export function CalendarAvailabilityModal({
               <div className="p-3 bg-stone-50 rounded-xl text-xs text-stone-600 flex items-center justify-between border border-stone-200">
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>סליקה מאובטחת ע״י Hyp / מסוף מקדמות 4502315932</span>
+                  <span>סליקה מאובטחת ע״י Cardcom</span>
                 </div>
                 <span className="font-extrabold text-[var(--brand-primary)]">מקדמה: ₪{pricing.depositAmount.toLocaleString()}</span>
               </div>
@@ -725,7 +725,7 @@ export function CalendarAvailabilityModal({
 
               <p className="text-xs text-stone-600 leading-relaxed">
                 ההזמנה נרשמה זמנית ביומן וממתינה לתשלום מקדמה.
-                <span className="font-semibold text-amber-950"> האישור הסופי ופתיחת כרטיס ניהול השהייה מתבצעים רק לאחר השלמת התשלום המאובטח ב-Hyp.</span>
+                <span className="font-semibold text-amber-950"> האישור הסופי ופתיחת כרטיס ניהול השהייה מתבצעים רק לאחר השלמת התשלום המאובטח.</span>
               </p>
 
               <div className="bg-white p-3.5 rounded-xl border border-amber-200/60 text-xs text-stone-700 space-y-1.5 font-medium">

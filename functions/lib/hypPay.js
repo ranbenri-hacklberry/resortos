@@ -1,3 +1,11 @@
+export const CARDCOM_DEMO_CARD = {
+  number: '4580280000000008',
+  month: '12',
+  year: '2030',
+  cvv: '123',
+  id: '000000000'
+};
+
 export const HYP_BASE = 'https://pay.hyp.co.il/p/';
 export const HYP_TERMINAL_A = '4502210929';
 export const HYP_TERMINAL_B = '4502315932';
@@ -62,13 +70,14 @@ export function hypReceiptResponse({ approval = '', lowProfileId = '', token = '
   };
   const scriptPayload = JSON.stringify(payload).replace(/</g, '\\u003c');
   const title = payload.paid ? 'התשלום אושר' : 'התשלום לא הושלם';
-  const number = payload.approval
-    ? receiptHtmlEscape(payload.approval)
-    : (payload.paid ? 'המספר נשמר בהזמנה' : '—');
+  const number = payload.approval ? receiptHtmlEscape(payload.approval) : '';
   const stayHref = safeToken
     ? `${HYP_RETURN_ORIGIN}/stay/${encodeURIComponent(safeToken)}?hyp=ok`
     : '';
-  const html = `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head><body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;background:#f8fafc;color:#0f172a"><main style="text-align:center;padding:28px 18px;max-width:420px"><p style="margin:0;font-size:15px;font-weight:800;color:#64748b">${title}</p><p style="margin:14px 0 0;font-size:13px;font-weight:700;color:#64748b">מספר אישור</p><p style="margin:6px 0 0;font-size:34px;font-weight:900;letter-spacing:1px">${number}</p><p style="margin:18px 0 0;font-size:14px;line-height:1.45;color:#334155">${payload.paid ? 'אפשר לסגור. ההזמנה מתעדכנת.' : 'לא בוצע חיוב. אפשר לסגור ולנסות שוב.'}</p>${stayHref && payload.paid ? `<p style="margin:16px 0 0"><a href="${receiptHtmlEscape(stayHref)}" style="color:#1d4ed8;font-weight:800">לדף השהות</a></p>` : ''}</main><script>(function(){var msg=${scriptPayload};try{var frame=window.parent&&window.parent!==window;var target=frame?window.parent:(window.top&&window.top!==window?window.top:null);if(target)target.postMessage(msg,'*');}catch(e){}if(msg.paid&&msg.token){var inFrame=false;try{inFrame=window.parent!==window;}catch(e2){inFrame=true;}if(!inFrame){setTimeout(function(){location.replace(${JSON.stringify(stayHref || `${HYP_RETURN_ORIGIN}/`)});},2200);}}})();</script></body></html>`;
+  const approvalBlock = number
+    ? `<p style="margin:14px 0 0;font-size:13px;font-weight:700;color:#64748b">מספר אישור</p><p style="margin:6px 0 0;font-size:34px;font-weight:900;letter-spacing:1px">${number}</p>`
+    : '';
+  const html = `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head><body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;background:#f8fafc;color:#0f172a"><main style="text-align:center;padding:28px 18px;max-width:420px"><p style="margin:0;font-size:22px;font-weight:900">${title}</p>${approvalBlock}<p style="margin:18px 0 0;font-size:14px;line-height:1.45;color:#334155">${payload.paid ? 'התשלום נקלט. חוזרים לדף השהות.' : 'לא בוצע חיוב. אפשר לסגור ולנסות שוב.'}</p><p id="back" style="margin:16px 0 0"></p></main><script>(function(){var msg=${scriptPayload};var stay=${JSON.stringify(stayHref)};function fromHref(href){try{var u=new URL(href,location.origin);var m=u.pathname.match(/\\/stay\\/(tok_[A-Za-z0-9_-]+)/);if(m)return location.origin+'/stay/'+m[1]+'?hyp=ok';var order=u.searchParams.get('Order')||u.searchParams.get('ReturnValue')||u.searchParams.get('order')||'';if(/^tok_[A-Za-z0-9_-]+$/.test(order))return location.origin+'/stay/'+order+'?hyp=ok';}catch(e){}return '';}if(!stay)stay=fromHref(location.href);if(!stay){try{stay=fromHref(document.referrer);}catch(e){}}if(!stay){try{stay=fromHref(window.parent.location.href);}catch(e){}}if(!stay){try{stay=sessionStorage.getItem('guest-pay-return')||'';}catch(e){}}if(!stay){try{var only='';for(var i=0;i<sessionStorage.length;i++){var key=sessionStorage.key(i)||'';var found=key.match(/^guest-terms:(tok_[A-Za-z0-9_-]+)$/);if(!found)continue;var next=location.origin+'/stay/'+found[1]+'?hyp=ok';if(only&&only!==next){only='';break;}only=next;}stay=only;}catch(e){}}if(stay){var back=document.getElementById('back');if(back)back.innerHTML='<a href="'+stay.replace(/"/g,'')+'" target="_top" style="color:#1d4ed8;font-weight:800">לדף השהות</a>';}try{var frame=window.parent&&window.parent!==window;var target=frame?window.parent:(window.top&&window.top!==window?window.top:null);if(target){target.postMessage(msg,'*');if(msg.paid&&stay)target.postMessage({type:'resortos-hyp',href:stay},'*');}}catch(e){}if(!(msg.paid&&stay))return;try{if(window.parent&&window.parent!==window)window.parent.location.replace(stay);}catch(e){}try{if(window.top&&window.top!==window)window.top.location.replace(stay);}catch(e){}location.replace(stay);})();</script></body></html>`;
   return new Response(html, {
     status: 200,
     headers: {
@@ -397,6 +406,56 @@ export function buildHypTokenChargeFields(creds, input) {
   };
 }
 
+export function cardcomExpiryMMYY(month, year) {
+  const mm = String(month || '').replace(/\D/g, '').padStart(2, '0').slice(-2);
+  const yy = hypExpiryYear(year);
+  return `${mm}${yy}`;
+}
+
+export function buildCardcomTokenChargeBody(user, input) {
+  const amount = Math.round(Number(input.amount || 0) * 100) / 100;
+  const name = splitName(input.clientName);
+  const fullName = `${name.first} ${name.last}`.trim();
+  const agorot = Math.round(amount * 100);
+  const uniq = String(input.uniq || `bal-${input.order || 'stay'}-${agorot}`)
+    .replace(/[^\w-]/g, '')
+    .slice(0, 50);
+  return {
+    TerminalNumber: Number(String(user.masof || '').replace(/\D/g, '')) || user.masof,
+    ApiName: user.apiName,
+    ApiPassword: user.apiPassword,
+    Amount: amount,
+    Token: String(input.token || ''),
+    CardExpirationMMYY: cardcomExpiryMMYY(input.exp_month, input.exp_year),
+    ExternalUniqTranId: uniq,
+    ExternalUniqTranIdResponse: true,
+    NumOfPayments: 1,
+    ISOCoinId: 1,
+    CardOwnerInformation: {
+      Phone: digitsPhone(input.cell) || undefined,
+      FullName: fullName || undefined,
+      CardOwnerEmail: input.email || undefined
+    }
+  };
+}
+
+export function cardcomChargeToHypParams(data, fallbackOrder = '') {
+  return {
+    Id: String(data?.TranzactionId || data?.TransactionId || ''),
+    CCode: String(data?.ResponseCode ?? ''),
+    Amount: String(data?.Amount ?? ''),
+    ACode: String(data?.ApprovalNumber || data?.CouponNumber || ''),
+    Order: String(fallbackOrder || ''),
+    L4digit: String(data?.Last4CardDigitsString || data?.Last4CardDigits || ''),
+    Brand: String(data?.Brand || data?.CardName || ''),
+    Hesh: String(data?.DocumentNumber || ''),
+    HK: String(data?.Token || ''),
+    Token: String(data?.Token || ''),
+    Tmonth: String(data?.CardMonth || ''),
+    Tyear: String(data?.CardYear || '')
+  };
+}
+
 export async function chargeHypToken(env, input) {
   const amount = Number(input.amount || 0);
   if (!(amount > 0.5)) {
@@ -410,6 +469,27 @@ export async function chargeHypToken(env, input) {
     throw err;
   }
   const preferred = resolveHypTerminal(input.terminal || 'A');
+  if (isCardcomTest(env)) {
+    const user = hypApiUser(env, preferred);
+    const posted = await postJson(
+      fetch,
+      'https://secure.cardcom.solutions/api/v11/Transactions/Transaction',
+      buildCardcomTokenChargeBody(user, input),
+      20000
+    );
+    const params = cardcomChargeToHypParams(posted.data || {}, input.order);
+    if (isHypPaid(params)) {
+      return {
+        params,
+        terminal: user.terminal,
+        result: hypPublicResult(params)
+      };
+    }
+    throw hypError(
+      params.CCode || posted.status || 'TOKEN',
+      posted.data?.Description || 'CARDCOM_TOKEN_CHARGE_FAILED'
+    );
+  }
   const order = preferred === 'A' ? ['A', 'B'] : ['B', 'A'];
   let lastErr = null;
   for (const terminal of order) {
@@ -437,6 +517,20 @@ export function publicHypSignFields(fields) {
   return next;
 }
 
+function withReturnOrder(url, order) {
+  const token = String(order || '').trim();
+  if (!token) return url;
+  try {
+    const next = new URL(url);
+    if (!next.searchParams.get('Order') && !next.searchParams.get('ReturnValue')) {
+      next.searchParams.set('Order', token);
+    }
+    return next.toString();
+  } catch {
+    return url;
+  }
+}
+
 export function buildHypLowProfileBody(user, input) {
   const amount = Math.round(Number(input.amount || 0) * 100) / 100;
   const name = splitName(input.clientName);
@@ -448,8 +542,9 @@ export function buildHypLowProfileBody(user, input) {
       UnitCost: Math.round(Number(row.UnitCost ?? row.unitCost ?? 0) * 100) / 100
     }))
     : [{ Description: info, Quantity: 1, UnitCost: amount }];
-  const successUrl = input.successUrl || hypBrowserReturnUrl();
-  const failUrl = input.failUrl || successUrl;
+  const order = String(input.order || '').slice(0, 250);
+  const successUrl = withReturnOrder(input.successUrl || hypBrowserReturnUrl(), order);
+  const failUrl = withReturnOrder(input.failUrl || successUrl, order);
   const maxPay = Math.max(1, Number(input.tash || 6) || 6);
   const fullName = `${name.first} ${name.last}`.trim();
   const body = {
@@ -458,7 +553,7 @@ export function buildHypLowProfileBody(user, input) {
     ApiPassword: user.apiPassword,
     Operation: input.tokenize === false ? 'ChargeOnly' : 'ChargeAndCreateToken',
     Amount: amount,
-    ReturnValue: String(input.order || '').slice(0, 250),
+    ReturnValue: order,
     SuccessRedirectUrl: successUrl,
     FailedRedirectUrl: failUrl,
     WebHookUrl: `${HYP_RETURN_ORIGIN}/api/payments/hyp/lp`,
@@ -468,12 +563,19 @@ export function buildHypLowProfileBody(user, input) {
     UIDefinition: {
       CardOwnerNameValue: fullName,
       CardOwnerPhoneValue: digitsPhone(input.cell) || undefined,
-      CardOwnerEmailValue: input.email || undefined
+      CardOwnerEmailValue: input.email || undefined,
+      ...(input.prefillDemoCard ? { CardOwnerIdValue: CARDCOM_DEMO_CARD.id } : {})
     },
     AdvancedDefinition: {
       MaxNumOfPayments: maxPay,
       MinNumOfPayments: 1,
-      RedirectToParent: input.stayInFrame ? false : true
+      RedirectToParent: input.stayInFrame ? false : true,
+      ...(input.prefillDemoCard ? {
+        CardNumber: CARDCOM_DEMO_CARD.number,
+        CVV: CARDCOM_DEMO_CARD.cvv,
+        CardExpirationMonth: CARDCOM_DEMO_CARD.month,
+        CardExpirationYear: CARDCOM_DEMO_CARD.year
+      } : {})
     }
   };
   if (input.invoice !== false && input.sendHesh !== false && (input.email || (input.products && input.products.length))) {
@@ -494,7 +596,7 @@ export function lpResultToHypParams(data, fallbackOrder = '') {
   const ui = data?.UIValues || {};
   const doc = data?.DocumentInfo || {};
   return {
-    Id: String(tx.TransactionId || data?.TransactionId || ''),
+    Id: String(tx.TranzactionId || tx.TransactionId || data?.TranzactionId || data?.TransactionId || ''),
     CCode: String(tx.ResponseCode ?? data?.ResponseCode ?? ''),
     Amount: String(tx.Amount ?? data?.Amount ?? ''),
     ACode: String(tx.ApprovalNumber || tx.CouponNumber || ''),
@@ -505,7 +607,7 @@ export function lpResultToHypParams(data, fallbackOrder = '') {
     HK: String(tx.Token || tokenInfo.Token || ''),
     Token: String(tx.Token || tokenInfo.Token || ''),
     Tmonth: String(tx.CardMonth || tokenInfo.CardMonth || ui.CardMonth || ''),
-    Tyear: String(tx.CardYear || tokenInfo.CardYear || ui.CardYear || '')
+    Tyear: cardYearValue(tx.CardYear, tokenInfo.CardYear, ui.CardYear)
   };
 }
 
@@ -516,7 +618,15 @@ export function isHypLowProfilePaid(data) {
   const tx = data.TransactionInfo || data.TranzactionInfo || {};
   const txCode = Number(tx.ResponseCode);
   if (Number.isFinite(txCode) && txCode !== 0 && txCode !== 700 && txCode !== 701) return false;
-  return Boolean(tx.TransactionId || data.TransactionId);
+  return Boolean(tx.TranzactionId || tx.TransactionId || data.TranzactionId || data.TransactionId);
+}
+
+function cardYearValue(...values) {
+  const texts = values.map((value) => String(value || '').trim()).filter(Boolean);
+  const full = texts.find((value) => value.length === 4);
+  if (full) return full;
+  const short = texts.find((value) => value.length === 2);
+  return short ? `20${short}` : (texts[0] || '');
 }
 
 function lowProfileAuthCombos(user) {
@@ -546,7 +656,11 @@ export async function createHypLowProfilePage(env, input) {
         ...user,
         apiName: auth.apiName,
         apiPassword: auth.apiPassword
-      }, { ...input, tokenize: operation !== 'ChargeOnly' });
+      }, {
+        ...input,
+        tokenize: operation !== 'ChargeOnly',
+        prefillDemoCard: isCardcomTest(env)
+      });
       body.Operation = operation;
       const posted = await postJson(
         fetch,
@@ -589,27 +703,16 @@ export async function getHypLowProfileResult(env, lowProfileId, opts = {}) {
     if (!hasHypCreds(env, terminal)) continue;
     const user = hypApiUser(env, terminal);
     for (const auth of uniqueAuthCombos(user)) {
-      const qs = new URLSearchParams({
-        TerminalNumber: String(user.masof),
-        ApiName: auth.apiName,
-        LowProfileId: id
-      });
       try {
-        const response = await fetch(`https://secure.cardcom.solutions/api/v11/LowProfile/GetLpResult?${qs}`, {
-          method: 'GET',
-          headers: { Accept: 'application/json' },
-          signal: AbortSignal.timeout(30000)
-        });
-        const text = await response.text();
-        let data = null;
-        try {
-          data = text ? JSON.parse(text) : null;
-        } catch {
-          data = null;
-        }
+        const posted = await postJson(fetch, 'https://secure.cardcom.solutions/api/v11/LowProfile/GetLpResult', {
+          TerminalNumber: Number(String(user.masof).replace(/\D/g, '')) || user.masof,
+          ApiName: auth.apiName,
+          LowProfileId: id
+        }, 20000);
+        const data = posted.data;
         const params = lpResultToHypParams(data || {}, opts.order);
         const paid = isHypLowProfilePaid(data);
-        last = { ok: paid, paid, params, raw: data, terminal, text };
+        last = { ok: paid, paid, params, raw: data, terminal, text: posted.text };
         if (paid) return last;
       } catch (err) {
         last = { ok: false, paid: false, params: {}, raw: null, error: err.message };
@@ -621,7 +724,8 @@ export async function getHypLowProfileResult(env, lowProfileId, opts = {}) {
 
 export async function createHypPaymentPage(env, input) {
   const purpose = input.purpose || 'balance';
-  const preferred = input.terminal || hypTerminalForPurpose(purpose);
+  // Demo masof 1000 opens a form that leaves the CVV empty. Masof 1001 shows the three digits.
+  const preferred = isCardcomTest(env) ? 'B' : (input.terminal || hypTerminalForPurpose(purpose));
   const amount = Number(input.amount || 0);
   if (!(amount > 0.5)) {
     const err = new Error('HYP_AMOUNT');

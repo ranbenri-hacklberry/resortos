@@ -1,6 +1,6 @@
-import { awaitingBankReview, isFullyPaid, kinorotSettlementKind } from './bookingPaid';
-import { isBookingComBooking } from './kinorotChannel';
-import { isUnavailableHoldBooking } from './unavailableHold';
+import { awaitingBankReview, isFullyPaid, kinorotSettlementKind } from './bookingPaid.js';
+import { isBookingComBooking } from './kinorotChannel.js';
+import { isUnavailableHoldBooking } from './unavailableHold.js';
 
 export function stayYmd(value) {
   const raw = String(value || '').trim();

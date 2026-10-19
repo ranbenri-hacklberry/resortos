@@ -6,13 +6,13 @@ import { coveringUnavailableHold, isUnavailableHoldBooking, unavailableHoldLabel
 export const UNIT_STATUS_BADGES = {
   OCCUPIED: { key: 'OCCUPIED', label: 'מאוכלס', color: '#6D28D9', bg: '#EDE9FE' },
   READY: { key: 'READY', label: 'מוכן', color: '#047857', bg: '#D1FAE5' },
-  NEEDS_COMPLETIONS: { key: 'NEEDS_COMPLETIONS', label: 'השלמות', color: '#0F766E', bg: '#CCFBF1' },
-  DIRTY: { key: 'DIRTY', label: 'לניקוי', color: '#C2410C', bg: '#FFEDD5' },
-  IN_PROGRESS: { key: 'IN_PROGRESS', label: 'בניקיון', color: '#3730A3', bg: '#E0E7FF' },
+  NEEDS_COMPLETIONS: { key: 'NEEDS_COMPLETIONS', label: 'ממתין לבדיקה', color: '#0F766E', bg: '#CCFBF1' },
+  DIRTY: { key: 'DIRTY', label: 'לניקוי', color: '#DC2626', bg: '#FEE2E2', border: '#EF4444' },
+  IN_PROGRESS: { key: 'IN_PROGRESS', label: 'בנקיון', color: '#B45309', bg: '#FEF3C7', border: '#F59E0B' },
   MAINTENANCE_ALERT: { key: 'MAINTENANCE_ALERT', label: 'תקלה', color: '#B91C1C', bg: '#FEE2E2' },
   GARDENING: { key: 'GARDENING', label: 'גינון', color: '#047857', bg: '#D1FAE5' },
   LEAVING: { key: 'LEAVING', label: 'יציאה', color: '#0369A1', bg: '#E0F2FE' },
-  UNAVAILABLE: { key: 'UNAVAILABLE', label: 'לא פנויה', color: '#57534E', bg: '#E7E5E4' }
+  UNAVAILABLE: { key: 'UNAVAILABLE', label: 'לא זמין', color: '#57534E', bg: '#E7E5E4' }
 };
 
 const UNIT_NAME_FRAMES = {
@@ -31,11 +31,11 @@ const UNIT_NAME_FRAMES = {
     textDark: '#99F6E4'
   },
   DIRTY: {
-    border: '#FB923C',
-    bgLight: '#FFEDD5',
-    bgDark: '#3D2412',
-    textLight: '#9A3412',
-    textDark: '#FED7AA'
+    border: '#EF4444',
+    bgLight: '#FEE2E2',
+    bgDark: '#450A0A',
+    textLight: '#991B1B',
+    textDark: '#FCA5A5'
   },
   MAINTENANCE_ALERT: {
     border: '#F87171',
@@ -52,12 +52,13 @@ const UNIT_NAME_FRAMES = {
     textDark: '#DDD6FE'
   },
   IN_PROGRESS: {
-    border: '#818CF8',
-    bgLight: '#E0E7FF',
-    bgDark: '#1E1B4B',
-    textLight: '#312E81',
-    textDark: '#C7D2FE'
+    border: '#F59E0B',
+    bgLight: '#FEF3C7',
+    bgDark: '#451A03',
+    textLight: '#92400E',
+    textDark: '#FDE68A'
   },
+
   GARDENING: {
     border: '#34D399',
     bgLight: '#D1FAE5',
@@ -118,10 +119,21 @@ export function priorityRoomStatus(unit) {
   const reason = String(unit?.custom_reason || '');
   if (stay === 'OCCUPIED') return { key: 'occupied', label: 'מאוכלס' };
   if (clean === 'MAINTENANCE_ALERT') return { key: 'alert', label: 'תקלה' };
-  if (clean === 'DIRTY' || clean === 'IN_PROGRESS') return { key: 'dirty', label: 'לניקוי' };
+  if (clean === 'IN_PROGRESS') {
+    const cleaner = unit?.assigned_staff || unit?.cleaner_name || '';
+    return {
+      key: 'in_progress',
+      label: cleaner ? `בנקיון | ${cleaner}` : 'בנקיון',
+      cleaner,
+      color: '#B45309',
+      bg: '#FEF3C7'
+    };
+  }
+  if (clean === 'DIRTY') return { key: 'dirty', label: 'לניקוי', color: '#DC2626', bg: '#FEE2E2' };
   if (clean === 'NEEDS_COMPLETIONS') return { key: 'inspect', label: 'ממתין לבדיקה' };
   if (clean === 'READY' && /ממתין|ביקורת|בדיקה/.test(reason)) return { key: 'inspect', label: 'ממתין לבדיקה' };
   return { key: 'ready', label: 'מוכן' };
+
 }
 
 export function isEffectivelyOccupied(unit, bookings, today = israelToday()) {
@@ -198,8 +210,8 @@ export function setOccupyAskDismissedToday(dismissed, today = israelToday()) {
 export const UNIT_OPS_CHOICES = [
   { key: 'DIRTY', domain: 'HOUSEKEEPING', reason: 'ניקוי לאחר יציאה והכנה לכניסה', hint: 'ממתין למשק בית' },
   { key: 'IN_PROGRESS', domain: 'HOUSEKEEPING', reason: 'ניקיון בביצוע', hint: 'הצוות בפנים' },
-  { key: 'NEEDS_COMPLETIONS', domain: 'HOUSEKEEPING', reason: 'נקי · השלמות', hint: 'נקי, חסר ציוד' },
-  { key: 'READY', domain: 'HOUSEKEEPING', reason: 'ממתין לביקורת מנהל', hint: 'נקי — אפשר כניסה' },
+  { key: 'NEEDS_COMPLETIONS', domain: 'HOUSEKEEPING', reason: 'ממתין לביקורת מנהל', hint: 'נקי · השלמות ציוד' },
+  { key: 'READY', domain: 'HOUSEKEEPING', reason: 'מוכן לאורח', hint: 'נקי — אפשר כניסה' },
   { key: 'MAINTENANCE_ALERT', domain: 'MAINTENANCE', reason: 'תקלת אחזקה פתוחה ביחידה', hint: 'לא מוכן לאורח' },
   { key: 'GARDENING', domain: 'GARDENING', reason: 'עבודת גינון פתוחה', hint: 'חצר / בריכה' }
 ];
@@ -320,8 +332,17 @@ export function unitDisplayStatus(unit, bookings, today = israelToday(), now = n
   if (ops === 'MAINTENANCE_ALERT') return UNIT_STATUS_BADGES.MAINTENANCE_ALERT;
   if (ops === 'GARDENING') return UNIT_STATUS_BADGES.GARDENING;
   if (occupied) return UNIT_STATUS_BADGES.OCCUPIED;
-  if (ops === 'IN_PROGRESS') return UNIT_STATUS_BADGES.IN_PROGRESS;
+  if (ops === 'IN_PROGRESS') {
+    const cleaner = unit?.assigned_staff || unit?.cleaner_name || unit?.cleaning_by || '';
+    const label = cleaner ? `בנקיון | ${cleaner}` : UNIT_STATUS_BADGES.IN_PROGRESS.label;
+    return {
+      ...UNIT_STATUS_BADGES.IN_PROGRESS,
+      label,
+      cleaner
+    };
+  }
   if (ops === 'DIRTY') return UNIT_STATUS_BADGES.DIRTY;
+
   if (ops === 'NEEDS_COMPLETIONS') return UNIT_STATUS_BADGES.NEEDS_COMPLETIONS;
   if (leavingToday) return UNIT_STATUS_BADGES.LEAVING;
   if (ops === 'READY' && isAwaitingManagerInspect(unit)) {

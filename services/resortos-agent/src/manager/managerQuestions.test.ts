@@ -1,0 +1,81 @@
+import { describe, expect, it } from 'vitest';
+import { answerManagerRoomQuestion, formatManagerInitialCard, getRoomOccupancy } from './managerQuestions.js';
+
+const room = { id: 'k693', name: 'בקתות מאיה 1', lockbox: '2410' };
+
+describe('manager room card', () => {
+  it('drops the cleaning line when a guest leaves today and says there is no arrival', () => {
+    const occupancy = getRoomOccupancy('k693', [
+      {
+        id: 'b1',
+        unit_id: 'k693',
+        guest_name: 'חאטיב פלאח',
+        check_in_date: '2026-10-16',
+        check_out_date: '2026-10-17',
+        booking_status: 'CONFIRMED',
+      },
+    ], '2026-10-17');
+    const card = formatManagerInitialCard('בקתות מאיה 1', '2410', {
+      id: 'k693',
+      operational_status: 'READY',
+      custom_reason: 'מוכן לאורח',
+    }, occupancy, room as any);
+    expect(card).toContain('🔑 קוד כספת: *2410*');
+    expect(card).toContain('🟠 צ׳ק אאוט היום (חאטיב פלאח)');
+    expect(card).toContain('אין כניסה היום');
+    expect(card).not.toContain('סטטוס ניקיון');
+    expect(card).not.toContain('מוכן לאורח');
+  });
+
+  it('keeps the cleaning line when the room is empty', () => {
+    const occupancy = getRoomOccupancy('k693', [], '2026-10-17');
+    const card = formatManagerInitialCard('בקתות מאיה 1', '2410', {
+      id: 'k693',
+      operational_status: 'READY',
+    }, occupancy, room as any);
+    expect(card).toContain('סטטוס ניקיון: מוכן לאורח 🟢');
+    expect(card).toContain('סטטוס תפוסה: פנוי ⚪');
+  });
+
+  it('answers פרטי לקוח with the guest on the room, including a turnover', () => {
+    const occupancy = getRoomOccupancy('k693', [
+      {
+        id: 'out',
+        unit_id: 'k693',
+        guest_name: 'חאטיב פלאח',
+        guest_phone: '972501112233',
+        check_in_date: '2026-10-16',
+        check_out_date: '2026-10-17',
+        booking_status: 'CONFIRMED',
+        adults_count: 2,
+        total_price_agorot: 120000,
+        payment_status: 'PAID',
+        clearing_payments: [{ amount_agorot: 120000 }],
+      },
+      {
+        id: 'in',
+        unit_id: 'k693',
+        guest_name: 'נועה לוי',
+        guest_phone: '0523334455',
+        check_in_date: '2026-10-17',
+        check_out_date: '2026-10-18',
+        booking_status: 'CONFIRMED',
+        adults_count: 2,
+        children_count: 1,
+        total_price_agorot: 90000,
+        payment_status: 'UNPAID',
+        clearing_payments: [],
+      },
+    ], '2026-10-17');
+    const reply = answerManagerRoomQuestion('פרטי לקוח', 'בקתות מאיה 1', '2410', undefined, occupancy, room as any);
+    expect(reply).toContain('פרטי לקוח · בקתות מאיה 1');
+    expect(reply).toContain('יוצא היום');
+    expect(reply).toContain('חאטיב פלאח');
+    expect(reply).toContain('0501112233');
+    expect(reply).toContain('16/10 → 17/10');
+    expect(reply).toContain('שולם');
+    expect(reply).toContain('נכנס היום');
+    expect(reply).toContain('נועה לוי');
+    expect(reply).toContain('יתרה');
+  });
+});

@@ -511,6 +511,23 @@ The objective is not to make hospitality workers better at using software.
 
 The objective is to make the property capable of operating itself.
 
+## The WhatsApp agent
+
+The property agent lives in `services/resortos-agent` and runs on the local Mac. It is a linked WhatsApp device (Baileys) on `127.0.0.1:8787`. Voice notes are transcribed on the machine. Replies come from the local model. It talks to ResortOS with an approved `ros_agent_…` credential.
+
+Staff are recognized by phone. `data/cleaners.json` is the file copy; the live staff list can override the role. Housekeeping can mark a room ready, report a shortage, or open a maintenance call, in Hebrew, Thai, or Arabic. A manager who asks about a room gets the room card and four actions:
+
+1. Change the room status.
+2. Add a note.
+3. Report maintenance or a shortage.
+4. Send the guest stay link. The link goes out by SMS only after the manager confirms the guest's number.
+
+The same chat answers who is in the room, payment questions a manager is allowed to see, the lockbox code, and what is nearby. A restaurant question returns each place with what it is and how far it is. Cash taken at the desk, and blocking a room for the night, wait for an explicit yes before anything is written.
+
+Outbound replies go back to the WhatsApp chat the person is already in. A health check restarts the process if WhatsApp drops, and texts the operations SMS line only if it does not come back.
+
+Setup, env vars, and the room-state protocol are in [services/resortos-agent/README.md](services/resortos-agent/README.md) and [services/resortos-agent/SMART_KEY_QR_SYSTEM.md](services/resortos-agent/SMART_KEY_QR_SYSTEM.md).
+
 ## Current capabilities
 
 ResortOS currently includes:
@@ -523,7 +540,7 @@ ResortOS currently includes:
 - Staff management
 - Guest portal
 - Payments
-- WhatsApp-based communication
+- WhatsApp operations agent for staff and managers (see above)
 - SOP management
 - Local Edge operational APIs
 - Role and unit-level authorization

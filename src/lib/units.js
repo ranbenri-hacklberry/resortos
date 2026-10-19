@@ -311,7 +311,7 @@ export function unitFullName(unitOrId, fallback = '') {
     return unitOrId.name || unitFullName(unitOrId.id, fallback);
   }
   const id = String(unitOrId || '');
-  const hit = DEFAULT_RESORT_UNITS.find((unit) => unit.id === id);
+  const hit = CANONICAL_MANAGED_SPACES.find((unit) => unit.id === id);
   return hit?.name || fallback || id;
 }
 
@@ -319,7 +319,7 @@ export function cleanGuestCabinName(raw) {
   let name = String(raw || '').trim();
   if (!name) return '';
 
-  const hit = DEFAULT_RESORT_UNITS.find((u) => u.id === name);
+  const hit = CANONICAL_MANAGED_SPACES.find((u) => u.id === name);
   if (hit) name = hit.name;
 
   // Remove circled characters e.g. Ⓔ, Ⓖ, Ⓐ, Ⓓ, Ⓒ, Ⓑ

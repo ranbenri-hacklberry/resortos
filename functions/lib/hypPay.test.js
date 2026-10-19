@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { quoteGuestCharge, resolveGuestTerminal } from './checkinCharge.js';
 import {
+  buildCardcomTokenChargeBody,
   buildHypLowProfileBody,
   buildHypSignFields,
   buildHypTokenChargeFields,
+  cardcomChargeToHypParams,
   formatHypListDate,
   hasHypCreds,
   hypApiUser,
@@ -182,6 +184,60 @@ test('token charge fields send CC as token on action=soft', () => {
   assert.equal(fields.Masof, HYP_TERMINAL_A);
 });
 
+test('cardcom token charge reuses the saved card on the same terminal', () => {
+  const body = buildCardcomTokenChargeBody(
+    { masof: '1001', apiName: 'api-user', apiPassword: 'api-pass' },
+    {
+      amount: 480,
+      token: '4cf8e168-261e-4613-8d20-000332986b24',
+      exp_month: '6',
+      exp_year: '2028',
+      order: 'tok_stay',
+      clientName: 'רני',
+      email: 'guest@example.com',
+      cell: '054-831-7887'
+    }
+  );
+  assert.equal(body.TerminalNumber, 1001);
+  assert.equal(body.Token, '4cf8e168-261e-4613-8d20-000332986b24');
+  assert.equal(body.CardExpirationMMYY, '0628');
+  assert.equal(body.Amount, 480);
+  assert.equal(body.ExternalUniqTranId, 'bal-tok_stay-48000');
+  assert.equal(body.ExternalUniqTranIdResponse, true);
+  assert.equal(body.ApiPassword, 'api-pass');
+  assert.equal(body.CardOwnerInformation.Phone, '0548317887');
+
+  const params = cardcomChargeToHypParams({
+    ResponseCode: 0,
+    TranzactionId: 55,
+    Amount: 480,
+    ApprovalNumber: '009491B',
+    Last4CardDigitsString: '4242',
+    Brand: 'Visa',
+    Token: '4cf8e168-261e-4613-8d20-000332986b24',
+    CardMonth: 6,
+    CardYear: 2028
+  }, 'tok_stay');
+  assert.equal(isHypPaid(params), true);
+  assert.equal(params.Id, '55');
+  assert.equal(params.HK, '4cf8e168-261e-4613-8d20-000332986b24');
+  assert.equal(params.L4digit, '4242');
+
+  const fromInfo = lpResultToHypParams({
+    ResponseCode: 0,
+    ReturnValue: 'tok_stay',
+    TokenInfo: {
+      Token: '4cf8e168-261e-4613-8d20-000332986b24',
+      CardMonth: 6,
+      CardYear: 2028
+    },
+    TransactionInfo: { ResponseCode: 0, TransactionId: 8811, Amount: 1 }
+  });
+  assert.equal(fromInfo.Token, '4cf8e168-261e-4613-8d20-000332986b24');
+  assert.equal(fromInfo.Tmonth, '6');
+  assert.equal(fromInfo.Tyear, '2028');
+});
+
 test('deposit sign request asks Hyp to tokenize the card', () => {
   const fields = buildHypSignFields(
     { masof: HYP_TERMINAL_B, key: 'secret-key', passp: 'secret-pass', terminal: 'B' },
@@ -203,6 +259,18 @@ test('every charge page tokenizes the card unless opted out', () => {
     { amount: 480, order: 'full_pay', clientName: 'Test Guest', info: 'יתרה' }
   );
   assert.equal(lp.Operation, 'ChargeAndCreateToken');
+  assert.equal(lp.AdvancedDefinition.CardNumber, undefined);
+
+  const demo = buildHypLowProfileBody(
+    { masof: '1001', apiName: 'api-user', apiPassword: 'api-pass' },
+    { amount: 30, order: 'tok_demo', clientName: 'רני', cell: '0548317887', info: 'מקדמה', prefillDemoCard: true }
+  );
+  assert.equal(demo.AdvancedDefinition.CardNumber, '4580280000000008');
+  assert.equal(demo.AdvancedDefinition.CVV, '123');
+  assert.equal(demo.AdvancedDefinition.CardExpirationMonth, '12');
+  assert.equal(demo.AdvancedDefinition.CardExpirationYear, '2030');
+  assert.equal(demo.UIDefinition.CardOwnerIdValue, '000000000');
+  assert.equal(demo.UIDefinition.CardOwnerPhoneValue, '0548317887');
 
   const optOut = buildHypLowProfileBody(
     { masof: HYP_TERMINAL_A, apiName: 'api-user', apiPassword: 'api-pass' },
@@ -337,6 +405,19 @@ test('Low Profile body and result map back to a checkout token', () => {
     ResponseCode: 0,
     TransactionInfo: { ResponseCode: 0, TransactionId: 8811 }
   }), true);
+  const cardcom = lpResultToHypParams({
+    ResponseCode: 0,
+    ReturnValue: 'tok_office',
+    TranzactionInfo: { ResponseCode: 0, TranzactionId: 266777696, Amount: 70, CardYear: 30 },
+    TokenInfo: { CardYear: 2030 }
+  });
+  assert.equal(cardcom.Id, '266777696');
+  assert.equal(cardcom.Amount, '70');
+  assert.equal(cardcom.Tyear, '2030');
+  assert.equal(isHypLowProfilePaid({
+    ResponseCode: 0,
+    TranzactionInfo: { ResponseCode: 0, TranzactionId: 266777696 }
+  }), true);
   assert.equal(mapped.Order, 'tok_demo_abc');
   assert.equal(mapped.Id, '8811');
   assert.equal(mapped.HK, 'card-token');
@@ -388,7 +469,7 @@ test('embedded card charge stays in the frame and the receipt shows the approval
     }
   );
   assert.equal(framed.AdvancedDefinition.RedirectToParent, false);
-  assert.equal(framed.SuccessRedirectUrl, 'https://resortos.app/api/payments/hyp/receipt');
+  assert.equal(framed.SuccessRedirectUrl, 'https://resortos.app/api/payments/hyp/receipt?Order=tok_test');
   assert.equal(hypApprovalCodeFromParams({ ApprovalNumber: '445566' }), '445566');
   assert.equal(hypReturnLooksFailed({ ResponseCode: '600' }), true);
   assert.equal(hypReturnLooksFailed({ ResponseCode: '0' }), false);
@@ -401,6 +482,7 @@ test('embedded card charge stays in the frame and the receipt shows the approval
   const html = await receipt.text();
   assert.match(html, /445566/);
   assert.match(html, /resortos-card-paid/);
-  assert.doesNotMatch(html, /window\.top\.location\.replace/);
+  assert.match(html, /resortos-hyp/);
+  assert.match(html, /target="_top"/);
   assert.doesNotMatch(html, /hyp=missing/);
 });

@@ -4,7 +4,7 @@ import { FIELD_UI_LANGUAGES } from '../lib/fieldUiLanguages';
 import { persistLanguage } from '../i18n';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
-import { createStaffAccount, deactivateAgentAccount, deactivateStaffAccount, fetchAttendanceSettings, listAgents, listStaff, revealStaffPassword, saveAttendanceSettings, updateStaffAccount, upsertAgentAccount } from '../lib/staffAuth';
+import { createStaffAccount, deactivateAgentAccount, deactivateStaffAccount, fetchAttendanceSettings, listAgents, listStaff, revealStaffPassword, saveAttendanceSettings, setOutboundCalls, updateStaffAccount, upsertAgentAccount } from '../lib/staffAuth';
 import { DEFAULT_SOP_TEMPLATES, fetchSopTemplates, saveSopTemplate, stepLabel } from '../lib/sop';
 import { useLiveUnits } from '../lib/resortos-db';
 import { DEFAULT_RESORT_UNITS, groupedInventoryUnits, inventoryUnits, normalizeAllowedUnitIds } from '../lib/units';
@@ -25,6 +25,7 @@ const EMPTY_FORM = {
   phone: '',
   whatsapp_phone: '',
   allow_remote_attendance: false,
+  outbound_calls: false,
   allowed_units: [],
   agent_access: false,
   agent_id: '',
@@ -202,6 +203,7 @@ export default function Settings({ theme, setTheme, sessionUser, onSessionUserUp
       phone: person.phone || '',
       whatsapp_phone: person.whatsapp_phone || '',
       allow_remote_attendance: Boolean(person.allow_remote_attendance),
+      outbound_calls: Boolean(person.outbound_calls),
       allowed_units: normalizeAllowedUnitIds(person.allowed_units),
       ...agentFieldsFromList(agents, person.id)
     });
@@ -343,7 +345,9 @@ export default function Settings({ theme, setTheme, sessionUser, onSessionUserUp
       }
       const result = await updateStaffAccount(editingId, staffForm);
       if (result?.user) {
-        setStaffList((prev) => prev.map((row) => (row.id === result.user.id ? { ...row, ...result.user } : row)));
+        const marked = await setOutboundCalls(result.user.id, Boolean(staffForm.outbound_calls)).catch(() => null);
+        if (marked?.user) result.user = { ...result.user, ...marked.user };
+        setStaffList((prev) => prev.map((row) => (row.id === result.user.id ? { ...row, ...result.user, outbound_calls: Boolean(staffForm.outbound_calls) } : row)));
         if (staffForm.password) {
           setRevealedPasswords((prev) => ({ ...prev, [result.user.id]: staffForm.password }));
         }
@@ -833,6 +837,7 @@ function StaffTab({
                 </div>
                 <div style={{ fontSize: '0.7rem', color: '#94A3B8' }}>
                   {person.username} · {t(`ROLE_${person.role}`, person.role)}
+                  {person.outbound_calls ? ` · ${t('SETTINGS_STAFF_OUTBOUND', 'שיחות יוצאות')}` : ''}
                   {staffPhoneLabel(person) ? ` · ${staffPhoneLabel(person)}` : ''}
                   {normalizeAllowedUnitIds(person.allowed_units).length
                     ? ` · ${normalizeAllowedUnitIds(person.allowed_units).length} ${t('SETTINGS_STAFF_UNITS_COUNT', 'יחידות')}`
@@ -1208,6 +1213,24 @@ function StaffForm({ isLight, isManager, canOpenAgents = false, isNew, staffForm
             onChange={(e) => setStaffForm((prev) => ({ ...prev, allow_remote_attendance: e.target.checked }))}
           />
           <span>{t('SETTINGS_STAFF_REMOTE', 'מותר לעדכן נוכחות גם מרחוק')}</span>
+        </label>
+      )}
+      {isManager && (
+        <label style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          marginTop: '10px',
+          fontSize: '0.8rem',
+          fontWeight: 700,
+          cursor: 'pointer'
+        }}>
+          <input
+            type="checkbox"
+            checked={Boolean(staffForm.outbound_calls)}
+            onChange={(e) => setStaffForm((prev) => ({ ...prev, outbound_calls: e.target.checked }))}
+          />
+          <span>{t('SETTINGS_STAFF_OUTBOUND', 'שיחות יוצאות לאורחים')}</span>
         </label>
       )}
       {onSave && (

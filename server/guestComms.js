@@ -91,14 +91,16 @@ export async function markBookingSelfDeparted(bookingId, at = new Date().toISOSt
 
 export async function sendAndLogGuestSms({
   booking,
+  bookingId,
   phone,
   message,
   metadata = {},
   channel = 'sms'
 }) {
+  const bId = String(booking?.id || bookingId || '').trim();
   const recipient = String(phone || booking?.guest_phone || '').trim();
   const content = String(message || '').trim();
-  if (!booking?.id || !content) {
+  if (!bId || !content) {
     const err = new Error('INVALID_GUEST_SMS');
     err.status = 400;
     throw err;
@@ -111,11 +113,11 @@ export async function sendAndLogGuestSms({
   } catch (err) {
     status = 'failed';
     sentAt = null;
-    error = err.message || String(err);
+    error = err.description ? `${err.message}: ${err.description}` : (err.message || String(err));
   }
   const row = await insertGuestComm({
-    booking_id: booking.id,
-    tenant_id: booking.tenant_id,
+    booking_id: bId,
+    tenant_id: booking?.tenant_id || null,
     channel,
     direction: 'outbound',
     recipient_phone: recipient,
@@ -131,6 +133,68 @@ export async function sendAndLogGuestSms({
     throw fail;
   }
   return row;
+}
+
+export async function sendManagerGuestLink({ bookingId, phone, message, actor }) {
+  const id = String(bookingId || '').trim();
+  const content = String(message || '').trim();
+  const recipient = String(phone || '').trim();
+  if (!id || !content || !recipient) {
+    if (id) {
+      await insertGuestComm({
+        booking_id: id,
+        channel: 'sms',
+        direction: 'outbound',
+        recipient_phone: recipient || null,
+        content,
+        status: 'failed',
+        metadata: { kind: 'guest_link', actor: actor || 'agent', error: !recipient ? 'SMS_PHONE_INVALID' : 'INVALID_GUEST_SMS' }
+      }).catch(() => {});
+    }
+    const err = new Error(!recipient ? 'SMS_PHONE_INVALID' : 'INVALID_GUEST_SMS');
+    err.status = 400;
+    throw err;
+  }
+  const rows = await rest(
+    `${BOOKING_TABLE}?id=eq.${encodeURIComponent(id)}&deleted_at=is.null&select=*&limit=1`
+  );
+  const booking = Array.isArray(rows) ? rows[0] : null;
+  if (!booking) {
+    await insertGuestComm({
+      booking_id: id,
+      channel: 'sms',
+      direction: 'outbound',
+      recipient_phone: recipient,
+      content,
+      status: 'failed',
+      metadata: { kind: 'guest_link', actor: actor || 'agent', error: 'NOT_FOUND' }
+    }).catch(() => {});
+    const err = new Error('NOT_FOUND');
+    err.status = 404;
+    throw err;
+  }
+  const url = booking.checkout_token ? `https://resortos.app/stay/${booking.checkout_token}` : '';
+  if (!url || !content.includes(url)) {
+    await insertGuestComm({
+      booking_id: id,
+      tenant_id: booking.tenant_id || null,
+      channel: 'sms',
+      direction: 'outbound',
+      recipient_phone: recipient,
+      content,
+      status: 'failed',
+      metadata: { kind: 'guest_link', actor: actor || 'agent', error: 'LINK_MISMATCH' }
+    }).catch(() => {});
+    const err = new Error('LINK_MISMATCH');
+    err.status = 400;
+    throw err;
+  }
+  return sendAndLogGuestSms({
+    booking,
+    phone: recipient,
+    message: content,
+    metadata: { kind: 'guest_link', actor: actor || 'agent' }
+  });
 }
 
 export async function sendFarewellForBooking(booking) {
@@ -235,31 +299,48 @@ export async function handleSendGuestComm(req, res) {
       `${BOOKING_TABLE}?id=eq.${encodeURIComponent(bookingId)}&deleted_at=is.null&select=*&limit=1`
     );
     const booking = Array.isArray(rows) ? rows[0] : null;
-    if (!booking) return res.status(404).json({ error: 'NOT_FOUND' });
+    if (!booking && !req.body?.phone) {
+      await insertGuestComm({
+        booking_id: bookingId,
+        channel: req.body?.channel || 'sms',
+        direction: 'outbound',
+        recipient_phone: null,
+        content: message,
+        status: 'failed',
+        metadata: {
+          kind: req.body?.kind || templateId || 'manual',
+          template: templateId || null,
+          actor: req.staff?.username || req.staff?.name || 'staff',
+          error: 'NOT_FOUND'
+        }
+      }).catch(() => {});
+      return res.status(404).json({ error: 'NOT_FOUND' });
+    }
     if (templateId && !message) {
       const tpl = templateById(templateId);
       if (!tpl) return res.status(400).json({ error: 'UNKNOWN_TEMPLATE' });
       message = tpl.build({
-        unitName: unitFullName(booking.unit_id, booking.unit_id),
-        gateCode: booking.stay?.gate_code || '',
-        checkoutUrl: booking.checkout_token
+        unitName: unitFullName(booking?.unit_id, booking?.unit_id),
+        gateCode: booking?.stay?.gate_code || '',
+        checkoutUrl: booking?.checkout_token
           ? `https://resortos.app/stay/${booking.checkout_token}`
           : ''
       });
     }
     if (!message) return res.status(400).json({ error: 'MESSAGE_REQUIRED' });
-    if (req.body?.channel === 'phone') {
+    if (req.body?.channel === 'phone' || req.body?.channel === 'whatsapp') {
+      const isWa = req.body?.channel === 'whatsapp';
       const row = await insertGuestComm({
-        booking_id: booking.id,
-        tenant_id: booking.tenant_id,
-        channel: 'phone',
-        direction: 'outbound',
-        recipient_phone: booking.guest_phone || '',
+        booking_id: bookingId,
+        tenant_id: booking?.tenant_id || null,
+        channel: isWa ? 'whatsapp' : 'phone',
+        direction: req.body?.direction || 'outbound',
+        recipient_phone: req.body?.phone || booking?.guest_phone || '',
         content: message,
-        status: 'logged',
+        status: req.body?.status || (isWa ? 'sent' : 'logged'),
         sent_at: new Date().toISOString(),
         metadata: {
-          kind: 'call',
+          kind: req.body?.kind || (isWa ? 'whatsapp' : 'call'),
           actor: req.staff?.username || req.staff?.name || 'staff'
         }
       });
@@ -267,7 +348,8 @@ export async function handleSendGuestComm(req, res) {
     }
     const row = await sendAndLogGuestSms({
       booking,
-      phone: req.body?.phone || booking.guest_phone,
+      bookingId,
+      phone: req.body?.phone || booking?.guest_phone,
       message,
       channel: req.body?.channel || 'sms',
       metadata: {

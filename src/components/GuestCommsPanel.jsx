@@ -27,17 +27,23 @@ async function commsFetch(path, options = {}) {
 
 function statusLabel(status) {
   if (status === 'sent' || status === 'delivered') return 'נשלח';
+  if (status === 'received') return 'התקבל';
   if (status === 'failed') return 'נכשל';
   if (status === 'scheduled') return 'מתוזמן';
   return status || '';
 }
 
-function kindLabel(meta) {
+function kindLabel(row) {
+  const meta = row?.metadata || {};
   const kind = meta?.kind || meta?.template || '';
+  if (row?.channel === 'whatsapp' || kind === 'whatsapp') {
+    return row?.direction === 'inbound' ? 'וואטסאפ מאורח' : 'וואטסאפ לאורח';
+  }
   if (kind === 'checkout_reminder') return 'תזכורת 09:45';
   if (kind === 'farewell') return 'סמס פרידה';
   if (kind === 'gate') return 'קוד שער';
-  if (kind === 'checkin' || kind === 'stay_link') return 'קישור צ׳ק-אין';
+  if (kind === 'checkin' || kind === 'stay_link' || kind === 'guest_link') return 'קישור צ׳ק-אין';
+  if (kind === 'stay_link_publish') return 'סנכרון קישור אורח';
   if (kind === 'manual') return 'ידני';
   return kind || 'הודעה';
 }
@@ -270,15 +276,20 @@ export default function GuestCommsPanel({ booking, themeStyles, isLight }) {
               gap: 8,
               fontSize: '0.68rem',
               fontWeight: 800,
-              color: themeStyles.textMuted,
+              color: row.status === 'failed' ? '#F87171' : themeStyles.textMuted,
               marginBottom: 4
             }}>
-              <span>{kindLabel(row.metadata)} · {statusLabel(row.status)}</span>
+              <span>{kindLabel(row)} · {statusLabel(row.status)}</span>
               <span>{formatWhen(row.sent_at || row.created_at)}</span>
             </div>
             <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.82rem', lineHeight: 1.45 }}>
               {row.content}
             </div>
+            {row.metadata?.error ? (
+              <div style={{ marginTop: 4, fontSize: '0.73rem', fontWeight: 700, color: '#F87171' }}>
+                סיבת כישלון: {row.metadata.error}
+              </div>
+            ) : null}
           </div>
         ))}
       </div>

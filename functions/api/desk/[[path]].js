@@ -4,7 +4,7 @@ import { loadCalendarReplica } from '../../lib/calendarReplica.js';
 import { compactStayRow } from '../../lib/guestContextStore.js';
 import { createHypPaymentPage, hasHypCreds } from '../../lib/hypPay.js';
 import { UNIT_DISPLAY_NAMES } from '../../lib/unitNames.js';
-import { onRequest as checkoutOnRequest, persistGuestRow, readBooking } from '../checkout/[[path]].js';
+import { onRequest as checkoutOnRequest, loadGuestIdPhoto, persistGuestRow, readBooking } from '../checkout/[[path]].js';
 
 const TOKEN_RE = /^tok_[A-Za-z0-9_-]+$/;
 
@@ -272,7 +272,8 @@ export async function onRequest(context) {
   try {
     const { request, env, params } = context;
     const method = request.method.toUpperCase();
-    const head = [].concat(params.path || []).filter(Boolean)[0] || '';
+    const parts = [].concat(params.path || []).filter(Boolean);
+    const head = parts[0] || '';
     if (method === 'OPTIONS') return json({ ok: true });
 
     if (head === 'login' && method === 'POST') {
@@ -291,6 +292,23 @@ export async function onRequest(context) {
 
     const session = await readSession(env, request);
     if (!session) return errorJson('צריך להתחבר מחדש', 401, 'UNAUTHORIZED');
+
+    if (head === 'id-photo' && method === 'GET') {
+      const photoToken = parts[1] || '';
+      if (!TOKEN_RE.test(photoToken)) return errorJson('קישור לא תקין', 400, 'INVALID_TOKEN');
+      const photo = await loadGuestIdPhoto(env, photoToken);
+      if (!photo) return errorJson('אין תעודה שמורה', 404, 'NOT_FOUND');
+      return new Response(photo.bytes, {
+        status: 200,
+        headers: {
+          'content-type': photo.mime,
+          'cache-control': 'private, no-store',
+          'x-content-type-options': 'nosniff',
+          'content-disposition': 'inline; filename="id-photo"',
+          'referrer-policy': 'no-referrer'
+        }
+      });
+    }
 
     if (head === 'bookings' && method === 'GET') {
       const day = new URL(request.url).searchParams.get('day')

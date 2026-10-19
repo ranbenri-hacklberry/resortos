@@ -1,12 +1,14 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { config, loadCleaners, loadRooms } from './config.js';
-import { WhatsAppClient } from './whatsapp/client.js';
+import { config, loadRooms } from './config.js';
+import { currentStaff, refreshStaff } from './staff/liveStaff.js';
+import { WhatsAppClient, canonicalJid } from './whatsapp/client.js';
 import { Transcriber, transcribeVoiceNote, isAudioMessage, extractText } from './whatsapp/media.js';
 import { OllamaClient } from './llm/client.js';
 import { ResortOSClient } from './integration/resortos.js';
 import { createPipeline } from './pipeline.js';
 import { generateRoomQrPng } from './whatsapp/qrGenerator.js';
 import { resolveRoomByAlias } from './llm/client.js';
+import { gmailStatus } from './gmail/mailbox.js';
 
 const wa = new WhatsAppClient();
 const stt = new Transcriber();
@@ -22,7 +24,7 @@ const pipeline = createPipeline({
   transcribe: (m, hint) => transcribeVoiceNote(m, stt, hint),
   llm,
   resortos,
-  cleaners: loadCleaners,
+  cleaners: currentStaff,
   rooms: loadRooms,
   log,
 });
@@ -34,6 +36,7 @@ wa.on('message', (m) => {
   const jid = m.key.remoteJid || 'global';
   const prev = chatQueues.get(jid) || Promise.resolve();
   const next = prev
+    .then(() => refreshStaff())
     .then(() => pipeline.handleInbound(m))
     .catch((e) => log.error({ err: String(e), jid }, 'Inbound pipeline error'));
   chatQueues.set(jid, next);
@@ -68,9 +71,11 @@ const send = (res: ServerResponse, code: number, body: unknown) => {
 export async function health() {
   const [ollama, mem] = [await llm.ping(), process.memoryUsage()];
   const ok = wa.status === 'open' && ollama.ok;
+  const gmail = await gmailStatus();
   return {
     ok,
     whatsapp: wa.status,
+    gmail: { configured: gmail.configured, connected: gmail.connected, email: gmail.email, unseen: gmail.unseen },
     stt: { ready: stt.ready },
     ollama: { ...ollama, model: config.ollama.model },
     memory: {
@@ -86,6 +91,9 @@ const server = createServer(async (req, res) => {
     if (req.method === 'GET' && req.url === '/health') {
       const h = await health();
       return send(res, h.ok ? 200 : 503, h);
+    }
+    if (req.method === 'GET' && req.url === '/api/gmail/status') {
+      return send(res, 200, await gmailStatus(true));
     }
     if (req.method === 'POST' && req.url === '/api/cleaners/dispatch') {
       if (config.dispatchToken && req.headers['x-agent-token'] !== config.dispatchToken) return send(res, 401, { error: 'unauthorized' });
@@ -118,11 +126,23 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && (req.url === '/api/messages/send' || req.url === '/api/alerts/send')) {
       const body = await readJson(req);
       const text = String(body.text || body.message || '').trim();
-      let phone = String(body.phone || '').replace(/\D/g, '');
-      if (!text || !phone) return send(res, 400, { error: 'phone and text required' });
-      if (phone.startsWith('0')) phone = `972${phone.slice(1)}`;
-      await wa.sendText(`${phone}@s.whatsapp.net`, text);
-      return send(res, 200, { ok: true, sentTo: phone });
+      const explicitJid = String(body.jid || '').trim();
+      const phone = String(body.phone || '').trim();
+      if (!text) return send(res, 400, { error: 'text required' });
+      const target = explicitJid || phone;
+      if (!target) return send(res, 400, { error: 'phone or jid required' });
+      const targetJid = canonicalJid(target);
+      await wa.sendText(targetJid, text);
+      if (body.booking_id) {
+        void resortos.logGuestComm({
+          bookingId: String(body.booking_id),
+          direction: 'outbound',
+          phone: phone || targetJid,
+          content: text,
+          status: 'sent',
+        });
+      }
+      return send(res, 200, { ok: true, sentTo: targetJid });
     }
     send(res, 404, { error: 'not found' });
   } catch (e: any) {
@@ -148,3 +168,5 @@ const shutdown = () => {
 };
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
+process.on('unhandledRejection', (err) => log.error({ err: String(err) }, 'unhandled rejection'));
+process.on('uncaughtException', (err) => log.error({ err: String(err) }, 'uncaught exception'));
