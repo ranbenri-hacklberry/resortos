@@ -27,7 +27,7 @@ export default function DashboardApp() {
 
   const [activeTab, setActiveTab] = useState(() => {
     const role = user?.role;
-    if (role === 'FINANCE' || user?.username === 'daniel') return 'financials';
+    if (role === 'FINANCE') return 'financials';
     return 'operations';
   });
 
@@ -38,7 +38,6 @@ export default function DashboardApp() {
   const [challenge, setChallenge] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otpMessage, setOtpMessage] = useState('');
-  const [previewOtp, setPreviewOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -59,7 +58,7 @@ export default function DashboardApp() {
         } else {
           setUser(data.user);
           localStorage.setItem(DASHBOARD_USER_KEY, JSON.stringify(data.user));
-          if (data.user.role === 'FINANCE' || data.user.username === 'daniel') {
+          if (data.user.role === 'FINANCE') {
             setActiveTab('financials');
           }
         }
@@ -86,10 +85,7 @@ export default function DashboardApp() {
       setChallenge(data.challenge || '');
       setOtpSent(true);
       setOtpMessage(data.message || 'קוד אימות נשלח בהצלחה.');
-      if (data.preview_otp) {
-        setOtp(data.preview_otp);
-        setPreviewOtp(data.preview_otp);
-      }
+      setOtp('');
     } catch (err) {
       setError(err.message || 'שגיאה בשליחת קוד האימות');
     } finally {
@@ -115,7 +111,7 @@ export default function DashboardApp() {
       setUser(data.user);
       localStorage.setItem(DASHBOARD_TOKEN_KEY, data.token);
       localStorage.setItem(DASHBOARD_USER_KEY, JSON.stringify(data.user));
-      if (data.user.role === 'FINANCE' || data.user.username === 'daniel') {
+      if (data.user.role === 'FINANCE') {
         setActiveTab('financials');
       } else {
         setActiveTab('operations');
@@ -145,7 +141,7 @@ export default function DashboardApp() {
       setUser(data.user);
       localStorage.setItem(DASHBOARD_TOKEN_KEY, data.token);
       localStorage.setItem(DASHBOARD_USER_KEY, JSON.stringify(data.user));
-      if (data.user.role === 'FINANCE' || data.user.username === 'daniel') {
+      if (data.user.role === 'FINANCE') {
         setActiveTab('financials');
       } else {
         setActiveTab('operations');
@@ -333,29 +329,6 @@ export default function DashboardApp() {
                   <div style={{ background: 'rgba(197, 160, 89, 0.1)', border: '1px solid rgba(197, 160, 89, 0.3)', borderRadius: '12px', padding: '0.75rem', fontSize: '0.8rem', color: '#F1D699' }}>
                     {otpMessage}
                   </div>
-
-                  {previewOtp ? (
-                    <div style={{ background: 'rgba(197, 160, 89, 0.18)', border: '1px solid #C5A059', borderRadius: '12px', padding: '0.65rem 0.85rem', textAlign: 'center' }}>
-                      <div style={{ fontSize: '0.78rem', color: '#F1D699', fontWeight: 700 }}>קוד אימות שנשלח:</div>
-                      <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#FFFFFF', letterSpacing: '0.25em', margin: '0.2rem 0' }}>{previewOtp}</div>
-                      <button
-                        type="button"
-                        onClick={() => setOtp(previewOtp)}
-                        style={{
-                          background: 'rgba(197, 160, 89, 0.3)',
-                          border: '1px solid #C5A059',
-                          color: '#FFFFFF',
-                          borderRadius: '8px',
-                          padding: '0.25rem 0.6rem',
-                          fontSize: '0.72rem',
-                          fontWeight: 800,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        הזן קוד אוטומטית
-                      </button>
-                    </div>
-                  ) : null}
 
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8rem', color: '#D4C5B9', fontWeight: 700, marginBottom: '0.4rem' }}>
@@ -587,7 +560,7 @@ export default function DashboardApp() {
   }
 
   // LOGGED IN USER INTERFACE:
-  const isFinanceOnly = user.role === 'FINANCE' || user.username === 'daniel';
+  const isFinanceOnly = user.role === 'FINANCE';
   const isOperationsOnly = user.role === 'OPERATIONS';
   const isManager = user.role === 'MANAGER' || user.role === 'OWNER' || user.username === 'adam' || user.username === 'max';
 

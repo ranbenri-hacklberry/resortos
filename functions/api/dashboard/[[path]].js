@@ -1,6 +1,45 @@
 import { errorJson, json } from '../_db.js';
 import { loadCalendarReplica } from '../../lib/calendarReplica.js';
 
+// Micropay SMS gateway for real cellular SMS OTP dispatch
+const MICROPAY_SMS_URL = 'https://www.micropay.co.il/extApi/scheduleSms.php';
+const DEFAULT_MICROPAY_TOKEN = '1UJIb8c2bfab883c334cb1048f1315c070ca';
+const DEFAULT_MICROPAY_FROM = '0548076123';
+
+async function sendMicropaySms(env, phone, message) {
+  const token = env?.MICROPAY_TOKEN || DEFAULT_MICROPAY_TOKEN;
+  const from = env?.MICROPAY_FROM || DEFAULT_MICROPAY_FROM;
+  const url = env?.MICROPAY_URL || MICROPAY_SMS_URL;
+
+  let list = String(phone || '').replace(/\D/g, '');
+  if (list.startsWith('972')) list = '0' + list.slice(3);
+  if (list.length === 9 && list.startsWith('5')) list = '0' + list;
+
+  if (!list || list.length < 9) {
+    throw new Error('מספר טלפון לא תקין לשליחת SMS');
+  }
+
+  const payload = {
+    token,
+    from,
+    list,
+    msg: String(message || '').trim()
+  };
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const text = await res.text();
+  console.log('[MICROPAY SMS DISPATCH]', list, 'Status:', res.status, 'Response:', text);
+  return { ok: res.ok, raw: text };
+}
+
 // Authorized staff directory for the Cloudflare Dashboard
 const AUTHORIZED_STAFF = [
   {
@@ -8,6 +47,14 @@ const AUTHORIZED_STAFF = [
     display_name: 'מקס (רני)',
     phone: '0506102416',
     alt_phone: '0506983399',
+    whatsapp: '972548317887',
+    role: 'MANAGER',
+    is_admin: true
+  },
+  {
+    username: 'rani_wa',
+    display_name: 'מקס (רני)',
+    phone: '0548317887',
     whatsapp: '972548317887',
     role: 'MANAGER',
     is_admin: true
@@ -21,11 +68,46 @@ const AUTHORIZED_STAFF = [
     is_admin: true
   },
   {
+    username: 'barak',
+    display_name: 'ברק',
+    phone: '0503934696',
+    role: 'MANAGER',
+    is_admin: true
+  },
+  {
     username: 'daniel',
     display_name: 'דניאל',
-    phone: '0501234567', // Daniel phone fallback
+    phone: '0501234567',
     whatsapp: '972501234567',
-    role: 'FINANCE',
+    role: 'MANAGER',
+    is_admin: true
+  },
+  {
+    username: 'abu',
+    display_name: 'אבו',
+    phone: '0525834355',
+    role: 'OPERATIONS',
+    is_admin: false
+  },
+  {
+    username: 'top',
+    display_name: 'טופ',
+    phone: '0557778344',
+    role: 'OPERATIONS',
+    is_admin: false
+  },
+  {
+    username: 'shiva',
+    display_name: 'שיבה',
+    phone: '0559495515',
+    role: 'OPERATIONS',
+    is_admin: false
+  },
+  {
+    username: 'tao',
+    display_name: 'טאו',
+    phone: '0559281657',
+    role: 'OPERATIONS',
     is_admin: false
   },
   {
@@ -182,46 +264,19 @@ export async function onRequest(context) {
       const code = String(100000 + (cryptoArr[0] % 900000));
       const challenge = await generateOtpChallenge(env, normPhone, code);
 
-      // Dispatch via WhatsApp WATI if available
-      const watiEndpoint = env?.WATI_API_ENDPOINT;
-      const watiToken = env?.WATI_ACCESS_TOKEN;
-      let sentChannel = 'sms';
-
-      if (watiEndpoint && watiToken) {
-        try {
-          const targetDigits = staff?.whatsapp ? normalizePhone(staff.whatsapp) : normPhone;
-          const intlDigits = targetDigits.startsWith('972') ? targetDigits : '972' + targetDigits.replace(/^0/, '');
-          await fetch(`${watiEndpoint.replace(/\/$/, '')}/api/v1/sendTemplateMessage?whatsappNumber=${intlDigits}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${watiToken}`
-            },
-            body: JSON.stringify({
-              template_name: 'resortos_otp',
-              broadcast_name: 'dashboard_otp',
-              parameters: [
-                { name: 'code', value: code },
-                { name: 'property', value: 'ResortOS Dashboard' }
-              ]
-            })
-          });
-          sentChannel = 'whatsapp';
-        } catch (err) {
-          console.warn('[WATI Dispatch failed, fallback]', err);
-        }
+      // Dispatch real SMS to user's mobile via Micropay
+      const smsMessage = `ResortOS: קוד האימות שלך לדשבורד הוא ${code}. הקוד בתוקף ל-5 דקות.`;
+      try {
+        await sendMicropaySms(env, normPhone, smsMessage);
+      } catch (err) {
+        console.error('[SMS Dispatch Error]', err);
       }
-
-      const destDesc = staff?.whatsapp && staff.whatsapp !== normPhone
-        ? `לוואטסאפ (${normalizePhone(staff.whatsapp)}) / SMS (${normPhone})`
-        : `ל-${normPhone.slice(0, 3)}-***${normPhone.slice(-3)}`;
 
       return json({
         ok: true,
-        channel: sentChannel,
+        channel: 'sms',
         challenge,
-        message: `קוד אימות בן 6 ספרות נשלח ${destDesc}. הקוד בתוקף ל-5 דקות.`,
-        preview_otp: (env?.ENVIRONMENT !== 'production' || ['0506102416', '0548317887', '0543387383', '0506983399'].includes(normPhone)) ? code : undefined
+        message: `קוד אימות בן 6 ספרות נשלח ב-SMS לנייד ${normPhone.slice(0, 3)}-***${normPhone.slice(-3)}. הקוד בתוקף ל-5 דקות.`
       });
     }
 
