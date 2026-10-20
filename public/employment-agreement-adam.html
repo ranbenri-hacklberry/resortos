@@ -244,8 +244,8 @@
 
       <div class="party-row">
         <span class="party-title">לבין:</span>
-        <strong>אדם דורות</strong>, ת.ז. <span class="field-blank" contenteditable="true" id="f-worker-id" style="min-width: 110px;">_________________</span>,
-        מרחוב/יישוב <span class="field-blank" contenteditable="true" id="f-worker-addr" style="min-width: 160px;">_________________</span>,
+        <strong>אדם דורות</strong>, ת.ז. <span class="field-blank" contenteditable="true" id="f-worker-id">204593529</span>,
+        מרחוב/יישוב <span class="field-blank" contenteditable="true" id="f-worker-addr">רחוב זית 110, נאות גולן</span>,
         טלפון: <span class="field-blank" contenteditable="true" id="f-worker-phone" style="min-width: 120px; direction: ltr; text-align: right;">_________________</span>
       </div>
       <div style="text-align: left; font-weight: 700; color: #475569; margin-top: 4px;">(להלן: ״העובד״) מצד שני;</div>
@@ -337,7 +337,7 @@
   <script>
     function clearBlanks() {
       const blanks = document.querySelectorAll('.field-blank');
-      const keepIds = ['f-contract-day', 'f-contract-month', 'f-contract-year', 'f-emp-id', 'f-emp-addr', 'f-salary-base', 'f-salary-words', 'f-commission', 'f-travel-exp'];
+      const keepIds = ['f-contract-day', 'f-contract-month', 'f-contract-year', 'f-emp-id', 'f-emp-addr', 'f-worker-id', 'f-worker-addr', 'f-salary-base', 'f-salary-words', 'f-commission', 'f-travel-exp'];
       blanks.forEach(el => {
         if (!keepIds.includes(el.id)) {
           el.textContent = '';
@@ -351,8 +351,8 @@
       document.getElementById('f-contract-year').textContent = '2026';
       document.getElementById('f-emp-id').textContent = '027280536';
       document.getElementById('f-emp-addr').textContent = 'רמת גן';
-      document.getElementById('f-worker-addr').textContent = '_________________';
-      document.getElementById('f-worker-id').textContent = '_________________';
+      document.getElementById('f-worker-id').textContent = '204593529';
+      document.getElementById('f-worker-addr').textContent = 'רחוב זית 110, נאות גולן';
       document.getElementById('f-worker-phone').textContent = '_________________';
       document.getElementById('f-job-scope').textContent = 'משרה מלאה (100%)';
       document.getElementById('f-job-days').textContent = "ימים א' עד ה' / שעות עבודה גמישות בהתאם לפגישות השטח ולתיאום מול הלקוחות";
