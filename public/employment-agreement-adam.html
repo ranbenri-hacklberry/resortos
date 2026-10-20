@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="utf-8">
+  <title>הסכם העסקה אישי - בועז שכנטוב / אדם דורות (שיווק ומכירות)</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 14mm 16mm 14mm 16mm;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    }
+    body {
+      background: #f1f5f9;
+      padding: 24px;
+      color: #0f172a;
+      line-height: 1.5;
+    }
+    .toolbar {
+      max-width: 210mm;
+      margin: 0 auto 20px;
+      background: #ffffff;
+      padding: 12px 20px;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      border: 1px solid #cbd5e1;
+    }
+    .btn {
+      background: #1e293b;
+      color: #fff;
+      border: none;
+      padding: 9px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      text-decoration: none;
+      transition: background 0.15s;
+    }
+    .btn:hover { background: #0f172a; }
+    .btn-blue { background: #0284c7; }
+    .btn-blue:hover { background: #0369a1; }
+    .btn-green { background: #16a34a; }
+    .btn-green:hover { background: #15803d; }
+    .toolbar-hint {
+      font-size: 13px;
+      color: #64748b;
+      font-weight: 600;
+    }
+
+    .contract-sheet {
+      max-width: 210mm;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 18mm 20mm;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+      border-radius: 4px;
+      color: #0f172a;
+      font-size: 13.5px;
+      line-height: 1.58;
+    }
+
+    .contract-title {
+      text-align: center;
+      margin-bottom: 22px;
+      border-bottom: 2px solid #0f172a;
+      padding-bottom: 12px;
+    }
+    .contract-title h1 {
+      font-size: 23px;
+      font-weight: 900;
+      letter-spacing: -0.3px;
+      margin-bottom: 3px;
+    }
+    .contract-title .role-tag {
+      display: inline-block;
+      background: #e0f2fe;
+      color: #0369a1;
+      padding: 3px 12px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 700;
+      margin: 4px 0 6px 0;
+    }
+    .contract-title p.date-line {
+      font-size: 13.5px;
+      color: #475569;
+      font-weight: 600;
+    }
+
+    .parties-box {
+      margin-bottom: 20px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 14px 18px;
+    }
+    .party-row {
+      margin-bottom: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 6px;
+    }
+    .party-row:last-child {
+      margin-bottom: 0;
+    }
+    .party-title {
+      font-weight: 800;
+      color: #0f172a;
+      min-width: 70px;
+    }
+    .field-blank {
+      border-bottom: 1px dashed #64748b;
+      min-width: 140px;
+      display: inline-block;
+      padding: 0 4px;
+      color: #0f172a;
+      font-weight: 600;
+      outline: none;
+    }
+    .field-blank:focus {
+      background: #eff6ff;
+      border-bottom-style: solid;
+      border-color: #0284c7;
+    }
+
+    .section-title {
+      font-size: 14.5px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-top: 16px;
+      margin-bottom: 6px;
+      border-right: 4px solid #1e293b;
+      padding-right: 8px;
+    }
+    p.clause {
+      margin-bottom: 7px;
+      text-align: justify;
+    }
+    ol.sub-clauses {
+      margin-right: 24px;
+      margin-bottom: 8px;
+    }
+    ol.sub-clauses li {
+      margin-bottom: 4px;
+    }
+
+    .signatures-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+      margin-top: 36px;
+      padding-top: 18px;
+      border-top: 1px solid #cbd5e1;
+      page-break-inside: avoid;
+    }
+    .sig-box {
+      text-align: center;
+    }
+    .sig-line {
+      margin-top: 48px;
+      border-top: 1px solid #0f172a;
+      padding-top: 6px;
+      font-weight: 700;
+      font-size: 13.5px;
+    }
+    .sig-sub {
+      font-size: 12px;
+      color: #64748b;
+      margin-top: 2px;
+    }
+
+    @media print {
+      body {
+        background: transparent !important;
+        padding: 0 !important;
+      }
+      .toolbar {
+        display: none !important;
+      }
+      .contract-sheet {
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        padding: 0 !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        font-size: 12.5px !important;
+        line-height: 1.48 !important;
+      }
+      .contract-title h1 {
+        font-size: 19px !important;
+      }
+      .signatures-grid {
+        margin-top: 24px !important;
+        page-break-inside: avoid !important;
+      }
+      .sig-line {
+        margin-top: 38px !important;
+      }
+      .page-break {
+        page-break-after: always;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+      <button class="btn btn-green" onclick="window.print()">🖨️ הדפס / שמור כ-PDF</button>
+      <button class="btn btn-blue" onclick="fillDefaults()">✍️ שחזר נתוני בסיס</button>
+      <button class="btn" onclick="clearBlanks()">🧹 נקה קווים ריקים</button>
+    </div>
+    <span class="toolbar-hint">💡 ניתן ללחוץ על כל קו מנוקד ולהקליד ישירות בדפדפן לפני ההדפסה</span>
+  </div>
+
+  <main class="contract-sheet">
+    <header class="contract-title">
+      <h1>הסכם עבודה אישי</h1>
+      <div class="role-tag">איש מכירות ושיווק שטח - אזור הצפון | תחום: ייבוא מסחרי</div>
+      <p class="date-line">שנערך ונחתם ביום <span class="field-blank" contenteditable="true" id="f-contract-day">01</span> לחודש <span class="field-blank" contenteditable="true" id="f-contract-month">אוקטובר</span> שנת <span class="field-blank" contenteditable="true" id="f-contract-year">2026</span></p>
+    </header>
+
+    <div class="parties-box">
+      <div class="party-row">
+        <span class="party-title">בין:</span>
+        <strong>בועז שכנטוב</strong>, ת.ז. <span class="field-blank" contenteditable="true" id="f-emp-id">027280536</span>,
+        מרחוב/עיר <span class="field-blank" contenteditable="true" id="f-emp-addr">רמת גן</span>
+      </div>
+      <div style="text-align: left; font-weight: 700; color: #475569; margin: 4px 0 8px 0;">(להלן: ״המעסיק״) מצד אחד;</div>
+
+      <div class="party-row">
+        <span class="party-title">לבין:</span>
+        <strong>אדם דורות</strong>, ת.ז. <span class="field-blank" contenteditable="true" id="f-worker-id" style="min-width: 110px;">_________________</span>,
+        מרחוב/יישוב <span class="field-blank" contenteditable="true" id="f-worker-addr" style="min-width: 160px;">_________________</span>,
+        טלפון: <span class="field-blank" contenteditable="true" id="f-worker-phone" style="min-width: 120px; direction: ltr; text-align: right;">_________________</span>
+      </div>
+      <div style="text-align: left; font-weight: 700; color: #475569; margin-top: 4px;">(להלן: ״העובד״) מצד שני;</div>
+    </div>
+
+    <!-- 1. מבוא והצהרות -->
+    <div class="section-title">1. מבוא והצהרות הצדדים</div>
+    <p class="clause">1.1. הואיל והמעסיק עוסק, בין היתר, בייבוא מסחרי של מוצרים וסחורות מסין לישראל, שיווקם, הפצתם ומכירתם ללקוחות סיטונאיים, קמעונאיים, חנויות, רשתות ועסקים (להלן: <strong>״הפעילות העסקית״</strong> או <strong>״המוצרים״</strong>);</p>
+    <p class="clause">1.2. והואיל והמעסיק מעוניין להעסיק את העובד, והעובד מעוניין לעבוד אצל המעסיק בתפקיד של איש שיווק ומכירות שטח בגזרת אזור הצפון, לשם פיתוח הפעילות המסחרית, איתור וגיוס לקוחות חדשים, שימור לקוחות קיימים והגדלת מחזורי המכירות;</p>
+    <p class="clause">1.3. והואיל והעובד הצהיר והתחייב כי הינו בעל הכישורים, הידע המסחרי, כושר המשא ומתן, רשיון נהיגה תקף וכושר ניידות הנדרשים לביצוע תפקידי שיווק ומכירות שטח במלואם, בנאמנות ובמקצועיות;</p>
+    <p class="clause">1.4. והואיל והצדדים מעוניינים להסדיר בכתב את תנאי העסקתו של העובד, זכויותיו וחובותיו במסגרת הסכם זה;</p>
+    <p class="clause"><strong>לפיכך הוצהר, הוסכם והותנה בין הצדדים כדלקמן:</strong></p>
+
+    <!-- 2. תקופת ההסכם -->
+    <div class="section-title">2. תקופת ההסכם ותחילת עבודה</div>
+    <p class="clause">2.1. תוקף הסכם זה ומועד תחילת עבודתו של העובד בפועל הינו ביום <strong>1 באוקטובר 2026</strong> (להלן: <strong>״מועד תחילת העבודה״</strong>).</p>
+    <p class="clause">2.2. ההסכם הינו לתקופה בלתי קצובה, וכל אחד מהצדדים יהא רשאי לסיימו בכל עת במתן הודעה מוקדמת בכתב בהתאם להוראות הדין ולהסכם זה.</p>
+
+    <!-- 3. הגדרת התפקיד -->
+    <div class="section-title">3. מהות התפקיד, גזרת פעילות ותחומי אחריות</div>
+    <p class="clause">3.1. העובד יועסק בתפקיד: <strong>איש מכירות, שיווק ופיתוח עסקי שטח - אזור הצפון</strong> (להלן: <strong>״התפקיד״</strong>), ויהיה כפוף ישירות למעסיק, בועז שכנטוב.</p>
+    <p class="clause">3.2. גזרת הפעילות העיקרית של העובד הינה באזור הצפון (גליל, גולן, עמקים, קריות/חיפה והסביבה), בעבודת שטח ניידת מול בתי עסק ולקוחות.</p>
+    <p class="clause">3.3. תחומי אחריותו ומשימותיו של העובד כוללים, בין היתר:</p>
+    <ol class="sub-clauses" type="א">
+      <li>איתור יזום, פנייה, גיוס ופתיחת לקוחות חדשים באזור הצפון (חנויות, רשתות, סיטונאים, מפיצים ועסקים רלוונטיים).</li>
+      <li>ניהול תיקי לקוחות קיימים, שימור קשר שוטף, ביצוע ביקורי שטח תקופתיים והגדלת סל הרכישות.</li>
+      <li>הצגת קווי המוצרים המיובאים מסין, הצגת דוגמאות מוצר (Samples), קטלוגים ומחירונים, ומתן מענה מסחרי ומקצועי לדרישות הלקוחות.</li>
+      <li>סגירת עסקאות, לקיחת הזמנות ומעקב אחר אספקת הסחורה ללקוח בתיאום מול המעסיק ומערך הלוגיסטיקה והמחסן.</li>
+      <li>מעקב שוטף אחר גבייה ותשלומים מלקוחות באזור הצפון בהתאם לתנאי האשראי שנקבעו מראש ע״י המעסיק.</li>
+      <li>דיווח שוטף למעסיק על פעילות השטח, יומן פגישות, הצעות מחיר פתוחות, משובי שוק ומידע תחרותי.</li>
+      <li>ביצוע כל משימה שיווקית, מסחרית או מכירתית סבירה נוספת בהתאם להנחיות המעסיק ולצורכי העסק.</li>
+    </ol>
+
+    <!-- 4. היקף משרה -->
+    <div class="section-title">4. היקף משרה, ניידות ושעות עבודה</div>
+    <p class="clause">4.1. העובד יועסק בהיקף משרה של: <span class="field-blank" contenteditable="true" id="f-job-scope" style="min-width: 180px;">משרה מלאה (100%)</span>.</p>
+    <p class="clause">4.2. ימי העבודה השבועיים יהיו: <span class="field-blank" contenteditable="true" id="f-job-days" style="min-width: 340px;">ימים א' עד ה' / שעות עבודה גמישות בהתאם לפגישות השטח ולתיאום מול הלקוחות</span>.</p>
+    <p class="clause">4.3. בשל אופי התפקיד כעבודת שטח חיצונית הדורשת מידה רבה של אמון אישי ועצמאות בניהול הזמן, מתחייב העובד לנהל יומן פגישות מסודר ולדווח באופן שוטף למעסיק על שעות ופעילות השטח.</p>
+
+    <div class="page-break"></div>
+
+    <!-- 5. שכר עבודה ועמלות -->
+    <div class="section-title">5. שכר עבודה, עמלות והחזר הוצאות</div>
+    <p class="clause">5.1. <strong>שכר יסוד חודשי:</strong> תמורת ביצוע עבודתו ומילוי התחייבויותיו לפי הסכם זה, ישלם המעסיק לעובד שכר יסוד חודשי ברוטו בסך של: <span class="field-blank" contenteditable="true" id="f-salary-base" style="min-width: 80px;">13,000</span> ש״ח (במילים: <span class="field-blank" contenteditable="true" id="f-salary-words" style="min-width: 130px;">שלושה עשר אלף</span> ש״ח).</p>
+    <p class="clause">5.2. <strong>עמלות מכירה:</strong> בנוסף לשכר היסוד, יהיה העובד זכאי לעמלות מכירה בשיעור של <span class="field-blank" contenteditable="true" id="f-commission" style="min-width: 50px;">3%</span> ממחזור המכירות (לפני מע״מ) שבוצע על ידו ונגבה בפועל באזור הצפון.</p>
+    <p class="clause">5.3. <strong>הוצאות רכב ונסיעות שטח:</strong> בשל היות התפקיד תפקיד שטח הדורש ניידות מרובה באזור הצפון, ישלם המעסיק לעובד החזר הוצאות רכב בסך קבוע של: <span class="field-blank" contenteditable="true" id="f-travel-exp" style="min-width: 60px;">600</span> ש״ח לחודש.</p>
+    <p class="clause">5.4. <strong>מועד תשלום:</strong> השכר, העמלות והחזר ההוצאות ישולמו מדי חודש בחודשו, לא יאוחר מהיום התשיעי לחודש הקלנדרי העוקב עבור החודש שחלף, ישירות לחשבון הבנק של העובד.</p>
+    <p class="clause">5.5. מן השכר ינוכו כל ניכויי החובה על פי חוק (מס הכנסה, ביטוח לאומי, ביטוח בריאות וחלק העובד בהפרשות סוציאליות).</p>
+
+    <!-- 6. תנאים סוציאליים -->
+    <div class="section-title">6. תנאים סוציאליים ופנסיה</div>
+    <p class="clause">6.1. <strong>ביטוח פנסיוני ופיצויים:</strong> המעסיק והעובד יפרישו לקופת פנסיה / ביטוח מנהלים כבחירת העובד, בהתאם לצו ההרחבה הכללי לביטוח פנסיוני מקיף במשק (תגמולי מעסיק, תגמולי עובד ופיצויי פיטורין כחוק).</p>
+    <p class="clause">6.2. <strong>חופשה שנתית:</strong> העובד יהיה זכאי לחופשה שנתית בהתאם להוראות חוק חופשה שנתית, התשי״א-1951. מועדי החופשה יתואמו מראש עם המעסיק.</p>
+    <p class="clause">6.3. <strong>דמי מחלה:</strong> העובד יהיה זכאי לדמי מחלה בהתאם לחוק דמי מחלה, התשל״ו-1976, בכפוף להמצאת אישור רפואי כדין.</p>
+    <p class="clause">6.4. <strong>דמי הבראה:</strong> העובד יהיה זכאי לדמי הבראה בהתאם לצו ההרחבה הכללי במשק, לאחר השלמת שנת עבודה מלאה.</p>
+
+    <!-- 7. סודיות והגנת ספקים -->
+    <div class="section-title">7. חובת נאמנות, סודיות, הגנת ספקים מסין ואי-תחרות</div>
+    <p class="clause">7.1. העובד מתחייב להקדיש את מיטב מרצו, כישוריו וזמנו לקידום עסקיו ומכירותיו של המעסיק, ולפעול בנאמנות, ביושר ובמסירות.</p>
+    <p class="clause">7.2. <strong>סודיות מסחרית:</strong> העובד מצהיר ומאשר כי במסגרת תפקידו ייחשף למידע מסחרי רגיש ביותר של המעסיק, לרבות: שמות ופרטי ספקים ומפעלים בסין, עלויות רכש, מחירי ייבוא והובלה, מחירונים והנחות מסחריות, רשימות לקוחות וקניינים, ותוכניות שיווק (להלן: <strong>״סודות מסחריים״</strong>). העובד מתחייב לשמור את המידע בסודיות מוחלטת, לא לעשות בו שימוש לצרכיו האישיים ולא להעבירו לכל גורם שלישי, הן בתקופת העבודה והן לאחריה ללא הגבלת זמן.</p>
+    <p class="clause">7.3. <strong>אי-תחרות והגנת קשרי ספקים ולקוחות:</strong> העובד מתחייב כי במשך תקופת עבודתו ובמשך 12 חודשים לאחר סיומה, לא יפנה במישרין או בעקיפין לספקי המעסיק או מפעליו בסין, לא יבצע מולם רכש מתחרה, ולא ישדל לקוחות של המעסיק לרכוש מוצרים מתחרים.</p>
+    <p class="clause">7.4. <strong>רכוש המעסיק:</strong> כל הדוגמאות (Samples), קטלוגים, מחירונים, רשימות לקוחות, ציוד ומסמכים שיימסרו לעובד הינם רכושו הבלעדי של המעסיק ויוחזרו במלואם עם סיום יחסי העבודה או לפי דרישה ראשונה.</p>
+
+    <!-- 8. סיום יחסי עבודה -->
+    <div class="section-title">8. סיום יחסי עבודה והודעה מוקדמת</div>
+    <p class="clause">8.1. כל צד יהא רשאי לסיים הסכם זה בכל עת, במתן הודעה מוקדמת בכתב לצד השני בהתאם לקבוע בחוק הודעה מוקדמת לפיטורים ולהתפטרות, התשס״א-2001.</p>
+    <p class="clause">8.2. המעסיק יהא רשאי לוותר על עבודתו בפועל של העובד במהלך תקופת ההודעה המוקדמת, כולה או מקצתה, ובלבד שישלם לעובד תמורת הודעה מוקדמת כקבוע בחוק.</p>
+    <p class="clause">8.3. עם סיום העסקתו, יבצע העובד חפיפה מסודרת ויעביר את כל תיקי הלקוחות, הצעות מחיר פעילות, נתוני גבייה, דוגמאות מוצרים וציוד שהיו בחזקתו לידי המעסיק.</p>
+
+    <!-- 9. שונות וסמכות שיפוט -->
+    <div class="section-title">9. שונות וסמכות שיפוט</div>
+    <p class="clause">9.1. הסכם זה ממצה ומבטל כל הסכמה, מצג או התחייבות קודמים, בכתב או בעל פה, שנעשו בין הצדדים עובר לחתימתו.</p>
+    <p class="clause">9.2. כל שינוי או תוספת להסכם זה יהיו תקפים אך ורק אם נעשו בכתב ונחתמו על ידי שני הצדדים.</p>
+    <p class="clause">9.3. סמכות השיפוט הבלעדית בכל סכסוך הנובע מהסכם זה או הקשור בו תהא מסורה לבית הדין האזורי לעבודה המוסמך במחוז הצפון (נצרת).</p>
+
+    <!-- חתימות -->
+    <div class="signatures-grid">
+      <div class="sig-box">
+        <div class="sig-line">בועז שכנטוב</div>
+        <div class="sig-sub">המעסיק</div>
+      </div>
+      <div class="sig-box">
+        <div class="sig-line">אדם דורות</div>
+        <div class="sig-sub">העובד</div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    function clearBlanks() {
+      const blanks = document.querySelectorAll('.field-blank');
+      const keepIds = ['f-contract-day', 'f-contract-month', 'f-contract-year', 'f-emp-id', 'f-emp-addr', 'f-salary-base', 'f-salary-words', 'f-commission', 'f-travel-exp'];
+      blanks.forEach(el => {
+        if (!keepIds.includes(el.id)) {
+          el.textContent = '';
+        }
+      });
+    }
+
+    function fillDefaults() {
+      document.getElementById('f-contract-day').textContent = '01';
+      document.getElementById('f-contract-month').textContent = 'אוקטובר';
+      document.getElementById('f-contract-year').textContent = '2026';
+      document.getElementById('f-emp-id').textContent = '027280536';
+      document.getElementById('f-emp-addr').textContent = 'רמת גן';
+      document.getElementById('f-worker-addr').textContent = '_________________';
+      document.getElementById('f-worker-id').textContent = '_________________';
+      document.getElementById('f-worker-phone').textContent = '_________________';
+      document.getElementById('f-job-scope').textContent = 'משרה מלאה (100%)';
+      document.getElementById('f-job-days').textContent = "ימים א' עד ה' / שעות עבודה גמישות בהתאם לפגישות השטח ולתיאום מול הלקוחות";
+      document.getElementById('f-salary-base').textContent = '13,000';
+      document.getElementById('f-salary-words').textContent = 'שלושה עשר אלף';
+      document.getElementById('f-commission').textContent = '3%';
+      document.getElementById('f-travel-exp').textContent = '600';
+    }
+  </script>
+</body>
+</html>
