@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="utf-8">
+  <title>הזמנת עבודה מספק - ResortOS</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 8mm 10mm;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    }
+    body {
+      background: #f1f5f9;
+      padding: 20px;
+      color: #0f172a;
+    }
+    .wo-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      max-width: 190mm;
+      margin: 0 auto 16px;
+      background: #ffffff;
+      padding: 12px 18px;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      border: 1px solid #cbd5e1;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .btn {
+      color: #fff;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 13.5px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      text-decoration: none;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.9; }
+
+    .wo-sheet {
+      max-width: 190mm;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 6mm 8mm;
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+      color: #0f172a;
+      direction: rtl;
+    }
+    .wo-title-box {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    .wo-title {
+      font-size: 24px;
+      font-weight: 900;
+      color: #0f172a;
+      letter-spacing: -0.3px;
+      margin-bottom: 2px;
+      line-height: 1.15;
+    }
+    .wo-subtitle {
+      font-size: 13px;
+      color: #475569;
+      font-weight: 700;
+      line-height: 1.15;
+    }
+    .wo-section {
+      margin-bottom: 8px;
+      border: 1.5px solid #1e293b;
+      border-radius: 4px;
+      overflow: hidden;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .wo-head-dark {
+      background: #1e293b;
+      color: #ffffff;
+      padding: 4px 10px;
+      font-size: 12.5px;
+      font-weight: 800;
+      letter-spacing: 0.2px;
+      line-height: 1.15;
+    }
+    .wo-head-light {
+      background: #e2e8f0;
+      color: #0f172a;
+      padding: 4px 10px;
+      font-size: 12.5px;
+      font-weight: 800;
+      letter-spacing: 0.2px;
+      line-height: 1.15;
+    }
+    .wo-row {
+      display: grid;
+      border-bottom: 1px solid #cbd5e1;
+      background: #ffffff;
+    }
+    .wo-row:last-child {
+      border-bottom: none;
+    }
+    .wo-cell {
+      padding: 5px 10px;
+      border-left: 1px solid #cbd5e1;
+      min-height: 38px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .wo-cell:last-child {
+      border-left: none;
+    }
+    .wo-lbl {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: #64748b;
+      margin-bottom: 2px;
+      line-height: 1;
+    }
+    .wo-val {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #0f172a;
+      outline: none;
+      min-height: 18px;
+      line-height: 1.25;
+    }
+    .wo-val[contenteditable="true"]:focus {
+      background: #eff6ff;
+      border-radius: 2px;
+    }
+    .wo-lines {
+      padding: 6px 12px;
+      background: #ffffff;
+    }
+    .wo-line {
+      border-bottom: 1px solid #94a3b8;
+      height: 29px;
+      line-height: 28px;
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #0f172a;
+      outline: none;
+    }
+    .wo-line:focus {
+      background: #eff6ff;
+    }
+    .wo-row-sig {
+      min-height: 56px;
+    }
+
+    @media print {
+      html, body {
+        background: #ffffff !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+      }
+      .wo-controls {
+        display: none !important;
+      }
+      .wo-sheet {
+        max-width: 100% !important;
+        height: 275mm !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        width: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
+        page-break-after: avoid !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      .wo-title-box {
+        margin-bottom: 6px !important;
+      }
+      .wo-title {
+        font-size: 24px !important;
+        margin-bottom: 2px !important;
+      }
+      .wo-subtitle {
+        font-size: 12.5px !important;
+      }
+      .wo-section {
+        margin-bottom: 0 !important;
+        border: 1.5px solid #0f172a !important;
+      }
+      .wo-head-dark {
+        background: #1e293b !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color: #ffffff !important;
+        padding: 4px 10px !important;
+        font-size: 12px !important;
+      }
+      .wo-head-light {
+        background: #e2e8f0 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color: #0f172a !important;
+        padding: 4px 10px !important;
+        font-size: 12px !important;
+      }
+      .wo-cell, .wo-row {
+        border-color: #cbd5e1 !important;
+        min-height: 38px !important;
+        padding: 4px 10px !important;
+      }
+      .wo-lbl {
+        font-size: 10.5px !important;
+      }
+      .wo-val {
+        font-size: 13.5px !important;
+        min-height: 18px !important;
+      }
+      .wo-lines {
+        padding: 6px 10px !important;
+      }
+      .wo-line {
+        border-color: #94a3b8 !important;
+        height: 29px !important;
+        line-height: 28px !important;
+        font-size: 13.5px !important;
+      }
+      .wo-row-sig {
+        min-height: 56px !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="wo-controls">
+    <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+      <button class="btn" style="background:#1e293b;" onclick="window.print()">🖨️ הדפס טופס ריק (A4)</button>
+      <button class="btn" style="background:#0284c7;" onclick="setMode('sample')">✍️ טען נתוני דוגמה 10065 (ארתור)</button>
+      <button class="btn" style="background:#64748b;" onclick="setMode('blank')">🔲 נקה לטופס ריק</button>
+      <a href="/qr-stickers.html#work-order" class="btn" style="background:#0f172a;">🔙 לוח קודי כספות ומדבקות</a>
+    </div>
+    <span style="font-size: 13px; color: #475569; font-weight: 600;">💡 מותאם ב-100% לדף A4 בודד שלם (מתפרס על כל גובה העמוד)</span>
+  </div>
+
+  <div class="wo-sheet">
+    <div class="wo-title-box">
+      <div class="wo-title">הזמנת עבודה מספק</div>
+      <div class="wo-subtitle">טופס לאישור, תיעוד ומעקב אחר עבודות ספקים וקבלנים</div>
+    </div>
+
+    <!-- Section 1: פרטי ההזמנה -->
+    <div class="wo-section">
+      <div class="wo-head-dark">פרטי ההזמנה</div>
+      <div class="wo-row" style="grid-template-columns: 1fr 1fr 1fr;">
+        <div class="wo-cell">
+          <span class="wo-lbl">מספר הזמנת עבודה</span>
+          <div class="wo-val" id="wo-num" contenteditable="true"></div>
+        </div>
+        <div class="wo-cell">
+          <span class="wo-lbl">תאריך פתיחה</span>
+          <div class="wo-val" id="wo-date-open" contenteditable="true"></div>
+        </div>
+        <div class="wo-cell">
+          <span class="wo-lbl">שם המזמין / אחראי</span>
+          <div class="wo-val" id="wo-requester" contenteditable="true"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 2: פרטי הספק -->
+    <div class="wo-section">
+      <div class="wo-head-dark">פרטי הספק</div>
+      <div class="wo-row" style="grid-template-columns: 2fr 1fr;">
+        <div class="wo-cell">
+          <span class="wo-lbl">שם הספק / העסק</span>
+          <div class="wo-val" id="wo-vendor-name" contenteditable="true"></div>
+        </div>
+        <div class="wo-cell">
+          <span class="wo-lbl">איש קשר</span>
+          <div class="wo-val" id="wo-vendor-contact" contenteditable="true"></div>
+        </div>
+      </div>
+      <div class="wo-row" style="grid-template-columns: 1.2fr 1.2fr 1fr;">
+        <div class="wo-cell">
+          <span class="wo-lbl">טלפון</span>
+          <div class="wo-val" id="wo-vendor-phone" contenteditable="true" style="direction:ltr; text-align:right;"></div>
+        </div>
+        <div class="wo-cell">
+          <span class="wo-lbl">דוא״ל</span>
+          <div class="wo-val" id="wo-vendor-email" contenteditable="true" style="direction:ltr; text-align:right;"></div>
+        </div>
+        <div class="wo-cell">
+          <span class="wo-lbl">ח.פ. / עוסק מורשה</span>
+          <div class="wo-val" id="wo-vendor-tax-id" contenteditable="true" style="direction:ltr; text-align:right;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 3: פרטי העבודה -->
+    <div class="wo-section">
+      <div class="wo-head-dark">פרטי העבודה</div>
+      <div class="wo-row" style="grid-template-columns: 1.2fr 1.5fr 1fr;">
+        <div class="wo-cell">
+          <span class="wo-lbl">אתר / מתחם</span>
+          <div class="wo-val" id="wo-site" contenteditable="true"></div>
+        </div>
+        <div class="wo-cell">
+          <span class="wo-lbl">יחידה / חדר / אזור</span>
+          <div class="wo-val" id="wo-unit-area" contenteditable="true"></div>
+        </div>
+        <div class="wo-cell">
+          <span class="wo-lbl">רמת דחיפות</span>
+          <div class="wo-val" id="wo-urgency" contenteditable="true"></div>
+        </div>
+      </div>
+      <div class="wo-row" style="grid-template-columns: 1.5fr 1.5fr;">
+        <div class="wo-cell">
+          <span class="wo-lbl">תאריך ביצוע מתוכנן</span>
+          <div class="wo-val" id="wo-scheduled-date" contenteditable="true"></div>
+        </div>
+        <div class="wo-cell">
+          <span class="wo-lbl">שעת הגעה משוערת</span>
+          <div class="wo-val" id="wo-scheduled-time" contenteditable="true"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 4: תיאור העבודה / התקלה / השירות הנדרש -->
+    <div class="wo-section">
+      <div class="wo-head-light">תיאור העבודה / התקלה / השירות הנדרש</div>
+      <div class="wo-lines" id="wo-desc-container">
+        <div class="wo-line" contenteditable="true" id="wo-line-1"></div>
+        <div class="wo-line" contenteditable="true" id="wo-line-2"></div>
+        <div class="wo-line" contenteditable="true" id="wo-line-3"></div>
+        <div class="wo-line" contenteditable="true" id="wo-line-4"></div>
+      </div>
+    </div>
+
+    <!-- Section 5: עלות ואישור -->
+    <div class="wo-section">
+      <div class="wo-head-dark">עלות ואישור</div>
+      <div class="wo-row" style="grid-template-columns: 1fr 1fr 1fr;">
+        <div class="wo-cell">
+          <span class="wo-lbl">מחיר לפני מע״מ</span>
+          <div class="wo-val" id="wo-price-net" contenteditable="true"></div>
+        </div>
+        <div class="wo-cell">
+          <span class="wo-lbl">מע״מ</span>
+          <div class="wo-val" id="wo-vat" contenteditable="true"></div>
+        </div>
+        <div class="wo-cell">
+          <span class="wo-lbl">סה״כ לתשלום</span>
+          <div class="wo-val" id="wo-total" contenteditable="true"></div>
+        </div>
+      </div>
+      <div class="wo-row" style="grid-template-columns: 1fr 1.5fr;">
+        <div class="wo-cell">
+          <span class="wo-lbl">תנאי תשלום</span>
+          <div class="wo-val" id="wo-terms" contenteditable="true"></div>
+        </div>
+        <div class="wo-cell">
+          <span class="wo-lbl">מספר הצעת מחיר / אסמכתא</span>
+          <div class="wo-val" id="wo-quote-ref" contenteditable="true"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 6: סיום העבודה ובקרה -->
+    <div class="wo-section">
+      <div class="wo-head-dark">סיום העבודה ובקרה</div>
+      <div class="wo-row" style="grid-template-columns: 1fr 1fr;">
+        <div class="wo-cell">
+          <span class="wo-lbl">תאריך סיום בפועל</span>
+          <div class="wo-val" id="wo-actual-date" contenteditable="true"></div>
+        </div>
+        <div class="wo-cell">
+          <span class="wo-lbl">שם מאשר העבודה</span>
+          <div class="wo-val" id="wo-approver-name" contenteditable="true"></div>
+        </div>
+      </div>
+      <div class="wo-row wo-row-sig" style="grid-template-columns: 1fr 1fr; min-height: 56px;">
+        <div class="wo-cell" style="justify-content: space-between;">
+          <span class="wo-lbl">חתימת הספק</span>
+          <div class="wo-val" id="wo-sign-vendor" contenteditable="true" style="border-bottom: 1px dotted #94a3b8; min-height: 22px;"></div>
+        </div>
+        <div class="wo-cell" style="justify-content: space-between;">
+          <span class="wo-lbl">חתימת המזמין / מנהל</span>
+          <div class="wo-val" id="wo-sign-manager" contenteditable="true" style="border-bottom: 1px dotted #94a3b8; min-height: 22px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 7: הערות -->
+    <div class="wo-section">
+      <div class="wo-head-light">הערות</div>
+      <div class="wo-lines" id="wo-notes-container">
+        <div class="wo-line" contenteditable="true" id="wo-note-1"></div>
+        <div class="wo-line" contenteditable="true" id="wo-note-2"></div>
+        <div class="wo-line" contenteditable="true" id="wo-note-3"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function setMode(mode) {
+      if (mode === 'blank') {
+        document.getElementById('wo-num').textContent = '';
+        document.getElementById('wo-date-open').textContent = '';
+        document.getElementById('wo-requester').textContent = '';
+        document.getElementById('wo-vendor-name').textContent = '';
+        document.getElementById('wo-vendor-contact').textContent = '';
+        document.getElementById('wo-vendor-phone').textContent = '';
+        document.getElementById('wo-vendor-email').textContent = '';
+        document.getElementById('wo-vendor-tax-id').textContent = '';
+        document.getElementById('wo-site').textContent = '';
+        document.getElementById('wo-unit-area').textContent = '';
+        document.getElementById('wo-urgency').textContent = '';
+        document.getElementById('wo-scheduled-date').textContent = '';
+        document.getElementById('wo-scheduled-time').textContent = '';
+        document.getElementById('wo-line-1').textContent = '';
+        document.getElementById('wo-line-2').textContent = '';
+        document.getElementById('wo-line-3').textContent = '';
+        document.getElementById('wo-line-4').textContent = '';
+        document.getElementById('wo-price-net').textContent = '';
+        document.getElementById('wo-vat').textContent = '';
+        document.getElementById('wo-total').textContent = '';
+        document.getElementById('wo-terms').textContent = '';
+        document.getElementById('wo-quote-ref').textContent = '';
+        document.getElementById('wo-actual-date').textContent = '';
+        document.getElementById('wo-approver-name').textContent = '';
+        document.getElementById('wo-sign-vendor').textContent = '';
+        document.getElementById('wo-sign-manager').textContent = '';
+        document.getElementById('wo-note-1').textContent = '';
+        document.getElementById('wo-note-2').textContent = '';
+        document.getElementById('wo-note-3').textContent = '';
+      } else if (mode === 'sample') {
+        document.getElementById('wo-num').textContent = '10065';
+        document.getElementById('wo-date-open').textContent = '12/10/26';
+        document.getElementById('wo-requester').textContent = 'אדם';
+        document.getElementById('wo-vendor-name').textContent = 'ארתור רוזנברג';
+        document.getElementById('wo-vendor-contact').textContent = '';
+        document.getElementById('wo-vendor-phone').textContent = '054-4669103';
+        document.getElementById('wo-vendor-email').textContent = '';
+        document.getElementById('wo-vendor-tax-id').textContent = '310246244';
+        document.getElementById('wo-site').textContent = 'רמות';
+        document.getElementById('wo-unit-area').textContent = '';
+        document.getElementById('wo-urgency').textContent = 'לא דחוף';
+        document.getElementById('wo-scheduled-date').textContent = '19/10/26';
+        document.getElementById('wo-scheduled-time').textContent = '9:30';
+        document.getElementById('wo-line-1').textContent = 'יוסי בלום, מול הנוף, נופים בלבן';
+        document.getElementById('wo-line-2').textContent = 'חצר מוסיקלית, בקתות מיוחדות';
+        document.getElementById('wo-line-3').textContent = 'צימר בגבעה';
+        document.getElementById('wo-line-4').textContent = '';
+        document.getElementById('wo-price-net').textContent = '2000 (עוסק פטור)';
+        document.getElementById('wo-vat').textContent = '360';
+        document.getElementById('wo-total').textContent = '2360 ₪';
+        document.getElementById('wo-terms').textContent = '30/11/26';
+        document.getElementById('wo-quote-ref').textContent = '';
+        document.getElementById('wo-actual-date').textContent = '19/10/26';
+        document.getElementById('wo-approver-name').textContent = 'אדם';
+        document.getElementById('wo-sign-vendor').textContent = '';
+        document.getElementById('wo-sign-manager').textContent = '';
+        document.getElementById('wo-note-1').textContent = 'מאושר על ידי אדם.';
+        document.getElementById('wo-note-2').textContent = 'בוצע ✓';
+        document.getElementById('wo-note-3').textContent = '';
+      }
+    }
+  </script>
+</body>
+</html>

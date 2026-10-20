@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, CheckCheck, ExternalLink, FileSpreadsheet, Filter, Link2, MessageCircle, Phone, Printer, RefreshCw, Search, Send, Table2 } from 'lucide-react';
+import { Check, CheckCheck, ExternalLink, FileSpreadsheet, FileText, Filter, Link2, MessageCircle, Phone, Printer, RefreshCw, Search, Send, Table2 } from 'lucide-react';
 import { formatIlsFromAgorot, normalizeClearingPayment, normalizeIsraeliId } from '../../lib/clearingPayments';
 import { printCashDayReport } from '../../lib/cashDayReport';
 import { calendarPartyLabel, dutyPrintAreaOf, dutyUnitGroup, printDailyDutyReport } from '../../lib/dailyDutyReport';
@@ -34,6 +34,7 @@ import { coveringUnavailableHold, isUnavailableHoldBooking, unavailableHoldLabel
 import { printGuestFile } from '../../lib/guestFile';
 import {
   PAYMENT_STATUSES,
+  applyPaymentDraft,
   cashCollectedAgorot,
   collectPriorityCash,
   formatPriorityShekels,
@@ -51,6 +52,7 @@ import { toMicropayPhone } from '../../lib/micropaySms';
 import { displayPhone, heStayDate } from '../command/liveCabins';
 import PriorityCashflow from './PriorityCashflow';
 import PriorityCalendar from './PriorityCalendar';
+import PriorityWord from './PriorityWord';
 import { formatManagerMeeting } from '../../lib/managerMeetings';
 import './priority.css';
 
@@ -306,9 +308,12 @@ function cardFromBooking(row, booking) {
     checkOut: whenLabel(booking.check_out_date, formatStayHourLabel(hours?.checkout)),
     nights: nightsLabel(booking.check_in_date, booking.check_out_date),
     bookingId: booking.id,
+    checkInIso: String(booking.check_in_date || '').slice(0, 10),
+    checkOutIso: String(booking.check_out_date || '').slice(0, 10),
     amountAgorot: amount,
     amountText: method === 'VOUCHER' ? '' : (amount ? formatPriorityShekels(amount) : ''),
     cashCollectedAgorot: cash,
+    paidAgorot: recordedPaidAgorot(booking),
     collectedText: method === 'VOUCHER' ? '' : (cash ? formatPriorityShekels(cash) : ''),
     payStatus: priorityStatusKey(booking),
     payMethod: method,
@@ -426,6 +431,8 @@ function rowFromUnit(unit, bookings, today) {
     nextStay,
     party: primary ? calendarPartyLabel(primary) : '',
     bookingId: primary?.id || '',
+    checkInIso: String(primary?.check_in_date || '').slice(0, 10),
+    checkOutIso: String(primary?.check_out_date || '').slice(0, 10),
     outGuest: out.guest,
     outParty: out.party,
     outPhone: out.phone,
@@ -545,13 +552,29 @@ function GuestPill({ kind, booking, swap = false, onOpen, callPending = null, on
   );
 }
 
-function RoomLog({ entries, scope, onScope }) {
-  const rows = visibleRoomLog(entries, scope).slice().reverse();
+function israelDay(iso) {
+  const date = new Date(iso || '');
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(date);
+}
+
+function guestStayLog(entries, checkIn, checkOut) {
+  const cin = String(checkIn || '').slice(0, 10);
+  const cout = String(checkOut || '').slice(0, 10);
+  if (!cin || !cout) return visibleRoomLog(entries, 'cycle');
+  return (entries || []).filter((row) => {
+    const day = israelDay(row.at);
+    return day && day >= cin && day <= cout;
+  });
+}
+
+function RoomLog({ entries, scope, onScope, checkIn, checkOut }) {
+  const rows = (scope === 'all' ? (entries || []) : guestStayLog(entries, checkIn, checkOut)).slice().reverse();
   return (
     <div className="room-panel split-timeline">
       <div className="room-log-bar">
-        <button type="button" className={scope === 'cycle' ? 'is-on' : ''} onClick={() => onScope('cycle')}>מהכניסה האחרונה</button>
-        <button type="button" className={scope === 'all' ? 'is-on' : ''} onClick={() => onScope('all')}>כל ההיסטוריה</button>
+        <button type="button" className={scope !== 'all' ? 'is-on' : ''} onClick={() => onScope('stay')}>האורח הזה</button>
+        <button type="button" className={scope === 'all' ? 'is-on' : ''} onClick={() => onScope('all')}>כל החדר</button>
       </div>
       {rows.length ? rows.map((row) => (
         <div key={row.id || `${row.at}-${row.text}`} className="timeline-item">
@@ -565,7 +588,7 @@ function RoomLog({ entries, scope, onScope }) {
             {row.quote && row.quote !== row.text ? <span className="log-quote">{row.quote}</span> : null}
           </div>
         </div>
-      )) : <div className="room-empty">אין עדיין רשומות לחדר</div>}
+      )) : <div className="room-empty">{scope === 'all' ? 'אין עדיין רשומות לחדר' : 'אין רשומות לאורח הזה'}</div>}
     </div>
   );
 }
@@ -687,12 +710,13 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
 
   const shown = useMemo(() => rows.map((row) => {
     const draft = drafts[row.id] || {};
+    const pay = draft.paymentBookingId && draft.paymentBookingId !== row.bookingId ? {} : draft;
     const clean = draft.clean || row.cleanKey;
-    const payStatus = draft.payStatus || row.payStatus;
-    const payMethod = draft.payMethod || row.payMethod;
-    const parsedAmount = draft.amountText != null ? parsePriorityShekels(draft.amountText) : null;
+    const payStatus = pay.payStatus || row.payStatus;
+    const payMethod = pay.payMethod || row.payMethod;
+    const parsedAmount = pay.amountText != null ? parsePriorityShekels(pay.amountText) : null;
     const amountAgorot = parsedAmount == null ? row.amountAgorot : parsedAmount;
-    const parsedCollected = draft.collectedText != null ? parsePriorityShekels(draft.collectedText) : null;
+    const parsedCollected = pay.collectedText != null ? parsePriorityShekels(pay.collectedText) : null;
     const collectedAgorot = parsedCollected == null ? row.cashCollectedAgorot : parsedCollected;
     const paidAgorot = parsedCollected == null
       ? row.paidAgorot
@@ -732,11 +756,11 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       paidAgorot,
       due: showGuest && row.bookingId && payMethod !== 'VOUCHER' ? formatPriorityShekels(amountAgorot) : '',
       paid: showGuest && row.bookingId && payMethod !== 'VOUCHER' && collectedAgorot > 0 ? formatPriorityShekels(collectedAgorot) : '',
-      amountText: showGuest && payMethod !== 'VOUCHER' && draft.amountText != null
-        ? draft.amountText
+      amountText: showGuest && payMethod !== 'VOUCHER' && pay.amountText != null
+        ? pay.amountText
         : (showGuest && payMethod !== 'VOUCHER' && row.amountAgorot ? formatPriorityShekels(row.amountAgorot) : ''),
-      collectedText: showGuest && payMethod !== 'VOUCHER' && draft.collectedText != null
-        ? draft.collectedText
+      collectedText: showGuest && payMethod !== 'VOUCHER' && pay.collectedText != null
+        ? pay.collectedText
         : (showGuest && payMethod !== 'VOUCHER' && row.cashCollectedAgorot ? formatPriorityShekels(row.cashCollectedAgorot) : ''),
       payTone: showGuest && row.bookingId ? priorityPayTone(payStatus) : '',
       staff: draft.staff != null ? draft.staff : row.staff,
@@ -752,7 +776,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       stayDirty: Boolean(draft.stay && draft.stay !== row.stayKey),
       cleanDirty: Boolean(draft.clean && draft.clean !== row.cleanKey),
       staffDirty: draft.staff != null && draft.staff !== (row.staff || ''),
-      payDirty: paymentDraftDirty(row, draft)
+      payDirty: paymentDraftDirty(row, pay) || Boolean(draft.paymentBookingId && draft.paymentBookingId !== row.bookingId && (draft.amountText != null || draft.collectedText != null || draft.payStatus || draft.payMethod))
     };
   }), [rows, drafts]);
 
@@ -784,9 +808,12 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
 
   const selected = visible.find((row) => row.id === selectedId) || shown.find((row) => row.id === selectedId) || visible[0] || null;
   const pinnedBooking = pinnedBookingId ? bookings.find((item) => item.id === pinnedBookingId) : null;
-  const card = pinnedBooking && selected && pinnedBooking.unit_id === selected.id
-    ? cardFromBooking(selected, pinnedBooking)
-    : selected;
+  const card = applyPaymentDraft(
+    pinnedBooking && selected && pinnedBooking.unit_id === selected.id
+      ? cardFromBooking(selected, pinnedBooking)
+      : selected,
+    drafts[selected?.id]
+  );
   const cardCall = card ? findCallForBooking(callAlerts, pinnedBooking || bookings.find((b) => b.id === card.bookingId), card.id) : null;
   const visibleIndex = selected ? visible.findIndex((row) => row.id === selected.id) : -1;
 
@@ -912,6 +939,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       delete prev.collectedText;
       delete prev.payStatus;
       delete prev.payMethod;
+      delete prev.paymentBookingId;
       const next = { ...current };
       if (!draftHas(prev)) delete next[unitId];
       else next[unitId] = prev;
@@ -930,7 +958,8 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       setMessage('אין אורח לחיוב');
       return;
     }
-    const draft = bookingId === row.bookingId ? (drafts[row.id] || {}) : {};
+    const stored = drafts[row.id] || {};
+    const draft = !stored.paymentBookingId || stored.paymentBookingId === bookingId ? stored : {};
     const totalAgorot = draft.amountText != null
       ? parsePriorityShekels(draft.amountText)
       : Number(booking.total_price_agorot) || 0;
@@ -1079,7 +1108,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       await db.bookings.put(next);
       await pushBookingToCloud(next, { allowOverlap: true });
       setNoteText('');
-      setMessage('ההערה נשמרה');
+      setMessage(`${booking.guest_name || 'האורח'}: ההערה נשמרה על האורח`);
     } catch (err) {
       const textError = `ההערה לא נשמרה: ${err?.message || 'שגיאה'}`;
       setSaveError(textError);
@@ -1202,7 +1231,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
           else next[id] = prev;
         };
         result.saved.forEach((id) => drop(id, ['stay', 'clean', 'staff', 'weekMark']));
-        payment.saved.forEach((id) => drop(id, ['amountText', 'collectedText', 'payStatus', 'payMethod']));
+        payment.saved.forEach((id) => drop(id, ['amountText', 'collectedText', 'payStatus', 'payMethod', 'paymentBookingId']));
         held.forEach((row) => drop(row.unitId, ['weekMark', 'stay', 'clean']));
         result.failed.forEach((fail) => {
           const prev = { ...(next[fail.unitId] || {}) };
@@ -1407,9 +1436,11 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         }
         return;
       }
+      if (viewRef.current === 'docs') return;
       if (event.altKey || event.metaKey || event.ctrlKey) return;
       const tag = event.target?.tagName;
-      const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+      const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || event.target?.isContentEditable;
+      if (typing) return;
       const open = editorRef.current;
       const openRow = open ? shown.find((item) => item.id === open.unitId) : null;
       const choices = open ? choicesFor(open.field, housekeepersRef.current, openRow?.staff) : [];
@@ -1550,11 +1581,17 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         <button type="button" className="tb-btn" disabled={refreshing} onClick={refreshBoard}>
           <RefreshCw size={14} className={refreshing ? 'spin' : ''} /> {refreshing ? 'מרענן…' : 'רענון'}
         </button>
-        <button type="button" className="tb-btn" onClick={() => move(-1)}>יחידה קודמת</button>
-        <button type="button" className="tb-btn" onClick={() => move(1)}>יחידה הבאה</button>
-        <button type="button" className="tb-btn" onClick={() => { setMode('grid'); queryRef.current?.focus(); }}><Filter size={14} /> שאילתא <kbd>F11</kbd></button>
-        <button type="button" className="tb-btn" onClick={() => setMessage(`מוצגות ${visible.length} יחידות`)}><Search size={14} /> הרץ חיפוש <kbd>Enter</kbd></button>
-        <button type="button" className={`tb-btn${mode === 'grid' ? ' is-on' : ''}`} onClick={() => setMode((current) => (current === 'form' ? 'grid' : 'form'))}><Table2 size={14} /> טבלה <kbd>F8</kbd></button>
+        <span className="tb-screens" role="tablist">
+          <button type="button" className={`tb-btn${view === 'desk' ? ' is-on' : ''}`} onClick={() => setView('desk')}>יחידות</button>
+          <button type="button" className={`tb-btn${view === 'calendar' ? ' is-on' : ''}`} onClick={() => setView('calendar')}>יומן</button>
+          <button type="button" className={`tb-btn${view === 'docs' ? ' is-on' : ''}`} onClick={() => setView('docs')}><FileText size={14} /> מסמך</button>
+          {showCashflow ? (
+            <button type="button" className={`tb-btn${view === 'cashflow' ? ' is-on' : ''}`} onClick={() => setView('cashflow')}>הוצאות חודשיות</button>
+          ) : null}
+        </span>
+        <button type="button" className="tb-btn" onClick={() => { setView('desk'); setMode('grid'); requestAnimationFrame(() => queryRef.current?.focus()); }}><Filter size={14} /> שאילתא <kbd>F11</kbd></button>
+        <button type="button" className="tb-btn" onClick={() => { setView('desk'); setMessage(`מוצגות ${visible.length} יחידות`); }}><Search size={14} /> הרץ חיפוש <kbd>Enter</kbd></button>
+        <button type="button" className={`tb-btn${view === 'desk' && mode === 'grid' ? ' is-on' : ''}`} onClick={() => { setView('desk'); setMode((current) => (current === 'form' ? 'grid' : 'form')); }}><Table2 size={14} /> טבלה <kbd>F8</kbd></button>
         <span className="tb-sep" />
         <button type="button" className="tb-btn" onClick={exportExcel}><FileSpreadsheet size={14} /> ייצא לאקסל</button>
         {canEdit ? (
@@ -1564,21 +1601,18 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         ) : null}
         <span className="tb-sep" />
         <button type="button" className="tb-btn" onClick={() => window.open('/price-list.html', '_blank', 'noopener')}><Printer size={14} /> מחירון</button>
+        <button type="button" className="tb-btn is-highlight" onClick={() => window.open('/qr-stickers.html#work-order', '_blank', 'noopener')} title="טופס הזמנת עבודה מספק A4 להדפסה"><FileText size={14} /> הזמנת עבודה</button>
         <button type="button" className="tb-btn" onClick={() => printDailyDutyReport({ dateStr: today, kind: 'both', area: 'all', bookings, units })}><Printer size={14} /> דוח יומי מלא</button>
         <button type="button" className="tb-btn" onClick={() => printCashDayReport(bookings, units, today)}><Printer size={14} /> דוח מזומנים</button>
         <button type="button" className="tb-btn" onClick={() => printDailyDutyReport({ dateStr: today, kind: 'morning', area: 'all', bookings, units })}><Printer size={14} /> תחילת יום</button>
-        <button type="button" className={`tb-btn tb-end${view === 'calendar' ? ' is-on' : ''}`} onClick={() => setView((current) => (current === 'calendar' ? 'desk' : 'calendar'))}>
-          יומן
-        </button>
-        {showCashflow ? (
-          <button type="button" className={`tb-btn tb-end${view === 'cashflow' ? ' is-on' : ''}`} onClick={() => setView((current) => (current === 'cashflow' ? 'desk' : 'cashflow'))}>
-            הוצאות חודשיות
-          </button>
-        ) : null}
       </div>
       {view === 'cashflow' && showCashflow ? (
         <div className="priority-body">
           <PriorityCashflow />
+        </div>
+      ) : view === 'docs' ? (
+        <div className="priority-body is-word">
+          <PriorityWord />
         </div>
       ) : (
       <>
@@ -1679,7 +1713,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                       disabled={!canEdit || !card.bookingId}
                       value={card.bookingId ? card.amountText : ''}
                       placeholder={card.bookingId ? '0 ₪' : ''}
-                      onChange={(event) => patchDraft(card.id, { amountText: event.target.value })}
+                      onChange={(event) => patchDraft(card.id, { amountText: event.target.value, paymentBookingId: card.bookingId })}
                     />
                   </label>
                   <Field
@@ -1697,7 +1731,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                         placeholder="סכום"
                         disabled={!canEdit || !card.bookingId}
                         value={card.collectedText || ''}
-                        onChange={(event) => patchDraft(card.id, { collectedText: event.target.value })}
+                        onChange={(event) => patchDraft(card.id, { collectedText: event.target.value, paymentBookingId: card.bookingId })}
                       />
                       <button
                         type="button"
@@ -1715,7 +1749,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                       className={priorityPayTone(card.payStatus)}
                       disabled={!canEdit || !card.bookingId}
                       value={card.bookingId ? (card.payStatus || 'UNPAID') : ''}
-                      onChange={(event) => patchDraft(card.id, { payStatus: event.target.value })}
+                      onChange={(event) => patchDraft(card.id, { payStatus: event.target.value, paymentBookingId: card.bookingId })}
                     >
                       {card.bookingId ? null : <option value="" />}
                       {PAYMENT_STATUSES.map((choice) => <option key={choice.key} value={choice.key}>{choice.label}</option>)}
@@ -2394,7 +2428,7 @@ function SplitFeedPanel({
             })}
           </div>
         ) : tab === 'log' ? (
-          <RoomLog entries={card.roomLog} scope={logScope} onScope={setLogScope} />
+          <RoomLog entries={card.roomLog} scope={logScope} onScope={setLogScope} checkIn={card.checkInIso} checkOut={card.checkOutIso} />
         ) : tab === 'notes' ? (
           <div className="room-panel split-timeline">
             {/* הערה בכינורות */}
@@ -2432,7 +2466,7 @@ function SplitFeedPanel({
               />
             </div>
 
-            {/* הערות פנימיות לחדר / לאורח */}
+            {/* הערות של האורח הפתוח */}
             <div className="room-add wa-inline-add">
               <input
                 value={noteText}
