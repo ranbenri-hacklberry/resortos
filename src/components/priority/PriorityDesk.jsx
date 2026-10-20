@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, CheckCheck, ExternalLink, FileSpreadsheet, FileText, Filter, Link2, MessageCircle, Phone, Printer, RefreshCw, Search, Send, Table2 } from 'lucide-react';
+import { Check, CheckCheck, ExternalLink, FileSpreadsheet, FileText, FolderOpen, Link2, MessageCircle, Phone, Printer, RefreshCw, Send, Table2 } from 'lucide-react';
 import { formatIlsFromAgorot, normalizeClearingPayment, normalizeIsraeliId } from '../../lib/clearingPayments';
 import { printCashDayReport } from '../../lib/cashDayReport';
 import { calendarPartyLabel, dutyPrintAreaOf, dutyUnitGroup, printDailyDutyReport } from '../../lib/dailyDutyReport';
 import { getUnitSign } from '../../lib/fieldUnitCatalog';
 import { israelToday } from '../../lib/cabinAccess';
+import { clearCleanerUntilScan } from '../../lib/housekeepingCycle';
 import { roomLogClock, visibleRoomLog } from '../../lib/roomLog';
 import { formatStayHourLabel, stayHoursFromBooking } from '../../lib/kinorotStayHours';
 import { db, useLiveBookings, useLiveUnits } from '../../lib/resortos-db';
@@ -20,6 +21,7 @@ import {
   savePriorityStatusDrafts
 } from '../../lib/priorityStatus';
 import { recordedPaidAgorot } from '../../lib/bookingPaid';
+import { defaultGroundStatus, groundsBands, statusChoices, statusLabel } from '../../lib/priorityGrounds';
 import {
   ARRIVAL_TODAY_LABEL,
   priorityDayCell,
@@ -29,16 +31,18 @@ import {
   selectPriorityStay
 } from '../../lib/priorityStay';
 import { priorityRoomStatus, unitDisplayStatus } from '../../lib/unitStatus';
-import { appendCashPaidNote, kinorotReservationId } from '../../lib/kinorotReservationNote';
+import { kinorotReservationId } from '../../lib/kinorotReservationNote';
 import { coveringUnavailableHold, isUnavailableHoldBooking, unavailableHoldLabel } from '../../lib/unavailableHold';
 import { printGuestFile } from '../../lib/guestFile';
 import {
+  PAYMENT_METHODS,
   PAYMENT_STATUSES,
   applyPaymentDraft,
   cashCollectedAgorot,
   collectPriorityCash,
   formatPriorityShekels,
   parsePriorityShekels,
+  paymentBreakdown,
   paymentDraftDirty,
   priorityMethodKey,
   priorityPayTone,
@@ -53,6 +57,7 @@ import { displayPhone, heStayDate } from '../command/liveCabins';
 import PriorityCashflow from './PriorityCashflow';
 import PriorityCalendar from './PriorityCalendar';
 import PriorityWord from './PriorityWord';
+import PriorityForms from './PriorityForms';
 import { formatManagerMeeting } from '../../lib/managerMeetings';
 import './priority.css';
 
@@ -84,7 +89,7 @@ const COLUMNS = [
 const WEEK_STATUSES = [
   { key: 'dirty', label: 'לניקוי', stay: 'VACANT', clean: 'DIRTY' },
   { key: 'in_progress', label: 'בנקיון', stay: 'VACANT', clean: 'IN_PROGRESS' },
-  { key: 'inspect', label: 'ממתין לבדיקה', stay: 'VACANT', clean: 'READY' },
+  { key: 'inspect', label: 'לבדיקה', stay: 'VACANT', clean: 'READY' },
   { key: 'ready', label: 'מוכן', stay: 'VACANT', clean: 'READY' },
   { key: 'occupied', label: 'מאוכלס', stay: 'OCCUPIED', clean: '' },
   { key: 'unavailable', label: 'לא זמין', hold: true }
@@ -119,7 +124,7 @@ function toneOf(label) {
   if (str === 'בשהייה' || str === 'תפוס' || str === 'מוכן') return 'tone-ok';
   if (str.startsWith('בנקיון') || str.startsWith('בניקיון') || str.startsWith('בניקוי')) return 'tone-progress';
   if (str === 'לניקוי' || str === 'לא נקי') return 'tone-dirty';
-  if (str === 'ממתין לבדיקה' || str === 'השלמות') return 'tone-inspect';
+  if (str === 'ממתין לבדיקה' || str === 'לבדיקה' || str === 'השלמות') return 'tone-inspect';
   if (str === 'החלפה' || str === 'צ׳ק אאוט' || str === 'צ׳ק אין' || str === 'יציאה' || str === ARRIVAL_TODAY_LABEL) return 'tone-wait';
   if (str === 'תקלה') return 'tone-bad';
   if (str === 'לא זמין' || str === 'לא למכירה' || str === 'שיפוץ' || str === 'שיפוצים' || str === 'סגור' || str === 'מקולקל') return 'tone-hold';
@@ -317,6 +322,7 @@ function cardFromBooking(row, booking) {
     collectedText: method === 'VOUCHER' ? '' : (cash ? formatPriorityShekels(cash) : ''),
     payStatus: priorityStatusKey(booking),
     payMethod: method,
+    payBreakdown: paymentBreakdown(booking),
     charges: paymentsOf(booking),
     notes: booking.special_requests || '',
     notesList: Array.isArray(booking.stay?.priority_notes) ? booking.stay.priority_notes : [],
@@ -347,7 +353,7 @@ function tasksOf(unit, stayLabel) {
       id: step.id || String(index),
       code: String(index + 1).padStart(2, '0'),
       title: step.label?.he || step.label?.en || step.id || 'שלב',
-      staff: unit.assigned_staff || '',
+      staff: unit.operational_status === 'DIRTY' ? '' : (unit.assigned_staff || ''),
       start: '',
       end: '',
       status: done.has(step.id) ? 'בוצע' : 'פתוח',
@@ -357,7 +363,7 @@ function tasksOf(unit, stayLabel) {
       id: 'ops',
       code: 'OPS',
       title: stayLabel || 'סטטוס יחידה',
-      staff: unit?.assigned_staff || '',
+      staff: unit?.operational_status === 'DIRTY' ? '' : (unit?.assigned_staff || ''),
       start: '',
       end: '',
       status: stayLabel === 'לניקוי' || stayLabel === 'בנקיון' || stayLabel === 'בניקיון' || stayLabel === 'השלמות' ? 'פתוח' : (stayLabel === 'ממתין לבדיקה' ? 'ממתין לבדיקה' : 'בוצע'),
@@ -459,7 +465,7 @@ function rowFromUnit(unit, bookings, today) {
     cleanKey: clean,
     clean: clean === 'IN_PROGRESS' && unit.assigned_staff ? `בנקיון | ${unit.assigned_staff}` : cleaningLabel(clean),
     reason: unit.custom_reason || '',
-    staff: unit.assigned_staff || '',
+    staff: clean === 'DIRTY' ? '' : (unit.assigned_staff || ''),
     notes: [primary?.special_requests || '', unit.custom_reason || ''].filter(Boolean).join(' · '),
     notesList: Array.isArray(primary?.stay?.priority_notes) ? primary.stay.priority_notes : [],
     phoneRaw: primary?.guest_phone || '',
@@ -470,7 +476,8 @@ function rowFromUnit(unit, bookings, today) {
   };
 }
 
-function choicesFor(field, housekeepers, currentName) {
+function choicesFor(field, housekeepers, currentName, groundKind) {
+  if (field === 'ground') return statusChoices(groundKind || 'yard');
   if (field === 'week') return WEEK_STATUSES;
   if (field === 'stay') return LODGING_CHOICES;
   if (field === 'clean') return CLEANING_CHOICES;
@@ -516,6 +523,28 @@ function findCallForBooking(calls, booking, unitId) {
     if (phoneA && phoneB && phoneA.length >= 7 && phoneA === phoneB) return true;
     return false;
   }) || null;
+}
+
+function GroundPill({ assetId, kind, record, pending, onOpen }) {
+  const saved = record?.status || defaultGroundStatus(kind);
+  const status = pending || saved;
+  const unsaved = Boolean(pending && pending !== saved);
+  const label = statusLabel(kind, status);
+  const last = Array.isArray(record?.log) ? record.log[record.log.length - 1] : null;
+  const when = last?.at
+    ? new Date(last.at).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : '';
+  const change = last?.note || `${statusLabel(kind, last?.from)} ← ${statusLabel(kind, last?.to)}`;
+  const title = unsaved
+    ? `${label} · טרם נשמר`
+    : last
+      ? `${record.label || assetId}: ${change} · ${last.by}${when ? ` · ${when}` : ''}`
+      : label;
+  return (
+    <button type="button" className={`grounds-pill is-${status}`} title={title} onClick={onOpen}>
+      {label}{unsaved ? ' *' : ''}
+    </button>
+  );
 }
 
 function GuestPill({ kind, booking, swap = false, onOpen, callPending = null, onAckCall = null }) {
@@ -628,6 +657,8 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   callAlertRef.current = untransferredAlerts.length > 0;
   const [calendarNote, setCalendarNote] = useState('');
   const [view, setView] = useState('desk');
+  const [groundsState, setGroundsState] = useState({});
+  const [groundDrafts, setGroundDrafts] = useState({});
   const [horizonStart, setHorizonStart] = useState(today);
   const queryRef = useRef(null);
   const viewRef = useRef('desk');
@@ -638,8 +669,41 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const chooseRef = useRef(() => {});
   const collectRef = useRef(() => {});
   const housekeepersRef = useRef([]);
+  const clearedCleanersRef = useRef(new Set());
   const asleepRef = useRef(false);
   const SCREEN_IDLE_MS = 30 * 60 * 1000;
+
+  useEffect(() => {
+    if (!active || !canEdit || !tenantId) return undefined;
+    const pending = (units || []).filter((unit) => (
+      unit?.operational_status === 'DIRTY'
+      && String(unit.assigned_staff || '').trim()
+      && !clearedCleanersRef.current.has(unit.id)
+    ));
+    if (!pending.length) return undefined;
+    pending.forEach((unit) => clearedCleanersRef.current.add(unit.id));
+    let cancel = false;
+    clearCleanerUntilScan({ tenantId, units: pending, pushUnitToCloud }).catch(() => {
+      if (cancel) return;
+      pending.forEach((unit) => clearedCleanersRef.current.delete(unit.id));
+    });
+    return () => { cancel = true; };
+  }, [active, canEdit, tenantId, units]);
+
+  useEffect(() => {
+    const token = getStoredToken();
+    if (!token) return undefined;
+    let cancel = false;
+    fetch('/api/priority/grounds', { headers: { Authorization: `Bearer ${token}` } })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (!cancel && data?.assets) setGroundsState(data.assets);
+      })
+      .catch(() => {});
+    return () => {
+      cancel = true;
+    };
+  }, [active]);
 
   useEffect(() => {
     if (!active) {
@@ -806,6 +870,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
     });
   }, [shown, query, horizon, bookings]);
 
+  const grounds = useMemo(() => groundsBands(visible), [visible]);
   const selected = visible.find((row) => row.id === selectedId) || shown.find((row) => row.id === selectedId) || visible[0] || null;
   const pinnedBooking = pinnedBookingId ? bookings.find((item) => item.id === pinnedBookingId) : null;
   const card = applyPaymentDraft(
@@ -832,10 +897,26 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   editorRef.current = editor;
   housekeepersRef.current = housekeepers;
 
-  const dirtyCount = shown.filter((row) => row.stayDirty || row.cleanDirty || row.weekDirty || row.staffDirty || row.payDirty).length;
+  const groundDirtyCount = Object.keys(groundDrafts).length;
+  const dirtyCount = shown.filter((row) => row.stayDirty || row.cleanDirty || row.weekDirty || row.staffDirty || row.payDirty).length + groundDirtyCount;
   const operator = operatorName || session?.name || 'משרד';
 
   const chooseStatus = (unitId, field, key) => {
+    if (field === 'ground') {
+      const kind = editor?.kind || groundsState[unitId]?.kind || 'yard';
+      const saved = groundsState[unitId]?.status || defaultGroundStatus(kind);
+      setGroundDrafts((current) => {
+        const next = { ...current };
+        if (!key || key === saved) delete next[unitId];
+        else next[unitId] = { status: key, kind };
+        return next;
+      });
+      setEditor(null);
+      setMenuBox(null);
+      setSaveError('');
+      setMessage(!key || key === saved ? '' : 'יש שינויים שטרם נשמרו');
+      return;
+    }
     const row = rows.find((item) => item.id === unitId);
     if (field === 'week') {
       const live = liveWeekKey(row?.stayKey, row?.cleanKey, row?.reason);
@@ -920,6 +1001,23 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
     });
   };
 
+  const openGround = (event, assetId, kind) => {
+    if (!canEdit || saving || !assetId) return;
+    event.stopPropagation();
+    const choices = statusChoices(kind);
+    const current = groundDrafts[assetId]?.status || groundsState[assetId]?.status || defaultGroundStatus(kind);
+    const index = Math.max(0, choices.findIndex((choice) => choice.key === current));
+    const rect = event.currentTarget.getBoundingClientRect();
+    const menuHeight = Math.min(choices.length * 24, 240);
+    const top = rect.bottom + menuHeight > window.innerHeight ? Math.max(4, rect.top - menuHeight) : rect.bottom;
+    setEditor({ unitId: assetId, field: 'ground', kind, index });
+    setMenuBox({
+      top,
+      right: Math.max(4, window.innerWidth - rect.right),
+      width: Math.max(rect.width, 120)
+    });
+  };
+
   const patchDraft = (unitId, patch) => {
     setDrafts((current) => {
       const prev = { ...(current[unitId] || {}), ...patch };
@@ -983,13 +1081,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       await pushBookingToCloud(next, { allowOverlap: true });
       clearPaymentDraft(row.id);
       const money = recorded > 0 ? formatPriorityShekels(recorded) : formatPriorityShekels(totalAgorot);
-      const noted = recorded > 0 ? recorded : totalAgorot;
-      try {
-        if (noted > 0) await syncCashNote(next, noted);
-        setMessage(recorded > 0 ? `${row.name}: נגבה מזומן ${money} ונרשם בכינורות` : `${row.name}: המזומן כבר רשום`);
-      } catch (err) {
-        setMessage(`${row.name}: נגבה מזומן ${money}. ההערה בכינורות לא נשמרה`);
-      }
+      setMessage(recorded > 0 ? `${row.name}: נגבה מזומן ${money}` : `${row.name}: המזומן כבר רשום`);
     } catch (err) {
       const text = `הגבייה נכשלה ולא נרשמה: ${err?.message || 'שגיאה'}`;
       setSaveError(text);
@@ -1144,26 +1236,6 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
     throw new Error('היומן עוד מתעדכן');
   };
 
-  const saveKinorotNote = async (note = kinorotNote.draft, resId = kinorotNote.resId) => {
-    if (!resId) return null;
-    const saved = await staffJson('/api/kinorot/note', { res_id: resId, note });
-    const text = String(saved?.note ?? note);
-    setKinorotNote({ resId, saved: text, draft: text, loading: false });
-    return text;
-  };
-
-  const syncCashNote = async (booking, agorot) => {
-    const resId = kinorotReservationId(booking);
-    if (!resId || !(Number(agorot) > 0)) return;
-    const loaded = kinorotNote.resId === resId && !kinorotNote.loading;
-    const current = loaded
-      ? kinorotNote.draft
-      : String((await staffJson(`/api/kinorot/note?res=${encodeURIComponent(resId)}`, undefined, 'GET')).note || '');
-    const next = appendCashPaidNote(current, agorot, { by: operator });
-    if (next === current.trim()) return;
-    await saveKinorotNote(next, resId);
-  };
-
   useEffect(() => {
     const resId = kinorotReservationId({ id: card?.bookingId });
     if (!resId) {
@@ -1208,6 +1280,32 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         drafts: restDrafts,
         pushUnitToCloud
       });
+      const groundFailed = [];
+      const groundSaved = [];
+      let latestGrounds = null;
+      for (const [id, draft] of Object.entries(groundDrafts)) {
+        try {
+          const data = await staffJson('/api/priority/grounds', { id, status: draft.status, by: operator });
+          latestGrounds = data.assets || latestGrounds;
+          groundSaved.push(id);
+        } catch (err) {
+          groundFailed.push({
+            unitId: id,
+            name: latestGrounds?.[id]?.label || groundsState[id]?.label || id,
+            error: err?.message || 'השמירה נכשלה'
+          });
+        }
+      }
+      if (latestGrounds) setGroundsState(latestGrounds);
+      if (groundSaved.length) {
+        setGroundDrafts((current) => {
+          const next = { ...current };
+          groundSaved.forEach((id) => {
+            if (next[id]?.status === groundDrafts[id]?.status) delete next[id];
+          });
+          return next;
+        });
+      }
       const held = [];
       const holdFailed = [];
       for (const unitId of holdIds) {
@@ -1243,7 +1341,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         });
         return next;
       });
-      const failed = [...result.failed, ...payment.failed, ...holdFailed];
+      const failed = [...result.failed, ...payment.failed, ...holdFailed, ...groundFailed];
       if (held.length) {
         const startedAt = new Date().toISOString();
         const running = await staffJson('/api/kinorot/sync', undefined, 'GET').catch(() => ({}));
@@ -1443,7 +1541,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       if (typing) return;
       const open = editorRef.current;
       const openRow = open ? shown.find((item) => item.id === open.unitId) : null;
-      const choices = open ? choicesFor(open.field, housekeepersRef.current, openRow?.staff) : [];
+      const choices = open ? choicesFor(open.field, housekeepersRef.current, openRow?.staff, open.kind) : [];
       if (event.key === 'Escape') {
         event.preventDefault();
         if (open) {
@@ -1459,7 +1557,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         event.preventDefault();
         setEditor((current) => {
           if (!current) return current;
-          const list = choicesFor(current.field, housekeepersRef.current, shown.find((item) => item.id === current.unitId)?.staff);
+          const list = choicesFor(current.field, housekeepersRef.current, shown.find((item) => item.id === current.unitId)?.staff, current.kind);
           const delta = event.key === 'ArrowDown' ? 1 : -1;
           const index = Math.max(0, Math.min(list.length - 1, current.index + delta));
           return { ...current, index };
@@ -1516,7 +1614,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
     setMessage(`יוצאו ${visible.length} יחידות`);
   };
 
-  const editorChoices = editor ? choicesFor(editor.field, housekeepers, shown.find((row) => row.id === editor.unitId)?.staff) : [];
+  const editorChoices = editor ? choicesFor(editor.field, housekeepers, shown.find((row) => row.id === editor.unitId)?.staff, editor.kind) : [];
 
   return (
     <div className="priority-root" dir="rtl">
@@ -1584,13 +1682,12 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         <span className="tb-screens" role="tablist">
           <button type="button" className={`tb-btn${view === 'desk' ? ' is-on' : ''}`} onClick={() => setView('desk')}>יחידות</button>
           <button type="button" className={`tb-btn${view === 'calendar' ? ' is-on' : ''}`} onClick={() => setView('calendar')}>יומן</button>
+          <button type="button" className={`tb-btn${view === 'forms' ? ' is-on' : ''}`} onClick={() => setView('forms')}><FolderOpen size={14} /> טפסים ותבניות</button>
           <button type="button" className={`tb-btn${view === 'docs' ? ' is-on' : ''}`} onClick={() => setView('docs')}><FileText size={14} /> מסמך</button>
           {showCashflow ? (
             <button type="button" className={`tb-btn${view === 'cashflow' ? ' is-on' : ''}`} onClick={() => setView('cashflow')}>הוצאות חודשיות</button>
           ) : null}
         </span>
-        <button type="button" className="tb-btn" onClick={() => { setView('desk'); setMode('grid'); requestAnimationFrame(() => queryRef.current?.focus()); }}><Filter size={14} /> שאילתא <kbd>F11</kbd></button>
-        <button type="button" className="tb-btn" onClick={() => { setView('desk'); setMessage(`מוצגות ${visible.length} יחידות`); }}><Search size={14} /> הרץ חיפוש <kbd>Enter</kbd></button>
         <button type="button" className={`tb-btn${view === 'desk' && mode === 'grid' ? ' is-on' : ''}`} onClick={() => { setView('desk'); setMode((current) => (current === 'form' ? 'grid' : 'form')); }}><Table2 size={14} /> טבלה <kbd>F8</kbd></button>
         <span className="tb-sep" />
         <button type="button" className="tb-btn" onClick={exportExcel}><FileSpreadsheet size={14} /> ייצא לאקסל</button>
@@ -1613,6 +1710,15 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       ) : view === 'docs' ? (
         <div className="priority-body is-word">
           <PriorityWord />
+        </div>
+      ) : view === 'forms' ? (
+        <div className="priority-body is-forms">
+          <PriorityForms
+            onOpenWord={() => setView('docs')}
+            onPrintDutyReport={() => printDailyDutyReport({ dateStr: today, kind: 'both', area: 'all', bookings, units })}
+            onPrintCashReport={() => printCashDayReport(bookings, units, today)}
+            onPrintMorningReport={() => printDailyDutyReport({ dateStr: today, kind: 'morning', area: 'all', bookings, units })}
+          />
         </div>
       ) : (
       <>
@@ -1704,23 +1810,27 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                     </select>
                   </label>
                 </div>
-                <div className="master-col">
+                <div className="master-col is-finance">
                   <div className="master-col-title">פיננסים וגבייה</div>
-                  <label className="field">
-                    <span>סה״כ לתשלום</span>
-                    <input
-                      inputMode="decimal"
-                      disabled={!canEdit || !card.bookingId}
-                      value={card.bookingId ? card.amountText : ''}
-                      placeholder={card.bookingId ? '0 ₪' : ''}
-                      onChange={(event) => patchDraft(card.id, { amountText: event.target.value, paymentBookingId: card.bookingId })}
-                    />
-                  </label>
-                  <Field
-                    label="יתרה לתשלום"
-                    className="is-due"
-                    value={card.bookingId ? formatPriorityShekels(Math.max(0, (Number(card.amountAgorot) || 0) - (Number(card.paidAgorot) || 0))) : ''}
-                  />
+                  <div className="finance-row">
+                    <label className="field">
+                      <span>סה״כ לתשלום</span>
+                      <input
+                        inputMode="decimal"
+                        disabled={!canEdit || !card.bookingId}
+                        value={card.bookingId ? card.amountText : ''}
+                        placeholder={card.bookingId ? '0 ₪' : ''}
+                        onChange={(event) => patchDraft(card.id, { amountText: event.target.value, paymentBookingId: card.bookingId })}
+                      />
+                    </label>
+                    {card.bookingId && card.payStatus !== 'PAID' ? (
+                      <Field
+                        label="יתרה לתשלום"
+                        className="is-due"
+                        value={formatPriorityShekels(Math.max(0, (Number(card.amountAgorot) || 0) - (Number(card.paidAgorot) || 0)))}
+                      />
+                    ) : null}
+                  </div>
                   <label className="field">
                     <span>גביית מזומן (F2)</span>
                     <span className="pay-line">
@@ -1731,6 +1841,15 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                         placeholder="סכום"
                         disabled={!canEdit || !card.bookingId}
                         value={card.collectedText || ''}
+                        onFocus={() => {
+                          if (!card.bookingId || String(card.collectedText || '').trim()) return;
+                          const due = Math.max(0, (Number(card.amountAgorot) || 0) - (Number(card.paidAgorot) || 0));
+                          if (!(due > 0)) return;
+                          patchDraft(card.id, {
+                            collectedText: formatPriorityShekels(due),
+                            paymentBookingId: card.bookingId
+                          });
+                        }}
                         onChange={(event) => patchDraft(card.id, { collectedText: event.target.value, paymentBookingId: card.bookingId })}
                       />
                       <button
@@ -1743,18 +1862,32 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                       </button>
                     </span>
                   </label>
-                  <label className="field">
-                    <span>סטטוס תשלום</span>
-                    <select
-                      className={priorityPayTone(card.payStatus)}
-                      disabled={!canEdit || !card.bookingId}
-                      value={card.bookingId ? (card.payStatus || 'UNPAID') : ''}
-                      onChange={(event) => patchDraft(card.id, { payStatus: event.target.value, paymentBookingId: card.bookingId })}
-                    >
-                      {card.bookingId ? null : <option value="" />}
-                      {PAYMENT_STATUSES.map((choice) => <option key={choice.key} value={choice.key}>{choice.label}</option>)}
-                    </select>
-                  </label>
+                  <div className="finance-row is-pay">
+                    <label className="field is-status">
+                      <span>סטטוס</span>
+                      <select
+                        className={priorityPayTone(card.payStatus)}
+                        disabled={!canEdit || !card.bookingId}
+                        value={card.bookingId ? (card.payStatus || 'UNPAID') : ''}
+                        onChange={(event) => patchDraft(card.id, { payStatus: event.target.value, paymentBookingId: card.bookingId })}
+                      >
+                        {card.bookingId ? null : <option value="" />}
+                        {PAYMENT_STATUSES.map((choice) => <option key={choice.key} value={choice.key}>{choice.label}</option>)}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>איך שולם</span>
+                      <select
+                        disabled={!canEdit || !card.bookingId}
+                        value={card.bookingId ? (card.payMethod || '') : ''}
+                        onChange={(event) => patchDraft(card.id, { payMethod: event.target.value, paymentBookingId: card.bookingId })}
+                      >
+                        <option value="">—</option>
+                        {PAYMENT_METHODS.map((choice) => <option key={choice.key} value={choice.key}>{choice.label}</option>)}
+                      </select>
+                      {card.payBreakdown ? <small className="pay-breakdown">{card.payBreakdown}</small> : null}
+                    </label>
+                  </div>
                 </div>
               </div>
 
@@ -1781,8 +1914,6 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
               setNoteText={setNoteText}
               addRoomNote={addRoomNote}
               kinorotNote={kinorotNote}
-              setKinorotNote={setKinorotNote}
-              saveKinorotNote={saveKinorotNote}
               setMessage={setMessage}
             />
           </div>
@@ -1791,6 +1922,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
             <table className="erp-table week-table">
               <thead>
                 <tr className="occupancy-row">
+                  <th className="grounds-banner" colSpan={2}>חצר ובריכה</th>
                   <th className="unit-cell occupancy-label">
                     <span className="occupancy-title">תפוסה כוללת</span>
                   </th>
@@ -1815,6 +1947,8 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                   })}
                 </tr>
                 <tr className="label-row">
+                  <th className="grounds-col is-yard">חצר</th>
+                  <th className="grounds-col is-pool">בריכה</th>
                   <th className="unit-cell">יחידה</th>
                   {horizon.map((day) => (
                     <th key={day} className={day === today ? 'is-today' : ''}>{horizonLabel(day, today)}</th>
@@ -1826,10 +1960,37 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                   <React.Fragment key={row.id}>
                     {row.area !== 'ramot' && (index === 0 || visible[index - 1].area !== row.area) ? (
                       <tr className="area-break">
-                        <td colSpan={horizon.length + 1}>{priorityAreaLabel(row.area)}</td>
+                        <td colSpan={horizon.length + 3}>{priorityAreaLabel(row.area)}</td>
                       </tr>
                     ) : null}
                     <tr>
+                      {grounds[index]?.yard ? (
+                        <td className="grounds-cell is-yard" rowSpan={grounds[index].yard.span}>
+                          <GroundPill
+                            assetId={grounds[index].yard.id}
+                            kind="yard"
+                            record={groundsState[grounds[index].yard.id]}
+                            pending={groundDrafts[grounds[index].yard.id]?.status}
+                            onOpen={(event) => openGround(event, grounds[index].yard.id, 'yard')}
+                          />
+                        </td>
+                      ) : null}
+                      {grounds[index]?.pool ? (
+                        <td
+                          className={`grounds-cell is-pool${grounds[index].pool.kind === 'none' ? ' is-empty' : ''}`}
+                          rowSpan={grounds[index].pool.span}
+                        >
+                          {grounds[index].pool.kind === 'none' ? null : (
+                            <GroundPill
+                              assetId={grounds[index].pool.id}
+                              kind="pool"
+                              record={groundsState[grounds[index].pool.id]}
+                              pending={groundDrafts[grounds[index].pool.id]?.status}
+                              onOpen={(event) => openGround(event, grounds[index].pool.id, 'pool')}
+                            />
+                          )}
+                        </td>
+                      ) : null}
                       <td className="unit-cell">
                         <button
                           type="button"
@@ -1897,7 +2058,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                     </tr>
                   </React.Fragment>
                 ))}
-                {!visible.length ? <tr><td className="empty-row" colSpan={horizon.length + 1}>אין יחידות לסינון</td></tr> : null}
+                {!visible.length ? <tr><td className="empty-row" colSpan={horizon.length + 3}>אין יחידות לסינון</td></tr> : null}
               </tbody>
             </table>
           </div>
@@ -2033,10 +2194,13 @@ function RoomBeaconInventory({ card }) {
   };
 
   useEffect(() => {
+    if (!isOffice) return undefined;
     pullBeacons();
     const timer = setInterval(pullBeacons, 10000);
     return () => clearInterval(timer);
-  }, [card?.id]);
+  }, [card?.id, isOffice]);
+
+  if (!isOffice) return null;
 
   const rawAssets = isOffice ? (Array.isArray(report?.assets) ? report.assets : []) : [];
   const assets = isOffice && rawAssets.length === 0
@@ -2138,8 +2302,6 @@ function SplitFeedPanel({
   setNoteText,
   addRoomNote,
   kinorotNote,
-  setKinorotNote,
-  saveKinorotNote,
   setMessage
 }) {
   const [commsRows, setCommsRows] = useState([]);
@@ -2435,34 +2597,12 @@ function SplitFeedPanel({
             <div className="kinorot-side-card">
               <div className="master-note-header">
                 <span>📝 הערה בכינורות</span>
-                <button
-                  type="button"
-                  className="tb-btn note-save"
-                  disabled={!canEdit || saving || !kinorotNote?.resId || kinorotNote?.loading || kinorotNote?.draft === kinorotNote?.saved}
-                  onClick={async () => {
-                    if (setSaving) setSaving(true);
-                    if (setSaveError) setSaveError('');
-                    try {
-                      await saveKinorotNote();
-                      if (setMessage) setMessage('ההערה נשמרה בכינורות');
-                    } catch (err) {
-                      const text = `ההערה לא נשמרה: ${err?.message || 'שגיאה'}`;
-                      if (setSaveError) setSaveError(text);
-                      if (setMessage) setMessage(text);
-                    } finally {
-                      if (setSaving) setSaving(false);
-                    }
-                  }}
-                >
-                  שמור בכינורות
-                </button>
               </div>
               <textarea
                 className="kinorot-note"
-                disabled={!canEdit || !kinorotNote?.resId || kinorotNote?.loading || saving}
-                value={kinorotNote?.draft || ''}
-                placeholder={kinorotNote?.loading ? 'טוען את ההערה...' : kinorotNote?.resId ? 'הערה שתופיע בכינורות' : 'אין הזמנת כינורות'}
-                onChange={(event) => setKinorotNote((current) => ({ ...current, draft: event.target.value }))}
+                readOnly
+                value={kinorotNote?.saved || ''}
+                placeholder={kinorotNote?.loading ? 'טוען את ההערה מכינורות...' : kinorotNote?.resId ? 'אין הערה בכינורות' : 'אין הזמנת כינורות'}
               />
             </div>
 
