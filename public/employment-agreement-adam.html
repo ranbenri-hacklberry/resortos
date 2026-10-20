@@ -6,7 +6,7 @@
   <style>
     @page {
       size: A4 portrait;
-      margin: 14mm 16mm 14mm 16mm;
+      margin: 10mm 14mm 10mm 14mm;
     }
     * {
       box-sizing: border-box;
@@ -16,36 +16,36 @@
     }
     body {
       background: #f1f5f9;
-      padding: 24px;
+      padding: 16px;
       color: #0f172a;
-      line-height: 1.5;
+      line-height: 1.45;
     }
     .toolbar {
       max-width: 210mm;
-      margin: 0 auto 20px;
+      margin: 0 auto 16px;
       background: #ffffff;
-      padding: 12px 20px;
-      border-radius: 10px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+      padding: 10px 18px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
       display: flex;
       justify-content: space-between;
       align-items: center;
       flex-wrap: wrap;
-      gap: 12px;
+      gap: 10px;
       border: 1px solid #cbd5e1;
     }
     .btn {
       background: #1e293b;
       color: #fff;
       border: none;
-      padding: 9px 16px;
-      border-radius: 8px;
-      font-size: 14px;
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-size: 13.5px;
       font-weight: 700;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       text-decoration: none;
       transition: background 0.15s;
     }
@@ -55,7 +55,7 @@
     .btn-green { background: #16a34a; }
     .btn-green:hover { background: #15803d; }
     .toolbar-hint {
-      font-size: 13px;
+      font-size: 12.5px;
       color: #64748b;
       font-weight: 600;
     }
@@ -64,51 +64,51 @@
       max-width: 210mm;
       margin: 0 auto;
       background: #ffffff;
-      padding: 18mm 20mm;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+      padding: 14mm 16mm;
+      box-shadow: 0 3px 12px rgba(0,0,0,0.07);
       border-radius: 4px;
       color: #0f172a;
-      font-size: 13.5px;
-      line-height: 1.58;
+      font-size: 12.5px;
+      line-height: 1.48;
     }
 
     .contract-title {
       text-align: center;
-      margin-bottom: 22px;
+      margin-bottom: 14px;
       border-bottom: 2px solid #0f172a;
-      padding-bottom: 12px;
+      padding-bottom: 8px;
     }
     .contract-title h1 {
-      font-size: 23px;
+      font-size: 21px;
       font-weight: 900;
       letter-spacing: -0.3px;
-      margin-bottom: 3px;
+      margin-bottom: 2px;
     }
     .contract-title .role-tag {
       display: inline-block;
       background: #e0f2fe;
       color: #0369a1;
-      padding: 3px 12px;
-      border-radius: 12px;
-      font-size: 13px;
+      padding: 2px 10px;
+      border-radius: 10px;
+      font-size: 12px;
       font-weight: 700;
-      margin: 4px 0 6px 0;
+      margin: 2px 0 4px 0;
     }
     .contract-title p.date-line {
-      font-size: 13.5px;
+      font-size: 12.5px;
       color: #475569;
       font-weight: 600;
     }
 
     .parties-box {
-      margin-bottom: 20px;
+      margin-bottom: 12px;
       background: #f8fafc;
       border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      padding: 14px 18px;
+      border-radius: 6px;
+      padding: 10px 14px;
     }
     .party-row {
-      margin-bottom: 8px;
+      margin-bottom: 4px;
       display: flex;
       flex-wrap: wrap;
       align-items: baseline;
@@ -120,11 +120,11 @@
     .party-title {
       font-weight: 800;
       color: #0f172a;
-      min-width: 70px;
+      min-width: 60px;
     }
     .field-blank {
       border-bottom: 1px dashed #64748b;
-      min-width: 140px;
+      min-width: 100px;
       display: inline-block;
       padding: 0 4px;
       color: #0f172a;
@@ -138,32 +138,32 @@
     }
 
     .section-title {
-      font-size: 14.5px;
+      font-size: 13.5px;
       font-weight: 800;
       color: #0f172a;
-      margin-top: 16px;
-      margin-bottom: 6px;
-      border-right: 4px solid #1e293b;
-      padding-right: 8px;
+      margin-top: 12px;
+      margin-bottom: 4px;
+      border-right: 3px solid #1e293b;
+      padding-right: 6px;
     }
     p.clause {
-      margin-bottom: 7px;
+      margin-bottom: 5px;
       text-align: justify;
     }
     ol.sub-clauses {
-      margin-right: 24px;
-      margin-bottom: 8px;
+      margin-right: 20px;
+      margin-bottom: 6px;
     }
     ol.sub-clauses li {
-      margin-bottom: 4px;
+      margin-bottom: 3px;
     }
 
     .signatures-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 40px;
-      margin-top: 36px;
-      padding-top: 18px;
+      gap: 36px;
+      margin-top: 24px;
+      padding-top: 12px;
       border-top: 1px solid #cbd5e1;
       page-break-inside: avoid;
     }
@@ -171,16 +171,25 @@
       text-align: center;
     }
     .sig-line {
-      margin-top: 48px;
+      margin-top: 36px;
       border-top: 1px solid #0f172a;
-      padding-top: 6px;
+      padding-top: 4px;
       font-weight: 700;
-      font-size: 13.5px;
+      font-size: 13px;
     }
     .sig-sub {
-      font-size: 12px;
+      font-size: 11.5px;
       color: #64748b;
-      margin-top: 2px;
+      margin-top: 1px;
+    }
+
+    .page-break {
+      page-break-after: always;
+      break-after: page;
+      height: 0;
+      margin: 0;
+      padding: 0;
+      border: none;
     }
 
     @media print {
@@ -197,21 +206,54 @@
         padding: 0 !important;
         max-width: 100% !important;
         width: 100% !important;
-        font-size: 12.5px !important;
-        line-height: 1.48 !important;
+        font-size: 11.5px !important;
+        line-height: 1.4 !important;
+      }
+      .contract-title {
+        margin-bottom: 10px !important;
+        padding-bottom: 5px !important;
       }
       .contract-title h1 {
-        font-size: 19px !important;
+        font-size: 18px !important;
+      }
+      .role-tag {
+        font-size: 11px !important;
+        padding: 1px 8px !important;
+      }
+      .parties-box {
+        padding: 8px 12px !important;
+        margin-bottom: 10px !important;
+      }
+      .party-row {
+        margin-bottom: 3px !important;
+      }
+      .section-title {
+        font-size: 12.5px !important;
+        margin-top: 9px !important;
+        margin-bottom: 3px !important;
+        padding-right: 5px !important;
+      }
+      p.clause {
+        margin-bottom: 4px !important;
+      }
+      ol.sub-clauses {
+        margin-right: 18px !important;
+        margin-bottom: 4px !important;
+      }
+      ol.sub-clauses li {
+        margin-bottom: 2px !important;
       }
       .signatures-grid {
-        margin-top: 24px !important;
+        margin-top: 18px !important;
+        padding-top: 8px !important;
         page-break-inside: avoid !important;
       }
       .sig-line {
-        margin-top: 38px !important;
+        margin-top: 28px !important;
       }
       .page-break {
-        page-break-after: always;
+        page-break-after: always !important;
+        break-after: page !important;
       }
     }
   </style>
@@ -219,18 +261,18 @@
 <body>
 
   <div class="toolbar">
-    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-      <button class="btn btn-green" onclick="window.print()">🖨️ הדפס / שמור כ-PDF</button>
+    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+      <button class="btn btn-green" onclick="window.print()">🖨️ הדפס / שמור כ-PDF (מותאם 2 דפי A4)</button>
       <button class="btn btn-blue" onclick="fillDefaults()">✍️ שחזר נתוני בסיס</button>
       <button class="btn" onclick="clearBlanks()">🧹 נקה קווים ריקים</button>
     </div>
-    <span class="toolbar-hint">💡 ניתן ללחוץ על כל קו מנוקד ולהקליד ישירות בדפדפן לפני ההדפסה</span>
+    <span class="toolbar-hint">💡 מותאם בדיוק ל-2 עמודי A4 בהדפסה</span>
   </div>
 
   <main class="contract-sheet">
     <header class="contract-title">
       <h1>הסכם עבודה אישי</h1>
-      <div class="role-tag">איש מכירות ושיווק שטח - אזור הצפון | תחום: ייבוא מסחרי</div>
+      <div class="role-tag">איש מכירות ושיווק שטח - אזור הצפון | ייבוא מסחרי מסין</div>
       <p class="date-line">שנערך ונחתם ביום <span class="field-blank" contenteditable="true" id="f-contract-day">01</span> לחודש <span class="field-blank" contenteditable="true" id="f-contract-month">אוקטובר</span> שנת <span class="field-blank" contenteditable="true" id="f-contract-year">2026</span></p>
     </header>
 
@@ -240,21 +282,21 @@
         <strong>בועז שכנטוב</strong>, ת.ז. <span class="field-blank" contenteditable="true" id="f-emp-id">027280536</span>,
         מרחוב/עיר <span class="field-blank" contenteditable="true" id="f-emp-addr">רמת גן</span>
       </div>
-      <div style="text-align: left; font-weight: 700; color: #475569; margin: 4px 0 8px 0;">(להלן: ״המעסיק״) מצד אחד;</div>
+      <div style="text-align: left; font-weight: 700; color: #475569; margin: 2px 0 6px 0;">(להלן: ״המעסיק״) מצד אחד;</div>
 
       <div class="party-row">
         <span class="party-title">לבין:</span>
         <strong>אדם דורות</strong>, ת.ז. <span class="field-blank" contenteditable="true" id="f-worker-id">204593529</span>,
         מרחוב/יישוב <span class="field-blank" contenteditable="true" id="f-worker-addr">נאות גולן</span>,
-        טלפון: <span class="field-blank" contenteditable="true" id="f-worker-phone" style="min-width: 120px; direction: ltr; text-align: right;">_________________</span>
+        טלפון: <span class="field-blank" contenteditable="true" id="f-worker-phone" style="min-width: 110px; direction: ltr; text-align: right;">_________________</span>
       </div>
-      <div style="text-align: left; font-weight: 700; color: #475569; margin-top: 4px;">(להלן: ״העובד״) מצד שני;</div>
+      <div style="text-align: left; font-weight: 700; color: #475569; margin-top: 2px;">(להלן: ״העובד״) מצד שני;</div>
     </div>
 
     <!-- 1. מבוא והצהרות -->
     <div class="section-title">1. מבוא והצהרות הצדדים</div>
-    <p class="clause">1.1. הואיל והמעסיק עוסק, בין היתר, בייבוא מסחרי של מוצרים וסחורות מסין לישראל, שיווקם, הפצתם ומכירתם ללקוחות סיטונאיים, קמעונאיים, חנויות, רשתות ועסקים (להלן: <strong>״הפעילות העסקית״</strong> או <strong>״המוצרים״</strong>);</p>
-    <p class="clause">1.2. והואיל והמעסיק מעוניין להעסיק את העובד, והעובד מעוניין לעבוד אצל המעסיק בתפקיד של איש שיווק ומכירות שטח בגזרת אזור הצפון, לשם פיתוח הפעילות המסחרית, איתור וגיוס לקוחות חדשים, שימור לקוחות קיימים והגדלת מחזורי המכירות;</p>
+    <p class="clause">1.1. הואיל והמעסיק עוסק, בין היתר, בייבוא מסחרי של מוצרים וסחורות מסין לישראל, שיווקם, הפצתם ומכירתם ללקוחות סיטונאיים, קמעונאיים, חנויות, רשתות ועסקים (להלן: <strong>״הפעילות העסקית״</strong>);</p>
+    <p class="clause">1.2. והואיל והמעסיק מעוניין להעסיק את העובד, והעובד מעוניין לעבוד אצל המעסיק בתפקיד של איש שיווק ומכירות שטח באזור הצפון, לשם פיתוח הפעילות המסחרית, גיוס לקוחות חדשים, שימור לקוחות קיימים והגדלת מחזורי המכירות;</p>
     <p class="clause">1.3. והואיל והעובד הצהיר והתחייב כי הינו בעל הכישורים, הידע המסחרי, כושר המשא ומתן, רשיון נהיגה תקף וכושר ניידות הנדרשים לביצוע תפקידי שיווק ומכירות שטח במלואם, בנאמנות ובמקצועיות;</p>
     <p class="clause">1.4. והואיל והצדדים מעוניינים להסדיר בכתב את תנאי העסקתו של העובד, זכויותיו וחובותיו במסגרת הסכם זה;</p>
     <p class="clause"><strong>לפיכך הוצהר, הוסכם והותנה בין הצדדים כדלקמן:</strong></p>
@@ -275,51 +317,48 @@
       <li>הצגת קווי המוצרים המיובאים מסין, הצגת דוגמאות מוצר (Samples), קטלוגים ומחירונים, ומתן מענה מסחרי ומקצועי לדרישות הלקוחות.</li>
       <li>סגירת עסקאות, לקיחת הזמנות ומעקב אחר אספקת הסחורה ללקוח בתיאום מול המעסיק ומערך הלוגיסטיקה והמחסן.</li>
       <li>מעקב שוטף אחר גבייה ותשלומים מלקוחות באזור הצפון בהתאם לתנאי האשראי שנקבעו מראש ע״י המעסיק.</li>
-      <li>דיווח שוטף למעסיק על פעילות השטח, יומן פגישות, הצעות מחיר פתוחות, משובי שוק ומידע תחרותי.</li>
+      <li>דיווח שוטף למעסיק על פעילות השטח, יומן פגישות, הצעות מחיר פתוחות ומשובי שוק.</li>
       <li>ביצוע כל משימה שיווקית, מסחרית או מכירתית סבירה נוספת בהתאם להנחיות המעסיק ולצורכי העסק.</li>
     </ol>
 
     <!-- 4. היקף משרה -->
     <div class="section-title">4. היקף משרה, ניידות ושעות עבודה</div>
-    <p class="clause">4.1. העובד יועסק בהיקף משרה של: <span class="field-blank" contenteditable="true" id="f-job-scope" style="min-width: 180px;">משרה מלאה (100%)</span>.</p>
-    <p class="clause">4.2. ימי העבודה השבועיים יהיו: <span class="field-blank" contenteditable="true" id="f-job-days" style="min-width: 340px;">ימים א' עד ה' / שעות עבודה גמישות בהתאם לפגישות השטח ולתיאום מול הלקוחות</span>.</p>
+    <p class="clause">4.1. העובד יועסק בהיקף משרה של: <span class="field-blank" contenteditable="true" id="f-job-scope" style="min-width: 160px;">משרה מלאה (100%)</span>.</p>
+    <p class="clause">4.2. ימי העבודה השבועיים יהיו: <span class="field-blank" contenteditable="true" id="f-job-days" style="min-width: 320px;">ימים א' עד ה' / שעות עבודה גמישות בהתאם לפגישות השטח ולתיאום מול הלקוחות</span>.</p>
     <p class="clause">4.3. בשל אופי התפקיד כעבודת שטח חיצונית הדורשת מידה רבה של אמון אישי ועצמאות בניהול הזמן, מתחייב העובד לנהל יומן פגישות מסודר ולדווח באופן שוטף למעסיק על שעות ופעילות השטח.</p>
 
+    <!-- מעבר עמוד חד לדף 2 -->
     <div class="page-break"></div>
 
     <!-- 5. שכר עבודה ועמלות -->
     <div class="section-title">5. שכר עבודה, עמלות והחזר הוצאות</div>
-    <p class="clause">5.1. <strong>שכר יסוד חודשי:</strong> תמורת ביצוע עבודתו ומילוי התחייבויותיו לפי הסכם זה, ישלם המעסיק לעובד שכר יסוד חודשי ברוטו בסך של: <span class="field-blank" contenteditable="true" id="f-salary-base" style="min-width: 80px;">13,000</span> ש״ח (במילים: <span class="field-blank" contenteditable="true" id="f-salary-words" style="min-width: 130px;">שלושה עשר אלף</span> ש״ח).</p>
-    <p class="clause">5.2. <strong>עמלות מכירה:</strong> בנוסף לשכר היסוד, יהיה העובד זכאי לעמלות מכירה בשיעור של <span class="field-blank" contenteditable="true" id="f-commission" style="min-width: 50px;">3%</span> ממחזור המכירות (לפני מע״מ) שבוצע על ידו ונגבה בפועל באזור הצפון.</p>
-    <p class="clause">5.3. <strong>הוצאות רכב ונסיעות שטח:</strong> בשל היות התפקיד תפקיד שטח הדורש ניידות מרובה באזור הצפון, ישלם המעסיק לעובד החזר הוצאות רכב בסך קבוע של: <span class="field-blank" contenteditable="true" id="f-travel-exp" style="min-width: 60px;">600</span> ש״ח לחודש.</p>
+    <p class="clause">5.1. <strong>שכר יסוד חודשי:</strong> תמורת עבודתו ומילוי התחייבויותיו לפי הסכם זה, ישלם המעסיק לעובד שכר יסוד חודשי ברוטו בסך של: <span class="field-blank" contenteditable="true" id="f-salary-base" style="min-width: 70px;">13,000</span> ש״ח (במילים: <span class="field-blank" contenteditable="true" id="f-salary-words" style="min-width: 120px;">שלושה עשר אלף</span> ש״ח).</p>
+    <p class="clause">5.2. <strong>עמלות מכירה:</strong> בנוסף לשכר היסוד, יהיה העובד זכאי לעמלות מכירה בשיעור של <span class="field-blank" contenteditable="true" id="f-commission" style="min-width: 45px;">3%</span> ממחזור המכירות (לפני מע״מ) שבוצע על ידו ונגבה בפועל באזור הצפון.</p>
+    <p class="clause">5.3. <strong>הוצאות רכב ונסיעות שטח:</strong> בשל היות התפקיד תפקיד שטח הדורש ניידות מרובה באזור הצפון, ישלם המעסיק לעובד החזר הוצאות רכב בסך קבוע של: <span class="field-blank" contenteditable="true" id="f-travel-exp" style="min-width: 55px;">600</span> ש״ח לחודש.</p>
     <p class="clause">5.4. <strong>מועד תשלום:</strong> השכר, העמלות והחזר ההוצאות ישולמו מדי חודש בחודשו, לא יאוחר מהיום התשיעי לחודש הקלנדרי העוקב עבור החודש שחלף, ישירות לחשבון הבנק של העובד.</p>
     <p class="clause">5.5. מן השכר ינוכו כל ניכויי החובה על פי חוק (מס הכנסה, ביטוח לאומי, ביטוח בריאות וחלק העובד בהפרשות סוציאליות).</p>
 
     <!-- 6. תנאים סוציאליים -->
     <div class="section-title">6. תנאים סוציאליים ופנסיה</div>
     <p class="clause">6.1. <strong>ביטוח פנסיוני ופיצויים:</strong> המעסיק והעובד יפרישו לקופת פנסיה / ביטוח מנהלים כבחירת העובד, בהתאם לצו ההרחבה הכללי לביטוח פנסיוני מקיף במשק (תגמולי מעסיק, תגמולי עובד ופיצויי פיטורין כחוק).</p>
-    <p class="clause">6.2. <strong>חופשה שנתית:</strong> העובד יהיה זכאי לחופשה שנתית בהתאם להוראות חוק חופשה שנתית, התשי״א-1951. מועדי החופשה יתואמו מראש עם המעסיק.</p>
-    <p class="clause">6.3. <strong>דמי מחלה:</strong> העובד יהיה זכאי לדמי מחלה בהתאם לחוק דמי מחלה, התשל״ו-1976, בכפוף להמצאת אישור רפואי כדין.</p>
-    <p class="clause">6.4. <strong>דמי הבראה:</strong> העובד יהיה זכאי לדמי הבראה בהתאם לצו ההרחבה הכללי במשק, לאחר השלמת שנת עבודה מלאה.</p>
+    <p class="clause">6.2. <strong>חופשה שנתית, דמי מחלה והבראה:</strong> העובד יהיה זכאי לחופשה שנתית, דמי מחלה ודמי הבראה בהתאם להוראות חוק חופשה שנתית, חוק דמי מחלה וצו ההרחבה לדמי הבראה במשק.</p>
 
     <!-- 7. סודיות והגנת ספקים -->
     <div class="section-title">7. חובת נאמנות, סודיות, הגנת ספקים מסין ואי-תחרות</div>
-    <p class="clause">7.1. העובד מתחייב להקדיש את מיטב מרצו, כישוריו וזמנו לקידום עסקיו ומכירותיו של המעסיק, ולפעול בנאמנות, ביושר ובמסירות.</p>
-    <p class="clause">7.2. <strong>סודיות מסחרית:</strong> העובד מצהיר ומאשר כי במסגרת תפקידו ייחשף למידע מסחרי רגיש ביותר של המעסיק, לרבות: שמות ופרטי ספקים ומפעלים בסין, עלויות רכש, מחירי ייבוא והובלה, מחירונים והנחות מסחריות, רשימות לקוחות וקניינים, ותוכניות שיווק (להלן: <strong>״סודות מסחריים״</strong>). העובד מתחייב לשמור את המידע בסודיות מוחלטת, לא לעשות בו שימוש לצרכיו האישיים ולא להעבירו לכל גורם שלישי, הן בתקופת העבודה והן לאחריה ללא הגבלת זמן.</p>
-    <p class="clause">7.3. <strong>אי-תחרות והגנת קשרי ספקים ולקוחות:</strong> העובד מתחייב כי במשך תקופת עבודתו ובמשך 12 חודשים לאחר סיומה, לא יפנה במישרין או בעקיפין לספקי המעסיק או מפעליו בסין, לא יבצע מולם רכש מתחרה, ולא ישדל לקוחות של המעסיק לרכוש מוצרים מתחרים.</p>
-    <p class="clause">7.4. <strong>רכוש המעסיק:</strong> כל הדוגמאות (Samples), קטלוגים, מחירונים, רשימות לקוחות, ציוד ומסמכים שיימסרו לעובד הינם רכושו הבלעדי של המעסיק ויוחזרו במלואם עם סיום יחסי העבודה או לפי דרישה ראשונה.</p>
+    <p class="clause">7.1. העובד מתחייב לפעול בנאמנות, ביושר ובמסירות, ולהקדיש את מיטב מרצו וכישוריו לקידום עסקיו ומכירותיו של המעסיק.</p>
+    <p class="clause">7.2. <strong>סודיות מסחרית:</strong> העובד מצהיר ומאשר כי ייחשף למידע מסחרי רגיש, לרבות: שמות ופרטי ספקים ומפעלים בסין, מחירי עלות וייבוא, מחירונים והנחות, רשימות לקוחות וקניינים (להלן: <strong>״סודות מסחריים״</strong>). העובד מתחייב לשמור את המידע בסודיות מוחלטת, לא לעשות בו שימוש לצרכיו ולא להעבירו לכל צד שלישי, הן בתקופת העבודה והן לאחריה ללא הגבלת זמן.</p>
+    <p class="clause">7.3. <strong>אי-תחרות והגנת ספקים:</strong> במשך תקופת עבודתו ובמשך 12 חודשים לאחר סיומה, לא יפנה העובד במישרין או בעקיפין לספקי המעסיק או מפעליו בסין לצורך רכש מתחרה, ולא ישדל לקוחות של המעסיק לרכוש מוצרים מתחרים.</p>
+    <p class="clause">7.4. <strong>רכוש המעסיק:</strong> כל הדוגמאות (Samples), קטלוגים, מחירונים, רשימות לקוחות וציוד שנמסרו לעובד הינם רכושו הבלעדי של המעסיק ויוחזרו במלואם עם סיום יחסי העבודה או לפי דרישה ראשונה.</p>
 
     <!-- 8. סיום יחסי עבודה -->
     <div class="section-title">8. סיום יחסי עבודה והודעה מוקדמת</div>
-    <p class="clause">8.1. כל צד יהא רשאי לסיים הסכם זה בכל עת, במתן הודעה מוקדמת בכתב לצד השני בהתאם לקבוע בחוק הודעה מוקדמת לפיטורים ולהתפטרות, התשס״א-2001.</p>
-    <p class="clause">8.2. המעסיק יהא רשאי לוותר על עבודתו בפועל של העובד במהלך תקופת ההודעה המוקדמת, כולה או מקצתה, ובלבד שישלם לעובד תמורת הודעה מוקדמת כקבוע בחוק.</p>
-    <p class="clause">8.3. עם סיום העסקתו, יבצע העובד חפיפה מסודרת ויעביר את כל תיקי הלקוחות, הצעות מחיר פעילות, נתוני גבייה, דוגמאות מוצרים וציוד שהיו בחזקתו לידי המעסיק.</p>
+    <p class="clause">8.1. כל צד יהא רשאי לסיים הסכם זה במתן הודעה מוקדמת בכתב לפי חוק הודעה מוקדמת לפיטורים ולהתפטרות, התשס״א-2001. המעסיק רשאי לוותר על עבודה בפועל כנגד תשלום חלף הודעה מוקדמת כדין.</p>
+    <p class="clause">8.2. עם סיום העסקתו, יבצע העובד חפיפה מסודרת ויעביר את כל תיקי הלקוחות, גבייה פתוחה, הצעות מחיר ודוגמאות לידי המעסיק.</p>
 
     <!-- 9. שונות וסמכות שיפוט -->
     <div class="section-title">9. שונות וסמכות שיפוט</div>
-    <p class="clause">9.1. הסכם זה ממצה ומבטל כל הסכמה, מצג או התחייבות קודמים, בכתב או בעל פה, שנעשו בין הצדדים עובר לחתימתו.</p>
-    <p class="clause">9.2. כל שינוי או תוספת להסכם זה יהיו תקפים אך ורק אם נעשו בכתב ונחתמו על ידי שני הצדדים.</p>
-    <p class="clause">9.3. סמכות השיפוט הבלעדית בכל סכסוך הנובע מהסכם זה או הקשור בו תהא מסורה לבית הדין האזורי לעבודה המוסמך במחוז הצפון (נצרת).</p>
+    <p class="clause">9.1. הסכם זה ממצה ומבטל כל הסכמה או מצג קודמים. כל שינוי או תוספת יהיו תקפים אך ורק אם נעשו בכתב ונחתמו על ידי שני הצדדים.</p>
+    <p class="clause">9.2. סמכות השיפוט הבלעדית בכל סכסוך הנובע מהסכם זה תהא מסורה לבית הדין האזורי לעבודה המוסמך במחוז הצפון (נצרת).</p>
 
     <!-- חתימות -->
     <div class="signatures-grid">
