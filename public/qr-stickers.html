@@ -403,7 +403,7 @@
         padding: 0 !important;
         width: 100% !important;
       }
-      .header-bar, .nav-tabs, .search-input, .test-link {
+      .header-bar, .nav-tabs, .search-input, .test-link, .grounds-toolbar {
         display: none !important;
       }
       .table-view {
@@ -724,6 +724,7 @@
         <button class="btn" onclick="showTab('signs'); window.print();">🏷️ שלטי כניסה לאורח (4 בדף)</button>
         <button class="btn" onclick="showTab('compact'); window.print();">📄 כל היחידות בדף 1</button>
         <button class="btn" style="background: #1e293b;" onclick="showTab('work-order'); window.print();">📑 הזמנת עבודה מספק</button>
+        <button class="btn" style="background:#0f766e;" onclick="showTab('grounds')">🌿 חצרות ובריכות</button>
       </div>
     </div>
 
@@ -733,6 +734,7 @@
       <button class="tab-btn" id="btn-tab-signs" onclick="showTab('signs')">🏷️ שלטי כניסה ומעמד לאורח (4 בדף A4 - מומלץ לאורחים)</button>
       <button class="tab-btn" id="btn-tab-compact" onclick="showTab('compact')">📄 הכל בדף A4 יחיד (קומפקטי - 41 מדבקות בדף 1)</button>
       <button class="tab-btn" id="btn-tab-work-order" onclick="showTab('work-order')">📑 הזמנת עבודה מספק (טופס A4)</button>
+      <button class="tab-btn" id="btn-tab-grounds" onclick="showTab('grounds')">🌿 חצרות ובריכות</button>
     </div>
 
     <!-- Tab 1: Master Code Table -->
@@ -3121,6 +3123,13 @@
     </div>
 
     <!-- Tab 5: Work Order Form (הזמנת עבודה מספק) -->
+    <div id="view-grounds" style="display:none;">
+      <div class="grounds-toolbar" style="display:flex;justify-content:flex-start;padding:8px 0;">
+        <button class="btn" style="background:#0f766e;" onclick="document.getElementById('grounds-frame').contentWindow.print()">🖨️ הדפסת חצרות ובריכות</button>
+      </div>
+      <iframe id="grounds-frame" title="חצרות ובריכות" src="/grounds-qr.html?embed=1" style="width:100%;height:calc(100vh - 190px);border:0;background:#fff;"></iframe>
+    </div>
+
     <div class="view-work-order" id="view-work-order">
       <div class="wo-controls">
         <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
@@ -3299,24 +3308,28 @@
       const vSigns = document.getElementById('view-signs');
       const vCompact = document.getElementById('view-compact');
       const vWorkOrder = document.getElementById('view-work-order');
+      const vGrounds = document.getElementById('view-grounds');
 
       const bTable = document.getElementById('btn-tab-table');
       const b5x5 = document.getElementById('btn-tab-5x5');
       const bSigns = document.getElementById('btn-tab-signs');
       const bCompact = document.getElementById('btn-tab-compact');
       const bWorkOrder = document.getElementById('btn-tab-work-order');
+      const bGrounds = document.getElementById('btn-tab-grounds');
 
       vTable.style.display = tab === 'table' ? 'block' : 'none';
       v5x5.style.display = tab === '5x5' ? 'block' : 'none';
       vSigns.style.display = tab === 'signs' ? 'block' : 'none';
       vCompact.style.display = tab === 'compact' ? 'block' : 'none';
       if (vWorkOrder) vWorkOrder.style.display = tab === 'work-order' ? 'block' : 'none';
+      if (vGrounds) vGrounds.style.display = tab === 'grounds' ? 'block' : 'none';
 
       bTable.classList.toggle('active', tab === 'table');
       b5x5.classList.toggle('active', tab === '5x5');
       bSigns.classList.toggle('active', tab === 'signs');
       bCompact.classList.toggle('active', tab === 'compact');
       if (bWorkOrder) bWorkOrder.classList.toggle('active', tab === 'work-order');
+      if (bGrounds) bGrounds.classList.toggle('active', tab === 'grounds');
 
       if (window.location.hash !== '#' + tab) {
         history.replaceState(null, '', '#' + tab);
@@ -3389,7 +3402,7 @@
 
     function checkInitialTab() {
       const hashTab = (window.location.hash || '').replace('#', '') || (new URLSearchParams(window.location.search)).get('tab');
-      if (hashTab && ['table', '5x5', 'signs', 'compact', 'work-order'].includes(hashTab)) {
+      if (hashTab && ['table', '5x5', 'signs', 'compact', 'work-order', 'grounds'].includes(hashTab)) {
         showTab(hashTab);
       }
     }

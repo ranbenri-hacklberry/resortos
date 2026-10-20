@@ -34,6 +34,15 @@ function allowLoginAttempt(key) {
   return true;
 }
 
+async function linkCrewLead(token, staffId, leadId) {
+  if (leadId == null) return null;
+  return rpc('hotelos_set_crew_lead', {
+    p_token: token,
+    p_staff_id: String(staffId || ''),
+    p_lead_id: String(leadId || '')
+  });
+}
+
 async function rpc(fn, args) {
   const key = supabaseAnonKey();
   if (!key) {
@@ -301,6 +310,9 @@ export async function createStaff(req, res) {
     });
     if (result?.error) return mapStaffError(result, res);
     if (!result?.user) return res.status(500).json({ error: 'AUTH_FAILED' });
+    const linked = await linkCrewLead(token, result.user.id, req.body?.crew_lead_id);
+    if (linked?.error) return mapStaffError(linked, res);
+    if (linked?.user) result.user = linked.user;
     import('./guestContext.js').then((mod) => mod.scheduleGuestContextPush()).catch(() => {});
     return res.status(201).json(result);
   } catch (err) {
@@ -344,6 +356,9 @@ export async function updateStaff(req, res) {
     });
     if (result?.error) return mapStaffError(result, res);
     if (!result?.user) return res.status(500).json({ error: 'AUTH_FAILED' });
+    const linked = await linkCrewLead(token, result.user.id, req.body?.crew_lead_id);
+    if (linked?.error) return mapStaffError(linked, res);
+    if (linked?.user) result.user = linked.user;
     import('./guestContext.js').then((mod) => mod.scheduleGuestContextPush()).catch(() => {});
     return res.json(result);
   } catch (err) {

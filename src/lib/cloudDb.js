@@ -478,6 +478,10 @@ export async function pushBookingToCloud(booking, options = {}) {
     }
     const row = toBookingRow(booking);
     row.guest_phone = keepGuestPhone(row.guest_phone, cloudRow?.guest_phone);
+    if (Array.isArray(booking.stay?.priority_notes)) {
+      const cloudStay = cloudRow?.stay && typeof cloudRow.stay === 'object' ? cloudRow.stay : {};
+      row.stay = { ...cloudStay, priority_notes: booking.stay.priority_notes };
+    }
     const { error } = await supabase.from('hotelos_bookings').upsert(row);
     if (error) {
       console.warn('[HOTELOS SYNC PUSH]', error.message);

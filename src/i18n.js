@@ -201,6 +201,7 @@ const resources = {
       "ROLE_OPS_MANAGER": "🧭 מנהל תפעול",
       "ROLE_RECEPTION": "💳 פקידות",
       "ROLE_HOUSEKEEPING": "🧹 משק בית",
+      "ROLE_WORK_LEAD": "👷 מנהל עבודה",
       "ROLE_MAINTENANCE": "🔧 אחזקה",
       "ROLE_GARDENING": "🌱 חצרנות",
       "ROLE_PRIORITY": "▦ פריוריטי",

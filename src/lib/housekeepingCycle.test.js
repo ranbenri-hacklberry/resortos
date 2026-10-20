@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { applyAssignedStaff, applyCalendarOccupancy, applyCalendarUnitStatus, isStaleHousekeeping, passedManagerInspection, persistRoomCompletions, turnoverNeed } from './housekeepingCycle.js';
+import { applyAssignedStaff, applyCalendarOccupancy, applyCalendarUnitStatus, clearCleanerUntilScan, isStaleHousekeeping, passedManagerInspection, persistRoomCompletions, turnoverNeed } from './housekeepingCycle.js';
 import { hideHousekeepingTaskWhileOccupied, isExpiredPendingInspect } from './unitStatus.js';
 
 const unit = { id: 'k671', name: 'נורית 1', is_active: true, operational_status: 'READY' };
@@ -246,6 +246,35 @@ describe('calendar field status', () => {
     });
     expect(pushed[0].assigned_staff).toBe('אוסנת');
     expect(pushed[0].operational_status).toBeUndefined();
+  });
+
+  it('drops a cleaner when a room is only listed for cleaning', async () => {
+    const pushed = [];
+    const pushUnitToCloud = vi.fn(async (row) => { pushed.push(row); });
+    await applyCalendarUnitStatus({
+      tenantId: 't1',
+      unit: { ...unit, operational_status: 'READY', assigned_staff: 'אוסנת' },
+      status: 'DIRTY',
+      pushUnitToCloud
+    });
+    expect(pushed.at(-1).operational_status).toBe('DIRTY');
+    expect(pushed.at(-1).assigned_staff).toBeNull();
+  });
+
+  it('clears a cleaner already sitting on a room that is waiting for a scan', async () => {
+    const pushed = [];
+    const pushUnitToCloud = vi.fn(async (row) => { pushed.push(row); });
+    await clearCleanerUntilScan({
+      tenantId: 't1',
+      units: [
+        { ...unit, operational_status: 'DIRTY', assigned_staff: 'אוסנת' },
+        { ...unit, id: 'k672', operational_status: 'IN_PROGRESS', assigned_staff: 'שיבה' }
+      ],
+      pushUnitToCloud
+    });
+    expect(pushed).toHaveLength(1);
+    expect(pushed[0].id).toBe('k671');
+    expect(pushed[0].assigned_staff).toBeNull();
   });
 });
 

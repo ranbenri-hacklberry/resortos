@@ -18,6 +18,19 @@ describe('live staff roles', () => {
     expect(merged.find((row) => row.phone === '972525834355')).toMatchObject({ role: 'HOUSEKEEPING', language: 'ar' });
   });
 
+  it('records a contractor crew member under the work lead', () => {
+    const merged = applyLiveRoles(file, [
+      { id: 'abu', name: 'אבו', role: 'WORK_LEAD', phones: ['0525834355'] },
+      { id: 'worker', name: 'סאמר', role: 'HOUSEKEEPING', phones: ['0501112233'], crew_lead_name: 'אבו' },
+    ]);
+    expect(merged.find((row) => row.name === 'אבו')?.recordsAs).toBeUndefined();
+    expect(merged.find((row) => row.name === 'סאמר')).toMatchObject({
+      phone: '972501112233',
+      role: 'HOUSEKEEPING',
+      recordsAs: 'אבו',
+    });
+  });
+
   it('adds a manager who exists only in the employee table', () => {
     const merged = applyLiveRoles(file, [
       { id: 'daniel', name: 'דניאל', role: 'MANAGER', phones: ['0504717447'] },

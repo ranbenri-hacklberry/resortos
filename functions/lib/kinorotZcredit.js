@@ -53,10 +53,12 @@ export function parseResviewPayment(html) {
   const header = text.match(/סה["״']?כ\s*₪?\s*([\d.,]+)\s*מקדמה\s*₪?\s*([\d.,]+)/);
   let total = header ? ilsFromRaw(header[1]) : 0;
   const deposit = header ? ilsFromRaw(header[2]) : 0;
-  if (total <= 0) {
-    const unitPrice = text.match(/מחיר יחידה[\s\S]{0,120}₪\s*([\d.,]+)/);
-    total = ilsFromRaw(unitPrice?.[1]) || deposit || payAmount;
-  }
+  const unitPrices = [...text.matchAll(/מחיר יחידה[\s\S]{0,80}?₪\s*([\d.,]+)/g)]
+    .map((match) => ilsFromRaw(match[1]))
+    .filter((amount) => amount > 0);
+  const unitTotal = unitPrices.reduce((sum, amount) => sum + amount, 0);
+  if (unitTotal > total) total = unitTotal;
+  if (total <= 0) total = deposit || payAmount;
   const notePayments = parseKinorotNotePayments(text);
   const collected = receivedKinorotNotePayments(notePayments);
   const events = collected.length

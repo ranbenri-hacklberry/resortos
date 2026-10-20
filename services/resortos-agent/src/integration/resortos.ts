@@ -271,7 +271,7 @@ export class ResortOSClient {
   async setStaffOccupancy(p: { unitId: string; occupancy: 'OCCUPIED' | 'VACANT'; reportedBy: string; note?: string }): Promise<ReadyResult> {
     const unit = (await this.listUnits()).find((u) => u.id === p.unitId);
     if (!unit) return { ok: false, skipped: 'unit_not_found' };
-    await this.putUnit(p.unitId, { staff_occupancy: p.occupancy, assigned_staff: p.reportedBy, ...roomLogNote(p.note) });
+    await this.putUnit(p.unitId, { staff_occupancy: p.occupancy, ...roomLogNote(p.note) });
     return { ok: true };
   }
 
@@ -280,11 +280,11 @@ export class ResortOSClient {
     if (!unit) return { ok: false, skipped: 'unit_not_found' };
     const patch: Record<string, unknown> = {
       operational_status: p.status,
-      assigned_staff: p.reportedBy,
     };
     if (p.reason !== undefined) patch.custom_reason = p.reason;
     if (p.status === 'READY') {
       patch.operational_domain = 'HOUSEKEEPING';
+      patch.assigned_staff = p.reportedBy;
       patch.cleaning_started_at = null;
       patch.is_escalated = false;
     } else if (p.status === 'IN_PROGRESS') {
@@ -292,6 +292,7 @@ export class ResortOSClient {
       patch.cleaning_started_at = new Date().toISOString();
     } else if (p.status === 'DIRTY') {
       patch.operational_domain = 'HOUSEKEEPING';
+      patch.assigned_staff = null;
       patch.cleaning_started_at = null;
     } else     if (p.status === 'MAINTENANCE_ALERT') {
       patch.operational_domain = 'MAINTENANCE';
@@ -400,6 +401,20 @@ export class ResortOSClient {
     } catch {
       // Non-critical
     }
+  }
+
+  async getGroundStatus(id: string): Promise<{ status?: string } | null> {
+    const data = await this.req<{ assets?: Record<string, { status?: string }> }>('GET', '/api/ops/grounds');
+    return data.assets?.[id] || null;
+  }
+
+  async setGroundStatus(p: { id: string; status: string; reportedBy: string; note?: string }): Promise<unknown> {
+    return this.req('POST', '/api/ops/grounds', {
+      id: p.id,
+      status: p.status,
+      reported_by: p.reportedBy,
+      note: p.note || '',
+    });
   }
 
   async requestGuestCall(p: {

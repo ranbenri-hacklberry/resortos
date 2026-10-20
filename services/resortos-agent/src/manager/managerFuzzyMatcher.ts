@@ -343,12 +343,16 @@ export function matchManagerRoomIntent(rawText: string, allRooms: RoomEntry[]): 
 export function formatComplexClarificationPrompt(
   complexName: string,
   candidateRooms: RoomEntry[],
-  allRooms: RoomEntry[]
+  allRooms: RoomEntry[],
+  extras: { label: string }[] = []
 ): string {
   let msg = `🤔 זיהיתי שהתכוונת למתחם *${complexName}*.\nבאיזו יחידה מדובר?\n\n`;
   candidateRooms.forEach((r, idx) => {
     const label = formatRoomDisplay(r.id, allRooms);
     msg += `*${idx + 1}* - ${label}\n`;
+  });
+  extras.forEach((row, idx) => {
+    msg += `*${candidateRooms.length + idx + 1}* - ${row.label}\n`;
   });
   msg += `\nהשב במספר הבחירה (למשל: *1*, *2*...)`;
   return msg;

@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { cashPaymentsOnDate } from './cashDayReport';
+import { dueAgorotOf, recordedPaidAgorot } from './bookingPaid';
 import {
+  applyPaymentDraft,
   applyPriorityPayment,
   cashCollectedAgorot,
   collectPriorityCash,
   formatPriorityShekels,
   parsePriorityShekels,
+  paymentBreakdown,
   priorityMethodKey,
   priorityMethodLabel,
   priorityPayLabel,
+  priorityStatusKey,
   priorityShekelMark
 } from './priorityPayment';
 
@@ -25,6 +29,24 @@ function stay(partial = {}) {
     ...partial
   };
 }
+
+describe('guest card cash field', () => {
+  it('keeps the amount being typed instead of the saved cash', () => {
+    const card = applyPaymentDraft(
+      { id: 'k1', bookingId: 'b9', collectedText: '', amountText: '2,000 ₪', cashCollectedAgorot: 0, paidAgorot: 0, amountAgorot: 200000 },
+      { collectedText: '350', paymentBookingId: 'b9' }
+    );
+    expect(card.collectedText).toBe('350');
+  });
+
+  it('leaves another guest on the same unit unchanged', () => {
+    const card = applyPaymentDraft(
+      { id: 'k1', bookingId: 'b2', collectedText: '100 ₪' },
+      { collectedText: '350', paymentBookingId: 'b9' }
+    );
+    expect(card.collectedText).toBe('100 ₪');
+  });
+});
 
 describe('priority shekel mark', () => {
   const arrival = {
@@ -70,7 +92,10 @@ describe('priority payment', () => {
     expect(priorityMethodLabel('VOUCHER')).toBe('שובר');
     expect(priorityMethodLabel('')).toBe('לא צוין');
     expect(priorityMethodLabel('CASH')).toBe('מזומן');
-    expect(priorityMethodLabel('BANK')).toBe('העברה בנקאית / ביט');
+    expect(priorityMethodLabel('BANK')).toBe('העברה');
+    expect(priorityMethodLabel('CARD_CASH')).toBe('אשראי + מזומן');
+    expect(priorityMethodLabel('AIRBNB')).toBe('Airbnb');
+    expect(priorityMethodLabel('BOOKING')).toBe('בוקינג');
     expect(formatPriorityShekels(200000)).toBe('2,000 ₪');
     expect(parsePriorityShekels('2,000 ₪')).toBe(200000);
   });
@@ -128,6 +153,69 @@ describe('priority payment', () => {
       ]
     });
     expect(cashCollectedAgorot(cashOnlyByTxn)).toBe(128000);
+  });
+
+  it('marks the stay paid by card and clears the balance', () => {
+    const open = stay({
+      payment_status: 'DEPOSIT_PAID',
+      deposit_agorot: 26000,
+      clearing_payments: [{ source: 'KINOROT', method: 'card', accountKey: 'MAX', amount_agorot: 26000, txn: 'kinorot_note_1' }]
+    });
+    const paid = applyPriorityPayment(open, { statusKey: 'PAID', methodKey: 'CARD', today, collector: 'משרד' });
+    expect(paid.booking.payment_status).toBe('PAID');
+    expect(paid.booking.payment_mode).toBe('CARD');
+    expect(recordedPaidAgorot(paid.booking)).toBe(200000);
+    expect(dueAgorotOf(paid.booking)).toBe(0);
+    expect(cashPaymentsOnDate([paid.booking], [], today)).toHaveLength(0);
+    expect(paid.collectedAgorot).toBe(174000);
+  });
+
+  it('clears the balance when paid is marked without a method', () => {
+    const paid = applyPriorityPayment(stay(), { statusKey: 'PAID', today, collector: 'משרד' });
+    expect(dueAgorotOf(paid.booking)).toBe(0);
+    expect(recordedPaidAgorot(paid.booking)).toBe(200000);
+  });
+
+  it('shows a zero balance on the card as soon as paid is chosen', () => {
+    const card = applyPaymentDraft(
+      { id: 'k1', bookingId: 'b9', amountAgorot: 130000, paidAgorot: 26000, payStatus: 'PARTIAL', payMethod: '' },
+      { payStatus: 'PAID', paymentBookingId: 'b9' }
+    );
+    expect(card.paidAgorot).toBe(130000);
+    expect(Math.max(0, card.amountAgorot - card.paidAgorot)).toBe(0);
+  });
+
+  it('shows a card deposit as partial credit, then a cash top-up as a split', () => {
+    const deposit = stay({
+      total_price_agorot: 130000,
+      deposit_agorot: 26000,
+      payment_status: 'DEPOSIT_PAID',
+      payment_mode: 'CARD',
+      clearing_payments: [{
+        source: 'KINOROT',
+        method: 'card',
+        accountKey: 'MAX',
+        amount_agorot: 26000,
+        txn: 'kinorot_note_1_26000_card'
+      }]
+    });
+    expect(priorityStatusKey(deposit)).toBe('PARTIAL');
+    expect(priorityMethodKey(deposit)).toBe('CARD');
+
+    const paid = collectPriorityCash(deposit, { today, collector: 'משרד', collectedAgorot: 104000 });
+    expect(paid.booking.payment_status).toBe('PAID');
+    expect(paid.booking.payment_mode).toBe('CARD_CASH');
+    expect(paymentBreakdown(paid.booking)).toBe('אשראי 260 ₪ · מזומן 1,040 ₪');
+    expect(recordedPaidAgorot(paid.booking)).toBe(130000);
+    expect(dueAgorotOf(paid.booking)).toBe(0);
+    expect(cashPaymentsOnDate([paid.booking], [], today)[0].amountAgorot).toBe(104000);
+
+    const airbnb = applyPriorityPayment(stay(), { statusKey: 'PAID', methodKey: 'AIRBNB', today, collector: 'משרד' });
+    expect(airbnb.booking.payment_mode).toBe('AIRBNB');
+    expect(dueAgorotOf(airbnb.booking)).toBe(0);
+    const booking = applyPriorityPayment(stay(), { statusKey: 'PAID', methodKey: 'BOOKING', today, collector: 'משרד' });
+    expect(booking.booking.payment_mode).toBe('BOOKING');
+    expect(dueAgorotOf(booking.booking)).toBe(0);
   });
 
   it('does not put a card payment into the cash report', () => {

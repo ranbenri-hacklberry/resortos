@@ -14,9 +14,11 @@ export const PAYMENT_STATUSES = [
 export const PAYMENT_METHODS = [
   { key: 'CASH', label: 'מזומן', mode: 'CASH' },
   { key: 'CARD', label: 'אשראי', mode: 'CARD' },
-  { key: 'BANK', label: 'העברה בנקאית / ביט', mode: 'BANK_TRANSFER' },
-  { key: 'BOOKING', label: 'Booking.com', mode: 'BOOKING' },
-  { key: 'VOUCHER', label: 'שובר', mode: 'VOUCHER' }
+  { key: 'CARD_CASH', label: 'אשראי + מזומן', mode: 'CARD_CASH' },
+  { key: 'BANK', label: 'העברה', mode: 'BANK_TRANSFER' },
+  { key: 'VOUCHER', label: 'שובר', mode: 'VOUCHER' },
+  { key: 'BOOKING', label: 'בוקינג', mode: 'BOOKING' },
+  { key: 'AIRBNB', label: 'Airbnb', mode: 'AIRBNB' }
 ];
 
 export function priorityStatusKey(booking) {
@@ -73,19 +75,62 @@ export function priorityMethodLabel(methodKey) {
   return PAYMENT_METHODS.find((row) => row.key === methodKey)?.label || 'לא צוין';
 }
 
+function clearingKind(raw) {
+  const row = normalizeClearingPayment(raw);
+  const method = String(raw?.method || '').toLowerCase();
+  const txn = String(row.txn || '');
+  if (row.source === 'CASH' || row.accountKey === 'CASH' || method === 'cash' || /_cash$/.test(txn)) return 'cash';
+  if (row.source === 'BANK' || row.accountKey === 'BANK' || method === 'bank' || /_bank$/.test(txn)) return 'bank';
+  if (row.source === 'VOUCHER' || method === 'voucher') return 'voucher';
+  if (row.source === 'BOOKING') return 'booking';
+  if (row.source === 'AIRBNB') return 'airbnb';
+  if (
+    row.source === 'CARD'
+    || row.source === 'HYP'
+    || row.source === 'MAX'
+    || row.accountKey === 'MAX'
+    || method === 'card'
+    || /_card$/.test(txn)
+  ) return 'card';
+  return '';
+}
+
+export function paymentParts(booking) {
+  const parts = { card: 0, cash: 0, bank: 0, voucher: 0, booking: 0, airbnb: 0 };
+  for (const raw of Array.isArray(booking?.clearing_payments) ? booking.clearing_payments : []) {
+    const kind = clearingKind(raw);
+    if (!kind) continue;
+    parts[kind] += Number(normalizeClearingPayment(raw).amount_agorot) || 0;
+  }
+  return parts;
+}
+
+export function paymentBreakdown(booking, cashAgorot = null) {
+  const parts = paymentParts(booking);
+  const cash = Number.isFinite(cashAgorot) ? cashAgorot : parts.cash;
+  const lines = [];
+  if (parts.card > 0) lines.push(`אשראי ${formatPriorityShekels(parts.card)}`);
+  if (cash > 0) lines.push(`מזומן ${formatPriorityShekels(cash)}`);
+  if (parts.bank > 0) lines.push(`העברה ${formatPriorityShekels(parts.bank)}`);
+  return lines.length > 1 ? lines.join(' · ') : '';
+}
+
 export function priorityMethodKey(booking) {
   if (!booking) return '';
   if (kinorotSettlementKind(booking) === 'voucher') return 'VOUCHER';
   const mode = String(booking.payment_mode || '').toUpperCase();
+  if (mode === 'AIRBNB') return 'AIRBNB';
+  if (mode === 'BOOKING' || kinorotSettlementKind(booking) === 'booking') return 'BOOKING';
+  if (mode === 'VOUCHER') return 'VOUCHER';
+  const parts = paymentParts(booking);
+  if (parts.card > 0 && parts.cash > 0) return 'CARD_CASH';
+  if (mode === 'CARD_CASH') return 'CARD_CASH';
+  if (parts.cash > 0 && parts.card === 0 && parts.bank === 0) return 'CASH';
+  if (parts.card > 0) return 'CARD';
+  if (parts.bank > 0) return 'BANK';
   if (mode === 'CASH' || mode === 'CASH_TRUST') return 'CASH';
   if (mode === 'BANK_TRANSFER') return 'BANK';
-  if (mode === 'BOOKING') return 'BOOKING';
   if (mode === 'CARD' || mode === 'CREDIT_FULL' || mode === 'CREDIT_DEPOSIT') return 'CARD';
-  const payments = Array.isArray(booking.clearing_payments) ? booking.clearing_payments : [];
-  const last = payments.map(normalizeClearingPayment).filter((row) => row.amount_agorot > 0).at(-1);
-  if (last?.source === 'CASH' || last?.accountKey === 'CASH') return 'CASH';
-  if (last?.source === 'BANK' || last?.accountKey === 'BANK') return 'BANK';
-  if (last?.source === 'HYP' || last?.source === 'MAX') return 'CARD';
   return '';
 }
 
@@ -152,6 +197,51 @@ function methodMode(methodKey) {
   return PAYMENT_METHODS.find((row) => row.key === methodKey)?.mode || '';
 }
 
+function withoutDeskSettlement(booking) {
+  const list = (Array.isArray(booking?.clearing_payments) ? booking.clearing_payments : [])
+    .filter((row) => !String(row?.txn || '').startsWith('priority_settle_'));
+  return { ...booking, clearing_payments: list };
+}
+
+function settlePaidBalance(booking, today, collector, methodKey) {
+  const stripped = withoutDeskSettlement(booking);
+  if (stripped.payment_status !== 'PAID') return { booking: stripped, collectedAgorot: 0 };
+  if (stripped.payment_mode === 'CASH' || stripped.payment_mode === 'CASH_TRUST') {
+    const cashDue = Math.max(0, (Number(stripped.total_price_agorot) || 0) - clearingSum(stripped));
+    if (!(cashDue > 0)) return { booking: stripped, collectedAgorot: 0 };
+    return withCashReceipt(stripped, today, collector, cashDue);
+  }
+  const total = Number(stripped.total_price_agorot) || 0;
+  const due = Math.max(0, total - clearingSum(stripped));
+  if (!(due > 0)) return { booking: stripped, collectedAgorot: 0 };
+  if (stripped.payment_mode === 'CARD_CASH' || methodKey === 'CARD_CASH') {
+    if (!(due > 0)) return { booking: { ...stripped, payment_mode: 'CARD_CASH' }, collectedAgorot: 0 };
+    const cash = withCashReceipt({ ...stripped, payment_mode: 'CARD_CASH' }, today, collector, due);
+    return {
+      booking: { ...cash.booking, payment_mode: 'CARD_CASH' },
+      collectedAgorot: cash.collectedAgorot
+    };
+  }
+  const source = ['CARD', 'BANK', 'VOUCHER', 'BOOKING', 'AIRBNB'].includes(methodKey) ? methodKey : 'DESK';
+  const payment = {
+    source,
+    accountKey: source,
+    amount_agorot: due,
+    date: today,
+    collector: collector || 'משרד',
+    payer_name: stripped.guest_name || '',
+    collected_at: `${today}T12:00:00`,
+    txn: `priority_settle_${source.toLowerCase()}_${stripped.id}`
+  };
+  return {
+    booking: {
+      ...stripped,
+      clearing_payments: mergeClearingPayments(stripped.clearing_payments, payment)
+    },
+    collectedAgorot: due
+  };
+}
+
 function withCashReceipt(booking, today, collector, amountAgorot) {
   const total = Number(booking.total_price_agorot) || 0;
   const amount = Number.isFinite(amountAgorot) ? amountAgorot : Math.max(0, total - clearingSum(booking));
@@ -186,16 +276,29 @@ export function applyPriorityPayment(booking, { totalAgorot, statusKey, methodKe
   if (Number.isFinite(totalAgorot)) next.total_price_agorot = totalAgorot;
   if (statusKey) next.payment_status = statusKey;
   if (methodKey && methodMode(methodKey)) next.payment_mode = methodMode(methodKey);
-  const cash = next.payment_mode === 'CASH' || next.payment_mode === 'CASH_TRUST';
-  if (cash && Number.isFinite(collectedAgorot)) {
+  if (Number.isFinite(collectedAgorot)) {
+    const written = collectedAgorot > 0 ? withCashReceipt(next, today, collector, collectedAgorot) : { booking: next, collectedAgorot: 0 };
+    next = written.booking;
+    const covered = clearingSum(next);
     const total = Number(next.total_price_agorot) || 0;
-    if (!statusKey && collectedAgorot > 0) {
-      next.payment_status = collectedAgorot < total ? 'PARTIAL' : 'PAID';
+    if (!statusKey) {
+      next.payment_status = covered <= 0 ? 'UNPAID' : (total > 0 && covered + 50 >= total ? 'PAID' : 'PARTIAL');
     }
-    return withCashReceipt(next, today, collector, collectedAgorot);
+    const inferred = priorityMethodKey({ ...next, payment_mode: methodKey === 'BOOKING' || methodKey === 'AIRBNB' || methodKey === 'VOUCHER' ? next.payment_mode : '' });
+    if (inferred && (!methodKey || methodKey === 'CASH' || methodKey === 'CARD' || methodKey === 'CARD_CASH')) {
+      next.payment_mode = methodMode(inferred) || next.payment_mode;
+    }
+    if (next.payment_status === 'PAID') {
+      const settled = settlePaidBalance(next, today, collector, priorityMethodKey(next));
+      return { booking: settled.booking, collectedAgorot: written.collectedAgorot || settled.collectedAgorot };
+    }
+    return { booking: next, collectedAgorot: written.collectedAgorot };
   }
-  if (next.payment_status === 'PAID' && cash) {
-    return withCashReceipt(next, today, collector);
+  if (next.payment_status === 'PAID') {
+    return settlePaidBalance(next, today, collector, methodKey);
+  }
+  if (statusKey && statusKey !== 'PAID') {
+    return { booking: withoutDeskSettlement(next), collectedAgorot: 0 };
   }
   return { booking: next, collectedAgorot: 0 };
 }
@@ -203,17 +306,60 @@ export function applyPriorityPayment(booking, { totalAgorot, statusKey, methodKe
 export function collectPriorityCash(booking, { today, collector, totalAgorot, collectedAgorot } = {}) {
   const total = Number.isFinite(totalAgorot) ? totalAgorot : Number(booking?.total_price_agorot) || 0;
   const specified = Number.isFinite(collectedAgorot) ? collectedAgorot : null;
-  const statusKey = specified == null
-    ? 'PAID'
-    : (specified > 0 && specified < total ? 'PARTIAL' : specified > 0 ? 'PAID' : 'UNPAID');
+  const already = paymentParts(booking);
+  const other = already.card + already.bank + already.voucher + already.booking + already.airbnb;
+  const remainder = Math.max(0, total - other - already.cash);
+  const projectedCash = specified == null ? remainder : specified;
+  const covered = other + (specified == null ? already.cash + remainder : Math.max(0, specified));
+  const statusKey = covered <= 0
+    ? 'UNPAID'
+    : (total > 0 && covered + 50 >= total ? 'PAID' : 'PARTIAL');
+  const hasCard = already.card > 0 && (projectedCash > 0 || already.cash > 0);
   return applyPriorityPayment(booking, {
     totalAgorot: total,
     statusKey,
-    methodKey: 'CASH',
+    methodKey: hasCard ? 'CARD_CASH' : 'CASH',
     today,
     collector,
     collectedAgorot: specified == null ? undefined : specified
   });
+}
+
+/** Keep a typed amount on the open guest card. A draft for another booking stays off this card. */
+export function applyPaymentDraft(card, draft) {
+  if (!card) return card;
+  const pay = draft && (!draft.paymentBookingId || draft.paymentBookingId === card.bookingId) ? draft : null;
+  if (!pay || (pay.amountText == null && pay.collectedText == null && !pay.payStatus && !pay.payMethod)) return card;
+  const amount = pay.amountText != null ? parsePriorityShekels(pay.amountText) : null;
+  const collected = pay.collectedText != null ? parsePriorityShekels(pay.collectedText) : null;
+  const cardPart = Math.max(0, (Number(card.paidAgorot) || 0) - (Number(card.cashCollectedAgorot) || 0));
+  const totalAgorot = amount == null ? Number(card.amountAgorot) || 0 : amount;
+  const cashAgorot = collected == null ? Number(card.cashCollectedAgorot) || 0 : collected;
+  let payStatus = pay.payStatus || card.payStatus;
+  let payMethod = pay.payMethod || card.payMethod;
+  if (collected != null && !pay.payStatus) {
+    const covered = cardPart + cashAgorot;
+    payStatus = covered <= 0 ? 'UNPAID' : (totalAgorot > 0 && covered + 50 >= totalAgorot ? 'PAID' : 'PARTIAL');
+  }
+  if (collected != null && !pay.payMethod && cardPart > 0 && cashAgorot > 0) payMethod = 'CARD_CASH';
+  const paidAgorot = payStatus === 'PAID'
+    ? totalAgorot
+    : collected == null
+      ? card.paidAgorot
+      : Math.max(0, cardPart + cashAgorot);
+  return {
+    ...card,
+    amountText: pay.amountText != null ? pay.amountText : card.amountText,
+    collectedText: pay.collectedText != null ? pay.collectedText : card.collectedText,
+    payStatus,
+    payMethod,
+    amountAgorot: totalAgorot,
+    cashCollectedAgorot: cashAgorot,
+    paidAgorot,
+    payBreakdown: cardPart > 0 && cashAgorot > 0
+      ? `אשראי ${formatPriorityShekels(cardPart)} · מזומן ${formatPriorityShekels(cashAgorot)}`
+      : (card.payBreakdown || '')
+  };
 }
 
 export function paymentDraftDirty(row, draft) {
@@ -248,12 +394,24 @@ export async function savePriorityPaymentDrafts({
   const failed = [];
   for (const [unitId, draft] of Object.entries(drafts || {})) {
     const row = (rows || []).find((item) => item.id === unitId);
-    if (!paymentDraftDirty(row, draft)) continue;
-    const booking = (bookings || []).find((item) => item.id === row.bookingId);
+    const bookingId = draft.paymentBookingId || row?.bookingId;
+    const booking = (bookings || []).find((item) => item.id === bookingId);
     if (!booking) {
+      if (!paymentDraftDirty(row, draft)) continue;
       failed.push({ unitId, name: row?.name || unitId, error: 'אין הזמנה פעילה' });
       continue;
     }
+    const payRow = bookingId === row?.bookingId
+      ? row
+      : {
+        ...row,
+        bookingId,
+        amountAgorot: Number(booking.total_price_agorot) || 0,
+        cashCollectedAgorot: cashCollectedAgorot(booking),
+        payStatus: priorityStatusKey(booking),
+        payMethod: priorityMethodKey(booking)
+      };
+    if (!paymentDraftDirty(payRow, draft)) continue;
     const parsed = draft.amountText == null
       ? null
       : (String(draft.amountText).trim() === '' ? 0 : parsePriorityShekels(draft.amountText));

@@ -1,5 +1,5 @@
 import type { WAMessage } from '@whiskeysockets/baileys';
-import { config, isBookableRoom, isStaffRoom, isOfficeRoom, type CleanerProfile, type Lang, type RoomEntry } from './config.js';
+import { cleaningCredit, config, isBookableRoom, isStaffRoom, isOfficeRoom, type CleanerProfile, type Lang, type RoomEntry } from './config.js';
 import type { InboundIntent } from './llm/client.js';
 import { resolveRoomByAlias } from './llm/client.js';
 import { AWAITING_INSPECTION_REASON, ResortOSError, type ReadyResult, type BookingRow, type UnitRow } from './integration/resortos.js';
@@ -42,6 +42,7 @@ import { placeDetail, placeMenuFor } from './guest/placeMenu.js';
 import {
   formatManagerInitialCard,
   answerManagerRoomQuestion,
+  getCleaningStatusLabel,
   getRoomOccupancy,
 } from './manager/managerQuestions.js';
 import {
@@ -53,6 +54,18 @@ import {
   phoneFromReply,
   type GuestLinkChoice,
 } from './manager/guestLink.js';
+import {
+  groundById,
+  groundByScan,
+  groundOptionLabel,
+  groundStatusLabel,
+  groundsForComplex,
+  housekeepingMenu,
+  poolGuestReply,
+  roomsForFamily,
+  workerGroundChoice,
+  type GroundKind,
+} from './grounds/groundScan.js';
 import {
   matchManagerRoomIntent,
   normalizeSpokenHebrewNumbers,
@@ -69,7 +82,9 @@ export type CleanerSessionState =
   | { role: 'CLEANER'; state: 'AWAITING_SUPPLIES'; roomId: string }
   | { role: 'CLEANER'; state: 'AWAITING_MAINTENANCE'; roomId: string }
   | { role: 'CLEANER'; state: 'AWAITING_STATUS_CONFIRM'; roomId: string; change: StatusChange; sourceText?: string }
-  | { role: 'CLEANER'; state: 'AWAITING_PLACE'; placeIds: string[]; roomId?: string };
+  | { role: 'CLEANER'; state: 'AWAITING_PLACE'; placeIds: string[]; roomId?: string }
+  | { role: 'CLEANER'; state: 'AWAITING_GROUND'; assetId: string; kind: GroundKind; label: string }
+  | { role: 'CLEANER'; state: 'AWAITING_GROUND_FAULT'; assetId: string; kind: GroundKind; label: string };
 
 export type ManagerSessionState =
   | { role: 'MANAGER'; state: 'AWAITING_ACTION'; roomId: string; bookingId?: string }
@@ -123,6 +138,8 @@ export interface PipelineDeps {
     reportMaintenance(p: { unitId: string; description: string; reportedBy: string }): Promise<unknown>;
     reportSupplies(p: { unitId: string; description: string; reportedBy: string }): Promise<unknown>;
     sendGuestLinkSms?(p: { bookingId: string; phone: string; message: string; reportedBy?: string }): Promise<{ ok: true }>;
+    getGroundStatus?(id: string): Promise<{ status?: string; updatedBy?: string } | null>;
+    setGroundStatus?(p: { id: string; status: string; reportedBy: string; note?: string }): Promise<unknown>;
     logGuestComm?(p: {
       bookingId: string;
       tenantId?: string | null;
@@ -366,6 +383,101 @@ export function createPipeline(d: PipelineDeps) {
         await d.send(jid, deskReply);
         return { handled: true };
       }
+      const rawGround = text.trim();
+      const scanned = groundByScan(rawGround);
+      const pendingGround = currentSession?.state === 'AWAITING_GROUND' || currentSession?.state === 'AWAITING_GROUND_FAULT'
+        ? currentSession
+        : null;
+      if (scanned || pendingGround) {
+        const actor = cleaner?.name || 'צוות';
+        if (scanned && isManager) {
+          const roomIds = roomsForFamily(scanned.family);
+          const today = getIsraelToday();
+          const units = (await d.resortos.listUnits?.()) || [];
+          const bookings = (await d.resortos.listBookings?.({ from: today, to: today })) || [];
+          const lines = roomIds.map((roomId) => {
+            const unit = units.find((row) => row.id === roomId);
+            const stay = bookings.find((booking) => (
+              booking.unit_id === roomId
+              && !booking.deleted_at
+              && booking.booking_status !== 'CANCELED'
+              && String(booking.check_in_date || '').slice(0, 10) <= today
+              && today < String(booking.check_out_date || '').slice(0, 10)
+            ));
+            const clean = getCleaningStatusLabel(unit?.operational_status, unit?.custom_reason);
+            const guest = stay?.guest_name ? ` · ${stay.guest_name}` : '';
+            return `${formatRoomDisplay(roomId, d.rooms())} · ${clean}${guest}`;
+          });
+          await d.send(jid, `${scanned.label}\nמצב החדרים במתחם:\n\n${lines.join('\n') || 'אין חדרים במתחם'}`);
+          return { handled: true };
+        }
+        if (scanned && cleaner && !isManager) {
+          sessionStates.set(sessionKey, {
+            role: 'CLEANER',
+            state: 'AWAITING_GROUND',
+            assetId: scanned.id,
+            kind: scanned.kind,
+            label: scanned.label,
+          });
+          await d.send(jid, housekeepingMenu(scanned));
+          return { handled: true };
+        }
+        if (scanned && !cleaner) {
+          const reply = await guestGroundReply(scanned, senderPhone);
+          await d.send(jid, reply);
+          return { handled: true };
+        }
+        if (pendingGround && /^START[_\s]+/i.test(rawGround)) {
+          sessionStates.delete(sessionKey);
+        } else if (pendingGround?.state === 'AWAITING_GROUND_FAULT') {
+          const note = rawGround.slice(0, 240);
+          if (d.resortos.setGroundStatus) {
+            await d.resortos.setGroundStatus({
+              id: pendingGround.assetId,
+              status: 'inspect',
+              reportedBy: actor,
+              note: `תקלה: ${note}`,
+            });
+          }
+          sessionStates.delete(sessionKey);
+          await d.send(jid, `נרשמה תקלה ב${pendingGround.label}: ${note}`);
+          return { handled: true };
+        } else if (pendingGround?.state === 'AWAITING_GROUND') {
+          const choice = workerGroundChoice(rawGround);
+          if (choice === 'start') {
+            let status = pendingGround.kind === 'pool' ? 'ok' : 'clean';
+            if (d.resortos.getGroundStatus) {
+              const row = await d.resortos.getGroundStatus(pendingGround.assetId).catch(() => null);
+              if (row?.status) status = row.status;
+            }
+            if (pendingGround.kind === 'yard') status = 'dirty';
+            if (d.resortos.setGroundStatus) {
+              await d.resortos.setGroundStatus({
+                id: pendingGround.assetId,
+                status,
+                reportedBy: actor,
+                note: 'התחלת ניקיון',
+              });
+            }
+            sessionStates.delete(sessionKey);
+            await d.send(jid, `נרשם שהתחלת ניקיון ב${pendingGround.label}.`);
+            return { handled: true };
+          }
+          if (choice === 'fault') {
+            sessionStates.set(sessionKey, {
+              role: 'CLEANER',
+              state: 'AWAITING_GROUND_FAULT',
+              assetId: pendingGround.assetId,
+              kind: pendingGround.kind,
+              label: pendingGround.label,
+            });
+            await d.send(jid, `מה התקלה ב${pendingGround.label}?`);
+            return { handled: true };
+          }
+          await d.send(jid, 'כתבו 1 להתחלת ניקיון או 2 לדיווח על תקלה.');
+          return { handled: true };
+        }
+      }
     }
     let transcript: Transcript | undefined;
     let lang: Lang = cleaner?.language || 'he';
@@ -591,6 +703,34 @@ export function createPipeline(d: PipelineDeps) {
       await d.send(jid, holdConfirmText(roomLabel));
     }
 
+    async function guestGroundReply(asset: { kind: GroundKind; family: string; label: string; scan: string; unitId?: string }, phone: string) {
+      const today = getIsraelToday();
+      const roomIds = roomsForFamily(asset.family);
+      const bookings = (await d.resortos.listBookings?.()) || [];
+      const mine = bookings.filter((booking) => (
+        phonesMatch(booking.guest_phone, phone)
+        && !booking.deleted_at
+        && booking.booking_status !== 'CANCELED'
+      ));
+      const covers = (booking: BookingRow) => {
+        const cin = String(booking.check_in_date || '').slice(0, 10);
+        const cout = String(booking.check_out_date || '').slice(0, 10);
+        return Boolean(cin && cout && cin <= today && today < cout);
+      };
+      const booking = mine.find((row) => roomIds.includes(row.unit_id) && covers(row))
+        || mine.find(covers)
+        || mine.find((row) => roomIds.includes(row.unit_id))
+        || mine[0];
+      const stayUrl = booking?.checkout_token ? `https://resortos.app/stay/${booking.checkout_token}` : '';
+      const reply = asset.kind === 'pool'
+        ? poolGuestReply(asset, stayUrl)
+        : (stayUrl
+          ? `${asset.label}\nדף האורח:\n${stayUrl}`
+          : 'הקוד של החצר מיועד לצוות. אם אתם אורחים, כתבו כאן מה צריך.');
+      if (booking) void logGuestWhatsAppExchange(booking, asset.scan, reply);
+      return reply;
+    }
+
     async function logGuestWhatsAppExchange(booking: BookingRow | undefined, inboundText: string, outboundText: string) {
       if (!booking?.id || !d.resortos.logGuestComm) return;
       const phone = displayPhone(senderPhone) || senderPhone || booking.guest_phone || '';
@@ -688,7 +828,7 @@ export function createPipeline(d: PipelineDeps) {
     }
 
     async function applyStatusChange(roomId: string, change: StatusChange, role: 'MANAGER' | 'CLEANER', sourceText?: string) {
-      const by = cleaner?.name || 'צוות';
+      const by = cleaningCredit(cleaner, 'צוות');
       const roomLabel = formatRoomDisplay(roomId, d.rooms());
       const say = async (reply: string) => { if (jid) await d.send(jid, reply); };
       try {
@@ -1193,6 +1333,21 @@ export function createPipeline(d: PipelineDeps) {
             const idx = parseInt(choiceMatch[1], 10);
             if (idx >= 1 && idx <= currentSession.candidateRoomIds.length) {
               const pickedRoomId = currentSession.candidateRoomIds[idx - 1];
+              const ground = groundById(pickedRoomId);
+              if (ground) {
+                let status = ground.kind === 'pool' ? 'ok' : 'clean';
+                let updatedBy = '';
+                if (d.resortos.getGroundStatus) {
+                  const row = await d.resortos.getGroundStatus(ground.id).catch(() => null);
+                  if (row?.status) status = row.status;
+                  updatedBy = row?.updatedBy || '';
+                }
+                sessionStates.delete(sessionKey);
+                const now = groundStatusLabel(ground.kind, status) || status;
+                const who = updatedBy ? `\nעודכן על ידי ${updatedBy}` : '';
+                await d.send(jid, `${ground.label}\nסטטוס עכשיו: ${now}${who}`);
+                return { handled: true, transcript };
+              }
               const r = d.rooms().find((x) => x.id === pickedRoomId);
               const lockbox = r?.lockbox || '1357#';
               const today = getIsraelToday();
@@ -1746,7 +1901,7 @@ export function createPipeline(d: PipelineDeps) {
           }
 
           if (d.resortos.startCleaning) {
-            await d.resortos.startCleaning({ unitId: resolvedId, reportedBy: cleaner.name });
+            await d.resortos.startCleaning({ unitId: resolvedId, reportedBy: cleaningCredit(cleaner) });
           }
           const roomLabel = cleaner.language === 'th' ? (r?.letterCode || r?.name || '') : (r?.name || r?.letterCode || '');
           let reply = '';
@@ -1932,13 +2087,22 @@ export function createPipeline(d: PipelineDeps) {
             transcript,
           };
         } else if (fuzzy.type === 'AMBIGUOUS_COMPLEX') {
+          const grounds = groundsForComplex(fuzzy.complex.key).map((asset) => ({
+            id: asset.id,
+            label: groundOptionLabel(asset),
+          }));
           sessionStates.set(sessionKey, {
             role: 'MANAGER',
             state: 'AWAITING_CLARIFICATION',
-            candidateRoomIds: fuzzy.candidateRooms.map((r) => r.id),
+            candidateRoomIds: [...fuzzy.candidateRooms.map((r) => r.id), ...grounds.map((asset) => asset.id)],
             pendingQuestion: text,
           });
-          const prompt = askByName(cleaner?.name, formatComplexClarificationPrompt(fuzzy.complex.officialName, fuzzy.candidateRooms, d.rooms()));
+          const prompt = askByName(cleaner?.name, formatComplexClarificationPrompt(
+            fuzzy.complex.officialName,
+            fuzzy.candidateRooms,
+            d.rooms(),
+            grounds
+          ));
           await d.send(jid, prompt);
           return { handled: true, transcript };
         } else if (fuzzy.type === 'AMBIGUOUS_NUMBER') {
@@ -2125,7 +2289,7 @@ export function createPipeline(d: PipelineDeps) {
       let skipped: string | undefined;
       let statusReply: string | undefined;
       try {
-        const by = cleaner.name;
+        const by = cleaningCredit(cleaner);
         const desc = intent.issue_description_hebrew ?? text;
         if (intent.action === 'ROOM_READY') {
           const r = await d.resortos.markRoomReady({ unitId: intent.room_id!, reportedBy: by });
@@ -2175,17 +2339,19 @@ export function createPipeline(d: PipelineDeps) {
               if (!isDone) dirtyIds.add(b.unit_id);
             }
 
-            const myRooms = all.filter((u) =>
-              dirtyIds.has(u.id) &&
-              (!u.assigned_staff || u.assigned_staff === cleaner.name)
-            );
+            const myRooms = all.filter((u) => {
+              if (!dirtyIds.has(u.id)) return false;
+              if (u.operational_status === 'IN_PROGRESS') return u.assigned_staff === cleaner.name;
+              return true;
+            });
             if (!myRooms.length) {
               statusReply = lang === 'th' ? 'ไม่มีห้องที่ต้องทำความสะอาดในขณะนี้ค่ะ' : (lang === 'ar' ? 'ما في غرف بحاجة لتنظيف حالياً.' : 'אין כרגע חדרים שממתינים לניקיון.');
             } else {
               const list = myRooms
                 .map((u) => {
                   const formatted = formatRoomForWorker(u.id, lang, d.rooms());
-                  return `${formatted}${u.assigned_staff === cleaner.name ? (lang === 'th' ? ' (ของคุณ)' : ' (שלך)') : ''}`;
+                  const mine = u.operational_status === 'IN_PROGRESS' && u.assigned_staff === cleaner.name;
+                  return `${formatted}${mine ? (lang === 'th' ? ' (ของคุณ)' : ' (שלך)') : ''}`;
                 })
                 .join('\n• ');
               statusReply = lang === 'th'

@@ -655,6 +655,7 @@ function opsRoute(req) {
   if (req.method === 'PUT' && unitMatch) return { path, unitId: decodeURIComponent(unitMatch[1]) };
   if (req.method === 'PUT' && path === '/api/ops/sop-templates') return { path };
   if (req.method === 'POST' && path === '/api/ops/guest-sms') return { path };
+  if ((req.method === 'GET' || req.method === 'POST') && path === '/api/ops/grounds') return { path };
   return null;
 }
 
@@ -675,6 +676,28 @@ export async function tryHandleOps(req, res) {
     }
     if (user.agent_connection_id && !agentAllows(user, 'read')) {
       send(res, 403, { error: 'FORBIDDEN' });
+      return true;
+    }
+    if (path === '/api/ops/grounds') {
+      if (req.method === 'POST' && user.agent_connection_id && !agentAllows(user, 'room_status')) {
+        send(res, 403, { error: 'FORBIDDEN' });
+        return true;
+      }
+      const { readGrounds, setGroundStatus } = await import('./groundsStatus.js');
+      if (req.method === 'GET') {
+        send(res, 200, { assets: readGrounds() });
+        return true;
+      }
+      const body = req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)
+        ? req.body
+        : await readJson(req);
+      const assets = setGroundStatus({
+        id: body?.id,
+        status: body?.status,
+        by: body?.reported_by || user?.name || 'צוות',
+        note: body?.note
+      });
+      send(res, 200, { assets, asset: assets[body?.id] || null });
       return true;
     }
     if (req.method === 'POST' && path === '/api/ops/guest-sms') {

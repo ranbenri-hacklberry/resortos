@@ -684,10 +684,10 @@ ON CONFLICT (id) DO UPDATE SET
     WHEN public.hotelos_bookings.cancellation_reason = 'removed_from_kinorot' THEN NULL
     ELSE public.hotelos_bookings.cancellation_reason
   END,
-  total_price_agorot = CASE
-    WHEN public.hotelos_bookings.total_price_agorot > 0 THEN public.hotelos_bookings.total_price_agorot
-    ELSE EXCLUDED.total_price_agorot
-  END,
+  total_price_agorot = GREATEST(
+    public.hotelos_bookings.total_price_agorot,
+    EXCLUDED.total_price_agorot
+  ),
   deposit_agorot = CASE
     WHEN EXCLUDED.deposit_agorot > public.hotelos_bookings.deposit_agorot THEN EXCLUDED.deposit_agorot
     WHEN public.hotelos_bookings.payment_status IN ('PAID', 'DEPOSIT_PAID', 'PARTIAL', 'PENDING_CASH', 'PENDING_BANK')

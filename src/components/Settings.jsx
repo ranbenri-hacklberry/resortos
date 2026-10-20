@@ -27,6 +27,7 @@ const EMPTY_FORM = {
   allow_remote_attendance: false,
   outbound_calls: false,
   allowed_units: [],
+  crew_lead_id: '',
   agent_access: false,
   agent_id: '',
   agent_phone: '',
@@ -111,6 +112,7 @@ export default function Settings({ theme, setTheme, sessionUser, onSessionUserUp
         whatsapp_phone: sessionUser.whatsapp_phone || '',
         allow_remote_attendance: Boolean(sessionUser.allow_remote_attendance),
         allowed_units: normalizeAllowedUnitIds(sessionUser.allowed_units),
+        crew_lead_id: sessionUser.crew_lead_id || '',
         ...agentFieldsFromList(agents, sessionUser.id)
       });
       if (canOpenAgents) {
@@ -205,6 +207,7 @@ export default function Settings({ theme, setTheme, sessionUser, onSessionUserUp
       allow_remote_attendance: Boolean(person.allow_remote_attendance),
       outbound_calls: Boolean(person.outbound_calls),
       allowed_units: normalizeAllowedUnitIds(person.allowed_units),
+      crew_lead_id: person.crew_lead_id || '',
       ...agentFieldsFromList(agents, person.id)
     });
   };
@@ -1138,13 +1141,40 @@ function StaffForm({ isLight, isManager, canOpenAgents = false, isNew, staffForm
       {isManager && (
         <select
           value={staffForm.role}
-          onChange={(e) => setStaffForm((prev) => ({ ...prev, role: e.target.value }))}
+          onChange={(e) => setStaffForm((prev) => ({
+            ...prev,
+            role: e.target.value,
+            crew_lead_id: e.target.value === 'HOUSEKEEPING' ? prev.crew_lead_id : ''
+          }))}
           style={{ ...staffInputStyle(isLight), marginTop: '6px' }}
         >
           {STAFF_ROLES.map((role) => (
             <option key={role} value={role}>{t(`ROLE_${role}`, role)}</option>
           ))}
         </select>
+      )}
+      {isManager && staffForm.role === 'HOUSEKEEPING' && (
+        <label style={{ display: 'block', marginTop: '8px' }}>
+          <span style={{ fontSize: '0.75rem', color: '#94A3B8', fontWeight: 700 }}>שייך למנהל עבודה</span>
+          <select
+            value={staffForm.crew_lead_id || ''}
+            onChange={(e) => setStaffForm((prev) => ({ ...prev, crew_lead_id: e.target.value }))}
+            style={{ ...staffInputStyle(isLight), marginTop: '6px' }}
+          >
+            <option value="">בלי מנהל עבודה</option>
+            {staffList.filter((person) => person.role === 'WORK_LEAD' && person.is_active !== false && person.id !== editingId).map((person) => (
+              <option key={person.id} value={person.id}>{person.display_name || person.username}</option>
+            ))}
+          </select>
+          <p style={{ fontSize: '0.72rem', color: '#94A3B8', margin: '4px 0 0', lineHeight: 1.4 }}>
+            העובד מדבר עם המערכת מהמספר שלו. הניקיון נרשם על מנהל העבודה.
+          </p>
+        </label>
+      )}
+      {staffForm.role === 'WORK_LEAD' && (
+        <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: '8px 0 0', lineHeight: 1.45, fontWeight: 700 }}>
+          מנהל עבודה הוא קבלן. עובדים שמשויכים אליו נכנסים עם המספר שלהם, והניקיון נרשם על שמו.
+        </p>
       )}
       {staffForm.role === 'RECEPTION' && (
         <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: '8px 0 0', lineHeight: 1.45, fontWeight: 700 }}>

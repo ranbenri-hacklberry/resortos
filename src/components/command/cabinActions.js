@@ -142,7 +142,7 @@ export async function runCabinStep({ tenantId, cabin, action }) {
       custom_reason: 'ניקוי לאחר יציאה והכנה לכניסה',
       is_escalated: false,
       cleaning_started_at: null,
-      assigned_staff: unit.assigned_staff || null,
+      assigned_staff: null,
       quality_inspections: inspections,
     });
     return;

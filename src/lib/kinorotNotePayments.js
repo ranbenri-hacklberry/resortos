@@ -49,7 +49,7 @@ export function parseKinorotNotePayments(text, { todayIso } = {}) {
   const src = String(text || '').replace(/\s+/g, ' ');
   const events = [];
   const seen = new Set();
-  const re = /(?:(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?\s+)?(?:שולם|שולמה|שילמה|שילם|חויב|חויבה|גבה|נגבה)(?:\s+מקדמה)?(?:\s+ב?(אשראי|מזומן|העברה(?:\s+בנקאית)?))?\s+([\d,]{2,6})/g;
+  const re = /(?:(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?\s*)?(?:בוצע\s+)?(?:שולם|שולמה|שילמה|שילם|חויב|חויבה|חיוב|גבה|נגבה)(?:\s+מקדמה)?(?:\s+ב?(אשראי|מזומן|העברה(?:\s+בנקאית)?))?\s+([\d,]{2,6})/g;
   let match;
   while ((match = re.exec(src))) {
     const amount = ilsFromRaw(match[5]);

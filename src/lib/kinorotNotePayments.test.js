@@ -136,6 +136,22 @@ describe('kinorot note payments', () => {
     ]);
   });
 
+  it('keeps the cabin price when the payment line is only the deposit', () => {
+    const html = `
+      <div>סה״כ ₪260.00 מקדמה ₪1,040.00 יתרת תשלום</div>
+      <div>מחיר יחידה כמות ₪1,300.00 בקתה 1</div>
+      <div>הערות 19/10בוצע חיוב מקדמה באשראי 260 שח</div>
+    `;
+    const parsed = parseResviewPayment(html);
+    expect(parsed.total).toBe(1300);
+    expect(parsed.paid).toBe(260);
+    expect(moneyFromKinorotPayment(parsed, '75344')).toMatchObject({
+      total_price_agorot: 130000,
+      deposit_agorot: 26000,
+      payment_status: 'DEPOSIT_PAID'
+    });
+  });
+
   it('keeps a card deposit and a cash balance as separate clearing rows', () => {
     const text = '6.10 חויב מקדמה באשראי 320 שולם במזומן 1280 לצוקי';
     const rows = clearingPaymentsFromKinorotNotes(

@@ -198,6 +198,48 @@ app.post('/api/priority/meetings/:id/status', requireManagerStaff, async (req, r
   }
 });
 
+app.get('/api/priority/grounds', requireManagerStaff, async (req, res) => {
+  try {
+    const { readGrounds } = await import('./groundsStatus.js');
+    res.json({ assets: readGrounds() });
+  } catch (err) {
+    res.status(Number(err.status) || 500).json({ error: err.message || 'GROUNDS_FAILED' });
+  }
+});
+
+app.post('/api/priority/grounds', requireManagerStaff, async (req, res) => {
+  try {
+    const { setGroundStatus } = await import('./groundsStatus.js');
+    const assets = setGroundStatus({
+      id: req.body?.id,
+      status: req.body?.status,
+      by: req.body?.by || req.staff?.display_name || req.staff?.username || 'משרד',
+      note: req.body?.note
+    });
+    res.json({ assets, asset: assets[req.body?.id] || null });
+  } catch (err) {
+    res.status(Number(err.status) || 500).json({ error: err.message || 'GROUNDS_SAVE_FAILED' });
+  }
+});
+
+app.get('/api/priority/docs', requireManagerStaff, async (req, res) => {
+  try {
+    const { readPriorityDocs } = await import('./priorityDocs.js');
+    res.json({ docs: readPriorityDocs() });
+  } catch (err) {
+    res.status(Number(err.status) || 500).json({ error: err.message || 'DOCS_FAILED' });
+  }
+});
+
+app.put('/api/priority/docs', requireManagerStaff, async (req, res) => {
+  try {
+    const { writePriorityDocs } = await import('./priorityDocs.js');
+    res.json({ docs: writePriorityDocs(req.body?.docs) });
+  } catch (err) {
+    res.status(Number(err.status) || 500).json({ error: err.message || 'DOCS_SAVE_FAILED' });
+  }
+});
+
 app.get('/api/priority/cashflow', requireManagerStaff, async (req, res) => {
   try {
     const { getExpenseCashflow } = await import('./expenseCashflow.js');

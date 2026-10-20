@@ -8,11 +8,17 @@ export const ROOT = path.resolve(here, '..');
 export type Lang = 'th' | 'ar' | 'he';
 export const SUPPORTED_LANGS: Lang[] = ['th', 'ar', 'he'];
 
+export function cleaningCredit(cleaner?: { name?: string; recordsAs?: string } | null, fallback = ''): string {
+  return String(cleaner?.recordsAs || cleaner?.name || fallback).trim();
+}
+
 export interface CleanerProfile {
   /** Digits only, international format, e.g. 972501234567 */
   phone: string;
   name: string;
   role?: string;
+  /** When set, a cleaning is stored under this contractor instead of the worker. */
+  recordsAs?: string;
   language: Lang;
   /** WhatsApp Linked Device ID if assigned, e.g. 208190587302068 */
   lid?: string;
@@ -123,6 +129,20 @@ export const config = {
   gmail: {
     user: env('GMAIL_USER', ''),
     appPassword: env('GMAIL_APP_PASSWORD', ''),
+  },
+  invoiceIntake: {
+    enabled: env('CHLOE_INVOICE_INTAKE', '') === '1',
+    allowlist: env('CHLOE_INVOICE_ALLOWLIST', '').split(/[\s,]+/).map((item) => item.trim()).filter(Boolean),
+    nameSuggest: env('CHLOE_INVOICE_NAME_SUGGEST', '') === '1',
+    businessId: '22222222-2222-2222-2222-222222222222',
+    recordsPath: path.resolve(ROOT, '../../data/invoices/invoice-records.jsonl'),
+    imagesDir: path.resolve(ROOT, '../../data/invoices'),
+    draftsPath: path.resolve(ROOT, '../../data/invoices/drafts.json'),
+    ocrBin: path.join(ROOT, 'bin', 'apple-vision-ocr-boxes'),
+    cropBin: path.join(ROOT, 'bin', 'invoice-crop'),
+    grok: env('XAI_API_KEY', '')
+      ? { apiKey: env('XAI_API_KEY', ''), model: 'grok-4.7' }
+      : null,
   },
 };
 

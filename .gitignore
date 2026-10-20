@@ -69,3 +69,5 @@ Thumbs.db
 print-checkouts-*.html
 print-checkins-*.html
 server/data/*.json
+data/priority-docs.json
+data/grounds-status.json

@@ -155,7 +155,7 @@ export async function createStaffTask({
     text_source_lang: 'he',
     is_escalated: priority === 'urgent' || Boolean(is_issue),
     cleaning_started_at: mapped.operational_status === 'DIRTY' ? (unit.cleaning_started_at || null) : null,
-    assigned_staff: actor?.name || unit.assigned_staff || null,
+    assigned_staff: mapped.operational_status === 'DIRTY' ? null : (actor?.name || unit.assigned_staff || null),
     image_urls: nextImages,
     updated_at: new Date().toISOString()
   }, { actor, viaEdge: true });

@@ -200,6 +200,7 @@ export async function reopenCabinCleaning({ tenantId, unit, pushUnitToCloud, sav
     custom_reason: 'ניקוי לאחר יציאה והכנה לכניסה',
     is_escalated: false,
     cleaning_started_at: null,
+    assigned_staff: null,
     updated_at: new Date().toISOString()
   }, statusPushOptions(saveOptions));
 }
@@ -292,6 +293,7 @@ export async function openTurnoverAfterCheckout({ tenantId, unit, pushUnitToClou
     custom_reason: 'ניקוי לאחר יציאה והכנה לכניסה',
     is_escalated: false,
     cleaning_started_at: null,
+    assigned_staff: null,
     updated_at: new Date().toISOString()
   }, { skipStayPublish });
 }
@@ -352,6 +354,26 @@ export async function ensureTurnoverCleaning({ tenantId, units, bookings, pushUn
       operational_domain: 'HOUSEKEEPING',
       custom_reason: need.reason,
       is_escalated: false,
+      cleaning_started_at: null,
+      assigned_staff: null,
+      updated_at: nowIso
+    });
+  }
+  await clearCleanerUntilScan({ tenantId, units, pushUnitToCloud });
+}
+
+/** A room waiting for cleaning has no cleaner until someone scans its QR. */
+export async function clearCleanerUntilScan({ tenantId, units, pushUnitToCloud }) {
+  if (!tenantId || !Array.isArray(units) || typeof pushUnitToCloud !== 'function') return;
+  const nowIso = new Date().toISOString();
+  for (const unit of units) {
+    if (!isInventoryUnit(unit) || unit.operational_status !== 'DIRTY') continue;
+    if (!String(unit.assigned_staff || '').trim()) continue;
+    await pushUnitToCloud({
+      id: unit.id,
+      tenant_id: tenantId,
+      name: unit.name,
+      assigned_staff: null,
       cleaning_started_at: null,
       updated_at: nowIso
     });

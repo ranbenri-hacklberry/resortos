@@ -826,6 +826,44 @@ function openFinancePlugin(env) {
           }
           return;
         }
+        if (path === '/api/priority/grounds') {
+          try {
+            const user = await staffUser(req, ['MANAGER', 'PRIORITY', 'OPS_MANAGER']);
+            const { readGrounds, setGroundStatus } = await import(serverModuleUrl('groundsStatus.js'));
+            if (req.method === 'GET') return sendJson(res, 200, { assets: readGrounds() });
+            if (req.method === 'POST') {
+              const body = await readJsonBody(req);
+              const assets = setGroundStatus({
+                id: body?.id,
+                status: body?.status,
+                by: body?.by || user?.display_name || user?.username || 'משרד',
+                note: body?.note
+              });
+              return sendJson(res, 200, { assets, asset: assets[body?.id] || null });
+            }
+            return sendJson(res, 404, { error: 'NOT_FOUND' });
+          } catch (err) {
+            const status = Number(err.status) || 502;
+            if (!res.headersSent) sendJson(res, status, { error: err.message || 'GROUNDS_FAILED' });
+          }
+          return;
+        }
+        if (path === '/api/priority/docs') {
+          try {
+            await staffUser(req, ['MANAGER', 'PRIORITY', 'OPS_MANAGER']);
+            const { readPriorityDocs, writePriorityDocs } = await import(serverModuleUrl('priorityDocs.js'));
+            if (req.method === 'GET') return sendJson(res, 200, { docs: readPriorityDocs() });
+            if (req.method === 'PUT') {
+              const body = await readJsonBody(req);
+              return sendJson(res, 200, { docs: writePriorityDocs(body?.docs) });
+            }
+            return sendJson(res, 404, { error: 'NOT_FOUND' });
+          } catch (err) {
+            const status = Number(err.status) || 502;
+            if (!res.headersSent) sendJson(res, status, { error: err.message || 'DOCS_FAILED' });
+          }
+          return;
+        }
         if (req.method === 'GET' && path === '/api/priority/cashflow') {
           try {
             await staffUser(req, ['MANAGER', 'PRIORITY']);

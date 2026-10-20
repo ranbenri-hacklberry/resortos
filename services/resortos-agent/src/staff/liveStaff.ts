@@ -6,6 +6,7 @@ export interface LiveStaff {
   name: string;
   role: string;
   phones: string[];
+  crew_lead_name?: string;
 }
 
 const BRIDGE = (process.env.HOTELOS_BRIDGE_URL || config.resortos.baseUrl || 'http://127.0.0.1:4038').replace(/\/$/, '');
@@ -40,18 +41,26 @@ export function applyLiveRoles(file: CleanerProfile[], live: LiveStaff[]): Clean
       || byName.get(String(cleaner.name || '').trim());
     if (!row) return cleaner;
     seen.add(row.id);
-    return { ...cleaner, name: row.name, role: row.role as CleanerProfile['role'] };
+    const recordsAs = String(row.crew_lead_name || '').trim();
+    return {
+      ...cleaner,
+      name: row.name,
+      role: row.role as CleanerProfile['role'],
+      ...(recordsAs ? { recordsAs } : {}),
+    };
   });
   for (const row of live) {
     if (!row?.id || seen.has(row.id) || !row.role || !row.name) continue;
     const phone = (row.phones || []).map(digits).find((value) => value.length >= 11);
     if (!phone) continue;
     seen.add(row.id);
+    const recordsAs = String(row.crew_lead_name || '').trim();
     merged.push({
       phone,
       name: row.name,
       role: row.role as CleanerProfile['role'],
       language: 'he' as Lang,
+      ...(recordsAs ? { recordsAs } : {}),
     });
   }
   return merged;

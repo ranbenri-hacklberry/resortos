@@ -3,14 +3,16 @@ import { spawnSync } from 'node:child_process';
 const QUERY = `
 SELECT coalesce(json_agg(row_to_json(t)), '[]'::json)::text
 FROM (
-  SELECT id::text AS id,
-         name,
-         role,
-         ARRAY_REMOVE(ARRAY[COALESCE(phone, ''), COALESCE(whatsapp_phone, '')], '') AS phones
-  FROM public.employees
-  WHERE COALESCE(is_active, true)
-    AND role IS NOT NULL
-    AND btrim(role) <> ''
+  SELECT e.id::text AS id,
+         e.name,
+         e.role,
+         ARRAY_REMOVE(ARRAY[COALESCE(e.phone, ''), COALESCE(e.whatsapp_phone, '')], '') AS phones,
+         COALESCE(lead.name, '') AS crew_lead_name
+  FROM public.employees e
+  LEFT JOIN public.employees lead ON lead.id = e.crew_lead_id
+  WHERE COALESCE(e.is_active, true)
+    AND e.role IS NOT NULL
+    AND btrim(e.role) <> ''
 ) t;
 `;
 
@@ -37,5 +39,6 @@ export function listAgentStaff() {
     name: String(row.name || ''),
     role: String(row.role || ''),
     phones: Array.isArray(row.phones) ? row.phones.map((phone) => String(phone || '')).filter(Boolean) : [],
+    crew_lead_name: String(row.crew_lead_name || ''),
   }));
 }

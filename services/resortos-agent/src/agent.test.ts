@@ -197,6 +197,82 @@ describe('pipeline: guards & dispatch', () => {
     expect(deps.sent[0][1]).toContain('B1');
   });
 
+  it('offers a housekeeper start-cleaning or a fault after a pool scan', async () => {
+    const deps = makeDeps();
+    deps.resortos.getGroundStatus = vi.fn(async () => ({ status: 'ok' }));
+    deps.resortos.setGroundStatus = vi.fn(async () => ({ ok: true }));
+    const pipeline = createPipeline(deps);
+    const scan = {
+      key: { remoteJid: '66812345678@s.whatsapp.net', fromMe: false },
+      message: { conversation: 'START_POOL_nurit' },
+    } as any;
+    const opened = await pipeline.handleInbound(scan);
+    expect(opened.handled).toBe(true);
+    expect(deps.resortos.startCleaning).not.toHaveBeenCalled();
+    expect(deps.sent[0][1]).toContain('התחלת ניקיון');
+    expect(deps.sent[0][1]).toContain('דיווח על תקלה');
+
+    deps.sent.length = 0;
+    const picked = await pipeline.handleInbound({
+      key: { remoteJid: '66812345678@s.whatsapp.net', fromMe: false },
+      message: { conversation: '1' },
+    } as any);
+    expect(picked.handled).toBe(true);
+    expect(deps.resortos.setGroundStatus).toHaveBeenCalledWith({
+      id: 'pool:nurit',
+      status: 'ok',
+      reportedBy: 'Somchai',
+      note: 'התחלת ניקיון',
+    });
+  });
+
+  it('shows a manager every room in the complex after a yard scan', async () => {
+    const deps = makeDeps();
+    deps.cleaners = () => [{ phone: '972506983399', name: 'רני', role: 'MANAGER', language: 'he' }];
+    deps.rooms = () => [
+      { id: 'k671', name: 'בתי נורית 1', aliases: [] },
+      { id: 'k673', name: 'בתי נורית 2', aliases: [] },
+    ];
+    deps.resortos.listUnits = vi.fn(async () => [
+      { id: 'k671', operational_status: 'READY' },
+      { id: 'k673', operational_status: 'DIRTY' },
+    ]);
+    deps.resortos.listBookings = vi.fn(async () => []);
+    const pipeline = createPipeline(deps);
+    const opened = await pipeline.handleInbound({
+      key: { remoteJid: '972506983399@s.whatsapp.net', fromMe: false },
+      message: { conversation: 'START_YARD_nurit' },
+    } as any);
+    expect(opened.handled).toBe(true);
+    expect(deps.sent[0][1]).toContain('מצב החדרים במתחם');
+    expect(deps.sent[0][1]).toContain('בתי נורית 1');
+    expect(deps.sent[0][1]).toContain('מוכן לאורח');
+    expect(deps.sent[0][1]).toContain('ממתין לניקיון');
+  });
+
+  it('explains the pool and sends the guest page when a guest scans it', async () => {
+    const deps = makeDeps();
+    deps.resortos.listBookings = vi.fn(async () => [{
+      id: 'b1',
+      unit_id: 'k671',
+      guest_name: 'משה',
+      guest_phone: '972501112233',
+      check_in_date: '2020-01-01',
+      check_out_date: '2099-01-01',
+      booking_status: 'CHECKED_IN',
+      checkout_token: 'tok_nurit',
+    }]);
+    deps.resortos.logGuestComm = vi.fn(async () => {});
+    const pipeline = createPipeline(deps);
+    const opened = await pipeline.handleInbound({
+      key: { remoteJid: '972501112233@s.whatsapp.net', fromMe: false },
+      message: { conversation: 'START_POOL_nurit' },
+    } as any);
+    expect(opened.handled).toBe(true);
+    expect(deps.sent[0][1]).toContain('הבריכה משותפת');
+    expect(deps.sent[0][1]).toContain('https://resortos.app/stay/tok_nurit');
+  });
+
   it('handles instant QR scan (START_B1) with zero LLM calls, starts cleaning, and returns lockbox', async () => {
     const deps = makeDeps();
     deps.rooms = () => [
@@ -1627,10 +1703,12 @@ describe('manager fuzzy room matching & dictation handling', () => {
     expect(reply).toContain('*1* - חצר מוזיקלית 1');
     expect(reply).toContain('*2* - חצר מוזיקלית 2');
     expect(reply).toContain('*3* - חצר מוזיקלית 3');
+    expect(reply).toContain('*4* - חצר');
+    expect(reply).toContain('*5* - בריכה');
     expect(pipeline.getSession('972548317887')).toEqual({
       role: 'MANAGER',
       state: 'AWAITING_CLARIFICATION',
-      candidateRoomIds: ['k690', 'k691', 'k692'],
+      candidateRoomIds: ['k690', 'k691', 'k692', 'yard:musical', 'pool:musical'],
       pendingQuestion: 'מה קורה בתזמורת?',
     });
 
@@ -1650,6 +1728,27 @@ describe('manager fuzzy room matching & dictation handling', () => {
       state: 'AWAITING_ACTION',
       roomId: 'k691',
     });
+  });
+
+  it('offers the pool status when the manager picks it from the complex list', async () => {
+    const deps = makeDeps();
+    deps.rooms = () => realRooms;
+    deps.cleaners = () => [managerProfile];
+    deps.resortos.getGroundStatus = vi.fn(async () => ({ status: 'inspect', updatedBy: 'עדי' }));
+    const pipeline = createPipeline(deps);
+    await pipeline.handleInbound({
+      key: { remoteJid: '972548317887@s.whatsapp.net', fromMe: false },
+      message: { conversation: 'מה קורה בתזמורת?' },
+    } as any);
+    deps.sent.length = 0;
+    const picked = await pipeline.handleInbound({
+      key: { remoteJid: '972548317887@s.whatsapp.net', fromMe: false },
+      message: { conversation: '5' },
+    } as any);
+    expect(picked.handled).toBe(true);
+    expect(deps.sent[0][1]).toContain('בריכה · החצר המוסיקלית');
+    expect(deps.sent[0][1]).toContain('לבדיקה');
+    expect(deps.sent[0][1]).toContain('עדי');
   });
 
   it('manager asks "מי נכנס היום לתזמורת?" -> clarifies, manager picks 1 -> answers check-in for D1', async () => {
