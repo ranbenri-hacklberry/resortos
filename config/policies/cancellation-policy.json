@@ -1,0 +1,56 @@
+{
+  "policy_id": "resortos-cancellation-standard",
+  "current_version": "1.0.0-draft",
+  "active_version": null,
+  "versions": [
+    {
+      "version": "1.0.0-draft",
+      "status": "PENDING_APPROVAL",
+      "created_at": "2026-10-21T14:50:00+03:00",
+      "updated_at": "2026-10-21T14:50:00+03:00",
+      "approved_by": null,
+      "approved_at": null,
+      "effective_from": null,
+      "effective_from_note": "נכנס לתוקף רק לאחר אישור מנהל",
+      "timezone": "Asia/Jerusalem",
+      "decisive_arrival": {
+        "source": "booking check-in hour (stayHoursFromBooking), fallback 15:00 local",
+        "default_checkin_time": "15:00",
+        "status": "NEEDS_APPROVAL"
+      },
+      "day_counting": {
+        "method": "elapsed_24h_blocks_before_arrival",
+        "status": "NEEDS_APPROVAL",
+        "note": "יום = 24 שעות מלאות לפני מועד ההגעה הקובע. חלופה: ימים קלנדריים. דורש אישור."
+      },
+      "basis": "booking_total",
+      "tiers": [
+        { "id": "free",   "min_hours_before": 360, "max_hours_before": null, "fee_percent": 0,   "label_he": "15 ימים ומעלה לפני ההגעה" },
+        { "id": "d8_14",  "min_hours_before": 192, "max_hours_before": 360,  "fee_percent": 20,  "label_he": "8–14 ימים לפני ההגעה" },
+        { "id": "d2_7",   "min_hours_before": 48,  "max_hours_before": 192,  "fee_percent": 70,  "label_he": "2–7 ימים לפני ההגעה" },
+        { "id": "gap_24_48", "min_hours_before": 24, "max_hours_before": 48, "min_exclusive": true, "fee_percent": null, "requires_manager_approval": true, "auto_charge": false,
+          "label_he": "בין 24 ל־48 שעות לפני ההגעה — לא הוגדר",
+          "proposals": [
+            { "id": "A", "fee_percent": 70,  "label_he": "הצעה א׳: כמו 2–7 ימים (70%)" },
+            { "id": "B", "fee_percent": 100, "label_he": "הצעה ב׳: כמו 24 שעות או פחות (100%)" }
+          ] },
+        { "id": "last24", "min_hours_before": 0, "max_hours_before": 24, "max_inclusive": true, "fee_percent": 100, "label_he": "24 שעות או פחות לפני ההגעה" }
+      ],
+      "no_show": { "defined": false, "status": "PENDING_APPROVAL", "requires_manager_approval": true },
+      "exceptions": [
+        { "id": "war_or_global_pandemic", "refund_percent": 100, "requires_manager_approval": true, "legal_wording_status": "PENDING_APPROVAL",
+          "label_he": "מלחמה או מגפה עולמית — החזר מלא, בכפוף לאישור מנהל ולנוסח משפטי מאושר" }
+      ],
+      "non_refundable_rate": { "enabled": false, "discount_percent": 10, "status": "REQUIRES_SEPARATE_APPROVAL" },
+      "scope": { "complexes": "*", "rate_plans": "*", "overrides": [] },
+      "existing_bookings": "pinned_to_version_at_booking_time; no retroactive change",
+      "document": { "library": "priority-docs (/api/priority/docs)", "doc_id": null, "status": "NOT_UPLOADED_NEEDS_MANAGER_AUTH",
+        "local_files": ["docs/policies/cancellation-policy-v1.0.0-draft.pdf", "docs/policies/cancellation-policy-v1.0.0-draft.docx"] },
+      "legal_note_he": "המדיניות כפופה לדין החל ואינה גורעת מזכויות ביטול שאינן ניתנות להתניה על פי דין.",
+      "guest_text_he": "ביטול 15 ימים או יותר לפני מועד ההגעה — ללא דמי ביטול. ביטול 8–14 ימים לפני ההגעה — 20% מסכום ההזמנה. ביטול 2–7 ימים לפני ההגעה — 70% מסכום ההזמנה. ביטול 24 שעות או פחות לפני ההגעה — 100% מסכום ההזמנה. במקרה של מלחמה או מגפה עולמית יינתן החזר מלא, בכפוף לאישור מנהל. המדיניות כפופה לדין החל ולזכויות ביטול שאינן ניתנות להתניה."
+    }
+  ],
+  "history": [
+    { "version": "1.0.0-draft", "at": "2026-10-21T14:50:00+03:00", "change": "טיוטה ראשונה לפי הנחיית רן; ממתינה לאישור" }
+  ]
+}
