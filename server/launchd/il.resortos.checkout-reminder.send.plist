@@ -20,7 +20,7 @@
   <dict>
     <key>HOME</key><string>/Users/rani</string>
     <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
-    <key>CHECKOUT_REMINDER_DRY_RUN</key><string>1</string>
+    <key>CHECKOUT_REMINDER_DRY_RUN</key><string>0</string>
   </dict>
 </dict>
 </plist>

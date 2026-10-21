@@ -55,10 +55,28 @@ export function dedupeKey(bookingId, date) {
   return `checkout_reminder:${bookingId}:${date}`;
 }
 
+/**
+ * Unit name for SMS/WhatsApp text: no '·' separator, no doubled 'בקתה'.
+ * 'טוסקנה · 2' → 'טוסקנה 2', 'מול הנוף · בקתה 5' → 'מול הנוף 5', 'בקתות מאיה · בקתה 1' → 'בקתות מאיה 1'.
+ */
+export function smsUnitName(name) {
+  let s = String(name || '').replace(/^[\u2460-\u24FF]\d+\s*/, '').trim();
+  s = s.replace(/\s*·\s*בקתה\s+/g, ' ').replace(/\s*·\s*/g, ' ');
+  s = s.replace(/^בקתה\s+(בקתות\s)/, '$1');
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+/** 'מ' + unit, without doubling an existing 'מ'/'מה' preposition. */
+export function fromUnit(name) {
+  const s = smsUnitName(name);
+  if (!s) return 'מהבקתה';
+  return `מ${s}`;
+}
+
 export function buildCheckoutReminder({ guestName, unitName, checkoutTime, stayUrl } = {}) {
   const name = firstName(guestName);
   const lines = [
-    `בוקר טוב${name ? ` ${name}` : ''}! היום יום העזיבה מ${unitName || 'הבקתה'}. העזיבה עד ${checkoutTime || DEFAULT_CHECKOUT_TIME}.`
+    `בוקר טוב${name ? ` ${name}` : ''}! היום יום העזיבה ${fromUnit(unitName)}. העזיבה עד ${checkoutTime || DEFAULT_CHECKOUT_TIME}.`
   ];
   if (stayUrl) lines.push(`אפשר לסמן צ׳ק-אאוט או לבקש צ׳ק-אאוט מאוחר בדף האירוח: ${stayUrl}.`);
   lines.push('תודה שהתארחתם!');

@@ -13,7 +13,7 @@ import { fileURLToPath } from 'url';
 import { studioRest, sendAndLogGuestSms } from './guestComms.js';
 import { unitFullName, CANONICAL_MANAGED_SPACES } from '../src/lib/units.js';
 import {
-  addDaysIso, classifyForDate, dedupeKey, formatPlan, formatReport, messageFor
+  smsUnitName, addDaysIso, classifyForDate, dedupeKey, formatPlan, formatReport, messageFor
 } from '../src/lib/checkoutReminder.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -41,7 +41,7 @@ function log(line) {
 }
 
 const unitOf = (id) => CANONICAL_MANAGED_SPACES.find((u) => u.id === id) || null;
-const unitNameOf = (id) => String(unitFullName(id, id)).replace(/^[\u2460-\u24FF]\d+\s*/, '');
+const unitNameOf = (id) => smsUnitName(unitFullName(id, id));
 
 const COLS = 'id,tenant_id,unit_id,guest_name,guest_phone,check_in_date,check_out_date,booking_status,channel_source,special_requests,checkout_token,checkout_status,checked_out_at,wifi_presence_status,stay';
 
@@ -98,12 +98,15 @@ function acquireLock(date, staleMin = 15) {
   catch { return null; }
 }
 
+// Manager reports go to Ran ONLY (Ran 2026-10-21: never Adam / anyone else).
+export const RAN_PHONE = '972548317887';
 async function notifyRan(text, cfg, env, { notify }) {
   const wa = cfg.managerWhatsApp || {};
   if (!notify || !wa.enabled) return { sent: false, reason: notify ? 'managerWhatsApp disabled' : '--no-notify' };
+  if (String(wa.phone || RAN_PHONE).replace(/\D/g, '') !== RAN_PHONE) return { sent: false, reason: 'managerWhatsApp.phone is not Ran – refused' };
   const res = await fetch(wa.agentUrl || 'http://127.0.0.1:8787/api/messages/send', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone: wa.phone || '972548317887', text }), signal: AbortSignal.timeout(15000)
+    body: JSON.stringify({ phone: RAN_PHONE, text }), signal: AbortSignal.timeout(15000)
   });
   return { sent: res.ok, status: res.status };
 }

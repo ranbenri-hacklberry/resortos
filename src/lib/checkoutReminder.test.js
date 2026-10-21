@@ -92,3 +92,29 @@ describe('report', () => {
     expect(t).toContain('עזבו: 1'); expect(t).toContain('עוד לא עזבו: 1');
   });
 });
+
+import { smsUnitName, fromUnit } from './checkoutReminder.js';
+describe('sms unit name (Ran 2026-10-21)', () => {
+  it('drops · and doubled בקתה', () => {
+    expect(smsUnitName('טוסקנה · 2')).toBe('טוסקנה 2');
+    expect(smsUnitName('מול הנוף · בקתה 5')).toBe('מול הנוף 5');
+    expect(smsUnitName('בקתות מאיה · בקתה 1')).toBe('בקתות מאיה 1');
+    expect(smsUnitName("טאג' מאהל · בקתה 3")).toBe("טאג' מאהל 3");
+    expect(smsUnitName('בתי נורית 4')).toBe('בתי נורית 4');
+    expect(smsUnitName('קאסה נובה · Aura')).toBe('קאסה נובה Aura');
+  });
+  it('from-prefix', () => {
+    expect(fromUnit('טוסקנה · 2')).toBe('מטוסקנה 2');
+    expect(fromUnit('מול הנוף · בקתה 5')).toBe('ממול הנוף 5');
+    expect(fromUnit('בקתות מאיה · בקתה 1')).toBe('מבקתות מאיה 1');
+    expect(fromUnit('')).toBe('מהבקתה');
+  });
+  it('template uses clean name', () => {
+    const t = buildCheckoutReminder({ guestName: 'יוליה', unitName: 'טוסקנה · 2', stayUrl: 'https://x' });
+    expect(t).toContain('היום יום העזיבה מטוסקנה 2.');
+    expect(t).not.toContain('·');
+    const m = buildCheckoutReminder({ guestName: 'משה', unitName: 'בקתות מאיה · בקתה 1' });
+    expect(m).toContain('מבקתות מאיה 1.');
+    expect(m).not.toMatch(/בקתה בקתות|מבקתה/);
+  });
+});
