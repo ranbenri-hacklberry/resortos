@@ -1,6 +1,7 @@
 import type { WAMessage } from '@whiskeysockets/baileys';
 import { cleaningCredit, config, isBookableRoom, isStaffRoom, isOfficeRoom, type CleanerProfile, type Lang, type RoomEntry } from './config.js';
 import type { InboundIntent } from './llm/client.js';
+import { detectGuestLang, type GuestLang } from './guest/i18n.js';
 import { resolveRoomByAlias } from './llm/client.js';
 import { alertRecipients, alertRoomLabel, buildUnknownScanAlert, createAlertMemory, displaySender, explainAlert, isWhatIsThis } from './manager/scanAlert.js';
 import { handleManagerInventory, type InventoryClient } from './manager/inventoryQuestion.js';
@@ -120,7 +121,8 @@ export type ManagerSessionState =
 
 export type GuestSessionState =
   | { role: 'GUEST'; state: 'AWAITING_PLACE'; placeIds: string[]; bookingId?: string }
-  | { role: 'GUEST'; state: 'AWAITING_CALL_CONFIRM'; bookingId: string; unitId: string; roomName: string; guestName?: string | null; guestPhone?: string | null };
+  | { role: 'GUEST'; state: 'AWAITING_CALL_CONFIRM'; bookingId: string; unitId: string; roomName: string; guestName?: string | null; guestPhone?: string | null }
+  | { role: 'GUEST'; state: 'AWAITING_BOOKING_PHONE'; pendingText: string; askedAt: number };
 
 export type SessionState = CleanerSessionState | ManagerSessionState | GuestSessionState;
 
@@ -192,6 +194,36 @@ export function normalizePhoneTail(raw?: string | null): string {
   if (digits.startsWith('972')) return digits.slice(3).slice(-9);
   if (digits.startsWith('0')) return digits.slice(1).slice(-9);
   return digits.slice(-9);
+}
+
+/** A phone number typed by a guest (052-606-5443, +972 52 606 5443, 0526065443) as digits, or ''. */
+export function extractTypedPhone(text?: string | null): string {
+  const m = String(text || '').match(/(?:\+?972|0)[\s\-.]*\d(?:[\s\-.]*\d){7,8}/);
+  if (!m) return '';
+  const digits = m[0].replace(/\D/g, '');
+  return digits.length >= 9 ? digits : '';
+}
+
+export function askBookingPhone(lang: GuestLang): string {
+  const t: Record<GuestLang, string> = {
+    he: 'רגע, אני בודקת את ההזמנה שלך 🙂 לא מצאתי אותה לפי המספר הזה. מה מספר הטלפון שאיתו בוצעה ההזמנה? אפשר גם שם מלא ותאריכי הגעה. אני מעדכנת את המנהל.',
+    en: "One moment, I'm checking your booking 🙂 I couldn't find it by this number. What phone number was the booking made with? Your full name and arrival dates also work. I'm updating the manager.",
+    ru: 'Минутку, проверяю ваше бронирование 🙂 Не нашла его по этому номеру. На какой номер телефона было сделано бронирование? Можно также полное имя и даты заезда. Я сообщаю менеджеру.',
+    ar: 'لحظة، أتحقق من حجزك 🙂 لم أجده بهذا الرقم. ما رقم الهاتف الذي تم الحجز به؟ يمكن أيضاً الاسم الكامل وتواريخ الوصول. أنا أبلّغ المدير.',
+    th: 'สักครู่ กำลังตรวจสอบการจองของคุณ 🙂 ไม่พบการจองจากหมายเลขนี้ การจองทำด้วยหมายเลขโทรศัพท์ใด? หรือแจ้งชื่อเต็มและวันที่เข้าพักก็ได้ กำลังแจ้งผู้จัดการ',
+  };
+  return t[lang] ?? t.he;
+}
+
+export function bookingPhoneNotFound(lang: GuestLang): string {
+  const t: Record<GuestLang, string> = {
+    he: 'לא מצאתי הזמנה גם לפי המספר הזה 🙏 אפשר שם מלא ותאריכי הגעה? המנהל מעודכן ויחזור אליך.',
+    en: "I couldn't find a booking with that number either 🙏 Could you send your full name and arrival dates? The manager has been updated and will get back to you.",
+    ru: 'По этому номеру бронирование тоже не найдено 🙏 Пришлите, пожалуйста, полное имя и даты заезда. Менеджер в курсе и свяжется с вами.',
+    ar: 'لم أجد حجزاً بهذا الرقم أيضاً 🙏 هل يمكنك إرسال الاسم الكامل وتواريخ الوصول؟ المدير على علم وسيتواصل معك.',
+    th: 'ไม่พบการจองจากหมายเลขนี้เช่นกัน 🙏 กรุณาส่งชื่อเต็มและวันที่เข้าพัก ผู้จัดการได้รับแจ้งแล้วและจะติดต่อกลับ',
+  };
+  return t[lang] ?? t.he;
 }
 
 export function phonesMatch(a?: string | null, b?: string | null): boolean {
@@ -360,6 +392,9 @@ export function createPipeline(deps: PipelineDeps) {
   };
   const sessionStates = new Map<string, SessionState>();
   const alertMemory = createAlertMemory();
+  // @lid guests matched by a phone they typed (jid -> booking phone), and jids already asked once for the booking phone (no loops).
+  const bookingPhoneOverride = new Map<string, string>();
+  const bookingPhoneAsked = new Set<string>();
   const getSession = (phone: string) => sessionStates.get(normalizePhoneTail(phone));
   const setSession = (phone: string, s: SessionState) => sessionStates.set(normalizePhoneTail(phone), s);
   const clearSession = (phone: string) => sessionStates.delete(normalizePhoneTail(phone));
@@ -436,6 +471,9 @@ export function createPipeline(deps: PipelineDeps) {
     if (!jid) return { handled: false, reason: 'no jid' };
     const senderPhone = phoneOf(jid);
     const senderPn = lidSenderPn(msg);
+    // @lid senders: the jid digits are a privacy ID, not a phone. Use the phone WhatsApp attaches (senderPn) for guest lookup + session (Ran 2026-10-21, Toscana 1).
+    const baseGuestPhone = (jid.endsWith('@lid') && senderPn) ? senderPn : senderPhone;
+    const guestPhone = bookingPhoneOverride.get(jid) || baseGuestPhone;
     if (jid.endsWith('@lid')) d.log.info({ jid, hasSenderPn: Boolean(senderPn), senderPnTail: senderPn ? senderPn.slice(-4) : null }, 'inbound @lid sender');
     // Staff on @lid without a stored LID (e.g. קוסטה, Ran 2026-10-21) are matched by the phone WhatsApp attaches.
     const cleaner = d.cleaners().find((c) => matchesCleaner(c, jid) || matchesCleaner(c, senderPhone)) || (senderPn ? d.cleaners().find((c) => matchesCleaner(c, senderPn)) : undefined);
@@ -443,10 +481,26 @@ export function createPipeline(deps: PipelineDeps) {
     // Guest priority for the background invoice name job (local vision model shares the GPU with guest replies).
     if (!cleaner) { try { (d.invoiceIntake as any)?.noteGuestActivity?.(); } catch { /* ignore */ } }
     const isWorker = Boolean(cleaner && !isManager);
-    const sessionKey = normalizePhoneTail(senderPhone);
+    const sessionKey = normalizePhoneTail(baseGuestPhone);
     const currentSession = sessionStates.get(sessionKey);
 
     let text = d.extractText(msg);
+    // Guest was asked once for the booking phone: retry the lookup with a typed number; anything else falls through (name+dates as before).
+    if (!cleaner && currentSession?.role === 'GUEST' && currentSession.state === 'AWAITING_BOOKING_PHONE' && text?.trim()) {
+      const typed = extractTypedPhone(text);
+      if (typed) {
+        sessionStates.delete(sessionKey);
+        const all = (await d.resortos.listBookings?.()) || [];
+        const hit = all.find((b) => phonesMatch(b.guest_phone, typed) && !b.deleted_at && b.booking_status !== 'CANCELED');
+        d.log.info({ jid, typedTail: typed.slice(-4), matched: Boolean(hit) }, 'guest typed booking phone');
+        if (hit) {
+          bookingPhoneOverride.set(jid, typed);
+          return handleInboundInner({ ...msg, message: { conversation: currentSession.pendingText } } as any);
+        }
+        await d.send(jid, bookingPhoneNotFound(detectGuestLang(text)));
+        return { handled: true };
+      }
+    }
     if (text?.trim()) {
       if (isManager) {
         const lastAlert = isWhatIsThis(text) ? alertMemory.recent(sessionKey) : null;
@@ -2089,10 +2143,10 @@ export function createPipeline(deps: PipelineDeps) {
         // ---- ROLE C: GUEST / CUSTOMER ----
         const bookings = (await d.resortos.listBookings?.()) || [];
         const roomBooking = bookings.find((b) =>
-          b.unit_id === resolvedId && phonesMatch(b.guest_phone, senderPhone) && !b.deleted_at && b.booking_status !== 'CANCELED'
+          b.unit_id === resolvedId && phonesMatch(b.guest_phone, guestPhone) && !b.deleted_at && b.booking_status !== 'CANCELED'
         );
         const otherBooking = !roomBooking
-          ? bookings.find((b) => phonesMatch(b.guest_phone, senderPhone) && !b.deleted_at && b.booking_status !== 'CANCELED')
+          ? bookings.find((b) => phonesMatch(b.guest_phone, guestPhone) && !b.deleted_at && b.booking_status !== 'CANCELED')
           : undefined;
 
         if (otherBooking) {
@@ -2175,7 +2229,13 @@ export function createPipeline(deps: PipelineDeps) {
         }
         const roomLabel = alertRoomLabel(r);
         // Phone not matched: never tell the sender they are not a guest (bookings from OTAs often lack a phone).
-        const reply = 'רגע, אני בודקת את ההזמנה שלך 🙂 אפשר שם מלא ותאריכי הגעה? אני מעדכנת את המנהל.';
+        // Ask once for the booking phone (@lid / different number); afterwards the plain name+dates request.
+        const askPhone = !bookingPhoneAsked.has(jid);
+        const reply = askPhone ? askBookingPhone(detectGuestLang(String(text || '').replace(/\b[A-Z]+_[A-Z]*\d+\b/g, ''))) : 'רגע, אני בודקת את ההזמנה שלך 🙂 אפשר שם מלא ותאריכי הגעה? אני מעדכנת את המנהל.';
+        if (askPhone) {
+          bookingPhoneAsked.add(jid);
+          sessionStates.set(sessionKey, { role: 'GUEST', state: 'AWAITING_BOOKING_PHONE', pendingText: text || '', askedAt: Date.now() });
+        }
         await d.send(jid, reply);
         try {
           // One alert per scanner per 10 min; never a raw @lid; managers with noAlerts (אדם) are skipped.
@@ -2307,7 +2367,7 @@ export function createPipeline(deps: PipelineDeps) {
         const bookings = (await d.resortos.listBookings?.()) || [];
         const today = getIsraelToday();
         const guestBookings = bookings.filter((b) =>
-          phonesMatch(b.guest_phone, senderPhone) && !b.deleted_at && b.booking_status !== 'CANCELED'
+          phonesMatch(b.guest_phone, guestPhone) && !b.deleted_at && b.booking_status !== 'CANCELED'
         );
 
         if (guestBookings.length > 0) {
@@ -2367,7 +2427,7 @@ export function createPipeline(deps: PipelineDeps) {
                 bookingId: booking.id,
                 unitId: booking.unit_id,
                 guestName: booking.guest_name,
-                guestPhone: booking.guest_phone || displayPhone(senderPhone) || senderPhone,
+                guestPhone: booking.guest_phone || displayPhone(guestPhone) || guestPhone,
                 cabin: ctx.roomName,
               });
             }
@@ -2383,7 +2443,7 @@ export function createPipeline(deps: PipelineDeps) {
             unitId: booking.unit_id,
             roomName: ctx.roomName,
             guestName: booking.guest_name,
-            guestPhone: booking.guest_phone || displayPhone(senderPhone) || senderPhone,
+            guestPhone: booking.guest_phone || displayPhone(guestPhone) || guestPhone,
           });
           const fallbackReply = askByName(
             booking.guest_name,
