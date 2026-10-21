@@ -1,17 +1,22 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Banknote,
+  Briefcase,
   Building2,
   CheckCircle2,
+  CreditCard,
   Download,
   ExternalLink,
   FileCheck2,
   FileSpreadsheet,
   FileText,
   FolderOpen,
+  Landmark,
   Layers,
   Maximize2,
   Printer,
   QrCode,
+  Receipt,
   Search,
   ShieldCheck,
   ShoppingBag,
@@ -23,12 +28,17 @@ import {
 } from 'lucide-react';
 
 const CATEGORIES = [
-  { id: 'all', label: 'כל הטפסים והתבניות', icon: FolderOpen },
-  { id: 'contracts', label: 'הסכמים וחוזים משפטיים', icon: ShieldCheck },
+  { id: 'all', label: 'כל הטפסים והמסמכים', icon: FolderOpen },
+  { id: 'finance_banking', label: 'חשבונות בנק ועו״ש', icon: Landmark },
+  { id: 'finance_loans', label: 'הלוואות ולוחות סילוקין', icon: Banknote },
+  { id: 'finance_cpa', label: 'רואה חשבון ורווח/הפסד', icon: FileSpreadsheet },
+  { id: 'finance_vat', label: 'דיווחי מע״מ 2026', icon: Receipt },
+  { id: 'finance_corporate', label: 'תאגיד, בעלים ומשפטי', icon: Briefcase },
+  { id: 'contracts', label: 'הסכמים וחוזים אישיים', icon: ShieldCheck },
   { id: 'procurement', label: 'רכש, הזמנות עבודה וספקים', icon: Wrench },
   { id: 'qr', label: 'מדבקות ושלטי QR', icon: QrCode },
   { id: 'hospitality', label: 'תפעול אירוח וחדרים', icon: Building2 },
-  { id: 'reports', label: 'דוחות תפעול וכספים', icon: FileSpreadsheet },
+  { id: 'reports', label: 'דוחות תפעול וכספים חיים', icon: FileSpreadsheet },
   { id: 'word', label: 'עורך מסמכים חופשי', icon: FileText }
 ];
 
@@ -43,17 +53,17 @@ export async function triggerFileDownload(url, filename) {
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = blobUrl;
-    a.download = filename || url.split('/').pop() || 'document.html';
+    a.download = filename || url.split('/').pop() || 'document.pdf';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(blobUrl), 1500);
     return true;
   } catch (err) {
-    // Fallback: ניסיון ניווט ישיר להורדה
+    // Fallback: ניווט ישיר להורדה
     const a = document.createElement('a');
     a.href = url;
-    a.download = filename || 'document.html';
+    a.download = filename || 'document.pdf';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -92,6 +102,540 @@ export default function PriorityForms({
   };
 
   const items = useMemo(() => [
+    // =========================================================================
+    // 1. חשבונות בנק ועו״ש
+    // =========================================================================
+    {
+      id: 'bank-beinleumi-os-3m',
+      category: 'finance_banking',
+      title: 'עובר ושב 3 חודשים - הבנק הבינלאומי',
+      subtitle: 'חשבון מיאליס ריזורט בע״מ · הבנק הבינלאומי',
+      description: 'דוח תנועות עו״ש רשמי ומפורט של 3 חודשים מרוכזים, תקבולים, העברות בנקאיות והוצאות שוטפות.',
+      formatBadge: 'PDF בנקאי',
+      tagColor: 'blue',
+      url: '/finance/%D7%91%D7%99%D7%A0%D7%9C%D7%90%D7%95%D7%9E%D7%99/%D7%A2%D7%95%D7%91%D7%A8%20%D7%95%D7%A9%D7%91%203%20%D7%97%D7%95%D7%93%D7%A9%D7%99%D7%9D%20%D7%91%D7%99%D7%A0%D7%9C%D7%90%D7%95%D7%9E%D7%99.pdf',
+      downloadName: 'עובר_ושב_3_חודשים_הבנק_הבינלאומי_מיאליס.pdf',
+      isHtml: false,
+      isPdf: true,
+      updatedAt: '2026',
+      parties: 'הבנק הבינלאומי · מיאליס ריזורט',
+      sheetPreviewType: 'report'
+    },
+    {
+      id: 'bank-beinleumi-tx-3m',
+      category: 'finance_banking',
+      title: 'תנועות חשבון 3 חודשים - הבנק הבינלאומי',
+      subtitle: 'פירוט תנועות חשבון מלא',
+      description: 'פירוט מלא של פעילות החשבון העסקי, חיובים, זיכויים ויתרות סגירה יומיות.',
+      formatBadge: 'PDF בנקאי',
+      tagColor: 'blue',
+      url: '/finance/%D7%91%D7%99%D7%A0%D7%9C%D7%90%D7%95%D7%9E%D7%99/%D7%AA%D7%A0%D7%95%D7%A2%D7%95%D7%AA%20%D7%91%D7%99%D7%A0%D7%9C%D7%90%D7%95%D7%9E%D7%99%20%D7%9E%D7%99%D7%90%D7%9C%D7%99%D7%A1%203%20%D7%97%D7%95%D7%93%D7%A9%D7%99%D7%9D.pdf',
+      downloadName: 'תנועות_בינלאומי_מיאליס_3_חודשים.pdf',
+      isPdf: true,
+      updatedAt: '2026',
+      parties: 'הבנק הבינלאומי · מיאליס ריזורט',
+      sheetPreviewType: 'report'
+    },
+    {
+      id: 'bank-beinleumi-balances-june',
+      category: 'finance_banking',
+      title: 'ריכוז יתרות יוני - הבנק הבינלאומי',
+      subtitle: 'אישור יתרות ופיקדונות תקופתי',
+      description: 'ריכוז יתרות חודשי רשמי מהבנק הבינלאומי עבור חודש יוני 2026, פיקדונות ויתרות זכות.',
+      formatBadge: 'PDF בנקאי',
+      tagColor: 'blue',
+      url: '/finance/%D7%91%D7%99%D7%A0%D7%9C%D7%90%D7%95%D7%9E%D7%99/%D7%A8%D7%99%D7%9B%D7%95%D7%96%20%D7%99%D7%AA%D7%A8%D7%95%D7%AA%20%D7%99%D7%95%D7%A0%D7%99%20%D7%91%D7%99%D7%A0%D7%9C%D7%90%D7%95%D7%9E%D7%99.pdf',
+      downloadName: 'ריכוז_יתרות_יוני_הבנק_הבינלאומי.pdf',
+      isPdf: true,
+      updatedAt: 'יוני 2026',
+      parties: 'הבנק הבינלאומי',
+      sheetPreviewType: 'report'
+    },
+    {
+      id: 'bank-beinleumi-valuation',
+      category: 'finance_banking',
+      title: 'שערוך כללי - הבנק הבינלאומי',
+      subtitle: 'שערוך נכסים, תיקים וערבויות',
+      description: 'דוח שערוך כללי אינטראקטיבי של תיק הלקוח, פקדונות וביטחונות בבנק הבינלאומי.',
+      formatBadge: 'HTML דוח',
+      tagColor: 'blue',
+      url: '/finance/%D7%91%D7%99%D7%A0%D7%9C%D7%90%D7%95%D7%9E%D7%99/%D7%A9%D7%A2%D7%A8%D7%95%D7%9A%20%D7%9B%D7%9C%D7%9C%D7%99%20%D7%91%D7%99%D7%A0%D7%9C%D7%95%D7%90%D7%9E%D7%99.html',
+      downloadName: 'שערוך_כללי_הבנק_הבינלאומי.html',
+      isHtml: true,
+      updatedAt: '2026',
+      parties: 'הבנק הבינלאומי',
+      sheetPreviewType: 'table'
+    },
+    {
+      id: 'bank-discount-balances',
+      category: 'finance_banking',
+      title: 'אישור יתרות - בנק דיסקונט',
+      subtitle: 'אישור יתרות רשמי לחשבון מיאליס ריזורט',
+      description: 'אישור יתרות רשמי מבנק דיסקונט לידי רואה חשבון / גופים פיננסיים, יתרות זכות והתחייבויות.',
+      formatBadge: 'PDF בנקאי',
+      tagColor: 'emerald',
+      url: '/finance/%D7%93%D7%99%D7%A1%D7%A7%D7%95%D7%A0%D7%98/%D7%90%D7%99%D7%A9%D7%95%D7%A8%20%D7%99%D7%AA%D7%A8%D7%95%D7%AA%20%D7%9E%D7%99%D7%90%D7%9C%D7%99%D7%A1%20%D7%93%D7%99%D7%A1%D7%A7%D7%95%D7%A0%D7%98.pdf',
+      downloadName: 'אישור_יתרות_בנק_דיסקונט_מיאליס.pdf',
+      isPdf: true,
+      updatedAt: '2026',
+      parties: 'בנק דיסקונט · מיאליס ריזורט',
+      sheetPreviewType: 'report'
+    },
+    {
+      id: 'bank-discount-tx-3m',
+      category: 'finance_banking',
+      title: 'תנועות חשבון 3 חודשים - בנק דיסקונט',
+      subtitle: 'תדפיס עו״ש רשמי של בנק דיסקונט',
+      description: 'דוח תנועות מלא לתקופה של שלושה חודשים, פירוט זיכויים מפעולות סליקה והעברות ספקים.',
+      formatBadge: 'PDF בנקאי',
+      tagColor: 'emerald',
+      url: '/finance/%D7%93%D7%99%D7%A1%D7%A7%D7%95%D7%A0%D7%98/%D7%AA%D7%A0%D7%95%D7%A2%D7%95%D7%AA%20%D7%93%D7%A1%D7%A7%D7%95%D7%A0%D7%98%20%D7%9E%D7%99%D7%90%D7%9C%D7%99%D7%A1%203%20%D7%97%D7%95%D7%93%D7%A9%D7%99%D7%9D.pdf',
+      downloadName: 'תנועות_בנק_דיסקונט_מיאליס_3_חודשים.pdf',
+      isPdf: true,
+      updatedAt: '2026',
+      parties: 'בנק דיסקונט · מיאליס ריזורט',
+      sheetPreviewType: 'report'
+    },
+    {
+      id: 'bank-mizrahi-account',
+      category: 'finance_banking',
+      title: 'מסמך חשבון - בנק מזרחי טפחות',
+      subtitle: 'דוח חשבון מיאליס ריזורט במזרחי טפחות',
+      description: 'מסמך ריכוז נתוני חשבון בנקאי, פרטי סניף, מסגרות אשראי והתקשרויות שוטפות.',
+      formatBadge: 'PDF בנקאי',
+      tagColor: 'amber',
+      url: '/finance/%D7%9E%D7%96%D7%A8%D7%97%D7%99%20%D7%98%D7%A4%D7%97%D7%95%D7%AA/%D7%9E%D7%96%D7%A8%D7%97%D7%99%20%D7%98%D7%A4%D7%97%D7%95%D7%AA%20%D7%9E%D7%99%D7%90%D7%9C%D7%99%D7%A1.pdf',
+      downloadName: 'בנק_מזרחי_טפחות_מיאליס.pdf',
+      isPdf: true,
+      updatedAt: '2026',
+      parties: 'בנק מזרחי טפחות · מיאליס',
+      sheetPreviewType: 'report'
+    },
+    {
+      id: 'bank-mizrahi-tx-3m',
+      category: 'finance_banking',
+      title: 'תנועות 3 חודשים - בנק מזרחי טפחות',
+      subtitle: 'תדפיס עו״ש רשמי של בנק מזרחי טפחות',
+      description: 'דוח תנועות חשבון עו״ש מפורט ל-3 חודשים, פירוט פעולות והתאמות בנקאיות.',
+      formatBadge: 'PDF בנקאי',
+      tagColor: 'amber',
+      url: '/finance/%D7%9E%D7%96%D7%A8%D7%97%D7%99%20%D7%98%D7%A4%D7%97%D7%95%D7%AA/%D7%AA%D7%A0%D7%95%D7%A2%D7%95%D7%AA%20%D7%9E%D7%96%D7%A8%D7%97%D7%99%20%D7%9E%D7%99%D7%90%D7%9C%D7%99%D7%A1%203%D7%97%D7%95%D7%93%D7%A9%D7%99%D7%9D.pdf',
+      downloadName: 'תנועות_מזרחי_מיאליס_3_חודשים.pdf',
+      isPdf: true,
+      updatedAt: '2026',
+      parties: 'בנק מזרחי טפחות',
+      sheetPreviewType: 'report'
+    },
+    {
+      id: 'bank-mizrahi-balances-1',
+      category: 'finance_banking',
+      title: 'אישור יתרות (חלק 1) - בנק מזרחי טפחות',
+      subtitle: 'אישור יתרות חשבון רשמי',
+      description: 'אישור יתרות רשמי חתום ע״י בנק מזרחי טפחות, יתרות זכות והתחייבויות בחשבון.',
+      formatBadge: 'PDF בנקאי',
+      tagColor: 'amber',
+      url: '/finance/%D7%9E%D7%96%D7%A8%D7%97%D7%99%20%D7%98%D7%A4%D7%97%D7%95%D7%AA/%D7%90%D7%99%D7%A9%D7%95%D7%A8%20%D7%99%D7%AA%D7%A8%D7%95%D7%AA%20%D7%9E%D7%96%D7%A8%D7%97%D7%99%20%D7%9E%D7%99%D7%90%D7%9C%D7%99%D7%A1%201.pdf',
+      downloadName: 'אישור_יתרות_מזרחי_מיאליס_1.pdf',
+      isPdf: true,
+      updatedAt: '2026',
+      parties: 'בנק מזרחי טפחות',
+      sheetPreviewType: 'report'
+    },
+    {
+      id: 'bank-mizrahi-balances-2',
+      category: 'finance_banking',
+      title: 'אישור יתרות (חלק 2) - בנק מזרחי טפחות',
+      subtitle: 'השלמת אישור יתרות ופיקדונות',
+      description: 'המשך אישור יתרות רשמי, פיקדונות וריכוז התחייבויות בחשבון העסקי.',
+      formatBadge: 'PDF בנקאי',
+      tagColor: 'amber',
+      url: '/finance/%D7%9E%D7%96%D7%A8%D7%97%D7%99%20%D7%98%D7%A4%D7%97%D7%95%D7%AA/%D7%90%D7%99%D7%A9%D7%95%D7%A8%20%D7%99%D7%AA%D7%A8%D7%95%D7%AA%20%D7%9E%D7%96%D7%A8%D7%97%D7%99%20%D7%9E%D7%99%D7%90%D7%9C%D7%99%D7%A1%202.pdf',
+      downloadName: 'אישור_יתרות_מזרחי_מיאליס_2.pdf',
+      isPdf: true,
+      updatedAt: '2026',
+      parties: 'בנק מזרחי טפחות',
+      sheetPreviewType: 'report'
+    },
+
+    // =========================================================================
+    // 2. הלוואות ולוחות סילוקין
+    // =========================================================================
+    {
+      id: 'loan-schedule-428k',
+      category: 'finance_loans',
+      title: 'לוח סילוקין - מיאליס ריזורט (428,320 ש״ח)',
+      subtitle: 'לוח סילוקין מלא לתקופת ההלוואה',
+      description: 'לוח סילוקין רשמי ומפורט על סך 428,320 ש״ח: פירוט קרן, ריבית, הצמדה, תאריכי פירעון ויתרות לסוף תקופה.',
+      formatBadge: 'לוח סילוקין PDF',
+      tagColor: 'purple',
+      url: '/finance/%D7%94%D7%9C%D7%95%D7%95%D7%90%D7%95%D7%AA/%D7%9C%D7%95%D7%97%20%D7%A1%D7%99%D7%9C%D7%95%D7%A7%D7%99%D7%9F%20-%20%D7%9E%D7%99%D7%90%D7%9C%D7%99%D7%A1%20%D7%A8%D7%99%D7%96%D7%95%D7%A8%D7%98%20428%2C320.pdf',
+      downloadName: 'לוח_סילוקין_מיאליס_ריזורט_428320.pdf',
+      isPdf: true,
+      updatedAt: '2026',
+      parties: 'מיאליס ריזורט · מימון',
+      sheetPreviewType: 'table'
+    },
+    {
+      id: 'loan-btb-balance',
+      category: 'finance_loans',
+      title: 'אישור יתרות הלוואה - BTB (מעודכן ל-20.10.2026)',
+      subtitle: 'אישור יתרות רשמי מקרן BTB',
+      description: 'אישור יתרות חוב עדכני ליום 20.10.2026 מקרן BTB עבור הלוואת העסק, קרן לסילוק ושיעורי ריבית.',
+      formatBadge: 'אישור BTB PDF',
+      tagColor: 'purple',
+      url: '/finance/%D7%94%D7%9C%D7%95%D7%95%D7%90%D7%95%D7%AA/BTB%20%D7%90%D7%99%D7%A9%D7%95%D7%A8%20%D7%99%D7%AA%D7%A8%D7%95%D7%AA%20%D7%94%D7%9C%D7%95%D7%95%D7%90%D7%94%2020.10.2026.pdf',
+      downloadName: 'BTB_אישור_יתרות_הלוואה_20.10.2026.pdf',
+      isPdf: true,
+      updatedAt: '20.10.2026',
+      parties: 'BTB · מיאליס ריזורט',
+      sheetPreviewType: 'report'
+    },
+    {
+      id: 'loan-btb-payments',
+      category: 'finance_loans',
+      title: 'פירוט תשלומים בהלוואה - BTB (20.10.2026)',
+      subtitle: 'דוח פירעונות והיסטוריית תשלומים',
+      description: 'פירוט כל התשלומים ששולמו עד כה בהלוואת BTB, חלוקת תשלומים קרן/ריבית, ויתרת לוח התשלומים העתידי.',
+      formatBadge: 'דוח תשלומים PDF',
+      tagColor: 'purple',
+      url: '/finance/%D7%94%D7%9C%D7%95%D7%95%D7%90%D7%95%D7%AA/BTB%20%D7%A4%D7%99%D7%A8%D7%95%D7%98%20%D7%AA%D7%A9%D7%9C%D7%95%D7%9E%D7%99%D7%9D%20%D7%91%D7%94%D7%9C%D7%95%D7%95%D7%90%D7%94%2020.10.2026.pdf',
+      downloadName: 'BTB_פירוט_תשלומים_בהלוואה_20.10.2026.pdf',
+      isPdf: true,
+      updatedAt: '20.10.2026',
+      parties: 'BTB ישראל',
+      sheetPreviewType: 'table'
+    },
+    {
+      id: 'loan-discount-details',
+      category: 'finance_loans',
+      title: 'פירוט הלוואת דיסקונט',
+      subtitle: 'דוח תנאי הלוואה מבנק דיסקונט',
+      description: 'דוח רשמי המפרט את תנאי ההלוואה העסקית בבנק דיסקונט: תקופה, מסלול ריבית, תשלום חודשי וביטחונות.',
+      formatBadge: 'PDF בנקאי',
+      tagColor: 'emerald',
+      url: '/finance/%D7%93%D7%99%D7%A1%D7%A7%D7%95%D7%A0%D7%98/%D7%A4%D7%99%D7%A8%D7%95%D7%98%20%D7%94%D7%9C%D7%95%D7%95%D7%90%D7%AA%20%D7%93%D7%99%D7%A1%D7%A7%D7%95%D7%A0%D7%98.pdf',
+      downloadName: 'פירוט_הלוואת_דיסקונט_מיאליס.pdf',
+      isPdf: true,
+      updatedAt: '2026',
+      parties: 'בנק דיסקונט',
+      sheetPreviewType: 'report'
+    },
+    {
+      id: 'loan-beinleumi-details',
+      category: 'finance_loans',
+      title: 'פירוט הלוואות - הבנק הבינלאומי',
+      subtitle: 'מערך ההלוואות בבנק הבינלאומי',
+      description: 'דוח מפורט של כל מסלולי ההלוואות, פירעונות חודשיים ושיעורי ריבית בבנק הבינלאומי.',
+      formatBadge: 'HTML דוח',
+      tagColor: 'blue',
+      url: '/finance/%D7%91%D7%99%D7%A0%D7%9C%D7%90%D7%95%D7%9E%D7%99/%D7%A4%D7%99%D7%A8%D7%95%D7%98%20%D7%94%D7%9C%D7%95%D7%95%D7%90%D7%95%D7%AA%20%D7%91%D7%99%D7%A0%D7%9C%D7%95%D7%90%D7%9E%D7%99.html',
+      downloadName: 'פירוט_הלוואות_הבנק_הבינלאומי.html',
+      isHtml: true,
+      updatedAt: '2026',
+      parties: 'הבנק הבינלאומי',
+      sheetPreviewType: 'table'
+    },
+    {
+      id: 'loan-owners-protocol',
+      category: 'finance_loans',
+      title: 'פרוטוקול חברה - הלוואת בעלים',
+      subtitle: 'אישור דירקטוריון להלוואת בעלים',
+      description: 'מסמך פרוטוקול משפטי רשמי של חברת מיאליס ריזורט בע״מ לאישור תנאי הלוואת בעלים והעמדת מימון.',
+      formatBadge: 'DOCX מסמך',
+      tagColor: 'purple',
+      url: '/finance/%D7%94%D7%9C%D7%95%D7%95%D7%90%D7%95%D7%AA/%D7%A4%D7%A8%D7%95%D7%98%D7%95%D7%A7%D7%95%D7%9C%20%D7%97%D7%91%D7%A8%D7%94%20-%20%D7%94%D7%9C%D7%95%D7%95%D7%90%D7%AA%20%D7%91%D7%A2%D7%9C%D7%99%D7%9D.docx',
+      downloadName: 'פרוטוקול_חברה_הלוואת_בעלים.docx',
+      isDocx: true,
+      updatedAt: '2026',
+      parties: 'דירקטוריון מיאליס ריזורט בע״מ',
+      sheetPreviewType: 'contract'
+    },
+
+    // =========================================================================
+    // 3. רואה חשבון ורווח והפסד
+    // =========================================================================
+    {
+      id: 'cpa-pnl-1-8-2026',
+      category: 'finance_cpa',
+      title: 'דוח רווח והפסד 1-8.2026 - מיאליס ריזורט',
+      subtitle: 'דוח כספי מבוקר רו״ח לתקופה 1-8.2026',
+      description: 'דוח רווח והפסד רשמי של מיאליס ריזורט: מחזור הכנסות מאירוח, עלות המכר, הוצאות הנהלה וכלליות, ורווח נקי לתקופה.',
+      formatBadge: 'דוח רווח והפסד PDF',
+      tagColor: 'emerald',
+      url: '/finance/%D7%A8%D7%95%D7%90%D7%94%20%D7%97%D7%A9%D7%91%D7%95%D7%9F/%D7%9E%D7%99%D7%90%D7%9C%D7%99%D7%A1%20%D7%A8%D7%95%D7%95%D7%97%20%D7%95%D7%94%D7%A4%D7%A1%D7%93%201-8.2026.pdf',
+      downloadName: 'מיאליס_רווח_והפסד_1-8.2026.pdf',
+      isPdf: true,
+      updatedAt: 'אוגוסט 2026',
+      parties: 'רו״ח · מיאליס ריזורט בע״מ',
+      sheetPreviewType: 'table'
+    },
+    {
+      id: 'cpa-revenue-approval',
+      category: 'finance_cpa',
+      title: 'אישור רו״ח על הכנסות 1-8.2026 - מיאליס ריזורט',
+      subtitle: 'אישור הכנסות חתום לידי בנקים וגופים מממנים',
+      description: 'אישור רואה חשבון רשמי וחתום המאמת את מחזור ההכנסות של העסק לתקופה שבין ינואר לאוגוסט 2026.',
+      formatBadge: 'אישור רו״ח PDF',
+      tagColor: 'emerald',
+      url: '/finance/%D7%A8%D7%95%D7%90%D7%94%20%D7%97%D7%A9%D7%91%D7%95%D7%9F/%D7%90%D7%99%D7%A9%D7%95%D7%A8%20%D7%A8%D7%95%D7%97%20%D7%94%D7%9B%D7%A0%D7%A0%D7%A1%D7%95%D7%AA%201-8.2026%20-%20%D7%9E%D7%99%D7%90%D7%9C%D7%99%D7%A1%20%D7%A8%D7%99%D7%96%D7%95%D7%A8%D7%98.pdf',
+      downloadName: 'אישור_רוח_הכנסות_1-8.2026_מיאליס_ריזורט.pdf',
+      isPdf: true,
+      updatedAt: 'אוגוסט 2026',
+      parties: 'משרד רו״ח',
+      sheetPreviewType: 'report'
+    },
+    {
+      id: 'cpa-daniel-approval',
+      category: 'finance_cpa',
+      title: 'אישור רו״ח - דניאל שוקרון (1-8.2026)',
+      subtitle: 'אישור הכנסות בעלים / דיבידנד ומשכורות',
+      description: 'אישור מרואה החשבון בדבר משיכות, הכנסות ושכר בעלים של דניאל שוקרון לתקופה 1-8.2026.',
+      formatBadge: 'אישור רו״ח PDF',
+      tagColor: 'emerald',
+      url: '/finance/%D7%A8%D7%95%D7%90%D7%94%20%D7%97%D7%A9%D7%91%D7%95%D7%9F/%D7%90%D7%99%D7%A9%D7%95%D7%A8%20%D7%A8%D7%95%D7%90%D7%94%20%D7%97%D7%A9%D7%91%D7%95%D7%9F%20-%20%D7%93%D7%A0%D7%99%D7%90%D7%9C%20%D7%A9%D7%95%D7%A7%D7%A8%D7%95%D7%9F%201-8.2026.pdf',
+      downloadName: 'אישור_רואה_חשבון_דניאל_שוקרון_1-8.2026.pdf',
+      isPdf: true,
+      updatedAt: 'אוגוסט 2026',
+      parties: 'רו״ח · דניאל שוקרון',
+      sheetPreviewType: 'report'
+    },
+    {
+      id: 'cpa-mialis-7-8',
+      category: 'finance_cpa',
+      title: 'דוח כספי תקופתי מיאליס (7-8.2026)',
+      subtitle: 'דוח פעילות שיא עונת הקיץ',
+      description: 'ריכוז נתונים כספיים ומחזורים עבור חודשי יולי-אוגוסט 2026, כולל ניתוח הכנסות והוצאות עונתיות.',
+      formatBadge: 'דוח תקופתי PDF',
+      tagColor: 'emerald',
+      url: '/finance/%D7%A8%D7%95%D7%90%D7%94%20%D7%97%D7%A9%D7%91%D7%95%D7%9F/%D7%9E%D7%99%D7%90%D7%9C%D7%99%D7%A1%207-8.2026.pdf',
+      downloadName: 'מיאליס_דוח_רוח_7-8.2026.pdf',
+      isPdf: true,
+      updatedAt: 'אוגוסט 2026',
+      parties: 'רו״ח · מיאליס ריזורט',
+      sheetPreviewType: 'table'
+    },
+
+    // =========================================================================
+    // 4. דיווחי מע״מ 2026
+    // =========================================================================
+    {
+      id: 'vat-1-2-2026',
+      category: 'finance_vat',
+      title: 'דיווח מע״מ ינואר-פברואר 2026',
+      subtitle: 'שובר דיווח ותשלום מע״מ תקופתי 1-2.2026',
+      description: 'דוח מע״מ רשמי מול רשות המסים עבור חודשים ינואר-פברואר 2026: עסקאות חייבות, מע״מ תשומות וסכום לתשלום.',
+      formatBadge: 'מע״מ PDF',
+      tagColor: 'amber',
+      url: '/finance/%D7%9E%D7%A2%D7%9E%202026/%D7%9E%D7%A2%D7%9E%201-2.2026.pdf',
+      downloadName: 'מעמ_מיאליס_1-2.2026.pdf',
+      isPdf: true,
+      updatedAt: 'פברואר 2026',
+      parties: 'רשות המסים · מיאליס ריזורט',
+      sheetPreviewType: 'report'
+    },
+    {
+      id: 'vat-3-4-2026',
+      category: 'finance_vat',
+      title: 'דיווח מע״מ מרץ-אפריל 2026',
+      subtitle: 'שובר דיווח ותשלום מע״מ תקופתי 3-4.2026',
+      description: 'דוח מע״מ רשמי מול רשות המסים לחודשים מרץ-אפריל (כולל עונת חג הפסח), מחזור עסקאות ומע״מ תשומות.',
+      formatBadge: 'מע״מ PDF',
+      tagColor: 'amber',
+      url: '/finance/%D7%9E%D7%A2%D7%9E%202026/%D7%9E%D7%A2%D7%9E%203-4.2026.PDF',
+      downloadName: 'מעמ_מיאליס_3-4.2026.pdf',
+      isPdf: true,
+      updatedAt: 'אפריל 2026',
+      parties: 'רשות המסים · מיאליס ריזורט',
+      sheetPreviewType: 'report'
+    },
+    {
+      id: 'vat-5-6-2026',
+      category: 'finance_vat',
+      title: 'דיווח מע״מ מאי-יוני 2026',
+      subtitle: 'שובר דיווח ותשלום מע״מ תקופתי 5-6.2026',
+      description: 'דוח מע״מ רשמי עבור חודשים מאי-יוני (עונת האביב ופתיחת הקיץ), מחזורי עסקאות ותשומות ציוד ותפעול.',
+      formatBadge: 'מע״מ PDF',
+      tagColor: 'amber',
+      url: '/finance/%D7%9E%D7%A2%D7%9E%202026/%D7%9E%D7%A2%D7%9E%205-6.2026.pdf',
+      downloadName: 'מעמ_מיאליס_5-6.2026.pdf',
+      isPdf: true,
+      updatedAt: 'יוני 2026',
+      parties: 'רשות המסים · מיאליס ריזורט',
+      sheetPreviewType: 'report'
+    },
+    {
+      id: 'vat-7-8-2026',
+      category: 'finance_vat',
+      title: 'דיווח מע״מ יולי-אוגוסט 2026',
+      subtitle: 'שובר דיווח ותשלום מע״מ תקופתי 7-8.2026',
+      description: 'דוח מע״מ רשמי לחודשי שיא עונת הקיץ יולי-אוגוסט 2026, מחזור עסקאות מקסימלי ותשלום מע״מ כדין.',
+      formatBadge: 'מע״מ PDF',
+      tagColor: 'amber',
+      url: '/finance/%D7%9E%D7%A2%D7%9E%202026/%D7%9E%D7%A2%D7%9E%207-8.2026.pdf',
+      downloadName: 'מעמ_מיאליס_7-8.2026.pdf',
+      isPdf: true,
+      updatedAt: 'אוגוסט 2026',
+      parties: 'רשות המסים · מיאליס ריזורט',
+      sheetPreviewType: 'report'
+    },
+
+    // =========================================================================
+    // 5. תאגיד, בעלים ומשפטי
+    // =========================================================================
+    {
+      id: 'corp-incorporation-cert',
+      category: 'finance_corporate',
+      title: 'תעודת התאגדות - מיאליס ריזורט בע״מ',
+      subtitle: 'רשם החברות · תעודת רישום חברה רשמית',
+      description: 'תעודת התאגדות רשמית של מיאליס ריזורט בע״מ ממשרד המשפטים / רשם החברות כולל ח״פ ומספר חברה.',
+      formatBadge: 'תעודת חברה PDF',
+      tagColor: 'purple',
+      url: '/finance/%D7%90%D7%97%D7%A8/%D7%AA%D7%A2%D7%95%D7%93%D7%AA%20%D7%94%D7%AA%D7%90%D7%92%D7%93%D7%95%D7%AA.pdf',
+      downloadName: 'תעודת_התאגדות_מיאליס_ריזורט_בעמ.pdf',
+      isPdf: true,
+      updatedAt: 'רשם החברות',
+      parties: 'משרד המשפטים · רשם החברות',
+      sheetPreviewType: 'contract'
+    },
+    {
+      id: 'corp-signatory-protocol',
+      category: 'finance_corporate',
+      title: 'פרוטוקול מורשה חתימה בבנק (מעודכן 06.01.2025)',
+      subtitle: 'החלטת דירקטוריון בדבר מורשי חתימה',
+      description: 'פרוטוקול דירקטוריון רשמי וחתום המגדיר את מורשי החתימה בחשבונות הבנק, זכויות חתימה ואישור עו״ד.',
+      formatBadge: 'פרוטוקול PDF',
+      tagColor: 'purple',
+      url: '/finance/%D7%90%D7%97%D7%A8/%D7%A4%D7%A8%D7%95%D7%98%D7%95%D7%A7%D7%95%D7%9C%20%D7%9E%D7%95%D7%A8%D7%A9%D7%94%20%D7%97%D7%AA%D7%99%D7%9E%D7%94%20%D7%91%D7%A0%D7%A7%20%D7%9E%D7%A2%D7%95%D7%93%D7%9B%D7%9F%2006.01.2025.pdf',
+      downloadName: 'פרוטוקול_מורשה_חתימה_בנק_מעודכן.pdf',
+      isPdf: true,
+      updatedAt: '06.01.2025',
+      parties: 'דירקטוריון החברה',
+      sheetPreviewType: 'contract'
+    },
+    {
+      id: 'corp-esna-2026',
+      category: 'finance_corporate',
+      title: 'אישור ניהול ספרים וניכוי מס במקור (ESNA 2026)',
+      subtitle: 'אישור רשות המסים בתוקף',
+      description: 'אישור רשמי של רשות המסים בדבר ניהול פנקסי חשבונות ופטור/שיעור ניכוי מס במקור לשנת 2026.',
+      formatBadge: 'אישור מס PDF',
+      tagColor: 'purple',
+      url: '/finance/%D7%90%D7%97%D7%A8/ESNA%202026.pdf',
+      downloadName: 'אישור_ניהול_ספרים_וניכוי_מס_2026.pdf',
+      isPdf: true,
+      updatedAt: '2026',
+      parties: 'רשות המסים',
+      sheetPreviewType: 'report'
+    },
+    {
+      id: 'daniel-financial-report',
+      category: 'finance_corporate',
+      title: 'דוח אישי בדבר מצב פיננסי - דניאל שוקרון',
+      subtitle: 'הצהרת עושר ומצב פיננסי אישי',
+      description: 'דוח אישי מפורט של דניאל שוקרון המפרט נכסים, התחייבויות, הכנסות ורכוש לצורך אישורי אשראי ובנקים.',
+      formatBadge: 'הצהרת הון PDF',
+      tagColor: 'blue',
+      url: '/finance/%D7%93%D7%A0%D7%99%D7%90%D7%9C%20%D7%A9%D7%95%D7%A7%D7%A8%D7%95%D7%9F/%D7%93%D7%95%D7%97%20%D7%90%D7%99%D7%A9%D7%99%20%D7%91%D7%93%D7%91%D7%A8%20%D7%9E%D7%A6%D7%91%20%D7%A4%D7%99%D7%A0%D7%A0%D7%A1%D7%99.pdf',
+      downloadName: 'דוח_אישי_מצב_פיננסי_דניאל_שוקרון.pdf',
+      isPdf: true,
+      updatedAt: '2026',
+      parties: 'דניאל שוקרון',
+      sheetPreviewType: 'report'
+    },
+    {
+      id: 'daniel-tax-2024',
+      category: 'finance_corporate',
+      title: 'שומה שנתית 2024 - דניאל שוקרון',
+      subtitle: 'דוח שומת מס הכנסה סופית לשנת 2024',
+      description: 'הודעת שומה שנתית רשמית מרשות המסים לשנת המס 2024, הכנסה חייבת ומס סופי ששולם.',
+      formatBadge: 'שומה PDF',
+      tagColor: 'blue',
+      url: '/finance/%D7%93%D7%A0%D7%99%D7%90%D7%9C%20%D7%A9%D7%95%D7%A7%D7%A8%D7%95%D7%9F/%D7%A9%D7%95%D7%9E%D7%94%202024.pdf',
+      downloadName: 'שומת_מס_2024_דניאל_שוקרון.pdf',
+      isPdf: true,
+      updatedAt: '2024',
+      parties: 'רשות המסים · דניאל שוקרון',
+      sheetPreviewType: 'report'
+    },
+    {
+      id: 'daniel-tax-2023',
+      category: 'finance_corporate',
+      title: 'שומה שנתית 2023 - דניאל שוקרון',
+      subtitle: 'דוח שומת מס הכנסה סופית לשנת 2023',
+      description: 'הודעת שומה שנתית רשמית מרשות המסים לשנת המס 2023, הכנסות מעסק ומקורות נוספים.',
+      formatBadge: 'שומה PDF',
+      tagColor: 'blue',
+      url: '/finance/%D7%93%D7%A0%D7%99%D7%90%D7%9C%20%D7%A9%D7%95%D7%A7%D7%A8%D7%95%D7%9F/%D7%A9%D7%95%D7%9E%D7%94%202023.pdf',
+      downloadName: 'שומת_מס_2023_דניאל_שוקרון.pdf',
+      isPdf: true,
+      updatedAt: '2023',
+      parties: 'רשות המסים · דניאל שוקרון',
+      sheetPreviewType: 'report'
+    },
+    {
+      id: 'daniel-payslip-sep',
+      category: 'finance_corporate',
+      title: 'תלוש שכר ספטמבר 2026 - דניאל שוקרון',
+      subtitle: 'תלוש שכר רשמי ספטמבר',
+      description: 'תלוש שכר חודשי רשמי לחודש ספטמבר 2026, פירוט ברוטו, נטו, ניכויים והפרשות סוציאליות.',
+      formatBadge: 'תלוש שכר PDF',
+      tagColor: 'blue',
+      url: '/finance/%D7%93%D7%A0%D7%99%D7%90%D7%9C%20%D7%A9%D7%95%D7%A7%D7%A8%D7%95%D7%9F/%D7%AA%D7%9C%D7%95%D7%A9%20%D7%A1%D7%A4%D7%98%D7%9E%D7%91%D7%A8.pdf',
+      downloadName: 'תלוש_שכר_ספטמבר_דניאל_שוקרון.pdf',
+      isPdf: true,
+      updatedAt: 'ספטמבר 2026',
+      parties: 'דניאל שוקרון',
+      sheetPreviewType: 'report'
+    },
+    {
+      id: 'daniel-payslip-aug',
+      category: 'finance_corporate',
+      title: 'תלוש שכר אוגוסט 2026 - דניאל שוקרון',
+      subtitle: 'תלוש שכר רשמי אוגוסט',
+      description: 'תלוש שכר חודשי רשמי לחודש אוגוסט 2026, פירוט ברוטו, נטו והפרשות פנסיה ופיצויים.',
+      formatBadge: 'תלוש שכר PDF',
+      tagColor: 'blue',
+      url: '/finance/%D7%93%D7%A0%D7%99%D7%90%D7%9C%20%D7%A9%D7%95%D7%A7%D7%A8%D7%95%D7%9F/%D7%AA%D7%9C%D7%95%D7%A9%20%D7%90%D7%95%D7%92%D7%95%D7%A1%D7%98.pdf',
+      downloadName: 'תלוש_שכר_אוגוסט_דניאל_שוקרון.pdf',
+      isPdf: true,
+      updatedAt: 'אוגוסט 2026',
+      parties: 'דניאל שוקרון',
+      sheetPreviewType: 'report'
+    },
+    {
+      id: 'daniel-payslip-jul',
+      category: 'finance_corporate',
+      title: 'תלוש שכר יולי 2026 - דניאל שוקרון',
+      subtitle: 'תלוש שכר רשמי יולי',
+      description: 'תלוש שכר חודשי רשמי לחודש יולי 2026, פירוט ברוטו, נטו והפרשות פנסיוניות.',
+      formatBadge: 'תלוש שכר PDF',
+      tagColor: 'blue',
+      url: '/finance/%D7%93%D7%A0%D7%99%D7%90%D7%9C%20%D7%A9%D7%95%D7%A7%D7%A8%D7%95%D7%9F/%D7%AA%D7%9C%D7%95%D7%A9%20%D7%99%D7%95%D7%9C%D7%99.pdf',
+      downloadName: 'תלוש_שכר_יולי_דניאל_שוקרון.pdf',
+      isPdf: true,
+      updatedAt: 'יולי 2026',
+      parties: 'דניאל שוקרון',
+      sheetPreviewType: 'report'
+    },
+    {
+      id: 'daniel-id-card',
+      category: 'finance_corporate',
+      title: 'צילום תעודת זהות - דניאל שוקרון',
+      subtitle: 'צילום ת״ז רשמי של בעל השליטה / מנהל',
+      description: 'צילום תעודת זהות וספח של דניאל שוקרון הנדרש לפתיחת חשבונות, חתימות ואישורים בנקאיים.',
+      formatBadge: 'ת״ז PDF',
+      tagColor: 'blue',
+      url: '/finance/%D7%93%D7%A0%D7%99%D7%90%D7%9C%20%D7%A9%D7%95%D7%A7%D7%A8%D7%95%D7%9F/%D7%AA%D7%96%20%D7%93%D7%A0%D7%99%D7%90%D7%9C.pdf',
+      downloadName: 'תעודת_זהות_דניאל_שוקרון.pdf',
+      isPdf: true,
+      updatedAt: '2026',
+      parties: 'דניאל שוקרון',
+      sheetPreviewType: 'contract'
+    },
+
+    // =========================================================================
+    // 6. הסכמים וחוזים אישיים
+    // =========================================================================
     {
       id: 'employment-contract',
       category: 'contracts',
@@ -107,6 +651,10 @@ export default function PriorityForms({
       parties: 'בועז שכנטוב · אדם דורות',
       sheetPreviewType: 'contract'
     },
+
+    // =========================================================================
+    // 7. רכש, הזמנות עבודה וספקים
+    // =========================================================================
     {
       id: 'work-order-blank',
       category: 'procurement',
@@ -138,6 +686,25 @@ export default function PriorityForms({
       sheetPreviewType: 'work-order'
     },
     {
+      id: 'procurement-list',
+      category: 'procurement',
+      title: 'רשימת רכש ומעקב הזמנות מלאי',
+      subtitle: 'טבלת רכש שוטף, טקסטיל וציוד',
+      description: 'טבלת ניהול הזמנות רכש שוטף לבקתות: טקסטיל, קפסולות, תמרוקים, ציוד ניקיון וכלי תחזוקה כולל כמויות ומחירים.',
+      formatBadge: 'A4 מותאם',
+      tagColor: 'emerald',
+      url: '/procurement_list.html',
+      downloadName: 'רשימת_רכש_ומעקב_הזמנות_מלאי.html',
+      isHtml: true,
+      updatedAt: 'אוגוסט 2026',
+      parties: 'מחלקת תפעול ורכש',
+      sheetPreviewType: 'table'
+    },
+
+    // =========================================================================
+    // 8. מדבקות ושלטי QR
+    // =========================================================================
+    {
       id: 'qr-stickers-units',
       category: 'qr',
       title: 'דף מדבקות QR ליחידות אירוח',
@@ -167,6 +734,10 @@ export default function PriorityForms({
       parties: 'שטחים ציבוריים ותפעול',
       sheetPreviewType: 'qr-grounds'
     },
+
+    // =========================================================================
+    // 9. תפעול אירוח וחדרים
+    // =========================================================================
     {
       id: 'room-sheet-a4',
       category: 'hospitality',
@@ -197,21 +768,10 @@ export default function PriorityForms({
       parties: 'קבלה, הזמנות ואורחים',
       sheetPreviewType: 'price-list'
     },
-    {
-      id: 'procurement-list',
-      category: 'procurement',
-      title: 'רשימת רכש ומעקב הזמנות מלאי',
-      subtitle: 'טבלת רכש שוטף, טקסטיל וציוד',
-      description: 'טבלת ניהול הזמנות רכש שוטף לבקתות: טקסטיל, קפסולות, תמרוקים, ציוד ניקיון וכלי תחזוקה כולל כמויות ומחירים.',
-      formatBadge: 'A4 מותאם',
-      tagColor: 'emerald',
-      url: '/procurement_list.html',
-      downloadName: 'רשימת_רכש_ומעקב_הזמנות_מלאי.html',
-      isHtml: true,
-      updatedAt: 'אוגוסט 2026',
-      parties: 'מחלקת תפעול ורכש',
-      sheetPreviewType: 'table'
-    },
+
+    // =========================================================================
+    // 10. דוחות תפעול וכספים חיים
+    // =========================================================================
     {
       id: 'report-duty-full',
       category: 'reports',
@@ -254,6 +814,10 @@ export default function PriorityForms({
       parties: 'משמרת בוקר ומשק בית',
       sheetPreviewType: 'report'
     },
+
+    // =========================================================================
+    // 11. עורך מסמכים חופשי
+    // =========================================================================
     {
       id: 'priority-word-editor',
       category: 'word',
@@ -270,19 +834,19 @@ export default function PriorityForms({
     }
   ], [onOpenWord, onPrintDutyReport, onPrintCashReport, onPrintMorningReport]);
 
-  // הורדת כל הטפסים בבת אחת למחשב
+  // הורדת כל הטפסים והמסמכים של הקטגוריה הפעילה או כולם למחשב
   const handleDownloadAll = async () => {
-    const htmlItems = items.filter((i) => i.isHtml && i.url);
-    if (!htmlItems.length) return;
+    const downloadableItems = filteredItems.filter((i) => i.url);
+    if (!downloadableItems.length) return;
     setDownloadingAll(true);
     setDownloadStatus('מוריד קבצים למחשב…');
-    for (let idx = 0; idx < htmlItems.length; idx++) {
-      const it = htmlItems[idx];
-      await triggerFileDownload(it.url, it.downloadName || `${it.id}.html`);
-      setDownloadStatus(`הורדו ${idx + 1} מתוך ${htmlItems.length} קבצים…`);
-      await new Promise((r) => setTimeout(r, 300));
+    for (let idx = 0; idx < downloadableItems.length; idx++) {
+      const it = downloadableItems[idx];
+      await triggerFileDownload(it.url, it.downloadName || `${it.id}.pdf`);
+      setDownloadStatus(`הורדו ${idx + 1} מתוך ${downloadableItems.length} קבצים…`);
+      await new Promise((r) => setTimeout(r, 250));
     }
-    setDownloadStatus(`הושלם! כל ${htmlItems.length} הטפסים נשמרו בתיקיית ההורדות.`);
+    setDownloadStatus(`הושלם! ${downloadableItems.length} קבצים נשמרו בתיקיית ההורדות.`);
     setTimeout(() => {
       setDownloadingAll(false);
       setDownloadStatus('');
@@ -321,8 +885,8 @@ export default function PriorityForms({
         <div className="forms-sidebar-header">
           <FolderOpen size={18} className="forms-header-icon" />
           <div className="forms-header-text">
-            <strong>קטגוריות טפסים</strong>
-            <span>{items.length} תבניות וטפסים פעילים</span>
+            <strong>מרכז מסמכים וטפסים</strong>
+            <span>{items.length} קבצים, דוחות ומסמכים</span>
           </div>
         </div>
 
@@ -332,7 +896,7 @@ export default function PriorityForms({
           <input
             type="text"
             className="forms-search-input"
-            placeholder="חיפוש טופס, ספק, הסכם…"
+            placeholder="חיפוש בנק, מע״מ, ספק, דוח…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -359,7 +923,7 @@ export default function PriorityForms({
                 onClick={() => setActiveCategory(cat.id)}
               >
                 <span className="forms-cat-main">
-                  <Icon size={16} className="forms-cat-icon" />
+                  <Icon size={15} className="forms-cat-icon" />
                   <span className="forms-cat-label">{cat.label}</span>
                 </span>
                 <span className={`forms-cat-badge${isSelected ? ' is-active' : ''}`}>{count}</span>
@@ -385,8 +949,9 @@ export default function PriorityForms({
             className="forms-dl-all-btn"
             disabled={downloadingAll}
             onClick={handleDownloadAll}
+            title="הורדת כל המסמכים המוצגים ישירות לתיקיית Downloads במחשב"
           >
-            <Download size={13} /> {downloadingAll ? 'מוריד חבילה…' : 'הורד את כל הטפסים למחשב'}
+            <Download size={13} /> {downloadingAll ? 'מוריד קבצים…' : `הורד ${filteredItems.filter((i) => i.url).length} קבצים למחשב`}
           </button>
           {downloadStatus ? (
             <div className="forms-dl-status">{downloadStatus}</div>
@@ -396,11 +961,11 @@ export default function PriorityForms({
         {/* טיפ תחתון */}
         <div className="forms-sidebar-footer">
           <Sparkles size={14} />
-          <span>כל הטפסים מותאמים להדפסה נקייה ישירות ל-A4 ללא גלישה.</span>
+          <span>כולל תצוגה מקדימה ישירה ל-PDF, הדפסה מהירה והורדה למחשב.</span>
         </div>
       </aside>
 
-      {/* אזור ראשי: רשת כרטיסי תבניות */}
+      {/* אזור ראשי: רשת כרטיסי תבניות ומסמכים */}
       <main className="forms-main-content">
         <header className="forms-content-header">
           <div>
@@ -408,18 +973,18 @@ export default function PriorityForms({
               {CATEGORIES.find((c) => c.id === activeCategory)?.label}
             </h2>
             <p className="forms-content-sub">
-              נמצאו {filteredItems.length} טפסים {search ? `עבור החיפוש "${search}"` : ''}
+              נמצאו {filteredItems.length} מסמכים {search ? `עבור החיפוש "${search}"` : ''}
             </p>
           </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
             <button
               type="button"
               className="forms-dl-all-btn top-btn"
               disabled={downloadingAll}
               onClick={handleDownloadAll}
-              title="הורדת כל קבצי הטפסים ישירות לתיקיית Downloads במחשב שלך"
+              title="הורדת כל המסמכים בקטגוריה ישירות לתיקיית Downloads במחשב"
             >
-              <Download size={13} /> הורד את כל הטפסים
+              <Download size={13} /> הורד את כל המסמכים
             </button>
             {onOpenWord ? (
               <button type="button" className="forms-new-doc-btn" onClick={onOpenWord}>
@@ -432,17 +997,17 @@ export default function PriorityForms({
         {filteredItems.length === 0 ? (
           <div className="forms-empty-state">
             <Search size={32} />
-            <h3>לא נמצאו טפסים מתאימים</h3>
+            <h3>לא נמצאו מסמכים מתאימים</h3>
             <p>נסה לשנות את מונח החיפוש או לבחור בקטגוריה אחרת.</p>
             <button type="button" className="forms-reset-btn" onClick={() => { setSearch(''); setActiveCategory('all'); }}>
-              הצג את כל הטפסים
+              הצג את כל המסמכים
             </button>
           </div>
         ) : (
           <div className="forms-grid">
             {filteredItems.map((item) => (
               <article key={item.id} className="form-card">
-                {/* כותרת עליונה של הכרטיס עם מיניאטורת A4 */}
+                {/* כותרת עליונה של הכרטיס עם מיניאטורת מסמך */}
                 <div className="form-card-preview-wrap">
                   <div className={`form-mini-sheet is-${item.sheetPreviewType || 'default'}`}>
                     <div className="mini-sheet-header">
@@ -487,7 +1052,7 @@ export default function PriorityForms({
 
                   {/* כפתורי פעולה */}
                   <div className="form-card-actions">
-                    {item.isHtml ? (
+                    {item.url ? (
                       <>
                         <button
                           type="button"
@@ -508,7 +1073,7 @@ export default function PriorityForms({
                         <button
                           type="button"
                           className="form-btn is-print"
-                          title="הדפסה מיידית / שמירה כ-PDF"
+                          title="הדפסה מיידית"
                           onClick={() => {
                             const win = window.open(item.url, '_blank', 'noopener');
                             if (win) {
@@ -525,7 +1090,7 @@ export default function PriorityForms({
                           target="_blank"
                           rel="noopener noreferrer"
                           className="form-btn is-open"
-                          title="פתח בכרטיסייה חדשה לעריכה מלאה"
+                          title="פתח בחלון מלא"
                         >
                           <ExternalLink size={13} /> פתח מלא
                         </a>
