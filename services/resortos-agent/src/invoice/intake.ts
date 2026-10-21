@@ -11,7 +11,7 @@ import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { extractInvoice, classifyInvoice, type OcrToken, type InvoiceExtraction } from './extract.js';
-import { grokInvoiceLines, grokFullInvoice, type GrokCfg, type GrokInvoice } from './grokFallback.js';
+import { grokInvoiceLines, grokFullInvoice, findSite, COMPLEXES, type GrokCfg, type GrokInvoice } from './grokFallback.js';
 import { normHe } from '../manager/inventoryQuestion.js';
 import { planCrops, runSuggestJob, swiftCropper, ollamaTranscriber, type CropSpec, type OllamaVisionCfg } from './nameSuggest.js';
 
@@ -90,6 +90,9 @@ export interface InvoiceDraft {
   paid?: boolean | null;
   kind?: 'inventory' | 'expense' | 'mixed';
   expense_category?: string | null;
+  /** Site / complex the expense relates to (e.g. "בתי נורית (G/23)"). Expenses never get a storeroom. */
+  related_site?: string | null;
+  payment_note?: string | null;
   /** Suggested filing location for new lines (matched items → supplier history → most common). */
   suggested_location?: string | null;
   /** Notes about automatic fixes applied on simple approve (shown in the result). */
@@ -137,6 +140,8 @@ export function parseInvoiceCommand(text: string):
   | { cmd: 'to_inventory' }
   | { cmd: 'to_expense'; value: string | null }
   | { cmd: 'accept_name'; line: number }
+  | { cmd: 'site'; value: string }
+  | { cmd: 'ask'; field: 'location' | 'supplier' | 'qty' | 'price' | 'name' | 'cancel' | 'confirm' }
   | null {
   const t = text.trim().replace(/\s+/g, ' ');
   let m: RegExpMatchArray | null;
@@ -156,6 +161,15 @@ export function parseInvoiceCommand(text: string):
     if (Number.isFinite(v) && v > 0) return { cmd: m[1] === 'כמות' ? 'qty' : 'price', line: Number(m[2]), value: v };
   }
   if ((m = t.match(/^ספק (.{2,120})$/))) return { cmd: 'supplier', value: m[1].trim() };
+  // Bare / partial invoice words (Ran 2026-10-21): only meaningful while a draft is open — handleText checks that.
+  if ((m = t.match(/^(?:מיקום|אתר) (\D.{1,60})$/))) return { cmd: 'site', value: m[1].trim() };
+  if (/^(?:מיקום|אתר|לאן|איפה לתייק)[?.!]?$/.test(t)) return { cmd: 'ask', field: 'location' };
+  if (/^ספק[?.!]?$/.test(t)) return { cmd: 'ask', field: 'supplier' };
+  if (/^כמות[?.!]?$/.test(t)) return { cmd: 'ask', field: 'qty' };
+  if (/^מחיר[?.!]?$/.test(t)) return { cmd: 'ask', field: 'price' };
+  if (/^שם[?.!]?$/.test(t)) return { cmd: 'ask', field: 'name' };
+  if (/^בטל(?: חשבונית| טיוטה)?[.!]?$/.test(t)) return { cmd: 'ask', field: 'cancel' };
+  if (/^אשר חשבונית$/.test(t)) return { cmd: 'approve_latest', override: false };
   return null;
 }
 
@@ -291,10 +305,12 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
     out.push(`תאריך: ${x.date || 'לא מזוהה'}`);
     out.push(`סכום חשבונית: ${money(x.total ?? x.before_vat ?? x.lines_sum)} ₪`);
     if (d.paid === true) out.push('שולם');
-    else if (d.paid === false) out.push('לא שולם');
+    else if (d.paid === false) out.push(d.payment_note && /העברה/.test(d.payment_note) ? 'לא שולם (לתשלום בהעברה)' : 'לא שולם');
+    const expOnly = d.lines.length > 0 && d.lines.every(isExp);
+    if (expOnly && d.related_site) out.push(`אתר: ${d.related_site}`);
     const hasNew = d.lines.some(isNew);
     const nInv = d.lines.filter(isInv).length, nExp = d.lines.filter(isExp).length;
-    const loc = hasNew ? (d.suggested_location ? ` ל${d.suggested_location}` : '') : '';
+    const loc = hasNew && !expOnly ? (d.suggested_location ? ` ל${d.suggested_location}` : '') : '';
     const gap = totalsOk(d) ? '' : ' (יש פער בסכומים — *אשר למרות פער*)';
     const needSup = hasNew && !d.supplier ? ' · קודם: ספק <שם>' : '';
     const cat = d.expense_category || 'אחר';
@@ -305,6 +321,10 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
   }
   function totalsOk(d: InvoiceDraft): boolean {
     const c = d.extraction.checks;
+    const x = d.extraction;
+    // Lines without amounts: if subtotal + VAT = total, the invoice is consistent (for expenses the total is what matters).
+    const noLineAmounts = d.lines.every((l) => l.line_total == null);
+    if (c.vat_ok && x.total != null && (noLineAmounts || d.lines.every(isExp))) return true;
     return d.source === 'grok_full' ? (c.lines_sum_ok && c.vat_ok) : c.all_ok;
   }
   function formatDraft(d: InvoiceDraft, title = '🧾 *טיוטת קליטת חשבונית*'): string {
@@ -484,6 +504,7 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
     const d: InvoiceDraft = {
       key: `${tail(phone)}:${invoice_no}`, phone: tail(phone), manager: managerName, invoice_no,
       created_at: t, expires_at: t + ttl, image_path: origPath, processed_image_path: processed?.path || null, source: 'grok_full', paid: g.paid, kind: g.kind, expense_category: g.kind === 'inventory' ? null : (g.expense_category || 'אחר'),
+      related_site: g.related_site ?? null, payment_note: g.payment_note ?? null,
       supplier, supplier_vat: g.supplier_vat, category,
       extraction: {
         invoice_no, date: g.date, date_iso: g.date_iso, supplier_vat: g.supplier_vat, customer_no: null,
@@ -492,7 +513,8 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
       },
       lines,
     };
-    d.suggested_location = suggestLocation(d) ?? invLoc;
+    // Expenses are never filed to a storeroom (Ran 2026-10-21, invoice 8351).
+    d.suggested_location = d.kind === 'expense' ? null : (suggestLocation(d) ?? invLoc);
     putDraft(d);
     log.info({ invoice: invoice_no, lines: lines.length, new: lines.filter(isNew).length, byName: lines.filter((l) => l.matched_by === 'name').length, generatedNo: invoice_no !== g.invoice_no }, 'invoice grok draft created');
     return { kind: 'draft', reply: formatShort(d), details: formatDraft(d), draft: d };
@@ -658,6 +680,17 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
     if (cmd.cmd === 'confirm') return confirm(phone, managerName, cmd.invoice, cmd.override);
     if (!latest) return null; // not an invoice context — let other flows handle it
     if (cmd.cmd === 'details') return formatDraft(latest);
+    if (cmd.cmd === 'ask') return cmd.field === 'cancel' && opts.otherPending ? null : askField(latest, cmd.field);
+    if (cmd.cmd === 'site') {
+      const d = latest;
+      if (d.lines.length && d.lines.every(isExp)) {
+        d.related_site = findSite(cmd.value) || cmd.value; putDraft(d);
+        return formatShort(d, `✏️ עודכן אתר: ${d.related_site}`);
+      }
+      for (const l of d.lines) if (!l.existing) l.location = cmd.value;
+      d.suggested_location = cmd.value; putDraft(d);
+      return formatShort(d, `✏️ עודכן מיקום: ${cmd.value}`);
+    }
     if (cmd.cmd === 'to_inventory' || cmd.cmd === 'to_expense') {
       const d = latest;
       if (cmd.cmd === 'to_inventory') { for (const l of d.lines) l.expense = undefined; d.kind = 'inventory'; }
@@ -710,6 +743,23 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
     }
     putDraft(d);
     return formatDraft(d, '✏️ *עודכן — טיוטת חשבונית*');
+  }
+
+  function askField(d: InvoiceDraft, field: string): string {
+    const exp = d.lines.length > 0 && d.lines.every(isExp);
+    const sites = COMPLEXES.map(([c, n]) => `${n} (${c})`).join(' / ');
+    switch (field) {
+      case 'location':
+        return exp
+          ? `חשבונית ${d.invoice_no} היא הוצאה — היא לא נכנסת למחסן.\nלאיזה אתר לשייך? כתוב: *מיקום <אתר>*\n${sites}\nאו *מלאי* אם זו בכל זאת סחורה למחסן.`
+          : `לאן לתייק את הפריטים מחשבונית ${d.invoice_no}?${d.suggested_location ? ` (הצעה: ${d.suggested_location})` : ''}\nכתוב: *מיקום <מחסן>* לכל השורות, או *מיקום <שורה> <מחסן>*.`;
+      case 'supplier': return `ספק נוכחי: ${d.supplier || 'לא מזוהה'}. לשינוי: *ספק <שם>*`;
+      case 'qty': return 'לשינוי כמות: *כמות <שורה> <מספר>*';
+      case 'price': return 'לשינוי מחיר: *מחיר <שורה> <מחיר>*';
+      case 'name': return 'לשינוי שם: *שם <שורה> <טקסט>*';
+      case 'cancel': return `לביטול הטיוטה כתוב: *בטל חשבונית ${d.invoice_no}*`;
+      default: return formatShort(d);
+    }
   }
 
   /** Re-run line math / line-sum / VAT checks after a manual qty / price edit. Handwritten drafts never become all_ok. */
@@ -819,7 +869,7 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
         subtotal: allExp ? (x.before_vat ?? expSub) : expSub,
         vat: allExp ? x.vat : Math.round(expSub * (ratio - 1) * 100) / 100,
         total: allExp ? (x.total ?? expSub) : Math.round(expSub * ratio * 100) / 100,
-        category: d.expense_category || 'אחר', paid: d.paid ?? null,
+        category: d.expense_category || 'אחר', paid: d.paid ?? null, site: d.related_site ?? null,
         image_paths: [processedSaved, imageSaved].filter(Boolean), approved_by: confirmedBy, source: 'chloe-whatsapp-invoice',
       };
       try {
@@ -864,7 +914,7 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
       created_item_ids: createdIds, received_item_ids: received?.ids || [], receive_skipped: received?.skipped || [], create_skipped: created?.skipped || [],
       image_paths: { mac: imageSaved, processed: processedSaved }, extraction_source: d.source || 'local',
       expense_server: expenseServer,
-      type: d.lines.every(isExp) ? 'expense' : d.lines.some(isExp) ? 'mixed' : 'inventory', expense_category: d.lines.some(isExp) ? (d.expense_category || 'אחר') : null, paid: d.paid ?? null,
+      type: d.lines.every(isExp) ? 'expense' : d.lines.some(isExp) ? 'mixed' : 'inventory', expense_category: d.lines.some(isExp) ? (d.expense_category || 'אחר') : null, paid: d.paid ?? null, related_site: d.related_site ?? null, payment_note: d.payment_note ?? null,
       expense_total: d.lines.some(isExp) ? Math.round(d.lines.filter(isExp).reduce((a, l) => a + (l.line_total || 0), 0) * 100) / 100 : null, business_id: cfg.businessId, confirmed_by: confirmedBy, recorded_at: new Date(now()).toISOString(),
       checks: d.extraction.checks, override_gap: override && !d.extraction.checks.all_ok, source: 'chloe-whatsapp-invoice-intake',
     };

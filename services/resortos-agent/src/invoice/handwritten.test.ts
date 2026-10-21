@@ -313,3 +313,82 @@ describe('expense vs inventory invoices (towing etc.)', () => {
     expect(intake.latestDraft(RAN)).toBeTruthy();
   });
 });
+
+// ---------- Regression: invoice 8351 (שמעון וסיגלית טואטי, Ran 2026-10-21) ----------
+const inv8351 = {
+  is_invoice: true, handwritten: true, invoice_no: '8351', date: '28/09/2026', supplier: 'שמעון וסיגלית טואטי', supplier_vat: '557044476',
+  before_vat: 4900, vat: 882, total: 5782, paid: null, payment_note: 'לתשלום בהעברה', related_site: 'בתי נורית', kind: 'inventory',
+  items: [
+    { line_no: 1, sku: null, name: 'פינוי פסולת מבתי נורית', kind: 'inventory', qty: null, unit: null, unit_price: null, line_total: null },
+    { line_no: 2, sku: null, name: 'שקי חול', kind: 'inventory', qty: null, unit: null, unit_price: null, line_total: null },
+    { line_no: 3, sku: null, name: 'עבודת טרקטור', kind: 'inventory', qty: null, unit: null, unit_price: null, line_total: null },
+  ],
+  corners: null,
+};
+
+describe('invoice 8351 regressions', () => {
+  it('bug 1: removal/labour handwritten invoice is an expense with category + site, never a storeroom', async () => {
+    const { intake } = setup(inv8351);
+    const r = await intake.handleMedia(RAN, 'רן', photo);
+    const d = r.draft!;
+    expect(d.kind).toBe('expense');
+    expect(d.lines.every((l) => l.expense)).toBe(true);
+    expect(d.expense_category).toBe('פינוי ועבודות');
+    expect(d.related_site).toBe('בתי נורית (G/23)');
+    expect(d.suggested_location).toBeNull();
+    expect(r.reply).not.toContain('מחסן');
+    expect(r.reply).toContain('אתר: בתי נורית (G/23)');
+    expect(r.reply).toContain('לתייק כהוצאה');
+  });
+  it('bug 2: "לתשלום בהעברה" → not paid, shown in the short reply', async () => {
+    const { intake } = setup(inv8351);
+    const r = await intake.handleMedia(RAN, 'רן', photo);
+    expect(r.draft!.paid).toBe(false);
+    expect(r.reply).toContain('לא שולם (לתשלום בהעברה)');
+    expect(parseGrokInvoice(JSON.stringify({ ...inv8351, payment_note: 'שולם במזומן' }))!.paid).toBe(true);
+    expect(parseGrokInvoice(JSON.stringify({ ...inv8351, payment_note: null, paid: null }))!.paid).toBeNull();
+  });
+  it('bug 3: no line amounts but before_vat+VAT=total → no "פער בסכומים"', async () => {
+    const { intake } = setup(inv8351);
+    const r = await intake.handleMedia(RAN, 'רן', photo);
+    expect(r.reply).not.toContain('פער');
+    expect(r.reply).toContain('5,782');
+  });
+  it('bug 3b: a real mismatch is still flagged', async () => {
+    const { intake } = setup({ ...inv8351, total: 6000 });
+    const r = await intake.handleMedia(RAN, 'רן', photo);
+    expect(r.reply).toContain('פער');
+  });
+  it('bug 4: bare "מיקום" with an open draft asks for options instead of falling through', async () => {
+    const { intake } = setup(inv8351);
+    await intake.handleMedia(RAN, 'רן', photo);
+    const out = await intake.handleText(RAN, 'רן', 'מיקום');
+    expect(out).toContain('לאיזה אתר');
+    expect(out).toContain('בתי נורית (G/23)');
+    const out2 = await intake.handleText(RAN, 'רן', 'מיקום טוסקנה');
+    expect(out2).toContain('אתר: טוסקנה (C/27)');
+    expect(await intake.handleText(RAN, 'רן', 'ספק')).toContain('שמעון וסיגלית טואטי');
+  });
+  it('bug 4: bare words without an open draft are left for other flows', async () => {
+    const { intake } = setup(inv8351);
+    expect(await intake.handleText(RAN, 'רן', 'מיקום')).toBeNull();
+  });
+  it('earlier fix: "1" while another flow (room card) is pending is NOT captured by the invoice draft', async () => {
+    const { intake } = setup(inv8351);
+    await intake.handleMedia(RAN, 'רן', photo);
+    expect(await intake.handleText(RAN, 'רן', '1', { otherPending: true })).toBeNull();
+    expect(await intake.handleText(RAN, 'רן', 'כן', { otherPending: true })).toBeNull();
+    // without another pending flow, a loose "1" gets the explicit-confirm hint (never commits)
+    expect(await intake.handleText(RAN, 'רן', '1')).toContain('אשר חשבונית 8351');
+  });
+});
+
+describe('invoice 8351: goods invoices are not over-classified', () => {
+  it('a total-only handwritten goods invoice (plants) is NOT forced to expense', () => {
+    const g = parseGrokInvoice(JSON.stringify({ ...inv8351, payment_note: null, related_site: null, items: [{ name: 'צמחי זריעת כרם', kind: 'inventory' }] }))!;
+    expect(g.kind).toBe('inventory');
+  });
+  it('a handwritten goods invoice WITH per-line amounts stays inventory', () => {
+    expect(parseGrokInvoice(JSON.stringify(handwritten))!.kind).toBe('inventory');
+  });
+});

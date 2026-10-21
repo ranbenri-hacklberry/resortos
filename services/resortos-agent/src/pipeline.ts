@@ -208,6 +208,15 @@ export function matchesCleaner(c: CleanerProfile, rawTarget?: string | null): bo
   return phonesMatch(c.phone, rawTarget);
 }
 
+/** Phone that WhatsApp attaches to an @lid sender (key.senderPn / remoteJidAlt / participantPn), digits only, or ''. */
+export function lidSenderPn(msg: any): string {
+  const k: any = msg?.key || {};
+  const jid = String(k.remoteJid || '');
+  if (!jid.endsWith('@lid')) return '';
+  const alt = [k.senderPn, k.remoteJidAlt, k.participantPn, k.participantAlt].find((v) => typeof v === 'string' && /@s\.whatsapp\.net$/.test(v));
+  return alt ? String(alt).split('@')[0].split(':')[0].replace(/\D/g, '') : '';
+}
+
 export function getIsraelToday(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date());
 }
@@ -409,7 +418,8 @@ export function createPipeline(deps: PipelineDeps) {
     const jid = msg.key.remoteJid || undefined;
     let inboundText = '';
     try { inboundText = String(d.extractText(msg) || ''); } catch { inboundText = ''; }
-    const cleanerRow = jid ? d.cleaners().find((c) => matchesCleaner(c, jid) || matchesCleaner(c, phoneOf(jid))) : undefined;
+    const inPn = lidSenderPn(msg);
+    const cleanerRow = jid ? d.cleaners().find((c) => matchesCleaner(c, jid) || matchesCleaner(c, phoneOf(jid)) || (inPn ? matchesCleaner(c, inPn) : false)) : undefined;
     const route = !jid ? 'none' : !cleanerRow ? 'guest' : (cleanerRow.role === 'MANAGER' || cleanerRow.role === 'OPS_MANAGER') ? 'manager' : 'staff';
     const isAudioMsg = (() => { try { return d.isAudio(msg); } catch { return false; } })();
     logConversation({ direction: 'inbound', jid, text: inboundText || (isAudioMsg ? '[voice note]' : ''), route });
@@ -423,7 +433,10 @@ export function createPipeline(deps: PipelineDeps) {
     const jid = msg.key.remoteJid;
     if (!jid) return { handled: false, reason: 'no jid' };
     const senderPhone = phoneOf(jid);
-    const cleaner = d.cleaners().find((c) => matchesCleaner(c, jid) || matchesCleaner(c, senderPhone));
+    const senderPn = lidSenderPn(msg);
+    if (jid.endsWith('@lid')) d.log.info({ jid, hasSenderPn: Boolean(senderPn), senderPnTail: senderPn ? senderPn.slice(-4) : null }, 'inbound @lid sender');
+    // Staff on @lid without a stored LID (e.g. קוסטה, Ran 2026-10-21) are matched by the phone WhatsApp attaches.
+    const cleaner = d.cleaners().find((c) => matchesCleaner(c, jid) || matchesCleaner(c, senderPhone)) || (senderPn ? d.cleaners().find((c) => matchesCleaner(c, senderPn)) : undefined);
     const isManager = cleaner?.role === 'MANAGER' || cleaner?.role === 'OPS_MANAGER' || cleaner?.role === 'PRIORITY';
     // Guest priority for the background invoice name job (local vision model shares the GPU with guest replies).
     if (!cleaner) { try { (d.invoiceIntake as any)?.noteGuestActivity?.(); } catch { /* ignore */ } }
