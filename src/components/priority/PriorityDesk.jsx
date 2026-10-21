@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, CheckCheck, ExternalLink, FileSpreadsheet, FileText, FolderOpen, Link2, MessageCircle, Phone, Printer, RefreshCw, Send, Table2 } from 'lucide-react';
 import { formatIlsFromAgorot, normalizeClearingPayment, normalizeIsraeliId } from '../../lib/clearingPayments';
