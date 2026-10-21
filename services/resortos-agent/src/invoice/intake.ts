@@ -430,10 +430,17 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
     let tokens: OcrToken[];
     try {
       img = await toImage(media);
+    } catch (e) {
+      log.error({ err: String(e) }, 'invoice file conversion failed');
+      return { kind: 'error', reply: '❌ לא הצלחתי לקרוא את הקובץ (OCR). אפשר לשלוח שוב צילום ברור / PDF.' };
+    }
+    try {
       tokens = await ocr(img.path);
     } catch (e) {
+      // Local OCR unavailable/broken (e.g. missing binary, 21/10): don't give up — Grok can still read the whole image.
       log.error({ err: String(e) }, 'invoice OCR failed');
-      return { kind: 'error', reply: '❌ לא הצלחתי לקרוא את הקובץ (OCR). אפשר לשלוח שוב צילום ברור / PDF.' };
+      if (!grokCfg) return { kind: 'error', reply: '❌ לא הצלחתי לקרוא את הקובץ (OCR). אפשר לשלוח שוב צילום ברור / PDF.' };
+      tokens = [];
     }
     const isPdf = img.ext === 'pdf';
     const processed = isPdf ? null : await processImage(img.path);

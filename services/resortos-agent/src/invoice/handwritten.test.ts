@@ -19,7 +19,7 @@ const handwritten = {
   corners: [[0.1, 0.1], [0.9, 0.12], [0.88, 0.95], [0.08, 0.93]],
 };
 
-function setup(grokReply: any, opts: { enhance?: any; grokStatus?: number } = {}) {
+function setup(grokReply: any, opts: { enhance?: any; grokStatus?: number; ocr?: any } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'hw-'));
   const calls: Array<{ method: string; url: string; body: any; headers?: any }> = [];
   const fetchImpl = vi.fn(async (url: any, init: any) => {
@@ -41,7 +41,7 @@ function setup(grokReply: any, opts: { enhance?: any; grokStatus?: number } = {}
     enabled: true, allowlist: ['0506102416'], businessId: BIZ, bridgeUrl: 'http://bridge.test',
     recordsPath: path.join(dir, 'rec.jsonl'), imagesDir: path.join(dir, 'img'), draftsPath: path.join(dir, 'drafts.json'),
     ocrBin: '/nonexistent', tmpDir: path.join(dir, 'tmp'),
-    ocr: async () => [{ text: 'כתב יד', x: 0.1, y: 0.1, w: 0.2, h: 0.02 }],
+    ocr: opts.ocr ?? (async () => [{ text: 'כתב יד', x: 0.1, y: 0.1, w: 0.2, h: 0.02 }]),
     fetchImpl: fetchImpl as any, grok: { apiKey: 'test-key', model: 'grok-4.7' }, enhance,
   });
   return { dir, intake, calls, enhance, fetchImpl };
@@ -143,5 +143,12 @@ describe('handwritten invoice → Grok whole-image fallback (mocked xAI)', () =>
     const r = await intake.handleMedia(RAN, 'רן', photo);
     expect(r.reply).not.toContain('test-key');
     expect(readFileSync(path.join(dir, 'drafts.json'), 'utf8')).not.toContain('test-key');
+  });
+
+  it('regression 21/10: local OCR binary missing/crashing → still falls back to Grok and drafts', async () => {
+    const { intake, calls } = setup(handwritten, { ocr: async () => { throw new Error('spawn bin/apple-vision-ocr-boxes ENOENT'); } });
+    const r = await intake.handleMedia(RAN, 'רן', photo);
+    expect(r.kind).toBe('draft');
+    expect(calls.filter((c) => c.url === XAI)).toHaveLength(1);
   });
 });
