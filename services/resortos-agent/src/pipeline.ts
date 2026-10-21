@@ -2,6 +2,7 @@ import type { WAMessage } from '@whiskeysockets/baileys';
 import { cleaningCredit, config, isBookableRoom, isStaffRoom, isOfficeRoom, type CleanerProfile, type Lang, type RoomEntry } from './config.js';
 import type { InboundIntent } from './llm/client.js';
 import { resolveRoomByAlias } from './llm/client.js';
+import { alertRecipients, alertRoomLabel, buildUnknownScanAlert, createAlertMemory, displaySender, explainAlert, isWhatIsThis } from './manager/scanAlert.js';
 import { handleManagerInventory, type InventoryClient } from './manager/inventoryQuestion.js';
 import type { InvoiceIntake, InvoiceMedia } from './invoice/intake.js';
 import { detectInventoryIntent } from './llm/client.js';
@@ -358,6 +359,7 @@ export function createPipeline(deps: PipelineDeps) {
     },
   };
   const sessionStates = new Map<string, SessionState>();
+  const alertMemory = createAlertMemory();
   const getSession = (phone: string) => sessionStates.get(normalizePhoneTail(phone));
   const setSession = (phone: string, s: SessionState) => sessionStates.set(normalizePhoneTail(phone), s);
   const clearSession = (phone: string) => sessionStates.delete(normalizePhoneTail(phone));
@@ -447,6 +449,12 @@ export function createPipeline(deps: PipelineDeps) {
     let text = d.extractText(msg);
     if (text?.trim()) {
       if (isManager) {
+        const lastAlert = isWhatIsThis(text) ? alertMemory.recent(sessionKey) : null;
+        if (lastAlert) {
+          alertMemory.forget(sessionKey);
+          await d.send(jid, explainAlert(lastAlert));
+          return { handled: true };
+        }
         const holdReply = await handleManagerRoomHold(text.trim(), sessionKey, cleaner?.name || 'מנהל', {
           rooms: d.rooms,
           today: getIsraelToday,
@@ -2165,15 +2173,17 @@ export function createPipeline(deps: PipelineDeps) {
           await d.send(jid, reply);
           return { handled: true, transcript };
         }
-        const cabinName = r?.name || r?.letterCode || '';
-        const roomLabel = cabinName ? (cabinName.includes('משרד') ? cabinName : `בקתה ${cabinName}`) : 'היחידה';
+        const roomLabel = alertRoomLabel(r);
         // Phone not matched: never tell the sender they are not a guest (bookings from OTAs often lack a phone).
         const reply = 'רגע, אני בודקת את ההזמנה שלך 🙂 אפשר שם מלא ותאריכי הגעה? אני מעדכנת את המנהל.';
         await d.send(jid, reply);
         try {
-          const alert = `🔔 סריקה ממספר לא מזוהה ב${roomLabel}\nצ'אט: ${jid}\nלא נמצאה הזמנה לפי טלפון — ביקשתי שם מלא ותאריכים. כדאי לבדוק בכינורות.`;
-          for (const m of d.cleaners().filter((c) => c.role === 'MANAGER' && c.phone)) {
-            await d.send(`${m.phone}@s.whatsapp.net`, alert).catch(() => {});
+          // One alert per scanner per 10 min; never a raw @lid; managers with noAlerts (אדם) are skipped.
+          if (alertMemory.shouldAlert(normalizePhoneTail(senderPn || senderPhone) || jid)) {
+            const alert = buildUnknownScanAlert(roomLabel, displaySender(jid, senderPn, d.cleaners()));
+            for (const m of alertRecipients(d.cleaners())) {
+              await d.send(`${m.phone}@s.whatsapp.net`, alert).then(() => alertMemory.remember(normalizePhoneTail(m.phone), alert)).catch(() => {});
+            }
           }
         } catch { /* alert is best-effort */ }
         return { handled: true, transcript };

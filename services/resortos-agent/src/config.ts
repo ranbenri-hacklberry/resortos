@@ -22,6 +22,8 @@ export interface CleanerProfile {
   language: Lang;
   /** WhatsApp Linked Device ID if assigned, e.g. 208190587302068 */
   lid?: string;
+  /** Never receives automatic Chloe alerts/broadcasts (Ran 2026-10-21: אדם). Commands they start still work. */
+  noAlerts?: boolean;
 }
 
 export type RoomUsage = 'GUEST_ACCOMMODATION' | 'STAFF_ACCOMMODATION' | 'OFFICE' | 'STORAGE' | 'SERVICE_AREA';
