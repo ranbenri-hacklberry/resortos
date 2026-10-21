@@ -383,5 +383,16 @@ export async function handleSelfCheckoutSideEffects(booking) {
   } catch (err) {
     console.warn('[farewell sms]', err.message);
   }
+  try {
+    const { logCheckoutToRoom } = await import('./roomCheckoutLog.js');
+    let full = booking;
+    try {
+      const rows = await rest(`${BOOKING_TABLE}?id=eq.${encodeURIComponent(booking.id)}&select=id,unit_id,guest_name,channel_source,stay,checkout_status,checked_out_at,updated_at`);
+      if (Array.isArray(rows) && rows[0]) full = { ...rows[0], ...booking, guest_name: rows[0].guest_name, stay: rows[0].stay };
+    } catch {}
+    await logCheckoutToRoom({ ...full, unit_id: full.unit_id || booking.unit_id, checked_out_at: at }, { source: 'guest' });
+  } catch (err) {
+    console.warn('[checkout room-log]', err.message);
+  }
   await fireCheckoutRouterWebhook({ ...booking, checked_out_at: at });
 }

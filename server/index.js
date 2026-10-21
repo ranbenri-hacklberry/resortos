@@ -643,6 +643,9 @@ app.listen(PORT, BIND_HOST, () => {
     import('./callMe.js')
         .then((calls) => calls.startGuestCallPoller())
         .catch((err) => console.warn('[call-me]', err.message));
+    import('./roomCheckoutLog.js')
+        .then((m) => m.startCheckoutRoomLogPoller())
+        .catch((err) => console.warn('[checkout room-log]', err.message));
     import('./guestContext.js')
         .then((guest) => guest.startGuestContextSync())
         .catch((err) => console.warn('[guest-context]', err.message));
