@@ -18,7 +18,7 @@ describe('canonicalJid', () => {
   });
 
   it('normalizes non-LID Israeli 05x numbers to 9725x@s.whatsapp.net', () => {
-    expect(canonicalJid('0529690024')).toBe('972529690024@s.whatsapp.net');
+    expect(canonicalJid('0521234567')).toBe('972521234567@s.whatsapp.net');
     expect(canonicalJid('050-610-2416')).toBe('972506102416@s.whatsapp.net');
   });
 

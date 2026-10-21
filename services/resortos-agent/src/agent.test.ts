@@ -408,7 +408,7 @@ describe('pipeline: guards & dispatch', () => {
     deps.resortos.listBookings = async () => [
       // k685 has checkout today AND checkin today => turnover!
       { id: 'b1', unit_id: 'k685', check_in_date: '2026-10-10', check_out_date: today, booking_status: 'CONFIRMED' },
-      { id: 'b2', unit_id: 'k685', check_in_date: today, check_out_date: '2026-10-20', booking_status: 'CONFIRMED' },
+      { id: 'b2', unit_id: 'k685', check_in_date: today, check_out_date: '2029-10-20', booking_status: 'CONFIRMED' },
     ];
     deps.llm.extractIntent = vi.fn(async () => ({
       action: 'QUERY_STATUS',

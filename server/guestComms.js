@@ -9,6 +9,8 @@ import { unitFullName } from '../src/lib/units.js';
 
 const BOOKING_TABLE = 'hotelos_bookings';
 const COMMS_TABLE = 'guest_communications';
+const AUTOMATION_TABLE = 'chat_automation_state';
+const AGENT_BASE = process.env.RESORTOS_AGENT_URL || 'http://127.0.0.1:8787';
 
 function studioBase() {
   return String(process.env.SUPABASE_URL || process.env.STUDIO_SUPABASE_URL || 'http://127.0.0.1:54321').replace(/\/$/, '');
@@ -45,6 +47,182 @@ async function rest(path, options = {}) {
 
 function israelIsoDate(now = new Date()) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(now);
+}
+
+export function normalizeChatId(phoneOrJid) {
+  if (!phoneOrJid) return '';
+  const digits = String(phoneOrJid).replace(/@.*$/, '').replace(/\D/g, '');
+  if (digits.startsWith('05') && digits.length === 10) return `972${digits.slice(1)}`;
+  return digits || String(phoneOrJid).trim();
+}
+
+export async function getChatAutomationState({ channelId = 'resortos', phone, bookingId }) {
+  const chatId = normalizeChatId(phone);
+  try {
+    let query = `${AUTOMATION_TABLE}?channel_id=eq.${encodeURIComponent(channelId)}`;
+    if (chatId) {
+      query += `&chat_id=eq.${encodeURIComponent(chatId)}`;
+    } else if (bookingId) {
+      query += `&booking_id=eq.${encodeURIComponent(bookingId)}`;
+    } else {
+      return { bot_disabled: false, channel_id: channelId };
+    }
+    const rows = await rest(`${query}&limit=1`);
+    const row = Array.isArray(rows) ? rows[0] : null;
+    return {
+      bot_disabled: Boolean(row?.bot_disabled),
+      channel_id: row?.channel_id || channelId,
+      chat_id: row?.chat_id || chatId,
+      booking_id: row?.booking_id || bookingId || null,
+      updated_by: row?.updated_by || null,
+      updated_at: row?.updated_at || null,
+      reason: row?.reason || null,
+    };
+  } catch (err) {
+    console.warn('[getChatAutomationState]', err.message);
+    return { bot_disabled: false, channel_id: channelId, chat_id: chatId };
+  }
+}
+
+export async function setChatAutomationState({
+  channelId = 'resortos',
+  phone,
+  bookingId,
+  botDisabled,
+  reason = 'manual_reply',
+  updatedBy = 'staff',
+}) {
+  const chatId = normalizeChatId(phone);
+  if (!chatId && !bookingId) return { ok: false, error: 'chat_id or booking_id required' };
+
+  try {
+    if (chatId) {
+      await rest(`${AUTOMATION_TABLE}?on_conflict=channel_id,chat_id`, {
+        method: 'POST',
+        headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+        body: JSON.stringify({
+          channel_id: channelId,
+          chat_id: chatId,
+          booking_id: bookingId || null,
+          bot_disabled: Boolean(botDisabled),
+          reason,
+          updated_by: updatedBy,
+          updated_at: new Date().toISOString(),
+        }),
+      });
+    } else if (bookingId) {
+      await rest(`${AUTOMATION_TABLE}?booking_id=eq.${encodeURIComponent(bookingId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          bot_disabled: Boolean(botDisabled),
+          reason,
+          updated_by: updatedBy,
+          updated_at: new Date().toISOString(),
+        }),
+      });
+    }
+
+    // Sync with resortos-agent in memory
+    try {
+      await fetch(`${AGENT_BASE}/api/channels/takeover`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channel_id: channelId,
+          chat_id: chatId,
+          booking_id: bookingId,
+          bot_disabled: Boolean(botDisabled),
+          reason,
+          updated_by: updatedBy,
+        }),
+        signal: AbortSignal.timeout(3000),
+      });
+    } catch {
+      // Agent sync is non-blocking
+    }
+
+    return { ok: true, bot_disabled: Boolean(botDisabled), channel_id: channelId, chat_id: chatId, booking_id: bookingId };
+  } catch (err) {
+    console.error('[setChatAutomationState]', err.message);
+    throw err;
+  }
+}
+
+export async function getUnreadCommsSummary() {
+  const todayDate = israelIsoDate(); // e.g. "2026-10-21"
+  const todayStartIso = `${todayDate}T00:00:00+03:00`;
+
+  try {
+    const disabledChatIds = new Set();
+    const disabledBookingIds = new Set();
+    try {
+      const stateRows = await rest(
+        `${AUTOMATION_TABLE}?bot_disabled=eq.true&select=chat_id,booking_id`
+      );
+      if (Array.isArray(stateRows)) {
+        for (const s of stateRows) {
+          if (s.chat_id) disabledChatIds.add(normalizeChatId(s.chat_id));
+          if (s.booking_id) disabledBookingIds.add(String(s.booking_id));
+        }
+      }
+    } catch {
+      // non-fatal
+    }
+
+    const rows = await rest(
+      `${COMMS_TABLE}?direction=eq.inbound&read_at=is.null&created_at=gte.${encodeURIComponent(todayStartIso)}&select=id,booking_id,recipient_phone,channel,created_at`
+    );
+    const list = Array.isArray(rows) ? rows : [];
+
+    const unread_by_booking = {};
+    const unread_by_phone = {};
+    let filteredCount = 0;
+
+    for (const r of list) {
+      const clean = r.recipient_phone ? normalizeChatId(r.recipient_phone) : '';
+      const isManual = (r.booking_id && disabledBookingIds.has(String(r.booking_id))) ||
+                       (clean && disabledChatIds.has(clean));
+      if (!isManual) continue;
+
+      filteredCount += 1;
+      if (r.booking_id) {
+        unread_by_booking[r.booking_id] = (unread_by_booking[r.booking_id] || 0) + 1;
+      }
+      if (clean) {
+        unread_by_phone[clean] = (unread_by_phone[clean] || 0) + 1;
+      }
+    }
+
+    return {
+      today: todayDate,
+      total_unread: filteredCount,
+      unread_by_booking,
+      unread_by_phone,
+    };
+  } catch (err) {
+    console.warn('[getUnreadCommsSummary]', err.message);
+    return { today: todayDate, total_unread: 0, unread_by_booking: {}, unread_by_phone: {} };
+  }
+}
+
+export async function markGuestCommsRead({ messageIds = [] }) {
+  if (!Array.isArray(messageIds) || messageIds.length === 0) {
+    return { ok: true, marked: 0 };
+  }
+  const nowIso = new Date().toISOString();
+  let marked = 0;
+  for (const id of messageIds) {
+    try {
+      await rest(`${COMMS_TABLE}?id=eq.${encodeURIComponent(id)}&read_at=is.null`, {
+        method: 'PATCH',
+        body: JSON.stringify({ read_at: nowIso }),
+      });
+      marked += 1;
+    } catch {
+      // non-fatal
+    }
+  }
+  return { ok: true, marked };
 }
 
 export async function listGuestComms(bookingId) {
@@ -294,12 +472,31 @@ export async function handleSendGuestComm(req, res) {
     const bookingId = String(req.body?.booking_id || '').trim();
     const templateId = String(req.body?.template_id || '').trim();
     let message = String(req.body?.message || '').trim();
+    const channelId = req.body?.channel_id || req.body?.channelId || 'resortos';
     if (!bookingId) return res.status(400).json({ error: 'BOOKING_REQUIRED' });
     const rows = await rest(
       `${BOOKING_TABLE}?id=eq.${encodeURIComponent(bookingId)}&deleted_at=is.null&select=*&limit=1`
     );
     const booking = Array.isArray(rows) ? rows[0] : null;
-    if (!booking && !req.body?.phone) {
+    const recipientPhone = req.body?.phone || booking?.guest_phone || '';
+
+    // Turn off Chloe auto-reply BEFORE sending manual message from staff!
+    if (recipientPhone || bookingId) {
+      try {
+        await setChatAutomationState({
+          channelId,
+          phone: recipientPhone,
+          bookingId,
+          botDisabled: true,
+          reason: 'manual_reply',
+          updatedBy: req.staffUser?.username || req.staff?.username || req.staff?.name || 'staff',
+        });
+      } catch (e) {
+        console.warn('[handleSendGuestComm] failed to set takeover before send:', e.message);
+      }
+    }
+
+    if (!booking && !recipientPhone) {
       await insertGuestComm({
         booking_id: bookingId,
         channel: req.body?.channel || 'sms',
@@ -310,7 +507,7 @@ export async function handleSendGuestComm(req, res) {
         metadata: {
           kind: req.body?.kind || templateId || 'manual',
           template: templateId || null,
-          actor: req.staff?.username || req.staff?.name || 'staff',
+          actor: req.staffUser?.username || req.staff?.username || req.staff?.name || 'staff',
           error: 'NOT_FOUND'
         }
       }).catch(() => {});
@@ -328,34 +525,72 @@ export async function handleSendGuestComm(req, res) {
       });
     }
     if (!message) return res.status(400).json({ error: 'MESSAGE_REQUIRED' });
-    if (req.body?.channel === 'phone' || req.body?.channel === 'whatsapp') {
-      const isWa = req.body?.channel === 'whatsapp';
+
+    if (req.body?.channel === 'whatsapp') {
+      let sentStatus = 'sent';
+      try {
+        const resp = await fetch(`${AGENT_BASE}/api/messages/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: recipientPhone,
+            text: message,
+            channel_id: channelId,
+            booking_id: bookingId,
+          }),
+          signal: AbortSignal.timeout(10000),
+        });
+        if (!resp.ok) sentStatus = 'failed';
+      } catch {
+        sentStatus = 'failed';
+      }
+
       const row = await insertGuestComm({
         booking_id: bookingId,
         tenant_id: booking?.tenant_id || null,
-        channel: isWa ? 'whatsapp' : 'phone',
+        channel: 'whatsapp',
         direction: req.body?.direction || 'outbound',
-        recipient_phone: req.body?.phone || booking?.guest_phone || '',
+        recipient_phone: recipientPhone,
         content: message,
-        status: req.body?.status || (isWa ? 'sent' : 'logged'),
+        status: sentStatus,
+        sent_at: sentStatus === 'sent' ? new Date().toISOString() : null,
+        metadata: {
+          kind: req.body?.kind || 'whatsapp',
+          channel: channelId,
+          actor: req.staffUser?.username || req.staff?.username || req.staff?.name || 'staff'
+        }
+      });
+      return res.json({ ok: true, row, channel_id: channelId });
+    }
+
+    if (req.body?.channel === 'phone') {
+      const row = await insertGuestComm({
+        booking_id: bookingId,
+        tenant_id: booking?.tenant_id || null,
+        channel: 'phone',
+        direction: req.body?.direction || 'outbound',
+        recipient_phone: recipientPhone,
+        content: message,
+        status: req.body?.status || 'logged',
         sent_at: new Date().toISOString(),
         metadata: {
-          kind: req.body?.kind || (isWa ? 'whatsapp' : 'call'),
-          actor: req.staff?.username || req.staff?.name || 'staff'
+          kind: req.body?.kind || 'call',
+          actor: req.staffUser?.username || req.staff?.username || req.staff?.name || 'staff'
         }
       });
       return res.json({ ok: true, row });
     }
+
     const row = await sendAndLogGuestSms({
       booking,
       bookingId,
-      phone: req.body?.phone || booking?.guest_phone,
+      phone: recipientPhone,
       message,
       channel: req.body?.channel || 'sms',
       metadata: {
         kind: req.body?.kind || templateId || 'manual',
         template: templateId || null,
-        actor: req.staff?.username || req.staff?.name || 'staff'
+        actor: req.staffUser?.username || req.staff?.username || req.staff?.name || 'staff'
       }
     });
     return res.json({ ok: true, row });
@@ -411,6 +646,21 @@ export async function handleSelfCheckoutSideEffects(booking) {
   } catch (err) {
     console.warn('[self checkout mark]', err.message);
   }
+
+  // Clear human takeover on checkout for this specific booking
+  if (booking?.id) {
+    try {
+      await setChatAutomationState({
+        bookingId: booking.id,
+        botDisabled: false,
+        reason: 'checkout',
+        updatedBy: 'system_checkout',
+      });
+    } catch (err) {
+      console.warn('[checkout takeover reset]', err.message);
+    }
+  }
+
   try {
     await sendFarewellForBooking({ ...booking, checked_out_at: at });
   } catch (err) {

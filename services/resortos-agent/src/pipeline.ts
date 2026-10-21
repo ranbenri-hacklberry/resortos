@@ -1,4 +1,6 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { WAMessage } from '@whiskeysockets/baileys';
+import type { ChannelId, InboundEnvelope } from './whatsapp/types.js';
 import { cleaningCredit, config, isBookableRoom, isStaffRoom, isOfficeRoom, type CleanerProfile, type Lang, type RoomEntry } from './config.js';
 import type { InboundIntent } from './llm/client.js';
 import { resolveRoomByAlias } from './llm/client.js';
@@ -112,8 +114,8 @@ export type SessionState = CleanerSessionState | ManagerSessionState | GuestSess
 
 /** Narrow interfaces so everything is mockable in tests. */
 export interface PipelineDeps {
-  send: (jid: string, text: string) => Promise<void>;
-  sendImage?: (jid: string, buffer: Buffer, caption?: string) => Promise<void>;
+  send: (jid: string, text: string, channelId?: ChannelId) => Promise<unknown>;
+  sendImage?: (jid: string, buffer: Buffer, caption?: string, channelId?: ChannelId) => Promise<unknown>;
   isAudio: (m: WAMessage) => boolean;
   extractText: (m: WAMessage) => string | null;
   transcribe: (m: WAMessage, hint?: Lang) => Promise<Transcript>;
@@ -309,31 +311,111 @@ export function formatRoomForWorker(roomId: string, lang: Lang, rooms: RoomEntry
 }
 
 export function createPipeline(d: PipelineDeps) {
-  const sessionStates = new Map<string, SessionState>();
-  const getSession = (phone: string) => sessionStates.get(normalizePhoneTail(phone));
-  const setSession = (phone: string, s: SessionState) => sessionStates.set(normalizePhoneTail(phone), s);
-  const clearSession = (phone: string) => sessionStates.delete(normalizePhoneTail(phone));
+  const channelStorage = new AsyncLocalStorage<ChannelId>();
+
+  const rawSend = d.send;
+  const wrappedSend = (jid: string, text: string, channelId?: ChannelId) => {
+    const ch = channelId || channelStorage.getStore() || 'resortos';
+    return rawSend(jid, text, ch);
+  };
+
+  const rawSendImage = d.sendImage;
+  const wrappedSendImage = rawSendImage
+    ? (jid: string, buffer: Buffer, caption?: string, channelId?: ChannelId) => {
+        const ch = channelId || channelStorage.getStore() || 'resortos';
+        return rawSendImage(jid, buffer, caption, ch);
+      }
+    : undefined;
+
+  d = {
+    ...d,
+    send: wrappedSend,
+    ...(wrappedSendImage ? { sendImage: wrappedSendImage } : {}),
+  };
+
+  const rawSessionStates = new Map<string, SessionState>();
+  const sessionStates = {
+    get: (key: string): SessionState | undefined => {
+      if (key.startsWith('resortos:')) {
+        return rawSessionStates.get(key) ?? rawSessionStates.get(key.replace('resortos:', ''));
+      }
+      return rawSessionStates.get(key);
+    },
+    set: (key: string, val: SessionState) => {
+      rawSessionStates.set(key, val);
+      if (key.startsWith('resortos:')) {
+        rawSessionStates.set(key.replace('resortos:', ''), val);
+      }
+    },
+    delete: (key: string) => {
+      rawSessionStates.delete(key);
+      if (key.startsWith('resortos:')) {
+        rawSessionStates.delete(key.replace('resortos:', ''));
+      }
+      return true;
+    },
+    has: (key: string) => {
+      if (key.startsWith('resortos:')) {
+        return rawSessionStates.has(key) || rawSessionStates.has(key.replace('resortos:', ''));
+      }
+      return rawSessionStates.has(key);
+    },
+    clear: () => rawSessionStates.clear(),
+  };
+
+  const getSession = (phone: string, channelId?: ChannelId) => {
+    const tail = normalizePhoneTail(phone);
+    const ch = channelId || channelStorage.getStore();
+    if (ch && ch !== 'resortos') {
+      return rawSessionStates.get(`${ch}:${tail}`);
+    }
+    return rawSessionStates.get(`resortos:${tail}`) ?? rawSessionStates.get(tail);
+  };
+
+  const setSession = (phone: string, s: SessionState, channelId?: ChannelId) => {
+    const tail = normalizePhoneTail(phone);
+    const ch = channelId || channelStorage.getStore() || 'resortos';
+    rawSessionStates.set(`${ch}:${tail}`, s);
+    if (ch === 'resortos') {
+      rawSessionStates.set(tail, s);
+    }
+  };
+
+  const clearSession = (phone: string, channelId?: ChannelId) => {
+    const tail = normalizePhoneTail(phone);
+    const ch = channelId || channelStorage.getStore() || 'resortos';
+    rawSessionStates.delete(`${ch}:${tail}`);
+    if (ch === 'resortos') {
+      rawSessionStates.delete(tail);
+    }
+  };
+
   const roomMemory = new Map<string, { complexKey?: string; complexAge: number; statedUnit?: number; statedUnitAge: number }>();
 
+  function memoryKey(phone: string): string {
+    const ch = channelStorage.getStore() || 'resortos';
+    return `${ch}:${normalizePhoneTail(phone)}`;
+  }
+
   function touchRoomMemory(phone: string) {
-    const row = roomMemory.get(phone);
+    const row = roomMemory.get(memoryKey(phone));
     if (!row) return;
     row.complexAge += 1;
     row.statedUnitAge += 1;
   }
 
   function rememberComplex(phone: string, complexKey: string) {
-    const row = roomMemory.get(phone) || { complexAge: 0, statedUnitAge: 99 };
+    const row = roomMemory.get(memoryKey(phone)) || { complexAge: 0, statedUnitAge: 99 };
     row.complexKey = complexKey;
     row.complexAge = 0;
-    roomMemory.set(phone, row);
+    roomMemory.set(memoryKey(phone), row);
   }
 
   function rememberStatedUnit(phone: string, unit: number) {
-    const row = roomMemory.get(phone) || { complexAge: 99, statedUnitAge: 0 };
+    const row = roomMemory.get(memoryKey(phone)) || { complexAge: 99, statedUnitAge: 0 };
     row.statedUnit = unit;
     row.statedUnitAge = 0;
-    roomMemory.set(phone, row);
+    roomMemory.set(memoryKey(phone), row);
   }
 
   function rememberRoom(phone: string, roomId: string) {
@@ -342,7 +424,7 @@ export function createPipeline(d: PipelineDeps) {
   }
 
   function dialogContext(phone: string, currentRoomId?: string): RoomDialogContext {
-    const row = roomMemory.get(phone);
+    const row = roomMemory.get(memoryKey(phone));
     const context: RoomDialogContext = {};
     if (row?.complexKey && row.complexAge <= 2) context.complexKey = row.complexKey;
     if (row?.statedUnit && row.statedUnitAge <= 2) context.statedUnit = row.statedUnit;
@@ -353,28 +435,39 @@ export function createPipeline(d: PipelineDeps) {
     return context;
   }
 
-  async function triggerRoomExit(p: { cleanerPhone: string; roomId: string }): Promise<{ ok: boolean; message?: string }> {
-    const cleaner = d.cleaners().find((c) => matchesCleaner(c, p.cleanerPhone));
-    if (!cleaner) return { ok: false, message: 'cleaner not found' };
-    const r = d.rooms().find((x) => x.id === p.roomId);
-    const roomLabel = cleaner.language === 'th' ? (r?.letterCode || r?.name || p.roomId) : (r?.name || r?.letterCode || p.roomId);
-    setSession(cleaner.phone, { role: 'CLEANER', state: 'AWAITING_STATUS', roomId: p.roomId });
-    const menuFn = CLEANER_EXIT_MENU[cleaner.language] || CLEANER_EXIT_MENU.he;
-    const menuText = menuFn(roomLabel);
-    await d.send(`${cleaner.phone}@s.whatsapp.net`, menuText);
-    return { ok: true, message: menuText };
+  async function triggerRoomExit(p: { cleanerPhone: string; roomId: string; channelId?: ChannelId }): Promise<{ ok: boolean; message?: string }> {
+    const channelId = p.channelId || 'resortos';
+    return channelStorage.run(channelId, async () => {
+      const cleaner = d.cleaners().find((c) => matchesCleaner(c, p.cleanerPhone));
+      if (!cleaner) return { ok: false, message: 'cleaner not found' };
+      const r = d.rooms().find((x) => x.id === p.roomId);
+      const roomLabel = cleaner.language === 'th' ? (r?.letterCode || r?.name || p.roomId) : (r?.name || r?.letterCode || p.roomId);
+      setSession(cleaner.phone, { role: 'CLEANER', state: 'AWAITING_STATUS', roomId: p.roomId }, channelId);
+      const menuFn = CLEANER_EXIT_MENU[cleaner.language] || CLEANER_EXIT_MENU.he;
+      const menuText = menuFn(roomLabel);
+      await d.send(`${cleaner.phone}@s.whatsapp.net`, menuText);
+      return { ok: true, message: menuText };
+    });
   }
 
   /** Worker -> agent. */
-  async function handleInbound(msg: WAMessage): Promise<InboundResult> {
-    const jid = msg.key.remoteJid;
-    if (!jid) return { handled: false, reason: 'no jid' };
-    const senderPhone = phoneOf(jid);
-    const cleaner = d.cleaners().find((c) => matchesCleaner(c, jid) || matchesCleaner(c, senderPhone));
-    const isManager = cleaner?.role === 'MANAGER' || cleaner?.role === 'OPS_MANAGER' || cleaner?.role === 'PRIORITY';
-    const isWorker = Boolean(cleaner && !isManager);
-    const sessionKey = normalizePhoneTail(senderPhone);
-    const currentSession = sessionStates.get(sessionKey);
+  async function handleInbound(
+    input: WAMessage | InboundEnvelope,
+    fallbackChannelId: ChannelId = 'resortos',
+  ): Promise<InboundResult> {
+    const isEnvelope = Boolean(input && typeof input === 'object' && 'rawMessage' in input && 'channelId' in input);
+    const channelId: ChannelId = isEnvelope ? (input as InboundEnvelope).channelId : fallbackChannelId;
+    const msg: WAMessage = isEnvelope ? (input as InboundEnvelope).rawMessage : (input as WAMessage);
+
+    return channelStorage.run(channelId, async () => {
+      const jid = msg.key.remoteJid;
+      if (!jid) return { handled: false, reason: 'no jid' };
+      const senderPhone = phoneOf(jid);
+      const cleaner = d.cleaners().find((c) => matchesCleaner(c, jid) || matchesCleaner(c, senderPhone));
+      const isManager = cleaner?.role === 'MANAGER' || cleaner?.role === 'OPS_MANAGER' || cleaner?.role === 'PRIORITY';
+      const isWorker = Boolean(cleaner && !isManager);
+      const sessionKey = `${channelId}:${normalizePhoneTail(senderPhone)}`;
+      const currentSession = sessionStates.get(sessionKey);
 
     let text = d.extractText(msg);
     if (text?.trim()) {
@@ -741,6 +834,7 @@ export function createPipeline(d: PipelineDeps) {
           phone,
           content: inboundText.trim(),
           status: 'received',
+          channel: channelId,
         });
       }
       if (outboundText.trim()) {
@@ -750,6 +844,7 @@ export function createPipeline(d: PipelineDeps) {
           phone,
           content: outboundText.trim(),
           status: 'sent',
+          channel: channelId,
         });
       }
     }
@@ -2382,40 +2477,44 @@ export function createPipeline(d: PipelineDeps) {
       await d.send(jid, askByName(cleaner?.name, CLARIFY[lang])).catch(() => {});
       return { handled: false, reason: String(e), transcript };
     }
+    });
   }
 
-  /** ResortOS -> agent -> worker. Body: { cleaner_phone, message_he, action?, type?, room_id? } */
-  async function handleDispatch(body: { cleaner_phone?: string; message_he?: string; action?: string; type?: string; room_id?: string }) {
-    const phone = body.cleaner_phone?.replace(/\D/g, '');
-    if (!phone) throw Object.assign(new Error('cleaner_phone required'), { status: 400 });
-    const cleaner = d.cleaners().find((c) => matchesCleaner(c, phone));
-    if (!cleaner) throw Object.assign(new Error('unknown cleaner'), { status: 404 });
+  /** ResortOS -> agent -> worker. Body: { cleaner_phone, message_he, action?, type?, room_id?, channel_id? } */
+  async function handleDispatch(body: { cleaner_phone?: string; message_he?: string; action?: string; type?: string; room_id?: string; channel_id?: ChannelId }) {
+    const channelId = body.channel_id || 'resortos';
+    return channelStorage.run(channelId, async () => {
+      const phone = body.cleaner_phone?.replace(/\D/g, '');
+      if (!phone) throw Object.assign(new Error('cleaner_phone required'), { status: 400 });
+      const cleaner = d.cleaners().find((c) => matchesCleaner(c, phone));
+      if (!cleaner) throw Object.assign(new Error('unknown cleaner'), { status: 404 });
 
-    if ((body.action === 'ROOM_EXIT' || body.type === 'ROOM_EXIT') && body.room_id) {
-      return triggerRoomExit({ cleanerPhone: phone, roomId: body.room_id });
-    }
+      if ((body.action === 'ROOM_EXIT' || body.type === 'ROOM_EXIT') && body.room_id) {
+        return triggerRoomExit({ cleanerPhone: phone, roomId: body.room_id, channelId });
+      }
 
-    if (!body.message_he?.trim()) throw Object.assign(new Error('cleaner_phone and message_he required'), { status: 400 });
+      if (!body.message_he?.trim()) throw Object.assign(new Error('cleaner_phone and message_he required'), { status: 400 });
 
-    // If manager refers to a room, resolve it to attach the key safe lockbox code if available
-    let msg = body.message_he;
-    const resolvedId = resolveRoomByAlias(body.message_he, d.rooms());
-    if (resolvedId) {
-      const r = d.rooms().find((x) => x.id === resolvedId);
-      if (r?.lockbox && !msg.includes(r.lockbox)) {
-        if (cleaner.language === 'th') {
-          msg += ` (รหัสตู้เซฟ ${r.letterCode || ''}: ${r.lockbox})`;
-        } else if (cleaner.language === 'ar') {
-          msg += ` (كود الخزنة: ${r.lockbox})`;
-        } else {
-          msg += ` (קוד כספת: ${r.lockbox})`;
+      // If manager refers to a room, resolve it to attach the key safe lockbox code if available
+      let msg = body.message_he;
+      const resolvedId = resolveRoomByAlias(body.message_he, d.rooms());
+      if (resolvedId) {
+        const r = d.rooms().find((x) => x.id === resolvedId);
+        if (r?.lockbox && !msg.includes(r.lockbox)) {
+          if (cleaner.language === 'th') {
+            msg += ` (รหัสตู้เซฟ ${r.letterCode || ''}: ${r.lockbox})`;
+          } else if (cleaner.language === 'ar') {
+            msg += ` (كود الخزنة: ${r.lockbox})`;
+          } else {
+            msg += ` (קוד כספת: ${r.lockbox})`;
+          }
         }
       }
-    }
 
-    const translated = await d.llm.translateTask(msg, cleaner.language);
-    await d.send(`${cleaner.phone}@s.whatsapp.net`, translated);
-    return { sent: true, language: cleaner.language, translated };
+      const translated = await d.llm.translateTask(msg, cleaner.language);
+      await d.send(`${cleaner.phone}@s.whatsapp.net`, translated);
+      return { sent: true, language: cleaner.language, translated };
+    });
   }
 
   return {

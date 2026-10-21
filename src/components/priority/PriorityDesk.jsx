@@ -547,7 +547,7 @@ function GroundPill({ assetId, kind, record, pending, onOpen }) {
   );
 }
 
-function GuestPill({ kind, booking, swap = false, onOpen, callPending = null, onAckCall = null }) {
+function GuestPill({ kind, booking, swap = false, onOpen, callPending = null, onAckCall = null, unreadCount = 0 }) {
   const full = booking?.guest_name || '';
   const name = swap ? guestFirstName(full) : (full || 'אורח');
   const shekel = priorityShekelMark(booking);
@@ -563,6 +563,14 @@ function GuestPill({ kind, booking, swap = false, onOpen, callPending = null, on
     >
       {kind === 'in' ? <span className="pill-arrow" dir="ltr">←</span> : null}
       <b>{name}</b>
+      {unreadCount > 0 ? (
+        <span
+          className="unread-msg-badge"
+          title={`${unreadCount} הודעות חדשות מהאורח (מענה ידני)`}
+        >
+          💬{unreadCount > 1 ? ` ${unreadCount}` : ''}
+        </span>
+      ) : null}
       {callPending ? (
         <span
           className="call-phone-badge"
@@ -649,6 +657,16 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const [sleepDay, setSleepDay] = useState(() => prioritySleepIsDay());
   const [refreshedAt, setRefreshedAt] = useState(null);
   const [callAlerts, setCallAlerts] = useState([]);
+  const [unreadSummary, setUnreadSummary] = useState({ unread_by_booking: {}, unread_by_phone: {}, total_unread: 0 });
+  const getBookingUnread = useCallback((b) => {
+    if (!b) return 0;
+    const bId = b.id || b.bookingId;
+    const p = b.guest_phone || b.phone || b.phoneRaw;
+    const clean = p ? String(p).replace(/\D+/g, '') : '';
+    const norm = clean.startsWith('05') ? `9725${clean.slice(2)}` : clean;
+    return (bId && unreadSummary.unread_by_booking[bId]) ||
+           (norm && unreadSummary.unread_by_phone[norm]) || 0;
+  }, [unreadSummary]);
   const untransferredAlerts = useMemo(
     () => callAlerts.filter((call) => !call.acked_at && !call.transferredTo && !call.transferred && !call.ownerId && !call.escalated),
     [callAlerts]
@@ -879,7 +897,9 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       : selected,
     drafts[selected?.id]
   );
-  const cardCall = card ? findCallForBooking(callAlerts, pinnedBooking || bookings.find((b) => b.id === card.bookingId), card.id) : null;
+  const cardBooking = card ? (pinnedBooking || bookings.find((b) => b.id === card.bookingId)) : null;
+  const cardCall = card ? findCallForBooking(callAlerts, cardBooking, card.id) : null;
+  const cardUnreadCount = card ? getBookingUnread(cardBooking || card) : 0;
   const visibleIndex = selected ? visible.findIndex((row) => row.id === selected.id) : -1;
 
   const move = (delta) => {
@@ -1467,17 +1487,30 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         const response = await fetch('/api/ops/call-me', {
           headers: { Authorization: `Bearer ${token}` }
         });
-        if (!response.ok) return;
-        const data = await response.json();
-        if (stop) return;
-        const rows = Array.isArray(data.calls) ? data.calls : [];
-        setCallAlerts(rows);
-        if (rows.length) {
-          asleepRef.current = false;
-          setAsleep(false);
+        if (response.ok) {
+          const data = await response.json();
+          if (!stop) {
+            const rows = Array.isArray(data.calls) ? data.calls : [];
+            setCallAlerts(rows);
+            if (rows.length) {
+              asleepRef.current = false;
+              setAsleep(false);
+            }
+          }
         }
       } catch {
         /* the next poll retries */
+      }
+      try {
+        const commsRes = await fetch('/api/guest-comms/unread-summary', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (commsRes.ok && !stop) {
+          const commsData = await commsRes.json();
+          setUnreadSummary(commsData || { unread_by_booking: {}, unread_by_phone: {}, total_unread: 0 });
+        }
+      } catch {
+        /* ignore */
       }
     };
     pull();
@@ -1487,6 +1520,22 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       window.clearInterval(timer);
     };
   }, [active]);
+
+  const refreshUnreadSummary = useCallback(async () => {
+    const token = getStoredToken();
+    if (!token) return;
+    try {
+      const res = await fetch('/api/guest-comms/unread-summary', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUnreadSummary(data || { unread_by_booking: {}, unread_by_phone: {}, total_unread: 0 });
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   async function ackGuestCall(token) {
     const auth = getStoredToken();
@@ -1766,9 +1815,17 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                   <Field
                     label="שם אורח"
                     value={
-                      cardCall ? (
-                        <span className="guest-with-call">
-                          <span>{card.guest}</span>
+                      <span className="guest-with-call">
+                        <span>{card.guest}</span>
+                        {cardUnreadCount > 0 ? (
+                          <span
+                            className="unread-msg-badge"
+                            title={`${cardUnreadCount} הודעות חדשות מהאורח (מענה ידני)`}
+                          >
+                            💬{cardUnreadCount > 1 ? ` ${cardUnreadCount}` : ''}
+                          </span>
+                        ) : null}
+                        {cardCall ? (
                           <button
                             type="button"
                             className="call-phone-pill"
@@ -1777,8 +1834,8 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                           >
                             📞 {cardCall.transferredName ? `הועבר ל${cardCall.transferredName}` : 'מבקש שיחה'} (סמן כנפתר)
                           </button>
-                        </span>
-                      ) : card.guest
+                        ) : null}
+                      </span>
                     }
                   />
                   <Field label="תעודת זהות" value={card.nationalId} />
@@ -1915,6 +1972,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
               addRoomNote={addRoomNote}
               kinorotNote={kinorotNote}
               setMessage={setMessage}
+              refreshUnreadSummary={refreshUnreadSummary}
             />
           </div>
         ) : (
@@ -2014,6 +2072,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                                   swap
                                   kind="out"
                                   booking={cell.out}
+                                  unreadCount={getBookingUnread(cell.out)}
                                   callPending={findCallForBooking(callAlerts, cell.out, row.id)}
                                   onAckCall={ackGuestCall}
                                   onOpen={() => openGuest(row.id, cell.out)}
@@ -2022,6 +2081,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                                   swap
                                   kind="in"
                                   booking={cell.inn}
+                                  unreadCount={getBookingUnread(cell.inn)}
                                   callPending={findCallForBooking(callAlerts, cell.inn, row.id)}
                                   onAckCall={ackGuestCall}
                                   onOpen={() => openGuest(row.id, cell.inn)}
@@ -2033,6 +2093,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                                   swap
                                   kind="out"
                                   booking={cell.out}
+                                  unreadCount={getBookingUnread(cell.out)}
                                   callPending={findCallForBooking(callAlerts, cell.out, row.id)}
                                   onAckCall={ackGuestCall}
                                   onOpen={() => openGuest(row.id, cell.out)}
@@ -2047,6 +2108,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                               <GuestPill
                                 kind={cell.kind}
                                 booking={cell.guest}
+                                unreadCount={getBookingUnread(cell.guest)}
                                 callPending={findCallForBooking(callAlerts, cell.guest, row.id)}
                                 onAckCall={ackGuestCall}
                                 onOpen={() => openGuest(row.id, cell.guest)}
@@ -2302,19 +2364,75 @@ function SplitFeedPanel({
   setNoteText,
   addRoomNote,
   kinorotNote,
-  setMessage
+  setMessage,
+  refreshUnreadSummary
 }) {
   const [commsRows, setCommsRows] = useState([]);
   const [commsBusy, setCommsBusy] = useState(false);
   const [commsError, setCommsError] = useState('');
   const [quickInput, setQuickInput] = useState('');
   const [taskKind, setTaskKind] = useState('cleaning');
+  const [autoReplyEnabled, setAutoReplyEnabled] = useState(true);
+  const [automationChannel, setAutomationChannel] = useState('resortos');
+  const [automationLoading, setAutomationLoading] = useState(false);
   const feedEndRef = useRef(null);
 
   const bookingId = card?.bookingId || '';
   const phone = card?.phoneRaw || card?.phone || '';
   const localPhone = toMicropayPhone(phone);
-  const waPhone = localPhone ? `972${localPhone.slice(1)}` : '';
+
+  async function loadAutomationState() {
+    if (!bookingId && !phone) return;
+    const headers = { Accept: 'application/json' };
+    const token = getStoredToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    try {
+      const q = new URLSearchParams({ channel_id: automationChannel });
+      if (bookingId) q.set('booking_id', bookingId);
+      if (phone) q.set('phone', phone);
+      const res = await fetch(`/api/guest-comms/automation-state?${q.toString()}`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setAutoReplyEnabled(!data.bot_disabled);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  useEffect(() => {
+    loadAutomationState();
+  }, [bookingId, phone, automationChannel]);
+
+  async function toggleAutoReply() {
+    if (!canEdit || automationLoading || (!bookingId && !phone)) return;
+    setAutomationLoading(true);
+    const targetEnabled = !autoReplyEnabled;
+    const headers = { Accept: 'application/json', 'Content-Type': 'application/json' };
+    const token = getStoredToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    try {
+      const res = await fetch('/api/guest-comms/automation-state', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          channel_id: automationChannel,
+          booking_id: bookingId,
+          phone,
+          bot_disabled: !targetEnabled,
+          reason: 'manager_toggle'
+        })
+      });
+      if (res.ok) {
+        setAutoReplyEnabled(targetEnabled);
+        if (refreshUnreadSummary) refreshUnreadSummary();
+      }
+    } catch (err) {
+      setCommsError(err.message || 'שגיאה בעדכון מענה אוטומטי');
+    } finally {
+      setAutomationLoading(false);
+    }
+  }
 
   async function loadComms() {
     if (!bookingId) {
@@ -2327,7 +2445,19 @@ function SplitFeedPanel({
     const response = await fetch(`/api/guest-comms?booking_id=${encodeURIComponent(bookingId)}`, { headers });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || 'COMMS_LIST_FAILED');
-    setCommsRows(Array.isArray(data.rows) ? data.rows : []);
+    const rows = Array.isArray(data.rows) ? data.rows : [];
+    setCommsRows(rows);
+
+    const unreadInbound = rows.filter((r) => r.direction === 'inbound' && !r.read_at).map((r) => r.id);
+    if (unreadInbound.length > 0) {
+      fetch('/api/guest-comms/mark-read', {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message_ids: unreadInbound })
+      }).then(() => {
+        if (refreshUnreadSummary) refreshUnreadSummary();
+      }).catch(() => {});
+    }
   }
 
   useEffect(() => {
@@ -2342,10 +2472,12 @@ function SplitFeedPanel({
     const response = await fetch('/api/guest-comms/send', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ booking_id: bookingId, ...body })
+      body: JSON.stringify({ booking_id: bookingId, channel_id: automationChannel, ...body })
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || 'COMMS_SEND_FAILED');
+    setAutoReplyEnabled(false);
+    if (refreshUnreadSummary) refreshUnreadSummary();
     return data;
   }
 
@@ -2448,32 +2580,44 @@ function SplitFeedPanel({
             </div>
           </div>
           <div className="wa-quick-links">
+            <div className="wa-bot-toggle-wrap">
+              <button
+                type="button"
+                className={`wa-bot-toggle ${autoReplyEnabled ? 'is-auto' : 'is-manual'}`}
+                disabled={automationLoading || !canEdit || (!bookingId && !phone)}
+                onClick={toggleAutoReply}
+                title={
+                  autoReplyEnabled
+                    ? 'מענה אוטומטי פעיל — Chloe עונה לאורח (לחצו לכיבוי ומעבר למענה ידני)'
+                    : 'מענה אוטומטי כבוי — נציג אנושי מטפל (לחצו להפעלה חוזרת של Chloe)'
+                }
+              >
+                <span>{autoReplyEnabled ? '🟢' : '🔴'}</span>
+                <span>{autoReplyEnabled ? 'מענה אוטומטי פעיל' : 'מענה אוטומטי כבוי'}</span>
+              </button>
+              <button
+                type="button"
+                className="wa-channel-pill"
+                title={`ערוץ וואטסאפ: ${automationChannel === 'mialees' ? 'מיאליס (050-950-6222)' : 'ResortOS (051-526-2612)'} (לחצו להחלפה)`}
+                onClick={() => setAutomationChannel((c) => (c === 'resortos' ? 'mialees' : 'resortos'))}
+              >
+                {automationChannel === 'mialees' ? 'מיאליס' : 'ResortOS'}
+              </button>
+            </div>
             {localPhone ? (
-              <>
-                <a
-                  href={`tel:${localPhone}`}
-                  className="wa-icon-btn is-call"
-                  title="חיוג מהיר"
-                  onClick={() => {
-                    if (bookingId && canEdit) {
-                      postComm({ message: 'שיחה אל האורח', channel: 'phone', kind: 'call' }).then(() => loadComms()).catch(() => {});
-                    }
-                  }}
-                >
-                  <Phone size={14} />
-                  <span>חיוג</span>
-                </a>
-                <a
-                  href={`https://wa.me/${waPhone}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="wa-icon-btn is-wa"
-                  title="פתיחת שיחת וואטסאפ ישירה"
-                >
-                  <MessageCircle size={14} />
-                  <span>WhatsApp</span>
-                </a>
-              </>
+              <a
+                href={`tel:${localPhone}`}
+                className="wa-icon-btn is-call"
+                title="חיוג מהיר"
+                onClick={() => {
+                  if (bookingId && canEdit) {
+                    postComm({ message: 'שיחה אל האורח', channel: 'phone', kind: 'call' }).then(() => loadComms()).catch(() => {});
+                  }
+                }}
+              >
+                <Phone size={14} />
+                <span>חיוג</span>
+              </a>
             ) : null}
           </div>
         </div>

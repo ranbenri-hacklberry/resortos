@@ -436,4 +436,57 @@ export class ResortOSClient {
       // Non-critical
     }
   }
+
+  async findActiveBookingByPhone(phone: string): Promise<BookingRow | null> {
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date());
+    const bookings = (await this.listBookings?.({ from: today, to: today })) || [];
+    const cleanPhone = phone.replace(/\D/g, '').slice(-9);
+    if (!cleanPhone) return null;
+    return (
+      bookings.find((b) => {
+        const bPhone = String(b.guest_phone || '').replace(/\D/g, '').slice(-9);
+        return bPhone && bPhone === cleanPhone;
+      }) || null
+    );
+  }
+
+  async listActiveTakeovers(): Promise<Array<{ channelId: string; chatId: string; bookingId?: string; botDisabled: boolean; reason: string; updatedBy?: string }>> {
+    try {
+      const rows = await this.postgrest<any[]>('GET', 'chat_automation_state', '?bot_disabled=eq.true&select=*');
+      if (!Array.isArray(rows)) return [];
+      return rows.map((r) => ({
+        channelId: r.channel_id,
+        chatId: r.chat_id,
+        bookingId: r.booking_id || undefined,
+        botDisabled: Boolean(r.bot_disabled),
+        reason: r.reason || 'manual_reply',
+        updatedBy: r.updated_by || undefined,
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  async upsertTakeover(p: {
+    channelId: string;
+    chatId: string;
+    bookingId?: string;
+    botDisabled: boolean;
+    reason: string;
+    updatedBy?: string;
+  }): Promise<void> {
+    try {
+      await this.postgrest('POST', 'chat_automation_state', '?on_conflict=channel_id,chat_id', {
+        channel_id: p.channelId,
+        chat_id: p.chatId,
+        booking_id: p.bookingId || null,
+        bot_disabled: p.botDisabled,
+        reason: p.reason,
+        updated_by: p.updatedBy || 'agent',
+        updated_at: new Date().toISOString(),
+      });
+    } catch {
+      // Non-critical
+    }
+  }
 }

@@ -6,6 +6,24 @@ export const WIFI_PRESENCE = ['active', 'idle', 'disconnected'];
 
 export const GUEST_SMS_TEMPLATES = [
   {
+    id: 'checkin',
+    label: 'קישור דף אורח',
+    build: ({ unitName, checkoutUrl } = {}) => (
+      `שלום! ברוכים הבאים${unitName ? ` ל-${unitName}` : ''}. `
+      + 'דף האירוח האישי שלכם כולל מידע על הבקתה, קוד לשער ופעולות מהירות (קישור):\n'
+      + (checkoutUrl || '')
+    )
+  },
+  {
+    id: 'stay_link',
+    label: 'קישור דף אורח',
+    build: ({ unitName, checkoutUrl } = {}) => (
+      `שלום! ברוכים הבאים${unitName ? ` ל-${unitName}` : ''}. `
+      + 'דף האירוח האישי שלכם כולל מידע על הבקתה, קוד לשער ופעולות מהירות (קישור):\n'
+      + (checkoutUrl || '')
+    )
+  },
+  {
     id: 'gate',
     label: 'קוד לשער',
     build: ({ gateCode } = {}) => (

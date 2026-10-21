@@ -109,9 +109,45 @@ export default function GuestCommsPanel({ booking, themeStyles, isLight }) {
   const [selectedTemplateId, setSelectedTemplateId] = useState(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [error, setError] = useState('');
+  const [autoReplyEnabled, setAutoReplyEnabled] = useState(true);
+  const [automationChannel, setAutomationChannel] = useState('resortos');
+  const [automationBusy, setAutomationBusy] = useState(false);
 
   const bookingId = booking?.id;
   const draftReady = Boolean(String(draft || '').trim());
+
+  async function loadAutomationState() {
+    if (!bookingId) return;
+    try {
+      const data = await commsFetch(`/automation-state?booking_id=${encodeURIComponent(bookingId)}&channel_id=${automationChannel}`);
+      setAutoReplyEnabled(!data.bot_disabled);
+    } catch {
+      // ignore
+    }
+  }
+
+  async function toggleAutoReply() {
+    if (!bookingId || automationBusy) return;
+    setAutomationBusy(true);
+    const targetEnabled = !autoReplyEnabled;
+    try {
+      await commsFetch('/automation-state', {
+        method: 'POST',
+        body: JSON.stringify({
+          channel_id: automationChannel,
+          booking_id: bookingId,
+          phone: booking?.guest_phone,
+          bot_disabled: !targetEnabled,
+          reason: 'manager_toggle'
+        })
+      });
+      setAutoReplyEnabled(targetEnabled);
+    } catch (err) {
+      setError(err.message || 'שגיאה בעדכון מצב מענה');
+    } finally {
+      setAutomationBusy(false);
+    }
+  }
 
   async function reload() {
     if (!bookingId) return;
@@ -119,7 +155,17 @@ export default function GuestCommsPanel({ booking, themeStyles, isLight }) {
     setError('');
     try {
       const data = await commsFetch(`?booking_id=${encodeURIComponent(bookingId)}`);
-      setRows(Array.isArray(data.rows) ? data.rows : []);
+      const list = Array.isArray(data.rows) ? data.rows : [];
+      setRows(list);
+      loadAutomationState();
+
+      const unreadIds = list.filter((r) => r.direction === 'inbound' && !r.read_at).map((r) => r.id);
+      if (unreadIds.length > 0) {
+        commsFetch('/mark-read', {
+          method: 'POST',
+          body: JSON.stringify({ message_ids: unreadIds })
+        }).catch(() => {});
+      }
     } catch (err) {
       setError(
         err.status === 401
@@ -135,7 +181,7 @@ export default function GuestCommsPanel({ booking, themeStyles, isLight }) {
 
   useEffect(() => {
     reload();
-  }, [bookingId]);
+  }, [bookingId, automationChannel]);
 
   function applyTemplate(templateId) {
     const text = buildTemplateText(templateId, booking);
@@ -161,11 +207,13 @@ export default function GuestCommsPanel({ booking, themeStyles, isLight }) {
         method: 'POST',
         body: JSON.stringify({
           booking_id: bookingId,
+          channel_id: automationChannel,
           message: text,
           kind: selectedTemplateId || 'manual',
           template_id: selectedTemplateId || undefined
         })
       });
+      setAutoReplyEnabled(false);
       setDraft('');
       setSelectedTemplateId(null);
       setConfirmOpen(false);
@@ -187,12 +235,51 @@ export default function GuestCommsPanel({ booking, themeStyles, isLight }) {
 
   return (
     <div dir="rtl" style={{ ...card, display: 'grid', gap: '0.75rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 900 }}>
           <MessageSquare size={16} color="#38BDF8" />
           הודעות אורח
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={toggleAutoReply}
+            disabled={automationBusy}
+            title={autoReplyEnabled ? 'מענה אוטומטי פעיל — Chloe עונה (לחצו למעבר למענה ידני)' : 'מענה אוטומטי כבוי — נציג אנושי מטפל (לחצו להפעלת Chloe)'}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '2px 8px',
+              borderRadius: 999,
+              fontSize: '0.72rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+              border: `1px solid ${autoReplyEnabled ? '#86efac' : '#fca5a5'}`,
+              background: autoReplyEnabled ? '#f0fdf4' : '#fef2f2',
+              color: autoReplyEnabled ? '#166534' : '#991b1b'
+            }}
+          >
+            <span>{autoReplyEnabled ? '🟢' : '🔴'}</span>
+            <span>{autoReplyEnabled ? 'מענה אוטומטי פעיל' : 'מענה אוטומטי כבוי'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setAutomationChannel((c) => (c === 'resortos' ? 'mialees' : 'resortos'))}
+            title={`ערוץ וואטסאפ: ${automationChannel === 'mialees' ? 'מיאליס (050-950-6222)' : 'ResortOS (051-526-2612)'} (לחצו להחלפה)`}
+            style={{
+              padding: '2px 8px',
+              borderRadius: 6,
+              fontSize: '0.72rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              border: `1px solid ${themeStyles.inputBorder}`,
+              background: isLight ? '#f1f5f9' : '#1e293b',
+              color: themeStyles.text
+            }}
+          >
+            {automationChannel === 'mialees' ? 'מיאליס' : 'ResortOS'}
+          </button>
           <PresenceDot booking={booking} />
           <button
             type="button"

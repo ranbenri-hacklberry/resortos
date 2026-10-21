@@ -146,6 +146,24 @@ export const config = {
       ? { apiKey: env('XAI_API_KEY', ''), model: 'grok-4.7' }
       : null,
   },
+  channels: {
+    resortos: {
+      id: 'resortos',
+      name: 'ResortOS / Chloe',
+      phoneNumber: '972515262612',
+      authDir: env('AUTH_DIR', path.join(ROOT, 'auth_info_baileys')),
+      enabled: true,
+      browserName: ['ResortOS Agent', 'Chrome', '1.0.0'] as [string, string, string],
+    },
+    mialees: {
+      id: 'mialees',
+      name: 'מיאליס',
+      phoneNumber: '972509506222',
+      authDir: env('MIALEES_AUTH_DIR', path.join(ROOT, 'data', 'auth_mialees')),
+      enabled: env('ENABLE_MIALEES_CHANNEL', '0') === '1',
+      browserName: ['Mialees Host', 'Chrome', '1.0.0'] as [string, string, string],
+    },
+  },
 };
 
 function loadJson<T>(file: string, fallback: T): T {

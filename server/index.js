@@ -463,6 +463,58 @@ app.post('/api/guest-comms/send', requireStaff, async (req, res) => {
   return handleSendGuestComm(req, res);
 });
 
+app.get('/api/guest-comms/automation-state', requireStaff, async (req, res) => {
+  const { getChatAutomationState } = await import('./guestComms.js');
+  try {
+    const state = await getChatAutomationState({
+      channelId: req.query?.channel_id || req.query?.channel || 'resortos',
+      phone: req.query?.phone,
+      bookingId: req.query?.booking_id,
+    });
+    res.json(state);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/guest-comms/automation-state', requireStaff, async (req, res) => {
+  const { setChatAutomationState } = await import('./guestComms.js');
+  try {
+    const result = await setChatAutomationState({
+      channelId: req.body?.channel_id || 'resortos',
+      phone: req.body?.phone,
+      bookingId: req.body?.booking_id,
+      botDisabled: Boolean(req.body?.bot_disabled),
+      reason: req.body?.reason || 'manager_toggle',
+      updatedBy: req.staffUser?.username || req.staff?.username || req.staff?.name || 'manager',
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/guest-comms/unread-summary', requireStaff, async (_req, res) => {
+  const { getUnreadCommsSummary } = await import('./guestComms.js');
+  try {
+    res.json(await getUnreadCommsSummary());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/guest-comms/mark-read', requireStaff, async (req, res) => {
+  const { markGuestCommsRead } = await import('./guestComms.js');
+  try {
+    const result = await markGuestCommsRead({
+      messageIds: req.body?.message_ids,
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/ops/stay-status', requireStaff, async (req, res) => {
   const { handleStayStatus } = await import('./guestComms.js');
   return handleStayStatus(req, res);
