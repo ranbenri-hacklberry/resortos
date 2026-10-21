@@ -1323,6 +1323,19 @@
   border-color: #f87171;
 }
 
+.wa-toggle-action-hint {
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.8;
+  margin-right: 2px;
+}
+
+.wa-icon-btn.is-close:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #dc2626;
+}
+
 .wa-channel-pill {
   display: inline-flex;
   align-items: center;

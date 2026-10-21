@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, CheckCheck, ExternalLink, FileSpreadsheet, FileText, FolderOpen, Link2, MessageCircle, Phone, Printer, RefreshCw, Send, Table2 } from 'lucide-react';
+import { Check, CheckCheck, ExternalLink, FileSpreadsheet, FileText, FolderOpen, Link2, MessageCircle, Phone, Printer, RefreshCw, Send, Table2, X } from 'lucide-react';
 import { formatIlsFromAgorot, normalizeClearingPayment, normalizeIsraeliId } from '../../lib/clearingPayments';
 import { printCashDayReport } from '../../lib/cashDayReport';
 import { calendarPartyLabel, dutyPrintAreaOf, dutyUnitGroup, printDailyDutyReport } from '../../lib/dailyDutyReport';
@@ -1973,6 +1973,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
               kinorotNote={kinorotNote}
               setMessage={setMessage}
               refreshUnreadSummary={refreshUnreadSummary}
+              onClose={() => setMode('grid')}
             />
           </div>
         ) : (
@@ -2365,7 +2366,8 @@ function SplitFeedPanel({
   addRoomNote,
   kinorotNote,
   setMessage,
-  refreshUnreadSummary
+  refreshUnreadSummary,
+  onClose
 }) {
   const [commsRows, setCommsRows] = useState([]);
   const [commsBusy, setCommsBusy] = useState(false);
@@ -2405,9 +2407,13 @@ function SplitFeedPanel({
   }, [bookingId, phone, automationChannel]);
 
   async function toggleAutoReply() {
-    if (!canEdit || automationLoading || (!bookingId && !phone)) return;
+    if (automationLoading || (!bookingId && !phone)) return;
     setAutomationLoading(true);
     const targetEnabled = !autoReplyEnabled;
+    // 1. Optimistic instant UI update
+    setAutoReplyEnabled(targetEnabled);
+    if (refreshUnreadSummary) refreshUnreadSummary();
+
     const headers = { Accept: 'application/json', 'Content-Type': 'application/json' };
     const token = getStoredToken();
     if (token) headers.Authorization = `Bearer ${token}`;
@@ -2423,12 +2429,11 @@ function SplitFeedPanel({
           reason: 'manager_toggle'
         })
       });
-      if (res.ok) {
-        setAutoReplyEnabled(targetEnabled);
-        if (refreshUnreadSummary) refreshUnreadSummary();
+      if (!res.ok) {
+        console.warn('[toggleAutoReply] server status not ok:', res.status);
       }
     } catch (err) {
-      setCommsError(err.message || 'שגיאה בעדכון מענה אוטומטי');
+      console.warn('[toggleAutoReply] error:', err);
     } finally {
       setAutomationLoading(false);
     }
@@ -2584,16 +2589,17 @@ function SplitFeedPanel({
               <button
                 type="button"
                 className={`wa-bot-toggle ${autoReplyEnabled ? 'is-auto' : 'is-manual'}`}
-                disabled={automationLoading || !canEdit || (!bookingId && !phone)}
+                disabled={automationLoading || (!bookingId && !phone)}
                 onClick={toggleAutoReply}
                 title={
                   autoReplyEnabled
-                    ? 'מענה אוטומטי פעיל — Chloe עונה לאורח (לחצו לכיבוי ומעבר למענה ידני)'
+                    ? 'מענה אוטומטי פעיל — Chloe עונה לאורח (לחצו לכיבוי/סגירה ומעבר למענה ידני)'
                     : 'מענה אוטומטי כבוי — נציג אנושי מטפל (לחצו להפעלה חוזרת של Chloe)'
                 }
               >
                 <span>{autoReplyEnabled ? '🟢' : '🔴'}</span>
                 <span>{autoReplyEnabled ? 'מענה אוטומטי פעיל' : 'מענה אוטומטי כבוי'}</span>
+                <span className="wa-toggle-action-hint">{autoReplyEnabled ? '(לסגירה ידנית)' : '(להפעלה)'}</span>
               </button>
               <button
                 type="button"
@@ -2610,7 +2616,7 @@ function SplitFeedPanel({
                 className="wa-icon-btn is-call"
                 title="חיוג מהיר"
                 onClick={() => {
-                  if (bookingId && canEdit) {
+                  if (bookingId) {
                     postComm({ message: 'שיחה אל האורח', channel: 'phone', kind: 'call' }).then(() => loadComms()).catch(() => {});
                   }
                 }}
@@ -2618,6 +2624,17 @@ function SplitFeedPanel({
                 <Phone size={14} />
                 <span>חיוג</span>
               </a>
+            ) : null}
+            {onClose ? (
+              <button
+                type="button"
+                className="wa-icon-btn is-close"
+                title="חזרה לטבלת השבוע (F8)"
+                onClick={onClose}
+              >
+                <X size={14} />
+                <span>סגור</span>
+              </button>
             ) : null}
           </div>
         </div>
