@@ -1176,7 +1176,7 @@ export function createPipeline(deps: PipelineDeps) {
             const media = await d.downloadMedia(msg);
             if (media) {
               const caption = im.imageMessage?.caption || im.documentWithCaptionMessage?.message?.documentMessage?.caption || text || '';
-              const r = await d.invoiceIntake.handleMedia(invPhone, cleaner?.name || 'מנהל', media, caption, (t) => d.send(jid, t));
+              const r = await d.invoiceIntake.handleMedia(invPhone, cleaner?.name || 'מנהל', media, caption, async (t) => { await d.send(jid, t); });
               if (r.kind !== 'not_invoice' && r.reply) {
                 await d.send(jid, r.reply);
                 if (r.followUp) r.followUp.then((t) => (t ? d.send(jid, t) : undefined)).catch((err) => d.log.warn({ err: String(err) }, 'invoice follow-up failed'));
