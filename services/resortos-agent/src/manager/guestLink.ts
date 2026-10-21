@@ -8,7 +8,33 @@ export interface GuestLinkChoice {
   label: string;
 }
 
-export function stayUrlOf(booking?: { checkout_token?: string | null } | null): string {
+/** Demo / office stay tokens that must never be sent as a guest link (Ran 2026-10-20). */
+export const DEMO_STAY_TOKENS = new Set<string>(['tok_pilot_office_demo']);
+const OFFICE_UNIT_IDS = new Set<string>(['pilot-office']);
+
+export function isDemoStayBooking(
+  booking?: { checkout_token?: string | null; unit_id?: string | null } | null,
+  room?: { id?: string; usage?: string | null } | null,
+): boolean {
+  const token = String(booking?.checkout_token || '').trim();
+  if (DEMO_STAY_TOKENS.has(token) || /demo/i.test(token)) return true;
+  if (booking?.unit_id && OFFICE_UNIT_IDS.has(String(booking.unit_id))) return true;
+  if (room && (room.usage === 'OFFICE' || (room.id && OFFICE_UNIT_IDS.has(room.id)))) return true;
+  return false;
+}
+
+/**
+ * Guest-page URL for a booking. Office/demo bookings get the configured real office page
+ * (env PILOT_OFFICE_STAY_URL) or no link at all - never the demo token.
+ */
+export function stayUrlOf(
+  booking?: { checkout_token?: string | null; unit_id?: string | null } | null,
+  room?: { id?: string; usage?: string | null } | null,
+): string {
+  if (isDemoStayBooking(booking, room)) {
+    const configured = String(process.env.PILOT_OFFICE_STAY_URL || '').trim();
+    return /^https:\/\//.test(configured) && !/demo/i.test(configured) ? configured : '';
+  }
   const token = String(booking?.checkout_token || '').trim();
   return token ? `https://resortos.app/stay/${token}` : '';
 }

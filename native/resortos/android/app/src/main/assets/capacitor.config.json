@@ -1,0 +1,27 @@
+{
+	"appId": "il.resortos.app",
+	"appName": "ResortOS",
+	"webDir": "www",
+	"backgroundColor": "#0F172A",
+	"server": {
+		"androidScheme": "https",
+		"cleartext": true,
+		"url": "http://100.127.14.15:3001"
+	},
+	"android": {
+		"path": "android",
+		"backgroundColor": "#0F172A",
+		"allowMixedContent": true
+	},
+	"plugins": {
+		"SplashScreen": {
+			"launchShowDuration": 400,
+			"backgroundColor": "#0F172A",
+			"showSpinner": false
+		},
+		"StatusBar": {
+			"style": "LIGHT",
+			"backgroundColor": "#0F172A"
+		}
+	}
+}

@@ -1,0 +1,149 @@
+[
+  {
+    "captureId": "cap_1792561346749",
+    "capturedAt": "2026-10-21T05:42:26.749Z",
+    "capturedBy": "chloe",
+    "imagePath": null,
+    "extracted": {
+      "check_number": "3657736",
+      "amount": 5000,
+      "due_date": "2026-11-04",
+      "payee": "ספק כללי",
+      "bank": "מזרחי טפחות",
+      "branch": "462",
+      "account": "601997",
+      "description": "שיק דחוי לספק",
+      "is_outgoing": true
+    },
+    "duplicatesFound": false,
+    "duplicates": [],
+    "confirmed": false,
+    "confirmedAt": null
+  },
+  {
+    "captureId": "cap_1792561354685",
+    "capturedAt": "2026-10-21T05:42:34.685Z",
+    "capturedBy": "chloe",
+    "imagePath": null,
+    "extracted": {
+      "check_number": "3657681",
+      "amount": 5000,
+      "due_date": "2026-11-04",
+      "payee": "ספק כללי",
+      "bank": "מזרחי טפחות",
+      "branch": "462",
+      "account": "601997",
+      "description": "שיק דחוי לספק",
+      "is_outgoing": true
+    },
+    "duplicatesFound": false,
+    "duplicates": [],
+    "confirmed": false,
+    "confirmedAt": null
+  },
+  {
+    "captureId": "cap_1792561430467",
+    "capturedAt": "2026-10-21T05:43:50.467Z",
+    "capturedBy": "chloe",
+    "imagePath": null,
+    "extracted": {
+      "check_number": "3655614",
+      "amount": 5000,
+      "due_date": "2026-11-04",
+      "payee": "ספק כללי",
+      "bank": "מזרחי טפחות",
+      "branch": "462",
+      "account": "601997",
+      "description": "שיק דחוי לספק",
+      "is_outgoing": true
+    },
+    "duplicatesFound": false,
+    "duplicates": [],
+    "confirmed": false,
+    "confirmedAt": null
+  },
+  {
+    "captureId": "cap_1792561492211",
+    "capturedAt": "2026-10-21T05:44:52.211Z",
+    "capturedBy": "chloe",
+    "imagePath": null,
+    "extracted": {
+      "check_number": "3652619",
+      "amount": 5000,
+      "due_date": "2026-11-04",
+      "payee": "ספק כללי",
+      "bank": "מזרחי טפחות",
+      "branch": "462",
+      "account": "601997",
+      "description": "שיק דחוי לספק",
+      "is_outgoing": true
+    },
+    "duplicatesFound": false,
+    "duplicates": [],
+    "confirmed": false,
+    "confirmedAt": null
+  },
+  {
+    "captureId": "cap_1792561530558",
+    "capturedAt": "2026-10-21T05:45:30.558Z",
+    "capturedBy": "chloe",
+    "imagePath": null,
+    "extracted": {
+      "check_number": "3656636",
+      "amount": 5000,
+      "due_date": "2026-11-04",
+      "payee": "ספק כללי",
+      "bank": "מזרחי טפחות",
+      "branch": "462",
+      "account": "601997",
+      "description": "שיק דחוי לספק",
+      "is_outgoing": true
+    },
+    "duplicatesFound": false,
+    "duplicates": [],
+    "confirmed": false,
+    "confirmedAt": null
+  },
+  {
+    "captureId": "cap_1792567665417",
+    "capturedAt": "2026-10-21T07:27:45.417Z",
+    "capturedBy": "chloe",
+    "imagePath": null,
+    "extracted": {
+      "check_number": "3652612",
+      "amount": 5000,
+      "due_date": "2026-11-04",
+      "payee": "ספק כללי",
+      "bank": "מזרחי טפחות",
+      "branch": "462",
+      "account": "601997",
+      "description": "שיק דחוי לספק",
+      "is_outgoing": true
+    },
+    "duplicatesFound": false,
+    "duplicates": [],
+    "confirmed": false,
+    "confirmedAt": null
+  },
+  {
+    "captureId": "cap_1792567991408",
+    "capturedAt": "2026-10-21T07:33:11.408Z",
+    "capturedBy": "chloe",
+    "imagePath": null,
+    "extracted": {
+      "check_number": "3652461",
+      "amount": 5000,
+      "due_date": "2026-11-04",
+      "payee": "ספק כללי",
+      "bank": "מזרחי טפחות",
+      "branch": "462",
+      "account": "601997",
+      "description": "שיק דחוי לספק",
+      "is_outgoing": true
+    },
+    "duplicatesFound": false,
+    "duplicates": [],
+    "confirmed": false,
+    "confirmedAt": null
+  }
+]

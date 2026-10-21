@@ -1,5 +1,6 @@
 import { config, type Lang, type RoomEntry } from '../config.js';
 import { inboundSystemPrompt, outboundSystemPrompt } from './prompts.js';
+import { parseTransfer, isInventoryQuestion } from '../manager/inventoryQuestion.js';
 
 export const ACTIONS = ['ROOM_READY', 'CLEANING_STARTED', 'MAINTENANCE_ISSUE', 'SUPPLIES_NEEDED', 'QUERY_STATUS', 'UNKNOWN'] as const;
 export type Action = (typeof ACTIONS)[number];
@@ -286,3 +287,11 @@ export function extractIntentFast(text: string, workerLang: Lang, rooms: RoomEnt
   return null;
 }
 
+
+/** Manager inventory intents (Ran 2026-10-20). Kept outside ACTIONS so the LLM room-action contract is unchanged. */
+export type InventoryIntent = 'INVENTORY_TRANSFER' | 'INVENTORY_QUERY';
+export function detectInventoryIntent(text: string): InventoryIntent | null {
+  if (parseTransfer(text)) return 'INVENTORY_TRANSFER';
+  if (isInventoryQuestion(text)) return 'INVENTORY_QUERY';
+  return null;
+}

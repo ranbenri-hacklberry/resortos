@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { validateIsraeliId } from './israeliIdValidator.js';
 import type { OfficialDocumentType, RawIDModelOutput } from './types.js';
+import { idNameSuggestEnabled, suggestIdNames } from './idNameSuggest.js';
 
 import { fileURLToPath } from 'node:url';
 
@@ -226,7 +227,12 @@ export async function processWithAppleVision(imageBase64: string): Promise<RawID
   try {
     writeFileSync(tempPath, Buffer.from(cleanBase64, 'base64'));
     const tokens = await runAppleVisionOcr(tempPath);
-    return parseIsraeliIdTokens(tokens);
+    const parsed = parseIsraeliIdTokens(tokens);
+    if (idNameSuggestEnabled()) {
+      // Additive only: first_name/last_name and the ID number/check digit are NOT changed by this.
+      try { parsed.name_suggestion = await suggestIdNames(tempPath); } catch { /* graceful: no suggestion */ }
+    }
+    return parsed;
   } finally {
     if (existsSync(tempPath)) {
       try {

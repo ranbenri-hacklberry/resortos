@@ -84,3 +84,15 @@ describe('unavailable Kinorot holds', () => {
     }], range)).toBe(false);
   });
 });
+
+describe('staff housing hold (מגורי צוות)', () => {
+  it('labels staff housing before the generic לא זמין and still treats it as a block', async () => {
+    const m = await import('./unavailableHold.js');
+    expect(m.unavailableHoldLabel('מגורי צוות - לא זמין')).toBe('מגורי צוות');
+    expect(m.unavailableHoldLabel('לא זמין')).toBe('לא זמין');
+    const hold = { id: 'kin_678_75333', unit_id: 'k678', guest_name: 'מגורי צוות - לא זמין', check_in_date: '2026-10-17', check_out_date: '2026-12-31' };
+    expect(m.isUnavailableHoldBooking(hold)).toBe(true);
+    expect(m.coveringUnavailableHold([hold], 'k678', '2026-10-21')).toBe(hold);
+    expect(m.isUnavailableHoldCollectionRow({ guestName: 'מגורי צוות - לא זמין' })).toBe(true);
+  });
+});

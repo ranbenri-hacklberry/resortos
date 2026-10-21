@@ -106,3 +106,74 @@ export function visibleRoomLog(events, scope = 'cycle') {
   }
   return start >= 0 ? list.slice(start) : list;
 }
+
+/* ── Checkout events (Ran 2026-10-21): one checkout = one entry, id `checkout:<bookingId>`. ── */
+export const CHECKOUT_SOURCE = { guest: 'אורח מהדף', manager: 'מנהל', sync: 'סנכרון' };
+
+export function checkoutSourceOf(booking) {
+  const s = booking?.stay || {};
+  if (s.self_checked_out_at || booking?.checkout_status === 'self_departed' || s.checkout_status === 'self_departed') return 'guest';
+  if (s.manager_checked_out_at) return 'manager';
+  return 'sync';
+}
+
+export function checkoutAtOf(booking, source = checkoutSourceOf(booking)) {
+  const s = booking?.stay || {};
+  if (source === 'guest') return s.self_checked_out_at || booking?.checked_out_at || booking?.updated_at || new Date().toISOString();
+  if (source === 'manager') return s.manager_checked_out_at || booking?.checked_out_at || booking?.updated_at || new Date().toISOString();
+  // Sync rows: updated_at is bumped on every sync run, so cap at the booked checkout time (11:00 Israel).
+  const candidates = [booking?.checked_out_at, booking?.updated_at].filter(Boolean);
+  const booked = booking?.check_out_date ? israelWallToIso(booking.check_out_date, '11:00') : null;
+  if (booked) candidates.push(booked);
+  const times = candidates.map((v) => new Date(v)).filter((d) => !Number.isNaN(d.getTime()));
+  if (!times.length) return new Date().toISOString();
+  return new Date(Math.min(...times.map((d) => d.getTime()))).toISOString();
+}
+
+/** 'YYYY-MM-DD' + 'HH:MM' Israel wall time → ISO (handles DST). */
+export function israelWallToIso(date, hhmm) {
+  const guess = new Date(`${date}T${hhmm}:00Z`);
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(guess);
+  const [h, m] = parts.split(':').map(Number);
+  const [wh, wm] = hhmm.split(':').map(Number);
+  const offsetMin = (h * 60 + m) - (wh * 60 + wm);
+  return new Date(guess.getTime() - ((offsetMin + 1440 * 2) % 1440 > 720 ? offsetMin - 1440 : offsetMin) * 60000).toISOString();
+}
+
+function lateLabel(stay) {
+  const v = String(stay?.late_until || stay?.checkout_time || '').trim();
+  if (!v || v === '11:00') return '';
+  if (v === 'next' || /\+1$/.test(v)) {
+    const t = v.replace('+1', '').trim();
+    return /^\d{1,2}:\d{2}$/.test(t) ? `צ׳ק-אאוט מאוחר – למחרת עד ${t}` : 'צ׳ק-אאוט מאוחר – למחרת';
+  }
+  return /^\d{1,2}:\d{2}$/.test(v) ? `צ׳ק-אאוט מאוחר עד ${v}` : '';
+}
+
+export function checkoutLogId(bookingId) {
+  return `checkout:${bookingId}`;
+}
+
+/** Room-log event for a booking that is CHECKED_OUT. Returns null when not checked out / no id. */
+export function buildCheckoutLogEvent(booking, { source } = {}) {
+  if (!booking?.id) return null;
+  const src = source || checkoutSourceOf(booking);
+  const at = checkoutAtOf(booking, src);
+  const name = String(booking.guest_name || '').trim();
+  const late = lateLabel(booking.stay);
+  const text = ['צ׳ק-אאוט', name, late].filter(Boolean).join(' · ');
+  return {
+    id: checkoutLogId(booking.id),
+    at,
+    kind: 'checkout',
+    actor: CHECKOUT_SOURCE[src] || CHECKOUT_SOURCE.sync,
+    text,
+    quote: '',
+    booking_id: booking.id
+  };
+}
+
+export function hasCheckoutLog(sop, bookingId) {
+  const list = Array.isArray(sop?.roomLog) ? sop.roomLog : [];
+  return list.some((row) => row?.id === checkoutLogId(bookingId));
+}

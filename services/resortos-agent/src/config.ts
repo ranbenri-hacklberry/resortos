@@ -22,6 +22,8 @@ export interface CleanerProfile {
   language: Lang;
   /** WhatsApp Linked Device ID if assigned, e.g. 208190587302068 */
   lid?: string;
+  /** Never receives automatic Chloe alerts/broadcasts (Ran 2026-10-21: אדם). Commands they start still work. */
+  noAlerts?: boolean;
 }
 
 export type RoomUsage = 'GUEST_ACCOMMODATION' | 'STAFF_ACCOMMODATION' | 'OFFICE' | 'STORAGE' | 'SERVICE_AREA';
@@ -142,6 +144,8 @@ export const config = {
     draftsPath: path.resolve(ROOT, '../../data/invoices/drafts.json'),
     ocrBin: path.join(ROOT, 'bin', 'apple-vision-ocr-boxes'),
     cropBin: path.join(ROOT, 'bin', 'invoice-crop'),
+    enhanceScript: path.join(ROOT, 'scripts', 'invoice_enhance.py'),
+    pythonBin: env('CHLOE_PYTHON', '/opt/homebrew/bin/python3'),
     grok: env('XAI_API_KEY', '')
       ? { apiKey: env('XAI_API_KEY', ''), model: 'grok-4.7' }
       : null,

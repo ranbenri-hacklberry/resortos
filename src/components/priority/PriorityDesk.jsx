@@ -127,7 +127,7 @@ function toneOf(label) {
   if (str === 'ממתין לבדיקה' || str === 'לבדיקה' || str === 'השלמות') return 'tone-inspect';
   if (str === 'החלפה' || str === 'צ׳ק אאוט' || str === 'צ׳ק אין' || str === 'יציאה' || str === ARRIVAL_TODAY_LABEL) return 'tone-wait';
   if (str === 'תקלה') return 'tone-bad';
-  if (str === 'לא זמין' || str === 'לא למכירה' || str === 'שיפוץ' || str === 'שיפוצים' || str === 'סגור' || str === 'מקולקל') return 'tone-hold';
+  if (str === 'לא זמין' || str === 'מגורי צוות' || str === 'לא למכירה' || str === 'שיפוץ' || str === 'שיפוצים' || str === 'סגור' || str === 'מקולקל') return 'tone-hold';
   return 'tone-idle';
 }
 

@@ -1,0 +1,11 @@
+{
+  "dryRun": false,
+  "checkoutTime": "11:00",
+  "managerWhatsApp": {
+    "enabled": true,
+    "phone": "972548317887",
+    "agentUrl": "http://127.0.0.1:8787/api/messages/send"
+  },
+  "lookbackDays": 1,
+  "lockStaleMinutes": 15
+}

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>ResortOS</title>
+  <link rel="stylesheet" href="./shell.css" />
+</head>
+<body>
+  <main class="shell">
+    <h1>ResortOS</h1>
+    <p>פותחים את לוח התפוסה מהסטודיו.</p>
+    <p id="status-url"></p>
+    <p id="status-label">מתחברים…</p>
+    <p id="status-hint"></p>
+    <div id="status" data-state="loading"></div>
+    <button type="button" id="retry">נסו שוב</button>
+    <button type="button" id="open-settings">שינוי כתובת</button>
+    <form id="settings" hidden>
+      <label for="url">כתובת</label>
+      <input id="url" />
+      <button type="submit">שמירה</button>
+      <button type="button" id="reset">ברירת מחדל</button>
+    </form>
+  </main>
+  <script src="./shell.js"></script>
+</body>
+</html>

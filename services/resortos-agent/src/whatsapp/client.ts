@@ -177,6 +177,7 @@ export const KNOWN_STAFF_LIDS: Record<string, string> = {
   '87338780737753': '972559495515',  // שיבה
   '37500030603279': '972559281657',  // טאו
   '217588009308323': '972529690024', // צוקי
+  '274762009972934': '972533932462', // קוסטה (Ran confirmed 2026-10-21)
 };
 
 export const STAFF_PHONE_TO_LID: Record<string, string> = Object.fromEntries(

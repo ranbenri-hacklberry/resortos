@@ -7,7 +7,7 @@ describe('place follow-up', () => {
   it('numbers the grocery options', async () => {
     const menu = await placeMenuFor('איפה קונים חלב');
     expect(menu?.text).toContain('1. *סופרמרקט וגלריה · רמות*');
-    expect(menu?.text).toContain('כתבו את המספר');
+    expect(menu?.text).toContain('השיבו במספר מהרשימה');
     expect(menu?.ids[0]).toBe('shop_ramot_super');
   });
 

@@ -344,12 +344,15 @@ export function formatComplexClarificationPrompt(
   complexName: string,
   candidateRooms: RoomEntry[],
   allRooms: RoomEntry[],
-  extras: { label: string }[] = []
+  extras: { label: string }[] = [],
+  /** Bug B (Ran 2026-10-20): current status per unit id, shown next to each unit; omitted when unknown. */
+  statuses: Record<string, string> = {}
 ): string {
   let msg = `🤔 זיהיתי שהתכוונת למתחם *${complexName}*.\nבאיזו יחידה מדובר?\n\n`;
   candidateRooms.forEach((r, idx) => {
     const label = formatRoomDisplay(r.id, allRooms);
-    msg += `*${idx + 1}* - ${label}\n`;
+    const status = statuses[r.id] ? ` · ${statuses[r.id]}` : '';
+    msg += `*${idx + 1}* - ${label}${status}\n`;
   });
   extras.forEach((row, idx) => {
     msg += `*${candidateRooms.length + idx + 1}* - ${row.label}\n`;

@@ -291,6 +291,7 @@ export async function processGuestIDDocument(
       rejection_reason: parsed.rejection_reason || 'non_official_or_unrecognized_document',
       latency_ms,
       raw_output: rawOutput,
+      ...(parsed.name_suggestion ? { name_suggestion: parsed.name_suggestion } : {}),
     };
   }
 
@@ -316,6 +317,7 @@ export async function processGuestIDDocument(
         rejection_reason: checksum.error || 'invalid_israeli_id_checksum',
         latency_ms,
         raw_output: rawOutput,
+        ...(parsed.name_suggestion ? { name_suggestion: parsed.name_suggestion } : {}),
       };
     }
 
@@ -332,6 +334,7 @@ export async function processGuestIDDocument(
       rejection_reason: null,
       latency_ms,
       raw_output: rawOutput,
+      ...(parsed.name_suggestion ? { name_suggestion: parsed.name_suggestion } : {}),
     };
   }
 
@@ -349,5 +352,6 @@ export async function processGuestIDDocument(
     rejection_reason: null,
     latency_ms,
     raw_output: rawOutput,
+    ...(parsed.name_suggestion ? { name_suggestion: parsed.name_suggestion } : {}),
   };
 }

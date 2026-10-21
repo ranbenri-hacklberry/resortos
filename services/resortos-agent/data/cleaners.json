@@ -45,6 +45,7 @@
     "lid": "249438949924982",
     "name": "אדם",
     "role": "MANAGER",
+    "noAlerts": true,
     "language": "he"
   },
   {
@@ -59,5 +60,13 @@
     "name": "צוקי",
     "role": "PRIORITY",
     "language": "he"
+  },
+  {
+    "phone": "972533932462",
+    "lid": "274762009972934",
+    "name": "קוסטה",
+    "role": "PRIORITY",
+    "language": "he",
+    "title": "תחזוקה"
   }
 ]

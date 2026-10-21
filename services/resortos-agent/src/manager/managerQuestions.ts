@@ -1,5 +1,15 @@
+import { stayUrlOf } from './guestLink.js';
+import { COMPLEXES, type ComplexDefinition } from './managerFuzzyMatcher.js';
+import { readFileSync } from 'node:fs';
 import type { RoomEntry } from '../config.js';
 import type { BookingRow, UnitRow } from '../integration/resortos.js';
+
+let ROOM_CONFIGURATIONS: Record<string, any> = {};
+try {
+  ROOM_CONFIGURATIONS = JSON.parse(readFileSync(new URL('../../data/room_configurations.json', import.meta.url), 'utf8'));
+} catch {
+  ROOM_CONFIGURATIONS = {};
+}
 
 export interface RoomOccupancyInfo {
   inBooking?: BookingRow;
@@ -15,7 +25,7 @@ export function getRoomOccupancy(roomId: string, bookings: BookingRow[], today: 
   );
 
   const inBooking = roomBookings.find((b) => b.check_in_date === today);
-  const outBooking = roomBookings.find((b) => b.check_out_date === today);
+  const outBooking = roomBookings.find((b) => b.check_out_date === today && b.id !== inBooking?.id);
   const stayingBooking = roomBookings.find(
     (b) => today > (b.check_in_date || '') && today < (b.check_out_date || '')
   );
@@ -53,6 +63,16 @@ export function getCleaningStatusLabel(status?: string | null, customReason?: st
   if (status === 'DIRTY') return 'ממתין לניקיון 🔴';
   if (status === 'MAINTENANCE_ALERT') return 'תקלת תחזוקה ⚠️';
   return 'לא ידוע ⚪';
+}
+
+/** Bug B (Ran 2026-10-20): one short status for a unit-list line, e.g. "בשהייה". Empty when unknown. */
+export function unitShortStatus(unit: UnitRow | undefined, occupancy: RoomOccupancyInfo): string {
+  if (occupancy.outBooking) return occupancy.inBooking ? 'צ׳ק אאוט + צ׳ק אין היום' : 'צ׳ק אאוט היום';
+  if (occupancy.stayingBooking) return 'בשהייה';
+  const cleaning = getCleaningStatusLabel(unit?.operational_status, unit?.custom_reason);
+  const clean = cleaning.startsWith('לא ידוע') ? '' : cleaning;
+  if (occupancy.inBooking) return clean ? `צ׳ק אין היום · ${clean}` : 'צ׳ק אין היום';
+  return clean;
 }
 
 function guestLabel(booking?: BookingRow): string {
@@ -125,7 +145,7 @@ function formatPax(b: BookingRow): string {
 function formatBookingDetails(b: BookingRow, headerTitle: string, roomLabel: string): string {
   const pax = formatPax(b);
   const payment = formatPayment(b);
-  const stayUrl = b.checkout_token ? `https://resortos.app/stay/${b.checkout_token}` : '';
+  const stayUrl = stayUrlOf(b);
 
   return `👥 *${headerTitle} (${roomLabel}):*\n` +
     `• *שם אורח:* ${b.guest_name || 'ללא שם'}\n` +
@@ -358,7 +378,8 @@ export function answerManagerRoomQuestion(
 
   // 11. Equipment Standard query
   if (/תקן ציוד|תקן חדר|מה התקן|ציוד תקני/i.test(q)) {
-    const isFamily = Boolean(room?.max_occupancy && room.max_occupancy > 2);
+    const cfg = ROOM_CONFIGURATIONS[unit?.id || room?.id || ''];
+    const isFamily = Boolean(cfg?.sleeping_places && cfg.sleeping_places > 2);
     const std = isFamily ? 'משפחה (עד 6 אורחים)' : 'זוגי (2 אורחים)';
     return `📋 *תקן ציוד עבור חדר ${roomLabel} (${std}):*\n` +
       `• כלי מטבח: צלחות גדולות (${isFamily ? 6 : 2}), כוסות (${isFamily ? 6 : 2}), מאגים (${isFamily ? 6 : 2}), כוסות יין (${isFamily ? 6 : 2}), סכו״ם מלא (${isFamily ? 6 : 2})${isFamily ? ', קעריות קטנות (4)' : ''}, סיר (1), מחבת (1).\n` +
@@ -393,4 +414,158 @@ export function answerManagerRoomQuestion(
   }
 
   return null;
+}
+
+export function matchComplex(text: string): ComplexDefinition | null {
+  const norm = String(text || '').toLowerCase();
+  for (const c of COMPLEXES) {
+    if (norm.includes(c.officialName.toLowerCase())) return c;
+    for (const nick of c.nicknames) {
+      if (new RegExp(`(?:^|[\\s.,?!למבכשל\\-])${nick}(?:$|[\\s.,?!])`, 'i').test(norm)) {
+        return c;
+      }
+    }
+  }
+  return null;
+}
+
+export function extractDateRange(text: string, today: string): { from: string; to: string; label: string } | null {
+  const str = String(text || '').toLowerCase();
+
+  // 1. Full date range like 23/10 - 24/10 or 23.10 - 24.10
+  const fullRangeMatch = str.match(/(\d{1,2})[\/.](\d{1,2})\s*[-–]\s*(\d{1,2})[\/.](\d{1,2})/);
+  if (fullRangeMatch) {
+    const d1 = parseInt(fullRangeMatch[1], 10);
+    const m1 = parseInt(fullRangeMatch[2], 10);
+    const d2 = parseInt(fullRangeMatch[3], 10);
+    const m2 = parseInt(fullRangeMatch[4], 10);
+    const year = parseInt(today.slice(0, 4), 10);
+    const from = `${year}-${String(m1).padStart(2, '0')}-${String(d1).padStart(2, '0')}`;
+    const to = `${year}-${String(m2).padStart(2, '0')}-${String(d2).padStart(2, '0')}`;
+    return { from, to, label: `${d1}/${m1}-${d2}/${m2}` };
+  }
+
+  // 2. Day-range with single month like 23-24/10 or 23-24.10 or (23-24/10)
+  const rangeMatch = str.match(/(\d{1,2})\s*[-–]\s*(\d{1,2})[\/.](\d{1,2})(?:[\/.](\d{2,4}))?/);
+  if (rangeMatch) {
+    const d1 = parseInt(rangeMatch[1], 10);
+    const d2 = parseInt(rangeMatch[2], 10);
+    const month = parseInt(rangeMatch[3], 10);
+    const year = rangeMatch[4] ? (rangeMatch[4].length === 2 ? 2000 + parseInt(rangeMatch[4], 10) : parseInt(rangeMatch[4], 10)) : parseInt(today.slice(0, 4), 10);
+    const mStr = String(month).padStart(2, '0');
+    const from = `${year}-${mStr}-${String(d1).padStart(2, '0')}`;
+    const to = `${year}-${mStr}-${String(d2).padStart(2, '0')}`;
+    return { from, to, label: `${d1}-${d2}/${month}` };
+  }
+
+  // 3. Single date like 23/10 or 23.10
+  const singleDateMatch = str.match(/(\d{1,2})[\/.](\d{1,2})(?:[\/.](\d{2,4}))?/);
+  if (singleDateMatch) {
+    const d = parseInt(singleDateMatch[1], 10);
+    const m = parseInt(singleDateMatch[2], 10);
+    const year = singleDateMatch[3] ? (singleDateMatch[3].length === 2 ? 2000 + parseInt(singleDateMatch[3], 10) : parseInt(singleDateMatch[3], 10)) : parseInt(today.slice(0, 4), 10);
+    const from = `${year}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    return { from, to: from, label: `${d}/${m}` };
+  }
+
+  // 4. Weekend (סופ״ש / סופש / סוף שבוע / weekend)
+  if (/סופ״ש|סופש|סוף שבוע|weekend/i.test(str)) {
+    const curr = new Date(`${today}T12:00:00Z`);
+    const dayOfWeek = curr.getUTCDay(); // 0 = Sun, ..., 5 = Fri, 6 = Sat
+    let diffToFri = (5 - dayOfWeek + 7) % 7;
+    if (dayOfWeek === 6) diffToFri = -1; // today is Saturday -> weekend is Fri-Sat
+    const fri = new Date(curr);
+    fri.setUTCDate(curr.getUTCDate() + diffToFri);
+    const sat = new Date(fri);
+    sat.setUTCDate(fri.getUTCDate() + 1);
+    const from = fri.toISOString().slice(0, 10);
+    const to = sat.toISOString().slice(0, 10);
+    const d1 = fri.getUTCDate();
+    const d2 = sat.getUTCDate();
+    const m = fri.getUTCMonth() + 1;
+    return { from, to, label: `${d1}-${d2}/${m}` };
+  }
+
+  // 5. Today / Tomorrow
+  if (/היום/i.test(str)) {
+    return { from: today, to: today, label: 'היום' };
+  }
+  if (/מחר/i.test(str)) {
+    const curr = new Date(`${today}T12:00:00Z`);
+    curr.setUTCDate(curr.getUTCDate() + 1);
+    const tom = curr.toISOString().slice(0, 10);
+    return { from: tom, to: tom, label: 'מחר' };
+  }
+
+  return null;
+}
+
+export function isComplexCheckinsQuestion(question: string): boolean {
+  const q = String(question || '').toLowerCase();
+  if (!matchComplex(q)) return false;
+  // Must ask for plural check-ins OR check-ins with weekend/date range/all rooms
+  const hasPluralCheckins = /כניסות/i.test(q);
+  const hasWeekendOrDate = /סופ״ש|סופש|סוף שבוע|weekend|\d{1,2}[-–\/.]\d{1,2}/i.test(q);
+  const hasAllRooms = /לכל חדר|בכל חדר|כל החדרים|לפי חדר/i.test(q);
+  return (hasPluralCheckins && (hasWeekendOrDate || hasAllRooms || !/מי נכנס/i.test(q))) ||
+         (hasWeekendOrDate && /כניס|מי מגיע|מי נכנס/i.test(q));
+}
+
+export function answerComplexCheckinsQuestion(
+  question: string,
+  allRooms: RoomEntry[],
+  bookings: BookingRow[],
+  today: string
+): string | null {
+  const q = String(question || '').toLowerCase().trim();
+  const isCheckin = /כניס(?:ה|ות|ים)|מי\s+(?:נכנס|מגיע|בא)(?:ים)?|צ['׳]?ק[- ]?אין|arrivals?|check-?ins?/i.test(q);
+  if (!isCheckin) return null;
+
+  const complex = matchComplex(q);
+  if (!complex) return null;
+
+  const dateRange = extractDateRange(q, today);
+  if (!dateRange) return null;
+
+  const complexRooms = allRooms
+    .filter((r) => complex.roomIds.includes(r.id) && r.usage !== 'STAFF_ACCOMMODATION' && r.usage !== 'OFFICE')
+    .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id, 'he', { numeric: true }));
+
+  if (complexRooms.length === 0) return null;
+
+  const lines: string[] = [];
+  for (const r of complexRooms) {
+    const unitBookings = bookings.filter(
+      (b) =>
+        b.unit_id === r.id &&
+        !b.deleted_at &&
+        b.booking_status !== 'CANCELED' &&
+        b.check_in_date &&
+        b.check_in_date >= dateRange.from &&
+        b.check_in_date <= dateRange.to
+    );
+
+    if (unitBookings.length === 0) {
+      lines.push(`• ${r.name}: אין כניסה`);
+    } else {
+      const bDesc = unitBookings
+        .map((b) => {
+          const inDate = shortDate(b.check_in_date);
+          const nights = nightCount(b) || 'לילה 1';
+          let guests = 'לא ידוע';
+          const hasHeadcount =
+            (b.adults_count != null && b.adults_count > 0) ||
+            (b.children_count != null && b.children_count > 0);
+          if (hasHeadcount) {
+            const total = (b.adults_count || 0) + (b.children_count || 0);
+            guests = total === 1 ? 'אורח 1' : `${total} אורחים`;
+          }
+          return `כניסה ${inDate}, ${nights}, ${guests}`;
+        })
+        .join('; ');
+      lines.push(`• ${r.name}: ${bDesc}`);
+    }
+  }
+
+  return `📋 *כניסות ב${complex.officialName} (${dateRange.label}):*\n${lines.join('\n')}`;
 }

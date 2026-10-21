@@ -8,6 +8,8 @@ import { tryHandleOps } from './opsGateway.js';
 import { tryHandleClimate } from './climateGateway.js';
 import { tryHandleNetwork } from './routerGateway.js';
 import { tryHandleAssetBeacons } from './assetBeaconWatch.js';
+import { registerInventoryRoutes } from './inventoryGateway.js';
+import { registerExpenseRoutes } from './expenses.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -318,6 +320,11 @@ function requireManagerOrLocal(req, res, next) {
   }
   return requireManagerStaff(req, res, next);
 }
+
+// Inventory API (manager staff, or Chloe from localhost). Ran 2026-10-20; restored 2026-10-21.
+registerInventoryRoutes(app, requireManagerOrLocal);
+// Supplier expenses (Ran 2026-10-21): own file store data/expenses.jsonl, separate from cash-flow manual entries.
+registerExpenseRoutes(app, requireManagerOrLocal);
 
 // FINANCIAL COMMAND CENTER API
 app.get('/api/finance/command-center', requireManagerOrLocal, async (req, res) => {
@@ -688,6 +695,9 @@ app.listen(PORT, BIND_HOST, () => {
     import('./callMe.js')
         .then((calls) => calls.startGuestCallPoller())
         .catch((err) => console.warn('[call-me]', err.message));
+    import('./roomCheckoutLog.js')
+        .then((m) => m.startCheckoutRoomLogPoller())
+        .catch((err) => console.warn('[checkout room-log]', err.message));
     import('./guestContext.js')
         .then((guest) => guest.startGuestContextSync())
         .catch((err) => console.warn('[guest-context]', err.message));
