@@ -19,7 +19,7 @@ const handwritten = {
   corners: [[0.1, 0.1], [0.9, 0.12], [0.88, 0.95], [0.08, 0.93]],
 };
 
-function setup(grokReply: any, opts: { enhance?: any; grokStatus?: number; ocr?: any } = {}) {
+function setup(grokReply: any, opts: { enhance?: any; grokStatus?: number; ocr?: any; expenseStatus?: number } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'hw-'));
   const calls: Array<{ method: string; url: string; body: any; headers?: any }> = [];
   const fetchImpl = vi.fn(async (url: any, init: any) => {
@@ -32,6 +32,10 @@ function setup(grokReply: any, opts: { enhance?: any; grokStatus?: number; ocr?:
       return ok({ model: 'grok-4.7', choices: [{ message: { content: JSON.stringify(grokReply) } }], usage: { total_tokens: 1 } });
     }
     if (u.includes('/api/inventory/items?')) return ok({ items: [{ id: 77, name: 'נייר טואלט', unit: 'חבילה', location: 'מחסן טוסקנה (C/27)', current_stock: 5, settings: {} }] });
+    if (u.endsWith('/api/finance/expenses')) {
+      if (opts.expenseStatus) return new Response(JSON.stringify({ ok: false, duplicate: opts.expenseStatus === 409 }), { status: opts.expenseStatus });
+      return new Response(JSON.stringify({ ok: true, expense: { id: 'exp_1' } }), { status: 201 });
+    }
     if (u.endsWith('/api/inventory/items/receive')) return ok(body.commit ? { ok: true, ids: body.lines.map((l: any) => l.id), skipped: [] } : { dry_run: true });
     if (u.endsWith('/api/inventory/items')) return ok(body.commit ? { ok: true, ids: [901], items: body.items.map((it: any) => ({ id: 901, name: it.name, sku: it.sku ?? null })), skipped: [] } : { dry_run: true });
     return new Response('nf', { status: 404 });
@@ -258,8 +262,12 @@ describe('expense vs inventory invoices (towing etc.)', () => {
     await intake.handleMedia(RAN, 'רן', photo);
     const out = await intake.handleText(RAN, 'רן', 'אשר');
     expect(out).toContain('תויקה כהוצאה — רכב/גרירה');
-    expect(calls.some((c) => c.method === 'POST' && c.url.startsWith('http://bridge'))).toBe(false);
+    const posts = calls.filter((c) => c.method === 'POST' && c.url.startsWith('http://bridge'));
+    expect(posts.map((c) => c.url)).toEqual(['http://bridge.test/api/finance/expenses']); // no inventory writes
+    expect(posts[0].body).toMatchObject({ supplier: 'גרר הצפון', invoice_no: '3310', date: '2026-10-21', subtotal: 400, vat: 72, total: 472, category: 'רכב/גרירה', paid: true });
+    expect(posts[0].body.image_paths.length).toBe(2);
     const rec = JSON.parse(readFileSync(path.join(dir, 'rec.jsonl'), 'utf8').trim());
+    expect(rec.expense_server).toEqual({ status: 'filed', id: 'exp_1' });
     expect(rec).toMatchObject({ type: 'expense', expense_category: 'רכב/גרירה', paid: true, expense_total: 400, total: 472 });
     expect(rec.lines[0].action).toBe('expense');
     expect(existsSync(rec.image_paths.processed)).toBe(true);
@@ -291,5 +299,17 @@ describe('expense vs inventory invoices (towing etc.)', () => {
     const { parseInvoiceCommand } = await import('./intake.js');
     expect(parseInvoiceCommand('מלאי')).toEqual({ cmd: 'to_inventory' });
     expect(parseInvoiceCommand('הוצאה רכב/גרירה')).toEqual({ cmd: 'to_expense', value: 'רכב/גרירה' });
+  });
+  it('server says duplicate → nice message, nothing recorded twice', async () => {
+    const { intake, dir } = setup(towing, { expenseStatus: 409 });
+    await intake.handleMedia(RAN, 'רן', photo);
+    expect(await intake.handleText(RAN, 'רן', 'אשר')).toContain('כבר רשומה במערכת');
+    expect(existsSync(path.join(dir, 'rec.jsonl'))).toBe(false);
+  });
+  it('server error on pure expense → draft kept, retry possible', async () => {
+    const { intake } = setup(towing, { expenseStatus: 500 });
+    await intake.handleMedia(RAN, 'רן', photo);
+    expect(await intake.handleText(RAN, 'רן', 'אשר')).toContain('נכשל');
+    expect(intake.latestDraft(RAN)).toBeTruthy();
   });
 });

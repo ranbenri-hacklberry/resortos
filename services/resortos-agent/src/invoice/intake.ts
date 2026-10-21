@@ -806,6 +806,37 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
     }));
     const base = { business_id: cfg.businessId, confirmed_by: confirmedBy, invoice_ref: invoiceRef };
     let received: any = null, created: any = null;
+    // Expense lines → ResortOS supplier expenses (POST /api/finance/expenses, own file store; Ran 2026-10-21).
+    let expenseServer: { status: 'filed' | 'duplicate' | 'failed'; id?: string; error?: string } | null = null;
+    const expLines = d.lines.filter(isExp);
+    if (expLines.length) {
+      const allExp = expLines.length === d.lines.length;
+      const x = d.extraction;
+      const expSub = Math.round(expLines.reduce((a, l) => a + (l.line_total || 0), 0) * 100) / 100;
+      const ratio = x.before_vat && x.total ? x.total / x.before_vat : 1.18;
+      const body = {
+        supplier: d.supplier || 'לא מזוהה', date: x.date_iso, invoice_no: d.invoice_no,
+        subtotal: allExp ? (x.before_vat ?? expSub) : expSub,
+        vat: allExp ? x.vat : Math.round(expSub * (ratio - 1) * 100) / 100,
+        total: allExp ? (x.total ?? expSub) : Math.round(expSub * ratio * 100) / 100,
+        category: d.expense_category || 'אחר', paid: d.paid ?? null,
+        image_paths: [processedSaved, imageSaved].filter(Boolean), approved_by: confirmedBy, source: 'chloe-whatsapp-invoice',
+      };
+      try {
+        const r = await bridge('POST', '/api/finance/expenses', body);
+        expenseServer = { status: 'filed', id: r?.expense?.id };
+      } catch (e) {
+        const msg = String((e as Error).message);
+        if (/ 409:/.test(msg)) {
+          expenseServer = { status: 'duplicate' };
+          if (allExp) { dropDraft(d.key); return `⛔ ההוצאה של חשבונית ${invoiceRef}${d.supplier ? ` (${d.supplier})` : ''} כבר רשומה במערכת. לא רשמתי שוב.`; }
+        } else {
+          log.error({ err: msg, invoice: invoiceRef }, 'expense post failed');
+          if (allExp) return `❌ רישום ההוצאה של ${invoiceRef} נכשל מול ResortOS: ${msg.slice(0, 160)}\nהטיוטה נשמרה. אפשר לנסות שוב *אשר*.`;
+          expenseServer = { status: 'failed', error: msg.slice(0, 160) };
+        }
+      }
+    }
     try {
       // Dry-runs first: any validation error stops before a single write.
       if (receiveLines.length) await bridge('POST', '/api/inventory/items/receive', { ...base, lines: receiveLines });
@@ -832,6 +863,7 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
       })),
       created_item_ids: createdIds, received_item_ids: received?.ids || [], receive_skipped: received?.skipped || [], create_skipped: created?.skipped || [],
       image_paths: { mac: imageSaved, processed: processedSaved }, extraction_source: d.source || 'local',
+      expense_server: expenseServer,
       type: d.lines.every(isExp) ? 'expense' : d.lines.some(isExp) ? 'mixed' : 'inventory', expense_category: d.lines.some(isExp) ? (d.expense_category || 'אחר') : null, paid: d.paid ?? null,
       expense_total: d.lines.some(isExp) ? Math.round(d.lines.filter(isExp).reduce((a, l) => a + (l.line_total || 0), 0) * 100) / 100 : null, business_id: cfg.businessId, confirmed_by: confirmedBy, recorded_at: new Date(now()).toISOString(),
       checks: d.extraction.checks, override_gap: override && !d.extraction.checks.all_ok, source: 'chloe-whatsapp-invoice-intake',
@@ -841,10 +873,10 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
     dropDraft(d.key);
     const nRec = (received?.ids || []).length, nNew = createdIds.length;
     if (d.lines.every(isExp)) {
-      return [`✅ *חשבונית ${invoiceRef} תויקה כהוצאה — ${d.expense_category || 'אחר'}*`, `ספק: ${d.supplier || '—'} | סה״כ ${money(d.extraction.total)} ₪`, 'המלאי לא השתנה. נרשם ברשומות החשבוניות של קלואי (עדיין לא במערכת הכספים).'].join('\n');
+      return [`✅ *חשבונית ${invoiceRef} תויקה כהוצאה — ${d.expense_category || 'אחר'}*`, `ספק: ${d.supplier || '—'} | סה״כ ${money(d.extraction.total)} ₪`, 'המלאי לא השתנה. נרשם בהוצאות הספקים ב־ResortOS.'].join('\n');
     }
     const lines = d.lines.filter(isInv).map((l) => `${l.line_no}. ${l.existing?.name || l.name} ${l.existing ? `+${fmtQty(l.qty)}` : `🆕 ${fmtQty(l.qty)}`}`);
-    if (d.lines.some(isExp)) lines.push(`+ ${d.lines.filter(isExp).length} שורות תויקו כהוצאה — ${d.expense_category || 'אחר'} (לא במלאי)`);
+    if (d.lines.some(isExp)) lines.push(expenseServer?.status === 'failed' ? `⚠️ ${d.lines.filter(isExp).length} שורות הוצאה לא נרשמו בהוצאות (שגיאת שרת) — נשמרו ברשומת החשבונית` : `+ ${d.lines.filter(isExp).length} שורות תויקו כהוצאה — ${d.expense_category || 'אחר'} (לא במלאי)${expenseServer?.status === 'duplicate' ? ', כבר היו רשומות' : ''}`);
     return [`✅ *חשבונית ${invoiceRef} נקלטה*`, `ספק: ${d.supplier || '—'} | סה״כ ${money(d.extraction.total)} ₪`,
       `עודכנו ${nRec} פריטים קיימים, נוצרו ${nNew} פריטים חדשים${(received?.skipped || []).length ? ` (דולגו ${(received.skipped).length} שכבר נקלטו)` : ''}.`,
       ...lines, override && !d.extraction.checks.all_ok ? '⚠️ נקלט למרות פער בבדיקות (נרשם ברשומה).' : ''].filter(Boolean).join('\n');
