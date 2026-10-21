@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { sendManagerSms } from './integration/managerSms.js';
 import { config, loadRooms } from './config.js';
 import { currentStaff, refreshStaff } from './staff/liveStaff.js';
 import { WhatsAppClient, canonicalJid } from './whatsapp/client.js';
@@ -9,6 +10,9 @@ import { createPipeline } from './pipeline.js';
 import { generateRoomQrPng } from './whatsapp/qrGenerator.js';
 import { resolveRoomByAlias } from './llm/client.js';
 import { gmailStatus } from './gmail/mailbox.js';
+import { createInvoiceIntake } from './invoice/intake.js';
+import { createInventoryClient } from './manager/inventoryQuestion.js';
+import { downloadInvoiceMedia } from './whatsapp/media.js';
 
 const wa = new WhatsAppClient();
 const stt = new Transcriber();
@@ -16,8 +20,28 @@ const llm = new OllamaClient();
 const resortos = new ResortOSClient();
 const log = wa.log;
 
+const invoiceIntake = createInvoiceIntake({
+  ...config.invoiceIntake,
+  bridgeUrl: config.resortos.baseUrl,
+  tmpDir: config.tmpDir,
+  log,
+  suggest: {
+    enabled: config.invoiceIntake.nameSuggest,
+    cropBin: config.invoiceIntake.cropBin,
+    // same model / num_ctx / keep_alive as Chloe's chat calls, so the loaded model is reused (no reload)
+    ollama: { url: config.ollama.url, model: config.ollama.model, keepAlive: config.ollama.keepAlive, numCtx: 4096 },
+  },
+});
+log.info({ enabled: config.invoiceIntake.enabled, nameSuggest: config.invoiceIntake.nameSuggest, grok: config.invoiceIntake.grok ? config.invoiceIntake.grok.model : 'off', allowlist: config.invoiceIntake.allowlist.map((p) => '***' + p.replace(/\D/g, '').slice(-4)) }, 'invoice intake config');
+
+const inventory = createInventoryClient({ bridgeUrl: config.resortos.baseUrl, businessId: config.invoiceIntake.businessId });
+
 const pipeline = createPipeline({
+  invoiceIntake,
+  inventory,
+  downloadMedia: downloadInvoiceMedia,
   send: (jid, text) => wa.sendText(jid, text),
+  notifyManagerSms: (message) => sendManagerSms(message),
   sendImage: (jid, buf, caption) => wa.sendImage(jid, buf, caption),
   isAudio: isAudioMessage,
   extractText,

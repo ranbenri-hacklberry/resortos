@@ -18,6 +18,8 @@ export interface RawIDModelOutput {
   birth_date: string;
   confidence: number;
   rejection_reason: string;
+  /** CHLOE_ID_NAME_SUGGEST: gemma4 crop suggestion — never trusted automatically */
+  name_suggestion?: import('./idNameSuggest.js').IdNameSuggestion;
 }
 
 export interface IsraeliIdValidationResult {
@@ -53,6 +55,8 @@ export interface GuestIDVerificationResult {
   latency_ms: number;
   /** Raw textual response from model */
   raw_output?: string;
+  /** CHLOE_ID_NAME_SUGGEST: suggested Hebrew names + confidence flag (unconfirmed, informational only) */
+  name_suggestion?: import('./idNameSuggest.js').IdNameSuggestion;
 }
 
 export interface IDOcrServiceOptions {

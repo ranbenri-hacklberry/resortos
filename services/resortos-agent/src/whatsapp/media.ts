@@ -13,6 +13,17 @@ export interface Transcript {
   duration_ms: number;
 }
 
+/** Download image / PDF bytes for invoice intake. Returns null for other message types. */
+export async function downloadInvoiceMedia(m: WAMessage): Promise<{ buffer: Buffer; mimetype: string; fileName?: string } | null> {
+  const mm: any = m.message || {};
+  const doc = mm.documentMessage || mm.documentWithCaptionMessage?.message?.documentMessage;
+  const media = mm.imageMessage || doc;
+  if (!media) return null;
+  const target: WAMessage = mm.documentWithCaptionMessage ? ({ ...m, message: mm.documentWithCaptionMessage.message } as WAMessage) : m;
+  const buffer = (await downloadMediaMessage(target, 'buffer', {})) as Buffer;
+  return { buffer, mimetype: String(media.mimetype || (mm.imageMessage ? 'image/jpeg' : 'application/octet-stream')), fileName: doc?.fileName || undefined };
+}
+
 export const isAudioMessage = (m: WAMessage): boolean => !!m.message?.audioMessage;
 
 export const extractText = (m: WAMessage): string | null =>

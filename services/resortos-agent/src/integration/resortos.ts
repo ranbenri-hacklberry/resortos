@@ -340,14 +340,14 @@ export class ResortOSClient {
     return { ok: false, skipped: data?.skipped || 'failed' };
   }
 
-  async holdNight(p: { unitId: string; reportedBy: string }): Promise<{ ok: true; verified: boolean; checkIn?: string; checkOut?: string } | { ok: false; skipped: string }> {
-    const data = await this.req<{ ok?: boolean; skipped?: string; verified?: boolean; checkIn?: string; checkOut?: string }>(
+  async holdNight(p: { unitId: string; reportedBy: string }): Promise<{ ok: true; verified: boolean; resId?: string; checkIn?: string; checkOut?: string } | { ok: false; skipped: string }> {
+    const data = await this.req<{ ok?: boolean; skipped?: string; verified?: boolean; resId?: string; checkIn?: string; checkOut?: string }>(
       'POST',
       `/api/ops/units/${encodeURIComponent(p.unitId)}/hold`,
       { reported_by: p.reportedBy },
       160000
     );
-    if (data?.ok) return { ok: true, verified: Boolean(data.verified), checkIn: data.checkIn, checkOut: data.checkOut };
+    if (data?.ok) return { ok: true, verified: Boolean(data.verified), resId: data.resId ? String(data.resId) : undefined, checkIn: data.checkIn, checkOut: data.checkOut };
     return { ok: false, skipped: data?.skipped || 'failed' };
   }
 

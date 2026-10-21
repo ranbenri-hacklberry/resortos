@@ -28,6 +28,8 @@ export const RACK_RATES: RackRate[] = [
   { label: 'צימר בגבעה', unitIds: ['hill-1', 'hill-2', 'hill-3', 'hill-4'], occupancy: 'זוג + 2', pool: 'מרכזית · 28°', weekday: 700, weekend: 1100 },
   { label: 'כיפת שמיים', unitIds: ['dome-blue', 'dome-red', 'dome-green'], occupancy: 'זוג', pool: 'פרטית · 28°', weekday: 1200, weekend: 1500 },
   { label: 'קאסה נובה', unitIds: ['k826', 'k827'], occupancy: 'זוג + 2', pool: 'פרטית', weekday: 800, weekend: 1200 },
+  // Demo office (Ran 2026-10-19 13:04): 1 ₪ test rate, agent price list only. No DB, booking or payment change.
+  { label: 'משרד (דמו)', unitIds: ['pilot-office'], occupancy: 'דמו', pool: '—', weekday: 1, weekend: 1 },
 ];
 
 export const MIALIS_CLOSE = {

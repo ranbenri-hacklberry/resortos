@@ -529,6 +529,11 @@ async function setUnitPaymentStatus(user, unitId, body) {
     { payment_status: next.payment_status, updated_at: next.updated_at },
     { Prefer: 'return=minimal' }
   );
+  // Push the new payment status to the cloud stay record so guest check-in sees it.
+  if (booking.checkout_token) {
+    publishBookingToMailbox({ ...booking, payment_status: next.payment_status, updated_at: next.updated_at })
+      .catch((err) => console.warn('[PAYMENT PUBLISH]', booking.id, err?.message || err));
+  }
   const label = status === 'PARTIAL' ? 'שולם חלקית' : 'שולם';
   await saveUnit(user, unitId, {
     room_log_actor: collector,

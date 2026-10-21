@@ -1,3 +1,4 @@
+import { kw, ATTRACTIONS_RE, COFFEE_RE, FOOD_MENU_RE, FUEL_RE, GROCERY_MENU_RE, MEAT_MEAL_RE, NATURE_RE } from './keywords.js';
 /** Numbered area places. A follow-up number returns hours, phone and navigation. */
 
 type GuidePlace = {
@@ -168,6 +169,9 @@ const GAS = ['shop_ramot_gas', 'shop_alon_haon', 'shop_givat_gas'];
 const COFFEE = ['food_hamitbach', 'food_breakfast_club', 'food_moize', 'food_moulan', 'food_nahtom'];
 const FOOD = ['food_moshbutz', 'food_bakata', 'food_ohad', 'food_thai', 'food_marinado', 'food_fish', 'food_bazelet', 'food_hamitbach'];
 const NATURE = ['trail_majrase', 'trail_kanaf', 'trail_meshushim', 'trail_ofir', 'trail_susita', 'trail_kinar', 'trail_gofra'];
+const BREAKFAST_ONLY = new Set(['food_hamitbach']);
+const DINNER_RE = kw(['ארוחת ערב', 'ארוחות ערב', 'לארוחת ערב', 'dinner', 'supper']);
+export const PLACE_MENU_FOOTER = 'השיבו במספר מהרשימה (למשל 1) לקבלת טלפון, שעות וניווט.';
 const ATTRACTION = ['attr_abukayak', 'attr_hamat_gader', 'attr_golan_winery', 'attr_jeeps'];
 
 async function byIds(list: GuidePlace[], ids: string[]): Promise<GuidePlace[]> {
@@ -180,22 +184,24 @@ export async function placeMenuFor(question: string): Promise<{ text: string; id
   const guide = await loadGuide();
   let places: GuidePlace[] = [];
   let heading = '';
-  if (/דלק/i.test(q) && !/חלב|סופר|מכולת|קניות/.test(q)) {
+  if (FUEL_RE.test(q) && !GROCERY_MENU_RE.test(q)) {
     places = await byIds(guide.SHOPS, GAS);
     heading = 'איפה מתדלקים';
-  } else if (/סופר|מכולת|צרכני|קניות|חלב|פירות|ביצים|supermarket|grocery/i.test(q)) {
+  } else if (GROCERY_MENU_RE.test(q)) {
     places = await byIds(guide.SHOPS, GROCERY);
     heading = 'איפה קונים';
-  } else if (/קפה/i.test(q) && !/מסעד|לאכול|בשר|סטייק/.test(q)) {
+  } else if (COFFEE_RE.test(q) && !MEAT_MEAL_RE.test(q)) {
     places = await byIds(guide.RESTAURANTS, COFFEE);
     heading = 'איפה שותים קפה';
-  } else if (/מסעד|לאכול|בשר|סטייק|דג|דגים|פיצה|ארוחת בוקר|אוכל|restaurant|food|eat|dinner|breakfast/i.test(q)) {
-    places = await byIds(guide.RESTAURANTS, FOOD);
+  } else if (FOOD_MENU_RE.test(q)) {
+    // S14: a dinner question drops the breakfast/pizza-delivery-only place.
+    const ids = DINNER_RE.test(q) ? FOOD.filter((id) => !BREAKFAST_ONLY.has(id)) : FOOD;
+    places = await byIds(guide.RESTAURANTS, ids);
     heading = 'איפה אוכלים';
-  } else if (/מעיין|מעין|שמורה|טיול|מסלול|כנרת|חוף|חופים|מג['׳]רסה|כנף|משושים|זוויתן|תצפית|שקיעה|nature|hike|spring|beach/i.test(q)) {
+  } else if (NATURE_RE.test(q)) {
     places = await byIds(guide.TRAILS, NATURE);
     heading = 'לאן יוצאים';
-  } else if (/אטרקצי|קייק|קיאק|רפטינג|ג['׳]יפ|ספא|חמת גדר|מה לעשות|פעילות|יקב|יין|attraction|kayak/i.test(q)) {
+  } else if (ATTRACTIONS_RE.test(q)) {
     places = await byIds(guide.ATTRACTIONS, ATTRACTION);
     heading = 'אטרקציות';
   }
@@ -206,7 +212,7 @@ export async function placeMenuFor(question: string): Promise<{ text: string; id
   });
   return {
     ids: places.map((place) => place.id),
-    text: `${heading}:\n${lines.join('\n')}\n\nכתבו את המספר לטלפון, שעות וניווט.`,
+    text: `${heading}:\n${lines.join('\n')}\n\n${PLACE_MENU_FOOTER}`,
   };
 }
 

@@ -1,0 +1,57 @@
+{
+  "548317887:1511": {
+    "key": "548317887:1511",
+    "phone": "548317887",
+    "manager": "רני",
+    "invoice_no": "1511",
+    "created_at": 1792568812448,
+    "expires_at": 1792741612448,
+    "image_path": "/Users/rani/resortos/services/resortos-agent/tmp/invoice-31b0af03-4ee9-4da0-851d-a405a2053210.jpg",
+    "processed_image_path": "/Users/rani/resortos/services/resortos-agent/tmp/invoice-31b0af03-4ee9-4da0-851d-a405a2053210-processed.jpg",
+    "source": "grok_full",
+    "supplier": "שרון שלוש",
+    "supplier_vat": "025721663",
+    "category": "כללי",
+    "extraction": {
+      "invoice_no": "1511",
+      "date": "19/10/26",
+      "date_iso": "2026-10-19",
+      "supplier_vat": "025721663",
+      "customer_no": null,
+      "lines_sum": 500,
+      "subtotal": 500,
+      "before_vat": 500,
+      "vat": 90,
+      "total": 590,
+      "checks": {
+        "lines_math_ok": false,
+        "lines_sum_ok": true,
+        "vat_ok": true,
+        "rounding_ok": true,
+        "all_ok": false,
+        "problems": [
+          "חשבונית ידנית — נקראה ע״י Grok, יש לבדוק כל שורה מול הצילום",
+          "יש שורות בלי כמות/מחיר או שכמות×מחיר≠סה״כ שורה"
+        ]
+      },
+      "skew": 0
+    },
+    "lines": [
+      {
+        "line_no": 1,
+        "sku": "",
+        "qty": null,
+        "unit_price": null,
+        "line_total": 500,
+        "latin": "",
+        "ok": false,
+        "existing": null,
+        "name": null,
+        "suggested_name": "צמחי זריעת כרם",
+        "suggested_by": "grok",
+        "location": null,
+        "unit": "יח׳"
+      }
+    ]
+  }
+}

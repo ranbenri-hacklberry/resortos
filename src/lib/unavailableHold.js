@@ -10,6 +10,8 @@ function foldFinals(value) {
 
 export function unavailableHoldLabel(text) {
   const folded = foldFinals(text);
+  // Staff housing (Ran 2026-10-21): still a block, but shown as מגורי צוות. Checked before לא זמין.
+  if (/מגורי\s*צוות/.test(String(text || ''))) return 'מגורי צוות';
   if (folded.includes('שיפוצ')) return String(text || '').includes('שיפוצים') ? 'שיפוצים' : 'שיפוץ';
   if (folded.includes('לא למכיר') || folded.includes('לא להשכר')) return 'לא למכירה';
   if (folded.includes('לא זמינ') || folded.includes('לא פנו')) return 'לא זמין';

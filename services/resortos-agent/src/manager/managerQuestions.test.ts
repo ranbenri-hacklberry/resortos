@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { answerManagerRoomQuestion, formatManagerInitialCard, getRoomOccupancy } from './managerQuestions.js';
+import { answerManagerRoomQuestion, formatManagerInitialCard, getRoomOccupancy, isComplexCheckinsQuestion, answerComplexCheckinsQuestion } from './managerQuestions.js';
 
 const room = { id: 'k693', name: 'בקתות מאיה 1', lockbox: '2410' };
 
@@ -79,3 +79,53 @@ describe('manager room card', () => {
     expect(reply).toContain('יתרה');
   });
 });
+
+describe('Bug 9: complex weekend check-ins query', () => {
+  const rooms = [
+    { id: 'k671', name: 'בתי נורית 1', property: 'בתי נורית' },
+    { id: 'k673', name: 'בתי נורית 2', property: 'בתי נורית' },
+    { id: 'k674', name: 'בתי נורית 3', property: 'בתי נורית' },
+    { id: 'k675', name: 'בתי נורית 4', property: 'בתי נורית' },
+    { id: 'k676', name: 'בתי נורית 5', property: 'בתי נורית' },
+    { id: 'k677', name: 'בתי נורית 6', property: 'בתי נורית' },
+  ];
+
+  it('answers weekend check-ins with one line per unit and never attaches guest link', () => {
+    const question = 'מה הכניסות בבתי נורית בסופ״ש (23-24/10)? לכל חדר כמה אורחים';
+    expect(isComplexCheckinsQuestion(question)).toBe(true);
+
+    const bookings = [
+      {
+        id: 'b1',
+        unit_id: 'k671',
+        check_in_date: '2026-10-23',
+        check_out_date: '2026-10-25',
+        booking_status: 'CONFIRMED',
+        adults_count: 2,
+        children_count: 2,
+      },
+      {
+        id: 'b2',
+        unit_id: 'k674',
+        check_in_date: '2026-10-24',
+        check_out_date: '2026-10-25',
+        booking_status: 'CONFIRMED',
+        // no headcount given
+      },
+    ];
+
+    const reply = answerComplexCheckinsQuestion(question, rooms as any, bookings as any, '2026-10-20');
+    expect(reply).toBeTruthy();
+    expect(reply).toContain('📋 *כניסות בבתי נורית (23-24/10):*');
+    expect(reply).toContain('• בתי נורית 1: כניסה 23/10, 2 לילות, 4 אורחים');
+    expect(reply).toContain('• בתי נורית 2: אין כניסה');
+    expect(reply).toContain('• בתי נורית 3: כניסה 24/10, לילה, לא ידוע');
+    expect(reply).toContain('• בתי נורית 4: אין כניסה');
+    expect(reply).toContain('• בתי נורית 5: אין כניסה');
+    expect(reply).toContain('• בתי נורית 6: אין כניסה');
+    // Must NOT contain any guest/demo links
+    expect(reply).not.toContain('resortos.app/stay');
+    expect(reply).not.toContain('stay/');
+  });
+});
+

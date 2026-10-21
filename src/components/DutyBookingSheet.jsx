@@ -220,6 +220,7 @@ export default function DutyBookingSheet({
           updated_at: nowIso
         };
         await pushBookingToCloud(next, { allowOverlap: true });
+ensureGuestStayPublished(next).catch(() => {});
         onBookingSaved?.(next);
         return;
       }
@@ -257,6 +258,7 @@ export default function DutyBookingSheet({
         updated_at: nowIso
       };
       await pushBookingToCloud(next, { allowOverlap: true });
+ensureGuestStayPublished(next).catch(() => {});
       onBookingSaved?.(next);
     } catch (err) {
       setError(err?.message || 'שמירת התשלום נכשלה');
