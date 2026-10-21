@@ -91,6 +91,8 @@ export interface GrokInvoice {
   items: GrokInvoiceItem[];
   /** 4 paper corners, normalized 0..1, top-left origin (TL,TR,BR,BL) — used to crop when local edge detection fails. */
   corners: Array<[number, number]> | null;
+  /** Payment status only when it is written on the invoice (e.g. "שולם", "שולם במזומן", "לתשלום"). */
+  paid: boolean | null;
 }
 
 export function buildFullPrompt(): string {
@@ -98,11 +100,12 @@ export function buildFullPrompt(): string {
     'You are reading a photo sent by a hotel manager in Israel. It may be a supplier invoice / delivery note, often HANDWRITTEN in Hebrew.',
     'Return STRICT JSON only, no prose:',
     '{"is_invoice":boolean,"handwritten":boolean,"invoice_no":string|null,"date":"dd/mm/yyyy"|null,"supplier":string|null,"supplier_vat":string|null,',
-    '"before_vat":number|null,"vat":number|null,"total":number|null,',
+    '"before_vat":number|null,"vat":number|null,"total":number|null,"paid":boolean|null,',
     '"items":[{"line_no":number,"sku":string|null,"name":string,"qty":number|null,"unit":string|null,"unit_price":number|null,"line_total":number|null}],',
     '"corners":[[x,y],[x,y],[x,y],[x,y]]|null}  (corners = the 4 corners of the paper document in the photo, normalized 0..1 from top-left, order TL,TR,BR,BL)',
     'Rules: "is_invoice" false if this is not an invoice / delivery note / receipt from a supplier (e.g. a check, a room photo) — then items=[].',
     '"name" = product name in Hebrew as written. "sku" only if a catalogue number is clearly written, else null. "supplier_vat" = 9-digit ח.פ / עוסק מורשה of the SUPPLIER (never 517258844).',
+    '"paid": true only if the invoice explicitly says it was paid (שולם / שולם במזומן / receipt / קבלה), false only if it explicitly says unpaid / due (לתשלום / לא שולם / אשראי), else null.',
     'Numbers as plain numbers (no ₪, no commas). If a value is unreadable use null. Never invent lines or values.',
   ].join('\n');
 }
@@ -144,6 +147,7 @@ export function parseGrokInvoice(text: string): GrokInvoice | null {
     before_vat: num(data.before_vat), vat: num(data.vat), total: num(data.total),
     items,
     corners: parseCorners(data.corners),
+    paid: data.paid === true ? true : data.paid === false ? false : null,
   };
 }
 

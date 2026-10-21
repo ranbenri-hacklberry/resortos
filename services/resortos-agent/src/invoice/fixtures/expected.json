@@ -1,0 +1,154 @@
+{
+ "11218259": {
+  "invoice_no": "11218259",
+  "date": "18/10/26",
+  "supplier": "קליר כימיקלים בע\"מ",
+  "supplier_vat": "511921058",
+  "customer_no": "346817",
+  "subtotal": 5635.0,
+  "before_vat": 5634.75,
+  "vat_18": 1014.25,
+  "total": 6649.0,
+  "lines": [
+   {
+    "line_no": 1,
+    "sku": "5-60718",
+    "name": "בוטיק ג׳ל רחצה בשפופרת 30ml",
+    "qty": 1,
+    "unit_price": 130,
+    "line_total": 130,
+    "inventory_item_id": 964
+   },
+   {
+    "line_no": 2,
+    "sku": "5-60717",
+    "name": "בוטיק שמפו ומרכך בשפופרת 30ml",
+    "qty": 1,
+    "unit_price": 130,
+    "line_total": 130,
+    "inventory_item_id": 965
+   },
+   {
+    "line_no": 3,
+    "sku": "5-60719",
+    "name": "בוטיק קרם גוף בשפופרת 30ml",
+    "qty": 1,
+    "unit_price": 130,
+    "line_total": 130,
+    "inventory_item_id": 966
+   },
+   {
+    "line_no": 4,
+    "sku": "9-3023",
+    "name": "ממרקה יפנית (סקוטש)",
+    "qty": 5,
+    "unit_price": 24,
+    "line_total": 120,
+    "inventory_item_id": 967
+   },
+   {
+    "line_no": 5,
+    "sku": "4-5026",
+    "name": "מטלית מיקרופייבר 50/80 כחול",
+    "qty": 60,
+    "unit_price": 2.7,
+    "line_total": 162,
+    "inventory_item_id": 968
+   },
+   {
+    "line_no": 6,
+    "sku": "9-303426",
+    "name": "xense floor&surface נוזל לשטיפת רצפות",
+    "qty": 1,
+    "unit_price": 387,
+    "line_total": 387,
+    "inventory_item_id": 969
+   },
+   {
+    "line_no": 7,
+    "sku": "9-909188",
+    "name": "oasis pro toilet תרכיז לניקוי אסלות",
+    "qty": 1,
+    "unit_price": 543,
+    "line_total": 543,
+    "inventory_item_id": 970
+   },
+   {
+    "line_no": 8,
+    "sku": "9-909182",
+    "name": "OASIS PRO GLASS לניקוי זכוכית וחלונות",
+    "qty": 1,
+    "unit_price": 330,
+    "line_total": 330,
+    "inventory_item_id": 971
+   },
+   {
+    "line_no": 9,
+    "sku": "9-909184",
+    "name": "Oasis pro white cotton מבשם אוויר",
+    "qty": 1,
+    "unit_price": 620,
+    "line_total": 620,
+    "inventory_item_id": 972
+   },
+   {
+    "line_no": 10,
+    "sku": "9-6264",
+    "name": "כפפות ניטריל שחור ללא אבקה M",
+    "qty": 1,
+    "unit_price": 99,
+    "line_total": 99,
+    "inventory_item_id": 973
+   },
+   {
+    "line_no": 11,
+    "sku": "9-6263",
+    "name": "כפפות ניטריל שחור ללא אבקה L",
+    "qty": 1,
+    "unit_price": 99,
+    "line_total": 99,
+    "inventory_item_id": 974
+   },
+   {
+    "line_no": 12,
+    "sku": "9-909178",
+    "name": "OASIS ACID BATH תרכיז לניקוי חדרי רחצה",
+    "qty": 1,
+    "unit_price": 410,
+    "line_total": 410,
+    "inventory_item_id": 975
+   },
+   {
+    "line_no": 13,
+    "sku": "7-1011",
+    "name": "נייר טואלט בגלילים 1/32",
+    "qty": 150,
+    "unit_price": 16.5,
+    "line_total": 2475,
+    "inventory_item_id": 976
+   }
+  ]
+ },
+ "11218290": {
+  "invoice_no": "11218290",
+  "date": "18/10/26",
+  "supplier": "קליר כימיקלים בע\"מ",
+  "supplier_vat": "511921058",
+  "customer_no": "346817",
+  "subtotal": 160.0,
+  "before_vat": 160.17,
+  "vat_18": 28.83,
+  "total": 189.0,
+  "lines": [
+   {
+    "line_no": 1,
+    "sku": "5-71517",
+    "name": "טופז סבון 25 גרם",
+    "qty": 1,
+    "unit_price": 160,
+    "line_total": 160,
+    "inventory_item_id": 977
+   }
+  ]
+ }
+}

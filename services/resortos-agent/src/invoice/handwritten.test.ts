@@ -86,7 +86,7 @@ describe('handwritten invoice → Grok whole-image fallback (mocked xAI)', () =>
     expect(d.lines[1].suggested_name).toBe('סבון ידיים');
     expect(d.lines[1].name).toBeNull(); // Grok name is a suggestion only
     expect(d.extraction.checks.all_ok).toBe(false); // handwritten always needs "למרות פער"
-    expect(r.reply).toContain('Grok');
+    expect(r.details).toContain('Grok');
     expect(calls.some((c) => c.body?.commit)).toBe(false);
   });
 
@@ -186,5 +186,57 @@ describe('parseInvoiceCommand qty/price', () => {
     expect(parseInvoiceCommand('מחיר 1 12.50 ₪')).toEqual({ cmd: 'price', line: 1, value: 12.5 });
     expect(parseInvoiceCommand('מחיר 1 0')).toBeNull();
     expect(parseInvoiceCommand('כמות נייר טואלט')).toBeNull();
+  });
+});
+
+describe('short reply + simple "אשר" (Ran 2026-10-21 UX)', () => {
+  const inv1511 = { ...handwritten, invoice_no: '1511', supplier: 'שרון שלוש', supplier_vat: '025721663', date: '19/10/2026', before_vat: 500, vat: 90, total: 590, paid: null,
+    items: [{ line_no: 1, sku: null, name: 'צמחי זריעת כרם', qty: null, unit: null, unit_price: null, line_total: null }] };
+  it('interim message is sent before the Grok read', async () => {
+    const order: string[] = [];
+    const { intake, fetchImpl } = setup(inv1511);
+    const r = await intake.handleMedia(RAN, 'רן', photo, '', async (t) => { order.push(`progress:${t}`); });
+    expect(order).toEqual(['progress:רגע, בודקת את החשבונית — תיכף חוזרת אליך']);
+    expect(r.kind).toBe('draft');
+  });
+  it('short reply: supplier/date/total + proposal, no VAT id, no lines', async () => {
+    const { intake } = setup(inv1511);
+    const r = await intake.handleMedia(RAN, 'רן', photo);
+    const lines = r.reply.split('\n');
+    expect(lines).toHaveLength(4);
+    expect(lines[0]).toBe('ספק: שרון שלוש');
+    expect(lines[1]).toBe('תאריך: 19/10/26');
+    expect(lines[2]).toBe('סכום חשבונית: 590.00 ₪');
+    expect(lines[3]).toContain('*אשר*');
+    expect(r.reply).not.toContain('025721663');
+    expect(r.reply).not.toContain('צמחי');
+  });
+  it('paid status line only when on the invoice', async () => {
+    const { intake } = setup({ ...inv1511, paid: true });
+    const r = await intake.handleMedia(RAN, 'רן', photo);
+    expect(r.reply.split('\n')[3]).toBe('שולם');
+    expect(r.reply.split('\n')).toHaveLength(5);
+  });
+  it('"אשר" with qty missing & no line total → 1 × invoice amount (before VAT), suggested location, commits, notes it', async () => {
+    const { intake, calls } = setup(inv1511);
+    await intake.handleMedia(RAN, 'רן', photo);
+    const out = await intake.handleText(RAN, 'רן', 'אשר');
+    expect(out).toContain('נקלטה');
+    expect(out).toContain('נרשם 1 × 500.00');
+    const create = calls.find((c) => c.body?.commit && c.url.endsWith('/api/inventory/items'))!;
+    expect(create.body.items[0]).toMatchObject({ name: 'צמחי זריעת כרם', current_stock: 1, cost_per_unit: 500, location: 'מחסן טוסקנה (C/27)' });
+  });
+  it('"אשר" with totals gap → asks for "אשר למרות פער", no commit', async () => {
+    const { intake, calls } = setup({ ...handwritten, total: 999 });
+    await intake.handleMedia(RAN, 'רן', photo);
+    expect(await intake.handleText(RAN, 'רן', 'אשר')).toContain('אשר למרות פער');
+    expect(calls.some((c) => c.body?.commit)).toBe(false);
+    expect(await intake.handleText(RAN, 'רן', 'אשר למרות פער')).toContain('נקלטה');
+  });
+  it('"פרטים" shows the full draft; "אשר" without a draft is not handled', async () => {
+    const { intake } = setup(inv1511);
+    expect(await intake.handleText(RAN, 'רן', 'אשר')).toBeNull();
+    await intake.handleMedia(RAN, 'רן', photo);
+    expect(await intake.handleText(RAN, 'רן', 'פרטים')).toContain('*שורות:*');
   });
 });

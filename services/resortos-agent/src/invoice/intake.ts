@@ -84,6 +84,12 @@ export interface InvoiceDraft {
   processed_image_path?: string | null;
   /** 'grok_full' = handwritten/manual invoice read entirely by Grok (whole image). */
   source?: 'local' | 'grok_full';
+  /** Payment status if written on the invoice (Grok only). */
+  paid?: boolean | null;
+  /** Suggested filing location for new lines (matched items → supplier history → most common). */
+  suggested_location?: string | null;
+  /** Notes about automatic fixes applied on simple approve (shown in the result). */
+  auto_notes?: string[];
   supplier: string | null;
   supplier_vat: string | null;
   category: string;
@@ -97,6 +103,8 @@ export interface MediaResult {
   draft?: InvoiceDraft;
   /** Resolves to ONE follow-up message (name suggestions) to send after `reply`, or null. */
   followUp?: Promise<string | null>;
+  /** Full draft (lines, checks) — what "פרטים" shows. The chat reply itself is the short form. */
+  details?: string;
 }
 
 const tail = (p: string) => {
@@ -120,12 +128,16 @@ export function parseInvoiceCommand(text: string):
   | { cmd: 'cancel'; invoice: string }
   | { cmd: 'confirm'; invoice: string; override: boolean }
   | { cmd: 'accept_names' }
+  | { cmd: 'approve_latest'; override: boolean }
+  | { cmd: 'details' }
   | { cmd: 'accept_name'; line: number }
   | null {
   const t = text.trim().replace(/\s+/g, ' ');
   let m: RegExpMatchArray | null;
   if ((m = t.match(/^אשר חשבונית (\d{4,12})( למרות פער)?$/))) return { cmd: 'confirm', invoice: m[1], override: Boolean(m[2]) };
   if ((m = t.match(/^בטל חשבונית (\d{4,12})$/))) return { cmd: 'cancel', invoice: m[1] };
+  if ((m = t.match(/^אשר( למרות פער)?[.!]?$/))) return { cmd: 'approve_latest', override: Boolean(m[1]) };
+  if (/^(?:פרטים|פירוט)$/.test(t)) return { cmd: 'details' };
   if (/^אשר שמות$/.test(t)) return { cmd: 'accept_names' };
   if ((m = t.match(/^אשר שם (\d{1,3})$/))) return { cmd: 'accept_name', line: Number(m[1]) };
   if ((m = t.match(/^שם (\d{1,3}) (.{2,120})$/))) return { cmd: 'name', line: Number(m[1]), value: m[2].trim() };
@@ -247,6 +259,39 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
       locations: d.lines.filter((l) => isNew(l) && !l.location).map((l) => l.line_no),
       supplier: d.lines.some(isNew) && !d.supplier,
     };
+  }
+  /** Where new lines would be filed: shared location of matched items → this supplier's history → most common in records. */
+  function suggestLocation(d: InvoiceDraft): string | null {
+    const locs = [...new Set(d.lines.filter((l) => l.existing && (l.existing.location || l.location)).map((l) => (l.existing!.location || l.location) as string))];
+    if (locs.length === 1) return locs[0];
+    const count = new Map<string, number>();
+    const recs = records();
+    const bySupplier = recs.filter((r) => (d.supplier_vat && String(r.supplier_vat) === d.supplier_vat) || (d.supplier && r.supplier && String(r.supplier).trim() === d.supplier.trim()));
+    for (const r of (bySupplier.length ? bySupplier : recs)) for (const l of r.lines || []) if (l.location) count.set(l.location, (count.get(l.location) || 0) + 1);
+    const best = [...count.entries()].sort((a, b) => b[1] - a[1])[0];
+    return best ? best[0] : null;
+  }
+  /** Short default reply (Ran 2026-10-21): supplier, date, total, paid (if on invoice), one proposal line. */
+  function formatShort(d: InvoiceDraft, title?: string): string {
+    const x = d.extraction;
+    if (d.suggested_location === undefined) { d.suggested_location = suggestLocation(d); putDraft(d); }
+    const out: string[] = [];
+    if (title) out.push(title);
+    out.push(`ספק: ${d.supplier || 'לא מזוהה'}`);
+    out.push(`תאריך: ${x.date || 'לא מזוהה'}`);
+    out.push(`סכום חשבונית: ${money(x.total ?? x.before_vat ?? x.lines_sum)} ₪`);
+    if (d.paid === true) out.push('שולם');
+    else if (d.paid === false) out.push('לא שולם');
+    const hasNew = d.lines.some(isNew);
+    const loc = hasNew ? (d.suggested_location ? ` ל${d.suggested_location}` : '') : '';
+    const gap = totalsOk(d) ? '' : ' (יש פער בסכומים — *אשר למרות פער*)';
+    const needSup = hasNew && !d.supplier ? ' · קודם: ספק <שם>' : '';
+    out.push(`להכניס${loc}? *אשר*${gap}${needSup} · לשינוי: ספק / כמות / מחיר / מיקום <שורה> <ערך> · *פרטים*`);
+    return out.join('\n');
+  }
+  function totalsOk(d: InvoiceDraft): boolean {
+    const c = d.extraction.checks;
+    return d.source === 'grok_full' ? (c.lines_sum_ok && c.vat_ok) : c.all_ok;
   }
   function formatDraft(d: InvoiceDraft, title = '🧾 *טיוטת קליטת חשבונית*'): string {
     const x = d.extraction;
@@ -413,10 +458,14 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
     });
     const locs = [...new Set(lines.filter((l) => l.existing && l.location).map((l) => l.location as string))];
     if (locs.length === 1) for (const l of lines) if (!l.existing && !l.location) l.location = locs[0];
+    // Fallback suggestion when nothing matched and no supplier history: the most common location in inventory.
+    const invCount = new Map<string, number>();
+    for (const it of all) if (it?.location) invCount.set(it.location, (invCount.get(it.location) || 0) + 1);
+    const invLoc = [...invCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
     const lines_sum = Math.round(lines.reduce((a, l) => a + (l.line_total || 0), 0) * 100) / 100;
     const d: InvoiceDraft = {
       key: `${tail(phone)}:${invoice_no}`, phone: tail(phone), manager: managerName, invoice_no,
-      created_at: t, expires_at: t + ttl, image_path: origPath, processed_image_path: processed?.path || null, source: 'grok_full',
+      created_at: t, expires_at: t + ttl, image_path: origPath, processed_image_path: processed?.path || null, source: 'grok_full', paid: g.paid,
       supplier, supplier_vat: g.supplier_vat, category,
       extraction: {
         invoice_no, date: g.date, date_iso: g.date_iso, supplier_vat: g.supplier_vat, customer_no: null,
@@ -425,12 +474,13 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
       },
       lines,
     };
+    d.suggested_location = suggestLocation(d) ?? invLoc;
     putDraft(d);
     log.info({ invoice: invoice_no, lines: lines.length, new: lines.filter(isNew).length, byName: lines.filter((l) => l.matched_by === 'name').length, generatedNo: invoice_no !== g.invoice_no }, 'invoice grok draft created');
-    return { kind: 'draft', reply: formatDraft(d, '✍️ *טיוטת חשבונית ידנית (נקראה ע״י Grok)*'), draft: d };
+    return { kind: 'draft', reply: formatShort(d), details: formatDraft(d), draft: d };
   }
 
-  async function handleMedia(phone: string, managerName: string, media: InvoiceMedia, caption = ''): Promise<MediaResult> {
+  async function handleMedia(phone: string, managerName: string, media: InvoiceMedia, caption = '', onProgress?: (text: string) => Promise<void>): Promise<MediaResult> {
     if (!isAllowed(phone)) return { kind: 'not_invoice', reply: '' };
     let img: { path: string; ext: string };
     let tokens: OcrToken[];
@@ -454,13 +504,14 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
     if (res.kind === 'draft' && res.draft && processed) { res.draft.processed_image_path = processed.path; putDraft(res.draft); }
     // Handwritten / manual invoice: the local path found no SKU rows at all → read the whole image with Grok.
     if ((res.kind === 'not_invoice' || res.kind === 'unsure') && grokCfg && extractInvoice(tokens).lines.length === 0) {
+      if (onProgress) { try { await onProgress('רגע, בודקת את החשבונית — תיכף חוזרת אליך'); } catch (e) { log.warn({ err: String(e) }, 'invoice progress send failed'); } }
       const g = await grokDraft(phone, managerName, img.path, processed);
       if (g) return g;
     }
     if (res.kind === 'draft' && res.draft && suggestOn) return withSuggestions(res, tokens, img.path);
     if (res.kind === 'draft' && res.draft && grokCfg && await grokFill(res.draft, img.path)) {
       putDraft(res.draft);
-      return { ...res, reply: formatDraft(res.draft) };
+      return { ...res, reply: formatShort(res.draft), details: formatDraft(res.draft) };
     }
     return res;
   }
@@ -486,7 +537,7 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
     if (!cropFn || !transcribeFn) {
       if (grokCfg && await grokFill(d0, imagePath)) {
         putDraft(d0);
-        return { ...res, draft: d0, reply: formatDraft(d0) };
+        return { ...res, draft: d0, reply: formatShort(d0), details: formatDraft(d0) };
       }
       return res;
     }
@@ -509,7 +560,7 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
     const first = await Promise.race([job.then(() => 'done' as const), new Promise<'wait'>((r) => setTimeout(() => r('wait'), inlineWait))]);
     if (first === 'done') {
       const { d } = await job;
-      if (d) return { ...res, draft: d, reply: formatDraft(d) };
+      if (d) return { ...res, draft: d, reply: formatShort(d), details: formatDraft(d) };
       return res;
     }
     const followUp = job.then(({ d }) => {
@@ -563,7 +614,7 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
     };
     putDraft(d);
     log.info({ invoice: x.invoice_no, lines: lines.length, new: lines.filter(isNew).length, checks: x.checks.all_ok, caption: Boolean(caption) }, 'invoice draft created');
-    return { kind: 'draft', reply: formatDraft(d), draft: d };
+    return { kind: 'draft', reply: formatShort(d), details: formatDraft(d), draft: d };
   }
 
   // ---------- commands ----------
@@ -588,6 +639,8 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
     }
     if (cmd.cmd === 'confirm') return confirm(phone, managerName, cmd.invoice, cmd.override);
     if (!latest) return null; // not an invoice context — let other flows handle it
+    if (cmd.cmd === 'details') return formatDraft(latest);
+    if (cmd.cmd === 'approve_latest') return approveSimple(phone, managerName, latest, cmd.override);
     const d = latest;
     if (cmd.cmd === 'accept_names' || cmd.cmd === 'accept_name') {
       const pool = d.lines.filter((l) => isNew(l) && !l.name && l.suggested_name && (cmd.cmd === 'accept_names' || l.line_no === cmd.line));
@@ -615,7 +668,7 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
       }
       recheck(d);
       putDraft(d);
-      return formatDraft(d, `✏️ *עודכן ${cmd.cmd === 'qty' ? 'כמות' : 'מחיר'} בשורה ${l.line_no} — טיוטת חשבונית*`);
+      return formatShort(d, `✏️ עודכן ${cmd.cmd === 'qty' ? 'כמות' : 'מחיר'} בשורה ${l.line_no}`);
     }
     if (cmd.cmd === 'supplier') { d.supplier = cmd.value; if (/קליר/.test(cmd.value)) d.category = 'ניקיון'; }
     else {
@@ -650,6 +703,33 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
     if (!lines_sum_ok) problems.push(`סכום השורות (${money(x.lines_sum)}) לא תואם לסיכום בחשבונית (${money(ref)})`);
     if (!vat_ok) problems.push('לא ניתן לאמת לפני מע״מ + מע״מ = סה״כ');
     x.checks = { lines_math_ok, lines_sum_ok, vat_ok, rounding_ok, all_ok: d.source !== 'grok_full' && lines_math_ok && lines_sum_ok && vat_ok && rounding_ok, problems };
+  }
+
+  /** "אשר": fill what can be filled automatically, then go through the normal confirm/commit path. */
+  async function approveSimple(phone: string, managerName: string, d: InvoiceDraft, override: boolean): Promise<string> {
+    const notes: string[] = [];
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    for (const l of d.lines) {
+      if (isNew(l) && !l.name && l.suggested_name) l.name = l.suggested_name;
+      if (isNew(l) && !l.location) l.location = d.suggested_location ?? suggestLocation(d);
+      if (!l.qty || l.qty <= 0) {
+        if (l.line_total == null && d.lines.length === 1) l.line_total = d.extraction.before_vat ?? d.extraction.total;
+        if (l.unit_price && l.line_total) l.qty = Math.round((l.line_total / l.unit_price) * 1000) / 1000;
+        else if (l.line_total) { l.qty = 1; l.unit_price = l.line_total; notes.push(`שורה ${l.line_no}: לא הופיעה כמות — נרשם 1 × ${money(l.line_total)} ₪`); }
+      } else if (l.unit_price == null && l.line_total != null) l.unit_price = r2(l.line_total / l.qty);
+      if (l.line_total == null && l.qty && l.unit_price != null) l.line_total = r2(l.qty * l.unit_price);
+    }
+    recheck(d);
+    d.auto_notes = notes;
+    putDraft(d);
+    const m = missing(d);
+    if (m.supplier) return `חסר שם ספק — לכתוב: ספק <שם>, ואז *אשר*.`;
+    if (m.names.length) return `חסר שם לשורות ${m.names.join(', ')} — לכתוב: שם <שורה> <טקסט>, ואז *אשר*.`;
+    if (m.locations.length) return `לאן להכניס? לכתוב: מיקום הכל <מחסן>, ואז *אשר*.`;
+    if (d.lines.some((l) => !l.qty || l.qty <= 0)) return `חסרה כמות בשורות ${d.lines.filter((l) => !l.qty || l.qty <= 0).map((l) => l.line_no).join(', ')} — לכתוב: כמות <שורה> <מספר>, ואז *אשר*.`;
+    if (!totalsOk(d) && !override) return `⚠️ הסכומים בחשבונית לא מסתדרים (*פרטים* לפירוט). אם בדקת וזה תקין: *אשר למרות פער*`;
+    const res = await confirm(phone, managerName, d.invoice_no, true);
+    return notes.length && res.startsWith('✅') ? `${res}\n${notes.map((n) => `ℹ️ ${n}`).join('\n')}` : res;
   }
 
   async function confirm(phone: string, managerName: string, invoice: string, override: boolean): Promise<string> {
