@@ -151,4 +151,40 @@ describe('handwritten invoice → Grok whole-image fallback (mocked xAI)', () =>
     expect(r.kind).toBe('draft');
     expect(calls.filter((c) => c.url === XAI)).toHaveLength(1);
   });
+
+  it('manager qty / price commands: derive unit price from line total, recompute checks, show draft', async () => {
+    const one = { ...handwritten, invoice_no: '1511', before_vat: 500, vat: 90, total: 590, items: [{ line_no: 1, sku: null, name: 'צמחי זריעת כרם', qty: null, unit: null, unit_price: null, line_total: 500 }] };
+    const { intake, calls } = setup(one);
+    const r = await intake.handleMedia(RAN, 'רן', photo);
+    expect(r.draft!.extraction.checks.lines_math_ok).toBe(false);
+    const a = await intake.handleText(RAN, 'רן', 'כמות 1 20');
+    expect(a).toContain('עודכן כמות בשורה 1');
+    let d = intake.latestDraft(RAN)!;
+    expect(d.lines[0]).toMatchObject({ qty: 20, unit_price: 25, line_total: 500, ok: true });
+    expect(d.extraction.checks).toMatchObject({ lines_math_ok: true, lines_sum_ok: true, vat_ok: true, all_ok: false });
+    await intake.handleText(RAN, 'רן', 'מחיר 1 30');
+    d = intake.latestDraft(RAN)!;
+    expect(d.lines[0]).toMatchObject({ qty: 20, unit_price: 30, line_total: 600 });
+    expect(d.extraction.lines_sum).toBe(600);
+    expect(d.extraction.checks.lines_sum_ok).toBe(false);
+    expect(await intake.handleText(RAN, 'רן', 'כמות 9 3')).toContain('אין שורה 9');
+    expect(calls.some((c) => c.body?.commit)).toBe(false);
+  });
+  it('price first with only line total → derives qty', async () => {
+    const one = { ...handwritten, items: [{ line_no: 1, sku: null, name: 'x פריט', qty: null, unit: null, unit_price: null, line_total: 300 }] };
+    const { intake } = setup(one);
+    await intake.handleMedia(RAN, 'רן', photo);
+    await intake.handleText(RAN, 'רן', 'מחיר 1 15.5');
+    expect(intake.latestDraft(RAN)!.lines[0].qty).toBeCloseTo(19.355, 3);
+  });
+});
+
+import { parseInvoiceCommand } from './intake.js';
+describe('parseInvoiceCommand qty/price', () => {
+  it('parses', () => {
+    expect(parseInvoiceCommand('כמות 2 10')).toEqual({ cmd: 'qty', line: 2, value: 10 });
+    expect(parseInvoiceCommand('מחיר 1 12.50 ₪')).toEqual({ cmd: 'price', line: 1, value: 12.5 });
+    expect(parseInvoiceCommand('מחיר 1 0')).toBeNull();
+    expect(parseInvoiceCommand('כמות נייר טואלט')).toBeNull();
+  });
 });

@@ -114,6 +114,8 @@ export function parseInvoiceCommand(text: string):
   | { cmd: 'name'; line: number; value: string }
   | { cmd: 'location'; line: number | 'all'; value: string }
   | { cmd: 'unit'; line: number; value: string }
+  | { cmd: 'qty'; line: number; value: number }
+  | { cmd: 'price'; line: number; value: number }
   | { cmd: 'supplier'; value: string }
   | { cmd: 'cancel'; invoice: string }
   | { cmd: 'confirm'; invoice: string; override: boolean }
@@ -129,6 +131,10 @@ export function parseInvoiceCommand(text: string):
   if ((m = t.match(/^שם (\d{1,3}) (.{2,120})$/))) return { cmd: 'name', line: Number(m[1]), value: m[2].trim() };
   if ((m = t.match(/^מיקום (\d{1,3}|הכל) (.{2,120})$/))) return { cmd: 'location', line: m[1] === 'הכל' ? 'all' : Number(m[1]), value: m[2].trim() };
   if ((m = t.match(/^יחידה (\d{1,3}) (.{1,40})$/))) return { cmd: 'unit', line: Number(m[1]), value: m[2].trim() };
+  if ((m = t.match(/^(כמות|מחיר) (\d{1,3}) (\d{1,7}(?:[.,]\d{1,3})?)\s*(?:₪|ש"ח|ש״ח)?$/))) {
+    const v = Number(m[3].replace(',', '.'));
+    if (Number.isFinite(v) && v > 0) return { cmd: m[1] === 'כמות' ? 'qty' : 'price', line: Number(m[2]), value: v };
+  }
   if ((m = t.match(/^ספק (.{2,120})$/))) return { cmd: 'supplier', value: m[1].trim() };
   return null;
 }
@@ -593,6 +599,24 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
       putDraft(d);
       return formatDraft(d, `✅ *אושרו ${pool.length} שמות — טיוטת חשבונית*`);
     }
+    if (cmd.cmd === 'qty' || cmd.cmd === 'price') {
+      const l = d.lines.find((x) => x.line_no === cmd.line);
+      if (!l) return `אין שורה ${cmd.line} בטיוטת חשבונית ${d.invoice_no} (יש ${d.lines.length} שורות).`;
+      const r2 = (n: number) => Math.round(n * 100) / 100;
+      const r3 = (n: number) => Math.round(n * 1000) / 1000;
+      if (cmd.cmd === 'qty') {
+        l.qty = cmd.value;
+        if (l.unit_price != null) l.line_total = r2(l.qty * l.unit_price);
+        else if (l.line_total != null) l.unit_price = r2(l.line_total / l.qty);
+      } else {
+        l.unit_price = cmd.value;
+        if (l.qty != null) l.line_total = r2(l.qty * l.unit_price);
+        else if (l.line_total != null) l.qty = r3(l.line_total / l.unit_price);
+      }
+      recheck(d);
+      putDraft(d);
+      return formatDraft(d, `✏️ *עודכן ${cmd.cmd === 'qty' ? 'כמות' : 'מחיר'} בשורה ${l.line_no} — טיוטת חשבונית*`);
+    }
     if (cmd.cmd === 'supplier') { d.supplier = cmd.value; if (/קליר/.test(cmd.value)) d.category = 'ניקיון'; }
     else {
       const targets = cmd.cmd === 'location' && cmd.line === 'all' ? d.lines : d.lines.filter((l) => l.line_no === cmd.line);
@@ -608,6 +632,24 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
     }
     putDraft(d);
     return formatDraft(d, '✏️ *עודכן — טיוטת חשבונית*');
+  }
+
+  /** Re-run line math / line-sum / VAT checks after a manual qty / price edit. Handwritten drafts never become all_ok. */
+  function recheck(d: InvoiceDraft) {
+    const x = d.extraction;
+    for (const l of d.lines) l.ok = l.qty != null && l.unit_price != null && l.line_total != null && Math.abs(l.qty * l.unit_price - l.line_total) < 0.02;
+    x.lines_sum = Math.round(d.lines.reduce((a, l) => a + (l.line_total || 0), 0) * 100) / 100;
+    const ref = x.before_vat ?? x.subtotal ?? x.total;
+    const lines_math_ok = d.lines.every((l) => l.ok);
+    const lines_sum_ok = ref != null && Math.abs(x.lines_sum - ref) <= 1;
+    const vat_ok = x.before_vat != null && x.vat != null && x.total != null ? Math.abs(x.before_vat + x.vat - x.total) <= 0.05 : x.checks.vat_ok;
+    const rounding_ok = x.before_vat == null || Math.abs(x.lines_sum - x.before_vat) <= 1;
+    const problems: string[] = [];
+    if (d.source === 'grok_full') problems.push('חשבונית ידנית — נקראה ע״י Grok, יש לבדוק כל שורה מול הצילום');
+    if (!lines_math_ok) problems.push('יש שורות בלי כמות/מחיר או שכמות×מחיר≠סה״כ שורה');
+    if (!lines_sum_ok) problems.push(`סכום השורות (${money(x.lines_sum)}) לא תואם לסיכום בחשבונית (${money(ref)})`);
+    if (!vat_ok) problems.push('לא ניתן לאמת לפני מע״מ + מע״מ = סה״כ');
+    x.checks = { lines_math_ok, lines_sum_ok, vat_ok, rounding_ok, all_ok: d.source !== 'grok_full' && lines_math_ok && lines_sum_ok && vat_ok && rounding_ok, problems };
   }
 
   async function confirm(phone: string, managerName: string, invoice: string, override: boolean): Promise<string> {
