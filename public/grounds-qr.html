@@ -110,6 +110,11 @@
       color: #1e40af;
       border: 0.5px solid #bfdbfe;
     }
+    .s5-badge.is-office {
+      background: #fef3c7;
+      color: #92400e;
+      border: 0.5px solid #fde68a;
+    }
     .s5-code {
       font-size: 12px;
       font-weight: 900;
@@ -189,11 +194,11 @@
   <div class="container">
     <header class="header-bar">
       <div class="header-title">
-        <h1>🌿 מדבקות QR לחצרות ולבריכות (28 שטחים)</h1>
-        <p>סריקה שולחת לקלואי את הסטטוס · חצר: נקי, לבדיקה, לניקיון · בריכה: תקינה, לבדיקה, לטיפול</p>
+        <h1>🌿 מדבקות QR לחצרות, בריכות ומשרד (29 שטחים)</h1>
+        <p>סריקה שולחת לקלואי את הסטטוס · חצר: נקי, לבדיקה, לניקיון · בריכה: תקינה, לבדיקה, לטיפול · משרד</p>
       </div>
       <div class="actions">
-        <button class="btn" onclick="window.print()">🖨️ הדפס מדבקות שטח (A4)</button>
+        <button class="btn" onclick="window.print()">🖨️ הדפס מדבקות שטח ומשרד (A4)</button>
       </div>
     </header>
     <div class="grid-5x5">
@@ -641,6 +646,22 @@
           <div class="s5-step1">1. סורקים במצלמה 📷</div>
           <div class="s5-step2">2. לחצו <strong>"שלח"</strong> בווטסאפ ↗</div>
           <div class="s5-step3">תקינה (1) · לבדיקה (2) · לטיפול (3)</div>
+          <div class="s5-th">สแกนแล้วกดส่งใน WhatsApp</div>
+        </div>
+      </div>
+
+      <div class="sticker-5x5">
+        <div class="s5-top">
+          <div class="s5-badge is-office">🏢 משרד</div>
+          <div class="s5-code" title="משרד ראשי">משרד ראשי</div>
+        </div>
+        <div class="s5-qr">
+          <img src="data:image/png;base64,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" alt="START_Office" />
+        </div>
+        <div class="s5-bot">
+          <div class="s5-step1">1. סורקים במצלמה 📷</div>
+          <div class="s5-step2">2. לחצו <strong>"שלח"</strong> בווטסאפ ↗</div>
+          <div class="s5-step3">פנייה לקלואי / דיווח משרד</div>
           <div class="s5-th">สแกนแล้วกดส่งใน WhatsApp</div>
         </div>
       </div>
