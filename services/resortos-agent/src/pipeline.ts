@@ -131,6 +131,7 @@ export interface PipelineDeps {
   invoiceIntake?: InvoiceIntake;
   downloadMedia?: (m: WAMessage) => Promise<InvoiceMedia | null>;
   send: (jid: string, text: string) => Promise<void>;
+  notifyManagerSms?: (message: string) => Promise<unknown> | void;
   sendImage?: (jid: string, buffer: Buffer, caption?: string) => Promise<void>;
   isAudio: (m: WAMessage) => boolean;
   extractText: (m: WAMessage) => string | null;

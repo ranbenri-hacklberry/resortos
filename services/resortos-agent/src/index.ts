@@ -41,7 +41,7 @@ const pipeline = createPipeline({
   inventory,
   downloadMedia: downloadInvoiceMedia,
   send: (jid, text) => wa.sendText(jid, text),
-  notifyManagerSms: (message) => sendManagerSms(message),
+  notifyManagerSms: (message: string) => sendManagerSms(message),
   sendImage: (jid, buf, caption) => wa.sendImage(jid, buf, caption),
   isAudio: isAudioMessage,
   extractText,
