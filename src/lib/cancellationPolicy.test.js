@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { POLICY, quoteCancellation, boundaryAt, decisiveArrivalAt, policyForBooking, getPolicyVersion } from './cancellationPolicy.js';
 
-const V = '1.1.1-draft';
+const V = '1.1.2-draft';
 const MIN = 60000;
 const q = (checkInYmd, cancelAt, extra = {}) => quoteCancellation({ version: V, total: 1000, checkInYmd, cancelAt, ...extra });
 
@@ -10,7 +10,7 @@ describe('policy record', () => {
     expect(POLICY.current_version).toBe(V);
     expect(POLICY.active_version).toBeNull();
     expect(getPolicyVersion('1.0.0-draft')).not.toBeNull();
-    expect(POLICY.version_history.map((h) => h.version)).toEqual(['1.0.0-draft', '1.1.0-draft', V]);
+    expect(POLICY.version_history.map((h) => h.version)).toEqual(['1.0.0-draft', '1.1.0-draft', '1.1.1-draft', V]);
     const v = getPolicyVersion(V);
     expect(v.status).toBe('PENDING_APPROVAL');
     expect(v.tiers_status).toBe('APPROVED');
