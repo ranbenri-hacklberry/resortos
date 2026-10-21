@@ -37,10 +37,16 @@ const CATEGORIES = [
   { id: 'contracts', label: 'הסכמים וחוזים אישיים', icon: ShieldCheck },
   { id: 'procurement', label: 'רכש ומלאי ספקים', icon: Wrench },
   { id: 'qr', label: 'מדבקות ושלטי QR', icon: QrCode },
-  { id: 'hospitality', label: 'תפעול אירוח וחדרים', icon: Building2 },
-  { id: 'reports', label: 'דוחות תפעול וכספים חיים', icon: FileSpreadsheet },
+  { id: 'operations', label: 'תפעול ודוחות', icon: Building2 },
+  { id: 'regulations', label: 'תקנונים והסכמים', icon: ShieldCheck },
   { id: 'word', label: 'עורך מסמכים חופשי', icon: FileText }
 ];
+
+import { resolveCategory, itemInCategory, categoryFromLocation } from '../../lib/formsCategories';
+import { REGULATIONS } from '../../lib/regulationsCatalog';
+
+// sections inside the merged 'תפעול ודוחות' tab
+const SECTION_LABELS = { hospitality: 'אירוח וחדרים', reports: 'דוחות תפעול וכספים' };
 
 const AUTO_DL_KEY = 'hotelos.autoDownloadFiles';
 
@@ -77,7 +83,8 @@ export default function PriorityForms({
   onPrintCashReport,
   onPrintMorningReport
 }) {
-  const [activeCategory, setActiveCategory] = useState('all');
+  const [activeCategory, setActiveCategoryRaw] = useState(() => (typeof window !== 'undefined' ? categoryFromLocation(window.location) : 'all'));
+  const setActiveCategory = (id) => setActiveCategoryRaw(resolveCategory(id));
   const [search, setSearch] = useState('');
   const [previewItem, setPreviewItem] = useState(null);
   const [downloadingAll, setDownloadingAll] = useState(false);
@@ -846,7 +853,12 @@ export default function PriorityForms({
       updatedAt: 'פעיל במערכת',
       parties: 'מסמכים חופשיים',
       sheetPreviewType: 'word-app'
-    }
+    },
+
+    // =========================================================================
+    // 12. תקנונים והסכמים (from src/lib/regulationsCatalog.js)
+    // =========================================================================
+    ...REGULATIONS
   ], [onOpenWord, onPrintDutyReport, onPrintCashReport, onPrintMorningReport]);
 
   // הורדת כל הטפסים והמסמכים של הקטגוריה הפעילה או כולם למחשב
@@ -870,7 +882,7 @@ export default function PriorityForms({
 
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
-      const matchCat = activeCategory === 'all' || item.category === activeCategory;
+      const matchCat = itemInCategory(item, activeCategory);
       if (!matchCat) return false;
       if (!search.trim()) return true;
       const q = search.trim().toLowerCase();
@@ -887,7 +899,7 @@ export default function PriorityForms({
     const counts = { all: items.length };
     CATEGORIES.forEach((cat) => {
       if (cat.id !== 'all') {
-        counts[cat.id] = items.filter((i) => i.category === cat.id).length;
+        counts[cat.id] = items.filter((i) => itemInCategory(i, cat.id)).length;
       }
     });
     return counts;
@@ -1055,7 +1067,7 @@ export default function PriorityForms({
                 {/* פרטי הכרטיס */}
                 <div className="form-card-info">
                   <h3 className="form-card-title">{item.title}</h3>
-                  <div className="form-card-sub">{item.subtitle}</div>
+                  <div className="form-card-sub">{SECTION_LABELS[item.category] ? `${SECTION_LABELS[item.category]} · ` : ''}{item.subtitle}</div>
                   <p className="form-card-desc">{item.description}</p>
 
                   <div className="form-card-meta">
@@ -1105,6 +1117,17 @@ export default function PriorityForms({
                         >
                           <ExternalLink size={13} /> פתח מלא
                         </a>
+                        {item.htmlUrl ? (
+                          <a
+                            href={item.htmlUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="form-btn is-open"
+                            title="תצוגת HTML"
+                          >
+                            <FileText size={13} /> תצוגת HTML
+                          </a>
+                        ) : null}
                       </>
                     ) : item.isAction ? (
                       <button
