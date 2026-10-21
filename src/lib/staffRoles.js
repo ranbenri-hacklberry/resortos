@@ -9,11 +9,11 @@ export function isReception(role) {
 }
 
 export function canOpenDesk(role) {
-  return role === 'RECEPTION' || role === 'MANAGER';
+  return role === 'RECEPTION' || role === 'MANAGER' || role === 'OPS_MANAGER' || role === 'PRIORITY';
 }
 
 export function isOpsLead(role) {
-  return role === 'MANAGER' || role === 'OPS_MANAGER';
+  return role === 'MANAGER' || role === 'OPS_MANAGER' || role === 'PRIORITY';
 }
 
 export function isPriorityOnly(role) {
@@ -37,6 +37,7 @@ export function canSeeFinancials(role, username = '', displayName = '') {
   return (
     r === 'MANAGER' ||
     r === 'OPS_MANAGER' ||
+    r === 'PRIORITY' ||
     r === 'OWNER' ||
     r === 'FINANCE' ||
     isFinanceOnly(role) ||
@@ -46,10 +47,13 @@ export function canSeeFinancials(role, username = '', displayName = '') {
     u === 'ran' ||
     u.includes('רני') ||
     d.includes('רני') ||
+    u === 'zuki' ||
+    u.includes('צוקי') ||
+    d.includes('צוקי') ||
     u.includes('owner')
   );
 }
 
 export function operationsViewRole(role) {
-  return role === 'OPS_MANAGER' ? 'MANAGER' : (role || 'HOUSEKEEPING');
+  return (role === 'OPS_MANAGER' || role === 'PRIORITY') ? 'MANAGER' : (role || 'HOUSEKEEPING');
 }

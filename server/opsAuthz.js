@@ -10,7 +10,7 @@ export function roleOf(user) {
 
 export function isOpsLead(user) {
   const role = roleOf(user);
-  return role === 'MANAGER' || role === 'OPS_MANAGER';
+  return role === 'MANAGER' || role === 'OPS_MANAGER' || role === 'PRIORITY';
 }
 
 export function isPriorityRole(user) {

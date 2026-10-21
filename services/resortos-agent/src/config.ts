@@ -41,6 +41,8 @@ export interface RoomEntry {
   usage?: RoomUsage;
   /** Whether room is available for guest reservations */
   booking_enabled?: boolean;
+  /** Maximum guest occupancy */
+  max_occupancy?: number | null;
   /** Free-form names/aliases in any language, used for resolving room_raw */
   aliases: string[];
 }

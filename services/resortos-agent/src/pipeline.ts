@@ -371,7 +371,7 @@ export function createPipeline(d: PipelineDeps) {
     if (!jid) return { handled: false, reason: 'no jid' };
     const senderPhone = phoneOf(jid);
     const cleaner = d.cleaners().find((c) => matchesCleaner(c, jid) || matchesCleaner(c, senderPhone));
-    const isManager = cleaner?.role === 'MANAGER' || cleaner?.role === 'OPS_MANAGER';
+    const isManager = cleaner?.role === 'MANAGER' || cleaner?.role === 'OPS_MANAGER' || cleaner?.role === 'PRIORITY';
     const isWorker = Boolean(cleaner && !isManager);
     const sessionKey = normalizePhoneTail(senderPhone);
     const currentSession = sessionStates.get(sessionKey);
@@ -2320,7 +2320,7 @@ export function createPipeline(d: PipelineDeps) {
           await d.resortos.reportSupplies({ unitId: intent.room_id!, description: desc, reportedBy: by });
         } else if (intent.action === 'QUERY_STATUS' && d.resortos.listUnits) {
           const all = await d.resortos.listUnits();
-          if (cleaner.role === 'MANAGER' || cleaner.role === 'OPS_MANAGER') {
+          if (cleaner.role === 'MANAGER' || cleaner.role === 'OPS_MANAGER' || cleaner.role === 'PRIORITY') {
             const today = getIsraelToday();
             const bookings = (await d.resortos.listBookings?.({ from: today, to: today })) || [];
             statusReply = formatVacantToday(d.rooms(), bookings, today);

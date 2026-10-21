@@ -52,5 +52,12 @@
     "name": "רני",
     "role": "MANAGER",
     "language": "he"
+  },
+  {
+    "phone": "972529690024",
+    "lid": "217588009308323",
+    "name": "צוקי",
+    "role": "PRIORITY",
+    "language": "he"
   }
 ]

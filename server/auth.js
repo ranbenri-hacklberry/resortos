@@ -144,7 +144,8 @@ async function staffFromRequest(req) {
 }
 
 function canManageAgents(user) {
-  return user?.role === 'MANAGER' || user?.role === 'OPS_MANAGER';
+  const role = String(user?.role || '').toUpperCase();
+  return role === 'MANAGER' || role === 'OPS_MANAGER' || role === 'PRIORITY';
 }
 
 export async function listAgents(req, res) {
