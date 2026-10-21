@@ -1,4 +1,4 @@
-# Cancellation policy v1.0.0-draft — audit, gaps, OTA fit (PENDING_APPROVAL)
+# Cancellation policy — audit + OTA (written for v1.0.0-draft; v1.1.0-draft: final tiers approved, calendar days 15:00 Asia/Jerusalem, no gap, no-show 100%; legal review REQUIRED)
 
 ## Audit (2026-10-21)
 - No existing cancellation-policy table, setting, or versioning anywhere (src, server, functions, migrations, supabase, Chloe services/resortos-agent incl. guestKnowledge.ts, public/price-list.html).
