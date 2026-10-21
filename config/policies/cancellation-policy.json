@@ -1,11 +1,120 @@
 {
   "policy_id": "resortos-cancellation-standard",
-  "current_version": "1.1.0-draft",
+  "current_version": "1.1.1-draft",
   "active_version": null,
   "versions": [
     {
-      "version": "1.1.0-draft",
+      "version": "1.1.1-draft",
       "status": "PENDING_APPROVAL",
+      "tiers_status": "APPROVED",
+      "legal_review": "REQUIRED_BEFORE_BINDING_PUBLICATION",
+      "created_at": "2026-10-21T15:15:00+03:00",
+      "updated_at": "2026-10-21T15:15:00+03:00",
+      "approved_by": null,
+      "approved_at": null,
+      "tiers_approved_by": "Ran",
+      "tiers_approved_at": "2026-10-21T15:04:00+03:00",
+      "effective_from": null,
+      "effective_from_note": "נכנס לתוקף רק לאחר אישור סופי ובדיקה משפטית",
+      "timezone": "Asia/Jerusalem",
+      "decisive_arrival": {
+        "source": "booking check-in hour if set (stayHoursFromBooking / checkinTime arg), else default",
+        "default_checkin_time": "15:00",
+        "status": "APPROVED"
+      },
+      "day_counting": {
+        "method": "calendar_days_asia_jerusalem",
+        "boundary_rule": "boundary(N) = (check-in date − N calendar days) at check-in hour, Israel local time",
+        "status": "APPROVED",
+        "note": "ימים קלנדריים, שעון ישראל, 15:00. סביב מעבר שעון יום עשוי להיות 23 או 25 שעות."
+      },
+      "basis": "booking_total",
+      "tiers": [
+        {
+          "id": "free",
+          "min_days_before": 15,
+          "max_days_before": null,
+          "nominal_hours": 360,
+          "fee_percent": 0,
+          "label_he": "15 ימים או יותר לפני ההגעה"
+        },
+        {
+          "id": "d8_14",
+          "min_days_before": 8,
+          "max_days_before": 15,
+          "nominal_hours": 192,
+          "fee_percent": 20,
+          "label_he": "מ־8 ימים ועד פחות מ־15 ימים"
+        },
+        {
+          "id": "d2_7",
+          "min_days_before": 2,
+          "max_days_before": 8,
+          "nominal_hours": 48,
+          "fee_percent": 70,
+          "label_he": "מ־2 ימים ועד פחות מ־8 ימים"
+        },
+        {
+          "id": "lt2",
+          "min_days_before": 0,
+          "max_days_before": 2,
+          "fee_percent": 100,
+          "label_he": "פחות מ־2 ימים לפני ההגעה"
+        }
+      ],
+      "no_show": {
+        "defined": true,
+        "fee_percent": 100,
+        "status": "APPROVED",
+        "label_he": "אי־הגעה — 100% מסכום ההזמנה"
+      },
+      "exceptions": [
+        {
+          "id": "war_or_global_pandemic",
+          "refund_percent": 100,
+          "requires_manager_approval": true,
+          "legal_wording_status": "LEGAL_REVIEW_REQUIRED",
+          "label_he": "מלחמה או מגפה עולמית — החזר מלא, בכפוף לאישור מנהל ולנוסח משפטי מאושר"
+        }
+      ],
+      "non_refundable_rate": {
+        "enabled": false,
+        "discount_percent": 10,
+        "status": "REQUIRES_SEPARATE_APPROVAL"
+      },
+      "ota": {
+        "changes": "none",
+        "note": "no Booking.com/Airbnb policy changed"
+      },
+      "scope": {
+        "complexes": "*",
+        "rate_plans": "*",
+        "overrides": []
+      },
+      "existing_bookings": "pinned_to_version_at_booking_time; no retroactive change",
+      "document": {
+        "library": "priority-docs (/api/priority/docs)",
+        "doc_id": "doc-cxlpolicy-110-draft",
+        "status": "ADDED_AS_DRAFT_TO_PRIORITY_DOCS",
+        "payload": "docs/policies/priority-docs-payload-v1.1.1-draft.json",
+        "local_files": [
+          "docs/policies/cancellation-policy-v1.1.1-draft.pdf",
+          "docs/policies/cancellation-policy-v1.1.1-draft.docx",
+          "docs/policies/cancellation-policy-v1.1.1-draft.html"
+        ],
+        "live_file": "/Users/rani/resortos/data/priority-docs.json",
+        "added_at": "2026-10-21T15:08:19+03:00",
+        "admin_url": "ResortOS admin → טאב פריוריטי → עורך מסמכים חופשי → 'נהלים ומדיניות / מדיניות ביטולים והחזרים (טיוטה 1.1.0)' (no per-doc deep link in app)",
+        "api": "GET /api/priority/docs (manager auth), id doc-cxlpolicy-110-draft",
+        "updated_at": "2026-10-21T15:15:00+03:00"
+      },
+      "legal_note_he": "המדיניות כפופה לדין החל ואינה גורעת מזכויות ביטול שאינן ניתנות להתניה על פי דין.",
+      "guest_text_he": "ביטול 15 ימים או יותר לפני מועד ההגעה — ללא דמי ביטול. ביטול מ־8 ימים ועד פחות מ־15 ימים לפני ההגעה — 20% מסכום ההזמנה. ביטול מ־2 ימים ועד פחות מ־8 ימים לפני ההגעה — 70% מסכום ההזמנה. ביטול פחות מ־2 ימים לפני ההגעה, או אי־הגעה — 100% מסכום ההזמנה. הימים נספרים כימים קלנדריים לפי שעון ישראל, עד השעה 15:00. במקרה של מלחמה או מגפה עולמית יינתן החזר מלא, בכפוף לאישור מנהל. המדיניות כפופה לדין החל ולזכויות ביטול שאינן ניתנות להתניה.",
+      "document_approved_by": "Tzuki (wording)"
+    },
+    {
+      "version": "1.1.0-draft",
+      "status": "SUPERSEDED_DRAFT",
       "tiers_status": "APPROVED",
       "legal_review": "REQUIRED_BEFORE_BINDING_PUBLICATION",
       "created_at": "2026-10-21T15:05:00+03:00",
@@ -232,6 +341,11 @@
       "version": "1.1.0-draft",
       "at": "2026-10-21T15:05:00+03:00",
       "change": "מדרגות סופיות אושרו ע״י רן: ימים קלנדריים 15:00 שעון ישראל, הוסר חלון 24–48, אי־הגעה 100%; בדיקה משפטית נדרשת"
+    },
+    {
+      "version": "1.1.1-draft",
+      "at": "2026-10-21T15:15:00+03:00",
+      "change": "תיקון ניסוח בלבד: טווחי ימים כתובים במילים לקריאה תקינה מימין לשמאל. אושר ע״י צוקי. ללא שינוי מדרגות"
     }
   ]
 }
