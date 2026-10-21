@@ -153,7 +153,7 @@ export function statusWriteMatches(intended, read) {
 
 function isManager(user) {
   const role = String(user?.role || '').toUpperCase();
-  return role === 'MANAGER' || role === 'OPS_MANAGER';
+  return role === 'MANAGER' || role === 'OPS_MANAGER' || role === 'PRIORITY';
 }
 
 export function createMemoryStore() {

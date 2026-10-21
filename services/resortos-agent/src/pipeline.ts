@@ -423,7 +423,7 @@ export function createPipeline(deps: PipelineDeps) {
     if (!jid) return { handled: false, reason: 'no jid' };
     const senderPhone = phoneOf(jid);
     const cleaner = d.cleaners().find((c) => matchesCleaner(c, jid) || matchesCleaner(c, senderPhone));
-    const isManager = cleaner?.role === 'MANAGER' || cleaner?.role === 'OPS_MANAGER';
+    const isManager = cleaner?.role === 'MANAGER' || cleaner?.role === 'OPS_MANAGER' || cleaner?.role === 'PRIORITY';
     // Guest priority for the background invoice name job (local vision model shares the GPU with guest replies).
     if (!cleaner) { try { (d.invoiceIntake as any)?.noteGuestActivity?.(); } catch { /* ignore */ } }
     const isWorker = Boolean(cleaner && !isManager);
@@ -2487,7 +2487,7 @@ export function createPipeline(deps: PipelineDeps) {
           await d.resortos.reportSupplies({ unitId: intent.room_id!, description: desc, reportedBy: by });
         } else if (intent.action === 'QUERY_STATUS' && d.resortos.listUnits) {
           const all = await d.resortos.listUnits();
-          if (cleaner.role === 'MANAGER' || cleaner.role === 'OPS_MANAGER') {
+          if (cleaner.role === 'MANAGER' || cleaner.role === 'OPS_MANAGER' || cleaner.role === 'PRIORITY') {
             const today = getIsraelToday();
             const bookings = (await d.resortos.listBookings?.({ from: today, to: today })) || [];
             statusReply = formatVacantToday(d.rooms(), bookings, today);
