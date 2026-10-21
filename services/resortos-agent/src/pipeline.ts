@@ -2,6 +2,9 @@ import type { WAMessage } from '@whiskeysockets/baileys';
 import { cleaningCredit, config, isBookableRoom, isStaffRoom, isOfficeRoom, type CleanerProfile, type Lang, type RoomEntry } from './config.js';
 import type { InboundIntent } from './llm/client.js';
 import { resolveRoomByAlias } from './llm/client.js';
+import { handleManagerInventory, type InventoryClient } from './manager/inventoryQuestion.js';
+import type { InvoiceIntake, InvoiceMedia } from './invoice/intake.js';
+import { detectInventoryIntent } from './llm/client.js';
 import { AWAITING_INSPECTION_REASON, ResortOSError, type ReadyResult, type BookingRow, type UnitRow } from './integration/resortos.js';
 import type { Transcript } from './whatsapp/media.js';
 import { resolveStaffPhone } from './whatsapp/client.js';
@@ -38,10 +41,16 @@ import {
 } from './manager/statusConfirm.js';
 import { cashConfirmText, cashShekelLabel, paymentStatusChoice, paymentStatusLabel, paymentStatusQuestion, proposeCashCollection } from './manager/cashCollection.js';
 import { holdConfirmText, holdDoneText, holdProgressText, proposesNightHold } from './manager/nightHold.js';
+import { fileAudit, handleManagerRoomHold } from './manager/roomHold.js';
+import { join as joinPath } from 'node:path';
 import { placeDetail, placeMenuFor } from './guest/placeMenu.js';
 import {
   formatManagerInitialCard,
   answerManagerRoomQuestion,
+  answerComplexCheckinsQuestion,
+  unitShortStatus,
+  isComplexCheckinsQuestion,
+  matchComplex,
   getCleaningStatusLabel,
   getRoomOccupancy,
 } from './manager/managerQuestions.js';
@@ -52,8 +61,12 @@ import {
   guestLinkSms,
   linkChoice,
   phoneFromReply,
+  stayUrlOf,
   type GuestLinkChoice,
 } from './manager/guestLink.js';
+import { normalizeOutgoingText } from './whatsapp/textSpacing.js';
+import { logConversation } from './conversationLog.js';
+import { isStaffOpsQuestion, STAFF_OPS_ONLY_REPLY } from './manager/opsQuestion.js';
 import {
   groundById,
   groundByScan,
@@ -112,6 +125,11 @@ export type SessionState = CleanerSessionState | ManagerSessionState | GuestSess
 
 /** Narrow interfaces so everything is mockable in tests. */
 export interface PipelineDeps {
+  /** Manager inventory (stock questions + confirmed transfers) via the ResortOS bridge. Optional. */
+  inventory?: InventoryClient;
+  /** Supplier-invoice intake (manager photos → draft → "אשר חשבונית"). Optional. */
+  invoiceIntake?: InvoiceIntake;
+  downloadMedia?: (m: WAMessage) => Promise<InvoiceMedia | null>;
   send: (jid: string, text: string) => Promise<void>;
   sendImage?: (jid: string, buffer: Buffer, caption?: string) => Promise<void>;
   isAudio: (m: WAMessage) => boolean;
@@ -134,7 +152,7 @@ export interface PipelineDeps {
     updateBookingNote?(p: { bookingId: string; note: string; reportedBy: string }): Promise<unknown>;
     collectCash?(p: { unitId: string; amountAgorot: number; reportedBy: string; note?: string }): Promise<{ ok: true; guest_name?: string; amount_agorot?: number } | { ok: false; skipped: string }>;
     setPaymentStatus?(p: { unitId: string; status: 'PARTIAL' | 'PAID'; reportedBy: string }): Promise<{ ok: true; guest_name?: string; payment_status?: string } | { ok: false; skipped: string }>;
-    holdNight?(p: { unitId: string; reportedBy: string }): Promise<{ ok: true; verified: boolean } | { ok: false; skipped: string }>;
+    holdNight?(p: { unitId: string; reportedBy: string }): Promise<{ ok: true; verified: boolean; resId?: string } | { ok: false; skipped: string }>;
     reportMaintenance(p: { unitId: string; description: string; reportedBy: string }): Promise<unknown>;
     reportSupplies(p: { unitId: string; description: string; reportedBy: string }): Promise<unknown>;
     sendGuestLinkSms?(p: { bookingId: string; phone: string; message: string; reportedBy?: string }): Promise<{ ok: true }>;
@@ -236,7 +254,8 @@ export function greetingReply(text: string, fullName?: string | null): string | 
 /** A question with no facts opens with the person's name. */
 export function askByName(fullName: string | null | undefined, text: string): string {
   const who = firstName(fullName);
-  const body = String(text || '').replace(/^(?:שלום|היי|הי|hello|hi|أهلاً|أهلا)\b[!,.،\s]*/i, '').trim();
+  // Keep trailing newlines: callers append more text after the question (Ran 2026-10-20, "📞)בינתיים").
+  const body = String(text || '').replace(/^(?:שלום|היי|הי|hello|hi|أهلاً|أهلا)\b[!,.،\s]*/i, '').replace(/^\s+/, '').replace(/[ \t]+$/, '');
   if (!who) return body;
   if (body.startsWith(`${who},`) || body.startsWith(`${who} `)) return body;
   return `${who}, ${body}`;
@@ -308,7 +327,26 @@ export function formatRoomForWorker(roomId: string, lang: Lang, rooms: RoomEntry
   return lockbox ? `${name} (כספת: ${lockbox})` : name;
 }
 
-export function createPipeline(d: PipelineDeps) {
+const roomHoldAudit = (entry: Record<string, unknown>) => fileAudit(process.env.ROOM_HOLD_AUDIT_PATH || joinPath(process.cwd(), 'data', 'room-hold-audit.jsonl'))(entry);
+
+export function createPipeline(deps: PipelineDeps) {
+  // Every outgoing text: spacing normalized (bug 5) and logged with full content (Ran 2026-10-20).
+  let currentRoute: { jid?: string; route?: string } = {};
+  /** Bug A: a bare number answers the room menu shown in the last 10 minutes. */
+  const ROOM_MENU_TTL_MS = 10 * 60 * 1000;
+  const roomMenuShownAt = new Map<string, number>();
+  const d: PipelineDeps = {
+    ...deps,
+    send: async (jid: string, text: string) => {
+      const out = normalizeOutgoingText(text);
+      // Bug A: remember when a numbered room-action menu was last shown to this number.
+      if (/אפשרויות לחדר .*\(השב מספר\)/.test(out)) {
+        try { roomMenuShownAt.set(normalizePhoneTail(phoneOf(jid)), Date.now()); } catch { /* ignore */ }
+      }
+      logConversation({ direction: 'outbound', jid, text: out, route: currentRoute.jid === jid ? currentRoute.route : undefined });
+      return deps.send(jid, out);
+    },
+  };
   const sessionStates = new Map<string, SessionState>();
   const getSession = (phone: string) => sessionStates.get(normalizePhoneTail(phone));
   const setSession = (phone: string, s: SessionState) => sessionStates.set(normalizePhoneTail(phone), s);
@@ -367,17 +405,47 @@ export function createPipeline(d: PipelineDeps) {
 
   /** Worker -> agent. */
   async function handleInbound(msg: WAMessage): Promise<InboundResult> {
+    const jid = msg.key.remoteJid || undefined;
+    let inboundText = '';
+    try { inboundText = String(d.extractText(msg) || ''); } catch { inboundText = ''; }
+    const cleanerRow = jid ? d.cleaners().find((c) => matchesCleaner(c, jid) || matchesCleaner(c, phoneOf(jid))) : undefined;
+    const route = !jid ? 'none' : !cleanerRow ? 'guest' : (cleanerRow.role === 'MANAGER' || cleanerRow.role === 'OPS_MANAGER') ? 'manager' : 'staff';
+    const isAudioMsg = (() => { try { return d.isAudio(msg); } catch { return false; } })();
+    logConversation({ direction: 'inbound', jid, text: inboundText || (isAudioMsg ? '[voice note]' : ''), route });
+    currentRoute = { jid, route };
+    const result = await handleInboundInner(msg);
+    logConversation({ direction: 'result', jid, route, handled: result.handled, reason: (result as any).reason, text: (result as any).transcript?.text });
+    return result;
+  }
+
+  async function handleInboundInner(msg: WAMessage): Promise<InboundResult> {
     const jid = msg.key.remoteJid;
     if (!jid) return { handled: false, reason: 'no jid' };
     const senderPhone = phoneOf(jid);
     const cleaner = d.cleaners().find((c) => matchesCleaner(c, jid) || matchesCleaner(c, senderPhone));
     const isManager = cleaner?.role === 'MANAGER' || cleaner?.role === 'OPS_MANAGER';
+    // Guest priority for the background invoice name job (local vision model shares the GPU with guest replies).
+    if (!cleaner) { try { (d.invoiceIntake as any)?.noteGuestActivity?.(); } catch { /* ignore */ } }
     const isWorker = Boolean(cleaner && !isManager);
     const sessionKey = normalizePhoneTail(senderPhone);
     const currentSession = sessionStates.get(sessionKey);
 
     let text = d.extractText(msg);
     if (text?.trim()) {
+      if (isManager) {
+        const holdReply = await handleManagerRoomHold(text.trim(), sessionKey, cleaner?.name || 'מנהל', {
+          rooms: d.rooms,
+          today: getIsraelToday,
+          listBookings: d.resortos.listBookings?.bind(d.resortos),
+          holdNight: d.resortos.holdNight?.bind(d.resortos),
+          audit: roomHoldAudit,
+          sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+        });
+        if (holdReply) {
+          await d.send(jid, holdReply);
+          return { handled: true };
+        }
+      }
       const deskReply = await consultCallDesk(senderPhone, text.trim());
       if (deskReply) {
         await d.send(jid, deskReply);
@@ -721,7 +789,7 @@ export function createPipeline(d: PipelineDeps) {
         || mine.find(covers)
         || mine.find((row) => roomIds.includes(row.unit_id))
         || mine[0];
-      const stayUrl = booking?.checkout_token ? `https://resortos.app/stay/${booking.checkout_token}` : '';
+      const stayUrl = stayUrlOf(booking);
       const reply = asset.kind === 'pool'
         ? poolGuestReply(asset, stayUrl)
         : (stayUrl
@@ -918,6 +986,46 @@ export function createPipeline(d: PipelineDeps) {
     }
 
     try {
+      // 0-INV. Manager inventory (Ran 2026-10-20): stock questions + transfers with explicit "אשר העברה".
+      if (isManager && jid && d.inventory && text?.trim()) {
+        const t0 = text.trim();
+        if (detectInventoryIntent(t0) || /^(?:אשר|בטל)\s+העברה$/.test(t0)) {
+          let invReply: string | null = null;
+          try { invReply = await handleManagerInventory(t0, sessionKey, cleaner?.name || 'מנהל', d.inventory); }
+          catch (err) { d.log?.warn?.({ err: (err as Error).message }, 'inventory failed'); invReply = 'לא הצלחתי לגשת למלאי כרגע. לא רשמתי כלום.'; }
+          if (invReply) { await d.send(jid, invReply); return { handled: true }; }
+        }
+      }
+      // 0-INVOICE (Ran 2026-10-21): manager invoice photos / PDFs → invoice intake (was never wired: every
+      // manager image fell through to the check capture). Not-an-invoice images still continue to the check flow.
+      if (isManager && jid && d.invoiceIntake && d.invoiceIntake.isAllowed(cleaner?.phone || senderPhone)) {
+        const invPhone = cleaner?.phone || senderPhone;
+        const im: any = msg.message || {};
+        const hasMedia = Boolean(im.imageMessage || im.documentMessage || im.documentWithCaptionMessage);
+        if (hasMedia && d.downloadMedia) {
+          try {
+            const media = await d.downloadMedia(msg);
+            if (media) {
+              const caption = im.imageMessage?.caption || im.documentWithCaptionMessage?.message?.documentMessage?.caption || text || '';
+              const r = await d.invoiceIntake.handleMedia(invPhone, cleaner?.name || 'מנהל', media, caption);
+              if (r.kind !== 'not_invoice' && r.reply) {
+                await d.send(jid, r.reply);
+                if (r.followUp) r.followUp.then((t) => (t ? d.send(jid, t) : undefined)).catch((err) => d.log.warn({ err: String(err) }, 'invoice follow-up failed'));
+                return { handled: true };
+              }
+            }
+          } catch (err) {
+            d.log.error({ err: String(err) }, 'invoice intake failed');
+          }
+        } else if (text?.trim()) {
+          try {
+            const r = await d.invoiceIntake.handleText(invPhone, cleaner?.name || 'מנהל', text.trim(), { otherPending: Boolean(getPendingCheck(senderPhone)) });
+            if (r) { await d.send(jid, r); return { handled: true }; }
+          } catch (err) {
+            d.log.error({ err: String(err) }, 'invoice text command failed');
+          }
+        }
+      }
       // 0A. Manager Financial Command Center Flows (WhatsApp Check Capture & Forecast)
       if (isManager) {
         const pendingCheck = getPendingCheck(senderPhone);
@@ -959,6 +1067,11 @@ export function createPipeline(d: PipelineDeps) {
           try {
             const caption = msg.message?.imageMessage?.caption || text || '';
             const parsedFromCaption = parseConversationalForecastEntry(caption);
+            // No amount in the caption → don't invent a 5000 ₪ check; ask what the image is (Ran 2026-10-21).
+            if (!parsedFromCaption?.amount) {
+              await d.send(jid, '🤔 קיבלתי תמונה — מה זה? (חשבונית / שיק / אחר). לשיק יש לצרף כיתוב עם סכום ותאריך, למשל: "שיק 2500 ל-15/11 לספק X".');
+              return { handled: true };
+            }
             const capturePayload = {
               imageName: 'whatsapp_check.jpg',
               fields: {
@@ -1073,7 +1186,7 @@ export function createPipeline(d: PipelineDeps) {
           sessionStates.delete(sessionKey);
         }
         if (!text?.trim()) return { handled: true, transcript };
-        return handleInbound(msg);
+        return handleInboundInner(msg);
       }
 
       if (currentSession?.role === 'GUEST' && currentSession.state === 'AWAITING_CALL_CONFIRM') {
@@ -1404,7 +1517,14 @@ export function createPipeline(d: PipelineDeps) {
             await askHoldConfirm(currentSession.roomId);
             return { handled: true, transcript };
           }
-          const continued = resolveRoomWithContext(trimmed, d.rooms(), dialogContext(sessionKey, currentSession.roomId));
+          // Bug A (Ran 2026-10-20): a bare number answers the room menu shown last, never an older unit picker
+          // ("נורית" → 1 → 1 → "נורית 3" → "1" must open Nurit 3's option 1, not Nurit 1).
+          const menuAt = roomMenuShownAt.get(sessionKey);
+          const isMenuNumber = /^\s*[1-9][0-9]?\.?\s*$/.test(normalizeSpokenHebrewNumbers(trimmed)) &&
+            menuAt !== undefined && Date.now() - menuAt < ROOM_MENU_TTL_MS;
+          const continued = isMenuNumber
+            ? ({ type: 'NONE' } as const)
+            : resolveRoomWithContext(trimmed, d.rooms(), dialogContext(sessionKey, currentSession.roomId));
           if (continued.type === 'RESOLVED' && continued.roomId !== currentSession.roomId) {
             await showManagerRoom(continued.roomId);
             return { handled: true, transcript };
@@ -1687,6 +1807,22 @@ export function createPipeline(d: PipelineDeps) {
         await d.send(jid, greet);
         return { handled: true, transcript };
       }
+      // Bug 2 (Ran 2026-10-20): "מי נכנס לבתי נורית בסופ״ש" → per-complex arrivals, not a room picker.
+      // Only one named complex per answer; never a summary of all units over WhatsApp.
+      if (isManager && jid && isStaffOpsQuestion(text)) {
+        if (isComplexCheckinsQuestion(text)) {
+          const bookings = (await d.resortos.listBookings?.()) || [];
+          const answer = answerComplexCheckinsQuestion(text, d.rooms(), bookings, getIsraelToday());
+          if (answer) {
+            await d.send(jid, answer);
+            return { handled: true, transcript };
+          }
+        }
+        if (!matchComplex(text) && !resolveRoomByAlias(text, d.rooms())) {
+          await d.send(jid, askByName(cleaner?.name, 'על איזה מתחם? (למשל "מי נכנס לבתי נורית בסופ״ש")'));
+          return { handled: true, transcript };
+        }
+      }
       const looseCash = isManager ? proposeCashCollection(text) : null;
       if (looseCash && jid) {
         const roomId = currentSession && 'roomId' in currentSession ? currentSession.roomId : undefined;
@@ -1938,7 +2074,7 @@ export function createPipeline(d: PipelineDeps) {
         if (otherBooking) {
           const correctRoom = d.rooms().find((x) => x.id === otherBooking.unit_id);
           const correctLabel = correctRoom?.name || correctRoom?.letterCode || otherBooking.unit_id;
-          const stayUrl = otherBooking.checkout_token ? `https://resortos.app/stay/${otherBooking.checkout_token}` : '';
+          const stayUrl = stayUrlOf(otherBooking);
           const reply = `נראה שסרקת את כספת חדר ${r?.name || r?.letterCode}, וההזמנה שלך היא עבור ${correctLabel}.\n\n` +
             `אנא גש אל ${correctLabel} וסרוק את הכספת שם, או השתמש בקוד הכספת של החדר שלך:\n` +
             `🔑 קוד כספת מפתח עבור ${correctLabel}: ${correctRoom?.lockbox || 'לא מוגדר'}\n\n` +
@@ -1954,7 +2090,7 @@ export function createPipeline(d: PipelineDeps) {
           const checkOut = roomBooking.check_out_date || '';
           const isTodayOrStay = today >= checkIn && today <= checkOut;
           const isFuture = today < checkIn;
-          const stayUrl = roomBooking.checkout_token ? `https://resortos.app/stay/${roomBooking.checkout_token}` : '';
+          const stayUrl = stayUrlOf(roomBooking);
 
           if (isTodayOrStay) {
             const units = (await d.resortos.listUnits?.()) || [];
@@ -2097,11 +2233,26 @@ export function createPipeline(d: PipelineDeps) {
             candidateRoomIds: [...fuzzy.candidateRooms.map((r) => r.id), ...grounds.map((asset) => asset.id)],
             pendingQuestion: text,
           });
+          const unitStatuses: Record<string, string> = {};
+          try {
+            const today = getIsraelToday();
+            const [units, bookings] = await Promise.all([
+              d.resortos.listUnits?.() ?? Promise.resolve([]),
+              d.resortos.listBookings?.({ from: today, to: today }) ?? Promise.resolve([]),
+            ]);
+            for (const r of fuzzy.candidateRooms) {
+              const st = unitShortStatus((units || []).find((u) => u.id === r.id), getRoomOccupancy(r.id, bookings || [], today));
+              if (st) unitStatuses[r.id] = st;
+            }
+          } catch {
+            // status data unavailable: show the plain list
+          }
           const prompt = askByName(cleaner?.name, formatComplexClarificationPrompt(
             fuzzy.complex.officialName,
             fuzzy.candidateRooms,
             d.rooms(),
-            grounds
+            grounds,
+            unitStatuses
           ));
           await d.send(jid, prompt);
           return { handled: true, transcript };
@@ -2139,7 +2290,7 @@ export function createPipeline(d: PipelineDeps) {
 
           const booking = guestBookings[0];
           const room = d.rooms().find((x) => x.id === booking.unit_id);
-          const stayUrl = booking.checkout_token ? `https://resortos.app/stay/${booking.checkout_token}` : undefined;
+          const stayUrl = stayUrlOf(booking) || undefined;
 
           const ctx: GuestContext = {
             booking,
@@ -2149,6 +2300,13 @@ export function createPipeline(d: PipelineDeps) {
             stayUrl,
             guestName: booking.guest_name,
           };
+
+          // Bug 2 (Ran 2026-10-20): occupancy / arrivals questions are staff questions, never the guest fallback.
+          if (isStaffOpsQuestion(text)) {
+            void logGuestWhatsAppExchange(booking, text, STAFF_OPS_ONLY_REPLY);
+            await d.send(jid, STAFF_OPS_ONLY_REPLY);
+            return { handled: true, transcript };
+          }
 
           const greet = greetingReply(text, booking.guest_name);
           if (greet) {
@@ -2197,10 +2355,11 @@ export function createPipeline(d: PipelineDeps) {
           });
           const fallbackReply = askByName(
             booking.guest_name,
-            `אין לי תשובה מדויקת לשאלה הזו כרגע — תרצו שנתקשר אליכם? (השיבו *כן* ונחזור אליכם בהקדם 📞)\n\n`
-          ) +
-            `בינתיים, כל המידע על שהותכם ב${ctx.roomName} (קוד WiFi, שער הישוב, הוראות ג'קוזי, מסעדות, אטרקציות וצ'ק-אאוט) זמין תמיד בדף האורח שלכם:\n` +
-            (stayUrl ? `📱 ${stayUrl}\n\n` : '') +
+            `אין לי תשובה מדויקת לשאלה הזו כרגע — תרצו שנתקשר אליכם? (השיבו *כן* ונחזור אליכם בהקדם 📞)`
+          ) + `\n\n` +
+            (stayUrl
+              ? `בינתיים, כל המידע על שהותכם ב${ctx.roomName} (קוד WiFi, שער הישוב, הוראות ג'קוזי, מסעדות, אטרקציות וצ'ק-אאוט) זמין תמיד בדף האורח שלכם:\n📱 ${stayUrl}\n\n`
+              : '') +
             `מאחלים לכם שהות נעימה ושלווה!`;
           void logGuestWhatsAppExchange(booking, text, fallbackReply);
           await d.send(jid, fallbackReply);

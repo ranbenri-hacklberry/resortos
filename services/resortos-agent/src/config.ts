@@ -140,6 +140,8 @@ export const config = {
     draftsPath: path.resolve(ROOT, '../../data/invoices/drafts.json'),
     ocrBin: path.join(ROOT, 'bin', 'apple-vision-ocr-boxes'),
     cropBin: path.join(ROOT, 'bin', 'invoice-crop'),
+    enhanceScript: path.join(ROOT, 'scripts', 'invoice_enhance.py'),
+    pythonBin: env('CHLOE_PYTHON', '/opt/homebrew/bin/python3'),
     grok: env('XAI_API_KEY', '')
       ? { apiKey: env('XAI_API_KEY', ''), model: 'grok-4.7' }
       : null,
