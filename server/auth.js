@@ -135,7 +135,7 @@ export async function getStaffMe(req, res) {
   }
 }
 
-async function staffFromRequest(req) {
+export async function staffFromRequest(req) {
   const token = bearerToken(req);
   if (!token) return null;
   const user = await rpc('hotelos_me', { p_token: token });

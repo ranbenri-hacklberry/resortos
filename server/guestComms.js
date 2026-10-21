@@ -94,7 +94,17 @@ export async function setChatAutomationState({
   reason = 'manual_reply',
   updatedBy = 'staff',
 }) {
-  const chatId = normalizeChatId(phone);
+  let chatId = normalizeChatId(phone);
+  if (!chatId && bookingId) {
+    try {
+      const rows = await rest(`${BOOKING_TABLE}?id=eq.${encodeURIComponent(bookingId)}&select=guest_phone&limit=1`);
+      if (Array.isArray(rows) && rows[0]?.guest_phone) {
+        chatId = normalizeChatId(rows[0].guest_phone);
+      }
+    } catch {
+      // non-fatal
+    }
+  }
   if (!chatId && !bookingId) return { ok: false, error: 'chat_id or booking_id required' };
 
   try {
