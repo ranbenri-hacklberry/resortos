@@ -9,7 +9,7 @@ function cancellationPolicyEntry(doc = policyDoc) {
   return {
     id: 'reg-cancellation-policy',
     category: 'regulations',
-    title: `מדיניות ביטולים והחזרים — גרסה ${v.version}`,
+    title: `מדיניות ביטולים והחזרים — גרסה \u2066${v.version}\u2069`,
     subtitle: isDraft ? `טיוטה · ${v.status} · נדרשת בדיקה משפטית` : 'מדיניות פעילה',
     description: v.guest_text_he,
     formatBadge: isDraft ? 'DRAFT · PENDING_APPROVAL' : 'פעיל',
