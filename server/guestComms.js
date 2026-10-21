@@ -18,6 +18,8 @@ function studioKey() {
   return String(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'postgres').trim();
 }
 
+export async function studioRest(path, options = {}) { return rest(path, options); }
+
 async function rest(path, options = {}) {
   const url = `${studioBase()}/rest/v1/${path.replace(/^\//, '')}`;
   const response = await fetch(url, {
@@ -95,7 +97,8 @@ export async function sendAndLogGuestSms({
   phone,
   message,
   metadata = {},
-  channel = 'sms'
+  channel = 'sms',
+  skipBcc = false
 }) {
   const bId = String(booking?.id || bookingId || '').trim();
   const recipient = String(phone || booking?.guest_phone || '').trim();
@@ -109,7 +112,7 @@ export async function sendAndLogGuestSms({
   let sentAt = new Date().toISOString();
   let error = null;
   try {
-    await sendMicropaySms({ phone: recipient, message: content });
+    await sendMicropaySms({ phone: recipient, message: content, skipBcc });
   } catch (err) {
     status = 'failed';
     sentAt = null;
@@ -235,46 +238,10 @@ export async function fireCheckoutRouterWebhook(booking, env = process.env) {
   }
 }
 
+/** Legacy entry point — delegates to the permanent mechanism (dry-run by default). */
 export async function runScheduledCheckoutReminders(now = new Date(), env = process.env) {
-  if (String(env.CHECKOUT_REMINDER_SMS || '1') === '0') {
-    return { sent: 0, skipped: true };
-  }
-  const today = israelIsoDate(now);
-  const rows = await rest(
-    `${BOOKING_TABLE}?deleted_at=is.null&check_out_date=eq.${today}`
-    + `&booking_status=neq.CANCELED&booking_status=neq.CHECKED_OUT`
-    + `&checkout_token=not.is.null`
-    + `&select=id,tenant_id,unit_id,guest_name,guest_phone,check_out_date,booking_status,checkout_token,checkout_status,checked_out_at,wifi_presence_status,stay`
-    + `&limit=80`
-  );
-  const list = Array.isArray(rows) ? rows : [];
-  let sent = 0;
-  const errors = [];
-  for (const booking of list) {
-    if (shouldSkipCheckoutReminder(booking, now)) continue;
-    const already = await rest(
-      `${COMMS_TABLE}?booking_id=eq.${encodeURIComponent(booking.id)}`
-      + `&metadata->>kind=eq.checkout_reminder&select=id&limit=1`
-    );
-    if (Array.isArray(already) && already.length) continue;
-    const unitName = unitFullName(booking.unit_id, booking.unit_id);
-    const message = checkoutReminderSms({
-      unitName,
-      token: booking.checkout_token
-    });
-    try {
-      await sendAndLogGuestSms({
-        booking,
-        phone: booking.guest_phone,
-        message,
-        metadata: { kind: 'checkout_reminder', template: 'checkout_reminder' }
-      });
-      sent += 1;
-    } catch (err) {
-      errors.push({ id: booking.id, error: err.message || String(err) });
-    }
-  }
-  return { sent, candidates: list.length, errors };
+  const { runCheckoutReminderJob } = await import('./checkoutReminderJob.js');
+  return runCheckoutReminderJob({ mode: 'send', now, env });
 }
 
 export async function handleListGuestComms(req, res) {

@@ -71,3 +71,4 @@ print-checkins-*.html
 server/data/*.json
 data/priority-docs.json
 data/grounds-status.json
+logs/

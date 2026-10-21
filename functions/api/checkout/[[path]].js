@@ -40,6 +40,7 @@ import { allCabinsPaid, applyPaySplitView, resolveStayUnitId } from '../../lib/p
 import { verifyStaffPin } from '../../lib/staffPin.js';
 import { normalizeBalancePreference } from '../../lib/balancePref.js';
 import { buildDemoCheckoutRow } from '../../lib/demoCheckout.js';
+import { departuresAuthorized, parseDeparturesQuery, departureRow } from '../../lib/checkoutDepartures.js';
 import { applyPaidArrivalCheckin, stayExpiresAt, stayLinkExpired } from '../../../src/lib/stayAccess.js';
 import {
   CATALOG_LOCKBOX,
@@ -790,6 +791,20 @@ async function handleCheckout(context) {
 
   if (!hasStayDb(env) && !env.CHECKOUT_KV) {
     return json({ error: 'MAILBOX_UNAVAILABLE' }, 503);
+  }
+
+  // Read-only departures overlay for Studio's checkout-reminder job (no side effects, never sends).
+  if (head === 'departures' && method === 'GET') {
+    if (!departuresAuthorized(request, env)) return json({ error: 'UNAUTHORIZED' }, 401);
+    const q = parseDeparturesQuery(request.url, TOKEN_RE);
+    if (q.error) return json({ error: q.error }, 400);
+    const tokens = q.tokens.length ? q.tokens : await readInboxTokens(env);
+    const rows = [];
+    for (const token of tokens) {
+      const row = departureRow(await readBooking(env, token), q.date);
+      if (row) rows.push(row);
+    }
+    return json({ date: q.date, rows });
   }
 
   if (head === 'demo' && method === 'POST') {
