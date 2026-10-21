@@ -240,3 +240,56 @@ describe('short reply + simple "אשר" (Ran 2026-10-21 UX)', () => {
     expect(await intake.handleText(RAN, 'רן', 'פרטים')).toContain('*שורות:*');
   });
 });
+
+describe('expense vs inventory invoices (towing etc.)', () => {
+  const towing = { ...handwritten, invoice_no: '3310', supplier: 'גרר הצפון', supplier_vat: '034567891', date: '21/10/2026', before_vat: 400, vat: 72, total: 472, paid: true,
+    kind: 'expense', expense_category: 'רכב/גרירה',
+    items: [{ line_no: 1, kind: 'expense', sku: null, name: 'גרירת רכב', qty: 1, unit: null, unit_price: 400, line_total: 400 }] };
+  it('towing → short message proposes expense category, not a warehouse', async () => {
+    const { intake } = setup(towing);
+    const r = await intake.handleMedia(RAN, 'רן', photo);
+    expect(r.draft!.kind).toBe('expense');
+    const last = r.reply.split('\n').pop()!;
+    expect(last).toContain('לתייק כהוצאה: רכב/גרירה? *אשר*');
+    expect(last).not.toContain('מחסן');
+  });
+  it('"אשר" on expense → no inventory writes, record has type/category/images', async () => {
+    const { intake, calls, dir } = setup(towing);
+    await intake.handleMedia(RAN, 'רן', photo);
+    const out = await intake.handleText(RAN, 'רן', 'אשר');
+    expect(out).toContain('תויקה כהוצאה — רכב/גרירה');
+    expect(calls.some((c) => c.method === 'POST' && c.url.startsWith('http://bridge'))).toBe(false);
+    const rec = JSON.parse(readFileSync(path.join(dir, 'rec.jsonl'), 'utf8').trim());
+    expect(rec).toMatchObject({ type: 'expense', expense_category: 'רכב/גרירה', paid: true, expense_total: 400, total: 472 });
+    expect(rec.lines[0].action).toBe('expense');
+    expect(existsSync(rec.image_paths.processed)).toBe(true);
+  });
+  it('"הוצאה <קטגוריה>" and "מלאי" switch the draft', async () => {
+    const { intake, calls } = setup(handwritten);
+    await intake.handleMedia(RAN, 'רן', photo);
+    expect(await intake.handleText(RAN, 'רן', 'הוצאה תחזוקה ותיקונים')).toContain('לתייק כהוצאה: תחזוקה ותיקונים');
+    expect(intake.latestDraft(RAN)!.lines.every((l) => l.expense && !l.existing)).toBe(true);
+    const back = await intake.handleText(RAN, 'רן', 'מלאי');
+    expect(back).toContain('להכניס');
+    expect(back).not.toContain('לתייק כהוצאה');
+    expect(calls.some((c) => c.body?.commit)).toBe(false);
+  });
+  it('mixed invoice → inventory lines go to stock, expense line does not', async () => {
+    const mixed = { ...handwritten, kind: 'mixed', expense_category: 'הובלה', before_vat: 350, vat: 63, total: 413,
+      items: [...handwritten.items, { line_no: 3, kind: 'expense', sku: null, name: 'דמי משלוח', qty: 1, unit: null, unit_price: 50, line_total: 50 }] };
+    const { intake, calls } = setup(mixed);
+    const r = await intake.handleMedia(RAN, 'רן', photo);
+    expect(r.reply).toContain('ו־1 שורות כהוצאה: הובלה');
+    const out = await intake.handleText(RAN, 'רן', 'אשר');
+    expect(out).toContain('נקלטה');
+    const create = calls.find((c) => c.body?.commit && c.url.endsWith('/api/inventory/items'))!;
+    expect(create.body.items.map((i: any) => i.name)).toEqual(['סבון ידיים']);
+    const recv = calls.find((c) => c.body?.commit && c.url.endsWith('/receive'))!;
+    expect(recv.body.lines.map((l: any) => l.id)).toEqual([77]);
+  });
+  it('parse: "הוצאה" / "מלאי" commands', async () => {
+    const { parseInvoiceCommand } = await import('./intake.js');
+    expect(parseInvoiceCommand('מלאי')).toEqual({ cmd: 'to_inventory' });
+    expect(parseInvoiceCommand('הוצאה רכב/גרירה')).toEqual({ cmd: 'to_expense', value: 'רכב/גרירה' });
+  });
+});

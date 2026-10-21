@@ -68,6 +68,8 @@ export interface DraftLine {
   suggested_by?: 'grok' | null;
   /** How an existing item was matched: catalogue number or (handwritten) exact normalized name. */
   matched_by?: 'sku' | 'name';
+  /** Service / non-stock line: filed as an expense, never sent to inventory. */
+  expense?: boolean;
   location: string | null;
   unit: string;
 }
@@ -86,6 +88,8 @@ export interface InvoiceDraft {
   source?: 'local' | 'grok_full';
   /** Payment status if written on the invoice (Grok only). */
   paid?: boolean | null;
+  kind?: 'inventory' | 'expense' | 'mixed';
+  expense_category?: string | null;
   /** Suggested filing location for new lines (matched items → supplier history → most common). */
   suggested_location?: string | null;
   /** Notes about automatic fixes applied on simple approve (shown in the result). */
@@ -130,6 +134,8 @@ export function parseInvoiceCommand(text: string):
   | { cmd: 'accept_names' }
   | { cmd: 'approve_latest'; override: boolean }
   | { cmd: 'details' }
+  | { cmd: 'to_inventory' }
+  | { cmd: 'to_expense'; value: string | null }
   | { cmd: 'accept_name'; line: number }
   | null {
   const t = text.trim().replace(/\s+/g, ' ');
@@ -138,6 +144,8 @@ export function parseInvoiceCommand(text: string):
   if ((m = t.match(/^בטל חשבונית (\d{4,12})$/))) return { cmd: 'cancel', invoice: m[1] };
   if ((m = t.match(/^אשר( למרות פער)?[.!]?$/))) return { cmd: 'approve_latest', override: Boolean(m[1]) };
   if (/^(?:פרטים|פירוט)$/.test(t)) return { cmd: 'details' };
+  if (/^מלאי$/.test(t)) return { cmd: 'to_inventory' };
+  if ((m = t.match(/^הוצאה(?: (.{2,40}))?$/))) return { cmd: 'to_expense', value: m[1]?.trim() || null };
   if (/^אשר שמות$/.test(t)) return { cmd: 'accept_names' };
   if ((m = t.match(/^אשר שם (\d{1,3})$/))) return { cmd: 'accept_name', line: Number(m[1]) };
   if ((m = t.match(/^שם (\d{1,3}) (.{2,120})$/))) return { cmd: 'name', line: Number(m[1]), value: m[2].trim() };
@@ -251,7 +259,9 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
   }
 
   // ---------- formatting ----------
-  const isNew = (l: DraftLine) => !l.existing;
+  const isExp = (l: DraftLine) => Boolean(l.expense);
+  const isNew = (l: DraftLine) => !l.existing && !l.expense;
+  const isInv = (l: DraftLine) => !l.expense;
   function missing(d: InvoiceDraft) {
     return {
       names: d.lines.filter((l) => isNew(l) && !l.name && !l.suggested_name).map((l) => l.line_no),
@@ -283,10 +293,14 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
     if (d.paid === true) out.push('שולם');
     else if (d.paid === false) out.push('לא שולם');
     const hasNew = d.lines.some(isNew);
+    const nInv = d.lines.filter(isInv).length, nExp = d.lines.filter(isExp).length;
     const loc = hasNew ? (d.suggested_location ? ` ל${d.suggested_location}` : '') : '';
     const gap = totalsOk(d) ? '' : ' (יש פער בסכומים — *אשר למרות פער*)';
     const needSup = hasNew && !d.supplier ? ' · קודם: ספק <שם>' : '';
-    out.push(`להכניס${loc}? *אשר*${gap}${needSup} · לשינוי: ספק / כמות / מחיר / מיקום <שורה> <ערך> · *פרטים*`);
+    const cat = d.expense_category || 'אחר';
+    if (nExp && !nInv) out.push(`לתייק כהוצאה: ${cat}? *אשר*${gap} · לשינוי: הוצאה <קטגוריה> / מלאי · *פרטים*`);
+    else if (nExp) out.push(`להכניס ${nInv} פריטים${loc} ו־${nExp} שורות כהוצאה: ${cat}? *אשר*${gap}${needSup} · לשינוי: מלאי / הוצאה <קטגוריה> / מיקום · *פרטים*`);
+    else out.push(`להכניס${loc}? *אשר*${gap}${needSup} · לשינוי: ספק / כמות / מחיר / מיקום <שורה> <ערך> / הוצאה <קטגוריה> · *פרטים*`);
     return out.join('\n');
   }
   function totalsOk(d: InvoiceDraft): boolean {
@@ -309,7 +323,9 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
     out.push('*שורות:*');
     for (const l of d.lines) {
       const price = `${money(l.unit_price)} ₪${l.ok ? '' : ' ⚠️'}`;
-      if (l.existing) {
+      if (l.expense) {
+        out.push(`${l.line_no}. 💼 הוצאה (${d.expense_category || 'אחר'}): ${l.name || l.suggested_name || '—'} · ${money(l.line_total)} ₪`);
+      } else if (l.existing) {
         out.push(`${l.line_no}. ${l.existing.name} *+${fmtQty(l.qty)}* (${l.sku ? `מק״ט ${l.sku}, ` : ''}${price}${l.matched_by === 'name' ? ', זוהה לפי שם' : ''}) · ${l.existing.location || l.location || 'מיקום?'}`);
       } else {
         const nm = l.name ? `*${l.name}*` : l.suggested_name ? `💡 שם מוצע${l.suggested_by === 'grok' ? ' (Grok)' : ''}: ${l.suggested_name} _(לא מאושר)_` : '*חסר שם*';
@@ -441,7 +457,8 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
     const supplier = supplierByVat(g.supplier_vat) || g.supplier;
     const category = supplier && /קליר/.test(supplier) ? 'ניקיון' : (cfg.defaultCategory || 'כללי');
     const lines: DraftLine[] = g.items.map((gl) => {
-      const m = matchItem(gl, bySku, all);
+      const exp = gl.kind === 'expense';
+      const m = exp ? null : matchItem(gl, bySku, all);
       const it = m?.it;
       const line_total = gl.line_total ?? (gl.qty != null && gl.unit_price != null ? Math.round(gl.qty * gl.unit_price * 100) / 100 : null);
       return {
@@ -449,6 +466,7 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
         ok: gl.qty != null && gl.unit_price != null && (gl.line_total == null || Math.abs(gl.qty * gl.unit_price - gl.line_total) < 0.02),
         existing: it ? { id: it.id, name: it.name, location: it.location ?? null, unit: it.unit ?? null, current_stock: it.current_stock ?? null } : null,
         matched_by: m?.by,
+        expense: exp || undefined,
         name: it ? it.name : null,
         suggested_name: it ? null : gl.name,
         suggested_by: it ? null : 'grok',
@@ -465,7 +483,7 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
     const lines_sum = Math.round(lines.reduce((a, l) => a + (l.line_total || 0), 0) * 100) / 100;
     const d: InvoiceDraft = {
       key: `${tail(phone)}:${invoice_no}`, phone: tail(phone), manager: managerName, invoice_no,
-      created_at: t, expires_at: t + ttl, image_path: origPath, processed_image_path: processed?.path || null, source: 'grok_full', paid: g.paid,
+      created_at: t, expires_at: t + ttl, image_path: origPath, processed_image_path: processed?.path || null, source: 'grok_full', paid: g.paid, kind: g.kind, expense_category: g.kind === 'inventory' ? null : (g.expense_category || 'אחר'),
       supplier, supplier_vat: g.supplier_vat, category,
       extraction: {
         invoice_no, date: g.date, date_iso: g.date_iso, supplier_vat: g.supplier_vat, customer_no: null,
@@ -640,6 +658,13 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
     if (cmd.cmd === 'confirm') return confirm(phone, managerName, cmd.invoice, cmd.override);
     if (!latest) return null; // not an invoice context — let other flows handle it
     if (cmd.cmd === 'details') return formatDraft(latest);
+    if (cmd.cmd === 'to_inventory' || cmd.cmd === 'to_expense') {
+      const d = latest;
+      if (cmd.cmd === 'to_inventory') { for (const l of d.lines) l.expense = undefined; d.kind = 'inventory'; }
+      else { for (const l of d.lines) { l.expense = true; l.existing = null; l.matched_by = undefined; } d.kind = 'expense'; d.expense_category = cmd.value || d.expense_category || 'אחר'; }
+      putDraft(d);
+      return formatShort(d, cmd.cmd === 'to_inventory' ? '✏️ עודכן: קליטה למלאי' : `✏️ עודכן: הוצאה — ${d.expense_category}`);
+    }
     if (cmd.cmd === 'approve_latest') return approveSimple(phone, managerName, latest, cmd.override);
     const d = latest;
     if (cmd.cmd === 'accept_names' || cmd.cmd === 'accept_name') {
@@ -710,6 +735,7 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
     const notes: string[] = [];
     const r2 = (n: number) => Math.round(n * 100) / 100;
     for (const l of d.lines) {
+      if (isExp(l)) { if (!l.name && l.suggested_name) l.name = l.suggested_name; continue; }
       if (isNew(l) && !l.name && l.suggested_name) l.name = l.suggested_name;
       if (isNew(l) && !l.location) l.location = d.suggested_location ?? suggestLocation(d);
       if (!l.qty || l.qty <= 0) {
@@ -726,7 +752,7 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
     if (m.supplier) return `חסר שם ספק — לכתוב: ספק <שם>, ואז *אשר*.`;
     if (m.names.length) return `חסר שם לשורות ${m.names.join(', ')} — לכתוב: שם <שורה> <טקסט>, ואז *אשר*.`;
     if (m.locations.length) return `לאן להכניס? לכתוב: מיקום הכל <מחסן>, ואז *אשר*.`;
-    if (d.lines.some((l) => !l.qty || l.qty <= 0)) return `חסרה כמות בשורות ${d.lines.filter((l) => !l.qty || l.qty <= 0).map((l) => l.line_no).join(', ')} — לכתוב: כמות <שורה> <מספר>, ואז *אשר*.`;
+    if (d.lines.some((l) => isInv(l) && (!l.qty || l.qty <= 0))) return `חסרה כמות בשורות ${d.lines.filter((l) => isInv(l) && (!l.qty || l.qty <= 0)).map((l) => l.line_no).join(', ')} — לכתוב: כמות <שורה> <מספר>, ואז *אשר*.`;
     if (!totalsOk(d) && !override) return `⚠️ הסכומים בחשבונית לא מסתדרים (*פרטים* לפירוט). אם בדקת וזה תקין: *אשר למרות פער*`;
     const res = await confirm(phone, managerName, d.invoice_no, true);
     return notes.length && res.startsWith('✅') ? `${res}\n${notes.map((n) => `ℹ️ ${n}`).join('\n')}` : res;
@@ -751,7 +777,7 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
     if (!d.extraction.checks.all_ok && !override) {
       return `⏸️ בבדיקות החשבונית יש פער:\n${d.extraction.checks.problems.map((p) => `• ${p}`).join('\n')}\nאם נבדק וזה תקין, יש לכתוב: *אשר חשבונית ${invoice} למרות פער*`;
     }
-    if (d.lines.some((l) => !l.qty || l.qty <= 0)) return `⏸️ יש שורה בלי כמות תקינה — לא ניתן לקלוט. אפשר לבטל ולשלוח צילום חד יותר.`;
+    if (d.lines.some((l) => isInv(l) && (!l.qty || l.qty <= 0))) return `⏸️ יש שורה בלי כמות תקינה — לא ניתן לקלוט. אפשר לבטל ולשלוח צילום חד יותר.`;
     const confirmedBy = `${managerName || 'מנהל'} (WhatsApp ***${d.phone.slice(-4)}, ${new Date(now()).toISOString()})`;
     const invoiceRef = d.invoice_no;
     // Persist image under the invoices folder (before writes so the record can point at it).
@@ -771,7 +797,7 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
         copyFileSync(d.processed_image_path, processedSaved);
       }
     } catch (e) { log.warn({ err: String(e) }, 'invoice processed image save failed'); }
-    const receiveLines = d.lines.filter((l) => l.existing).map((l) => ({ id: l.existing!.id, qty: l.qty, sku: l.sku || null, unit_price: l.unit_price, invoice_line: l.line_no }));
+    const receiveLines = d.lines.filter((l) => l.existing && !l.expense).map((l) => ({ id: l.existing!.id, qty: l.qty, sku: l.sku || null, unit_price: l.unit_price, invoice_line: l.line_no }));
     const newItems = d.lines.filter(isNew).map((l) => ({
       name: l.name, category: d.category, unit: l.unit, current_stock: l.qty, cost_per_unit: l.unit_price,
       supplier: d.supplier, location: l.location, supplier_product_name: [l.latin || l.name],
@@ -802,17 +828,23 @@ export function createInvoiceIntake(cfg: InvoiceIntakeConfig) {
       lines: d.lines.map((l) => ({
         line_no: l.line_no, sku: l.sku, name: l.existing?.name || l.name, qty: l.qty, unit_price: l.unit_price, line_total: l.line_total,
         unit: l.existing?.unit || l.unit, location: l.existing?.location || l.location,
-        action: l.existing ? 'received' : 'created', inventory_item_id: l.existing?.id ?? (l.sku ? createdBySku.get(l.sku) : createdByName.get(String(l.name || ''))) ?? null,
+        action: l.expense ? 'expense' : l.existing ? 'received' : 'created', inventory_item_id: l.existing?.id ?? (l.sku ? createdBySku.get(l.sku) : createdByName.get(String(l.name || ''))) ?? null,
       })),
       created_item_ids: createdIds, received_item_ids: received?.ids || [], receive_skipped: received?.skipped || [], create_skipped: created?.skipped || [],
-      image_paths: { mac: imageSaved, processed: processedSaved }, extraction_source: d.source || 'local', business_id: cfg.businessId, confirmed_by: confirmedBy, recorded_at: new Date(now()).toISOString(),
+      image_paths: { mac: imageSaved, processed: processedSaved }, extraction_source: d.source || 'local',
+      type: d.lines.every(isExp) ? 'expense' : d.lines.some(isExp) ? 'mixed' : 'inventory', expense_category: d.lines.some(isExp) ? (d.expense_category || 'אחר') : null, paid: d.paid ?? null,
+      expense_total: d.lines.some(isExp) ? Math.round(d.lines.filter(isExp).reduce((a, l) => a + (l.line_total || 0), 0) * 100) / 100 : null, business_id: cfg.businessId, confirmed_by: confirmedBy, recorded_at: new Date(now()).toISOString(),
       checks: d.extraction.checks, override_gap: override && !d.extraction.checks.all_ok, source: 'chloe-whatsapp-invoice-intake',
     };
     mkdirSync(path.dirname(cfg.recordsPath), { recursive: true });
     appendFileSync(cfg.recordsPath, JSON.stringify(rec) + '\n');
     dropDraft(d.key);
     const nRec = (received?.ids || []).length, nNew = createdIds.length;
-    const lines = d.lines.map((l) => `${l.line_no}. ${l.existing?.name || l.name} ${l.existing ? `+${fmtQty(l.qty)}` : `🆕 ${fmtQty(l.qty)}`}`);
+    if (d.lines.every(isExp)) {
+      return [`✅ *חשבונית ${invoiceRef} תויקה כהוצאה — ${d.expense_category || 'אחר'}*`, `ספק: ${d.supplier || '—'} | סה״כ ${money(d.extraction.total)} ₪`, 'המלאי לא השתנה. נרשם ברשומות החשבוניות של קלואי (עדיין לא במערכת הכספים).'].join('\n');
+    }
+    const lines = d.lines.filter(isInv).map((l) => `${l.line_no}. ${l.existing?.name || l.name} ${l.existing ? `+${fmtQty(l.qty)}` : `🆕 ${fmtQty(l.qty)}`}`);
+    if (d.lines.some(isExp)) lines.push(`+ ${d.lines.filter(isExp).length} שורות תויקו כהוצאה — ${d.expense_category || 'אחר'} (לא במלאי)`);
     return [`✅ *חשבונית ${invoiceRef} נקלטה*`, `ספק: ${d.supplier || '—'} | סה״כ ${money(d.extraction.total)} ₪`,
       `עודכנו ${nRec} פריטים קיימים, נוצרו ${nNew} פריטים חדשים${(received?.skipped || []).length ? ` (דולגו ${(received.skipped).length} שכבר נקלטו)` : ''}.`,
       ...lines, override && !d.extraction.checks.all_ok ? '⚠️ נקלט למרות פער בבדיקות (נרשם ברשומה).' : ''].filter(Boolean).join('\n');

@@ -989,7 +989,9 @@ export function createPipeline(deps: PipelineDeps) {
       // 0-INV. Manager inventory (Ran 2026-10-20): stock questions + transfers with explicit "אשר העברה".
       if (isManager && jid && d.inventory && text?.trim()) {
         const t0 = text.trim();
-        if (detectInventoryIntent(t0) || /^(?:אשר|בטל)\s+העברה$/.test(t0)) {
+        // "מלאי" while an invoice draft is open = switch that invoice to inventory (handled by invoice intake below).
+        const invoiceSwitch = t0 === 'מלאי' && Boolean((d.invoiceIntake as any)?.latestDraft?.(cleaner?.phone || senderPhone));
+        if (!invoiceSwitch && (detectInventoryIntent(t0) || /^(?:אשר|בטל)\s+העברה$/.test(t0))) {
           let invReply: string | null = null;
           try { invReply = await handleManagerInventory(t0, sessionKey, cleaner?.name || 'מנהל', d.inventory); }
           catch (err) { d.log?.warn?.({ err: (err as Error).message }, 'inventory failed'); invReply = 'לא הצלחתי לגשת למלאי כרגע. לא רשמתי כלום.'; }

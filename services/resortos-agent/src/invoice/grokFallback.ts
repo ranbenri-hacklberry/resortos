@@ -76,7 +76,7 @@ export async function grokInvoiceLines(cfg: GrokCfg, image: Buffer, mime: string
 // Used ONLY when the local Apple Vision path found no SKU rows. The whole image goes to Grok;
 // the result is a draft that still needs the manager's explicit "אשר חשבונית" (and name approval).
 
-export interface GrokInvoiceItem { line_no: number; sku: string | null; name: string; qty: number | null; unit: string | null; unit_price: number | null; line_total: number | null }
+export interface GrokInvoiceItem { line_no: number; sku: string | null; name: string; kind: 'inventory' | 'expense'; qty: number | null; unit: string | null; unit_price: number | null; line_total: number | null }
 export interface GrokInvoice {
   is_invoice: boolean;
   handwritten: boolean;
@@ -93,6 +93,9 @@ export interface GrokInvoice {
   corners: Array<[number, number]> | null;
   /** Payment status only when it is written on the invoice (e.g. "שולם", "שולם במזומן", "לתשלום"). */
   paid: boolean | null;
+  /** inventory = goods to stock; expense = service / non-stock (towing, repairs, fuel, utilities…); mixed = both. */
+  kind: 'inventory' | 'expense' | 'mixed';
+  expense_category: string | null;
 }
 
 export function buildFullPrompt(): string {
@@ -101,11 +104,14 @@ export function buildFullPrompt(): string {
     'Return STRICT JSON only, no prose:',
     '{"is_invoice":boolean,"handwritten":boolean,"invoice_no":string|null,"date":"dd/mm/yyyy"|null,"supplier":string|null,"supplier_vat":string|null,',
     '"before_vat":number|null,"vat":number|null,"total":number|null,"paid":boolean|null,',
-    '"items":[{"line_no":number,"sku":string|null,"name":string,"qty":number|null,"unit":string|null,"unit_price":number|null,"line_total":number|null}],',
+    '"kind":"inventory"|"expense"|"mixed","expense_category":string|null,',
+    '"items":[{"line_no":number,"kind":"inventory"|"expense","sku":string|null,"name":string,"qty":number|null,"unit":string|null,"unit_price":number|null,"line_total":number|null}],',
     '"corners":[[x,y],[x,y],[x,y],[x,y]]|null}  (corners = the 4 corners of the paper document in the photo, normalized 0..1 from top-left, order TL,TR,BR,BL)',
     'Rules: "is_invoice" false if this is not an invoice / delivery note / receipt from a supplier (e.g. a check, a room photo) — then items=[].',
     '"name" = product name in Hebrew as written. "sku" only if a catalogue number is clearly written, else null. "supplier_vat" = 9-digit ח.פ / עוסק מורשה of the SUPPLIER (never 517258844).',
     '"paid": true only if the invoice explicitly says it was paid (שולם / שולם במזומן / receipt / קבלה), false only if it explicitly says unpaid / due (לתשלום / לא שולם / אשראי), else null.',
+    '"kind": per item "inventory" = physical goods a hotel keeps in stock (cleaning supplies, toiletries, linen, food, drinks, spare parts); "expense" = services and non-stock costs (towing / גרירה, vehicle repair, fuel, maintenance labour, repairs, utilities, electricity, water, gas, internet, rent, professional services, accounting, legal, advertising, transport, fees). Invoice "kind" = inventory / expense / mixed accordingly.',
+    '"expense_category" (if any expense lines): short Hebrew, one of: רכב/גרירה, רכב/דלק, רכב/תיקון, תחזוקה ותיקונים, חשמל, מים, גז, תקשורת, שירותים מקצועיים, פרסום, הובלה, שכירות, אחר.',
     'Numbers as plain numbers (no ₪, no commas). If a value is unreadable use null. Never invent lines or values.',
   ].join('\n');
 }
@@ -131,7 +137,7 @@ export function parseGrokInvoice(text: string): GrokInvoice | null {
     const name = str(r?.name, 80);
     if (!name) continue;
     const sku = str(r?.sku, 30);
-    items.push({ line_no: items.length + 1, sku: sku && /\d/.test(sku) ? sku.replace(/\s+/g, '') : null, name, qty: num(r?.qty), unit: str(r?.unit, 20), unit_price: num(r?.unit_price), line_total: num(r?.line_total) });
+    items.push({ line_no: items.length + 1, kind: r?.kind === 'expense' ? 'expense' : 'inventory', sku: sku && /\d/.test(sku) ? sku.replace(/\s+/g, '') : null, name, qty: num(r?.qty), unit: str(r?.unit, 20), unit_price: num(r?.unit_price), line_total: num(r?.line_total) });
     if (items.length >= 60) break;
   }
   const vatRaw = String(data.supplier_vat ?? '').replace(/\D/g, '');
@@ -148,6 +154,8 @@ export function parseGrokInvoice(text: string): GrokInvoice | null {
     items,
     corners: parseCorners(data.corners),
     paid: data.paid === true ? true : data.paid === false ? false : null,
+    kind: items.length && items.every((i) => i.kind === 'expense') ? 'expense' : items.some((i) => i.kind === 'expense') ? 'mixed' : (data.kind === 'expense' && !items.length ? 'expense' : 'inventory'),
+    expense_category: str(data.expense_category, 40),
   };
 }
 
