@@ -1052,12 +1052,16 @@ function guestCommsPlugin(env) {
         const urlPath = requestPath(req);
         const isList = urlPath === '/api/guest-comms' && req.method === 'GET';
         const isSend = urlPath === '/api/guest-comms/send' && req.method === 'POST';
+        const isAutomationGet = urlPath === '/api/guest-comms/automation-state' && req.method === 'GET';
+        const isAutomationSet = urlPath === '/api/guest-comms/automation-state' && req.method === 'POST';
+        const isUnreadSummary = urlPath === '/api/guest-comms/unread-summary' && req.method === 'GET';
+        const isMarkRead = urlPath === '/api/guest-comms/mark-read' && req.method === 'POST';
         const isStatus = urlPath === '/api/ops/stay-status' && req.method === 'GET';
         const isEffects = urlPath === '/api/guest/self-checkout-effects' && req.method === 'POST';
         const isCalls = urlPath === '/api/ops/call-me' && req.method === 'GET';
         const isCallAck = urlPath === '/api/ops/call-me/ack' && req.method === 'POST';
         const isCallTransfer = urlPath === '/api/ops/call-me/transfer' && req.method === 'POST';
-        if (!isList && !isSend && !isStatus && !isEffects && !isCalls && !isCallAck && !isCallTransfer) {
+        if (!isList && !isSend && !isAutomationGet && !isAutomationSet && !isUnreadSummary && !isMarkRead && !isStatus && !isEffects && !isCalls && !isCallAck && !isCallTransfer) {
           next();
           return;
         }
@@ -1090,6 +1094,38 @@ function guestCommsPlugin(env) {
           }
           const staff = await requireStaff(req);
           req.staff = staff;
+          if (isAutomationGet) {
+            const url = new URL(req.url || '', 'http://localhost');
+            const state = await comms.getChatAutomationState({
+              channelId: url.searchParams.get('channel_id') || url.searchParams.get('channel') || 'resortos',
+              phone: url.searchParams.get('phone'),
+              bookingId: url.searchParams.get('booking_id')
+            });
+            return sendJson(res, 200, state);
+          }
+          if (isAutomationSet) {
+            const body = await readJsonBody(req);
+            const result = await comms.setChatAutomationState({
+              channelId: body?.channel_id || 'resortos',
+              phone: body?.phone,
+              bookingId: body?.booking_id,
+              botDisabled: Boolean(body?.bot_disabled),
+              reason: body?.reason || 'manager_toggle',
+              updatedBy: staff?.username || staff?.name || 'manager'
+            });
+            return sendJson(res, 200, result);
+          }
+          if (isUnreadSummary) {
+            const summary = await comms.getUnreadCommsSummary();
+            return sendJson(res, 200, summary);
+          }
+          if (isMarkRead) {
+            const body = await readJsonBody(req);
+            const result = await comms.markGuestCommsRead({
+              messageIds: body?.message_ids
+            });
+            return sendJson(res, 200, result);
+          }
           if (isList) {
             const url = new URL(req.url || '', 'http://localhost');
             req.query = Object.fromEntries(url.searchParams.entries());
