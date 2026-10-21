@@ -1021,7 +1021,7 @@ export function createPipeline(deps: PipelineDeps) {
           }
         } else if (text?.trim()) {
           try {
-            const r = await d.invoiceIntake.handleText(invPhone, cleaner?.name || 'מנהל', text.trim(), { otherPending: Boolean(getPendingCheck(senderPhone)) });
+            const r = await d.invoiceIntake.handleText(invPhone, cleaner?.name || 'מנהל', text.trim(), { otherPending: Boolean(getPendingCheck(senderPhone)) || sessionStates.has(sessionKey) });
             if (r) { await d.send(jid, r); return { handled: true }; }
           } catch (err) {
             d.log.error({ err: String(err) }, 'invoice text command failed');
@@ -2153,9 +2153,15 @@ export function createPipeline(deps: PipelineDeps) {
         }
         const cabinName = r?.name || r?.letterCode || '';
         const roomLabel = cabinName ? (cabinName.includes('משרד') ? cabinName : `בקתה ${cabinName}`) : 'היחידה';
-        const reply = `לא זוהתה הזמנה פעילה עבור מספר הטלפון הזה ב${roomLabel}.\n\n` +
-          `אם הגעתם להתארח אצלנו או שההזמנה בוצעה במספר אחר, אנא השבו להודעה זו עם שמכם המלא או מספר ההזמנה, ונשמח לעזור לכם בהקדם! 🏡`;
+        // Phone not matched: never tell the sender they are not a guest (bookings from OTAs often lack a phone).
+        const reply = 'רגע, אני בודקת את ההזמנה שלך 🙂 אפשר שם מלא ותאריכי הגעה? אני מעדכנת את המנהל.';
         await d.send(jid, reply);
+        try {
+          const alert = `🔔 סריקה ממספר לא מזוהה ב${roomLabel}\nצ'אט: ${jid}\nלא נמצאה הזמנה לפי טלפון — ביקשתי שם מלא ותאריכים. כדאי לבדוק בכינורות.`;
+          for (const m of d.cleaners().filter((c) => c.role === 'MANAGER' && c.phone)) {
+            await d.send(`${m.phone}@s.whatsapp.net`, alert).catch(() => {});
+          }
+        } catch { /* alert is best-effort */ }
         return { handled: true, transcript };
       }
 

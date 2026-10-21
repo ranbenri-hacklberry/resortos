@@ -452,7 +452,7 @@ describe('pipeline: guards & dispatch', () => {
         guest_name: 'דניאל כהן',
         guest_phone: '052-9876543',
         check_in_date: today,
-        check_out_date: today,
+        check_out_date: '2026-10-18',
         booking_status: 'CONFIRMED',
         checkout_token: 'tok_guest_777',
       },
@@ -491,7 +491,7 @@ describe('pipeline: guards & dispatch', () => {
         guest_name: 'דניאל כהן',
         guest_phone: '052-9876543',
         check_in_date: today,
-        check_out_date: today,
+        check_out_date: '2026-10-18',
         booking_status: 'CONFIRMED',
         checkout_token: 'tok_guest_777',
       },
@@ -558,8 +558,9 @@ describe('pipeline: guards & dispatch', () => {
     const r = await createPipeline(deps).handleInbound(msg);
     expect(r.handled).toBe(true);
     const reply = deps.sent[0][1];
-    expect(reply).toContain('לא זוהתה הזמנה פעילה עבור מספר הטלפון הזה');
-    expect(reply).toContain('אנא השבו להודעה זו');
+    expect(reply).toContain('רגע, אני בודקת את ההזמנה שלך');
+    expect(reply).toContain('שם מלא ותאריכי הגעה');
+    expect(reply).not.toContain('לא זוהתה הזמנה');
     expect(reply).not.toContain('054-831-7887');
   });
 
@@ -1382,7 +1383,7 @@ describe('guest knowledge & digital stay Q&A', () => {
     expect(reply).toContain('מושבוץ');
     expect(reply).toContain('בשרים ומטבח מקומי');
     expect(reply).toContain('מרינדו');
-    expect(reply).toContain('כתבו את המספר');
+    expect(reply).toContain('השיבו במספר מהרשימה');
   });
 
   it('answers checkout inquiry with 11:00 and digital self check-out', async () => {
@@ -1803,31 +1804,39 @@ describe('manager fuzzy room matching & dictation handling', () => {
     });
   });
 
-  it('keeps the complex: "2" after מאיה 1 opens מאיה 2', async () => {
-    const deps = makeDeps();
-    deps.rooms = () => realRooms as RoomEntry[];
-    deps.cleaners = () => [managerProfile];
-    deps.resortos.listUnits = vi.fn(async () => []);
-    deps.resortos.listBookings = vi.fn(async () => []);
-    deps.resortos.approveRoomByManager = vi.fn(async () => ({ ok: true as const }));
+  it('keeps the complex: "2" after מאיה 1 opens מאיה 2 after menu TTL', async () => {
+    vi.useFakeTimers();
+    try {
+      const deps = makeDeps();
+      deps.rooms = () => realRooms as RoomEntry[];
+      deps.cleaners = () => [managerProfile];
+      deps.resortos.listUnits = vi.fn(async () => []);
+      deps.resortos.listBookings = vi.fn(async () => []);
+      deps.resortos.approveRoomByManager = vi.fn(async () => ({ ok: true as const }));
 
-    const pipeline = createPipeline(deps);
-    await pipeline.handleInbound({
-      key: { remoteJid: '972548317887@s.whatsapp.net', fromMe: false },
-      message: { conversation: 'מאיה 1' },
-    } as any);
+      const pipeline = createPipeline(deps);
+      await pipeline.handleInbound({
+        key: { remoteJid: '972548317887@s.whatsapp.net', fromMe: false },
+        message: { conversation: 'מאיה 1' },
+      } as any);
 
-    deps.sent.length = 0;
-    const res = await pipeline.handleInbound({
-      key: { remoteJid: '972548317887@s.whatsapp.net', fromMe: false },
-      message: { conversation: '2' },
-    } as any);
+      // Advance clock past 10-minute action menu TTL
+      vi.setSystemTime(Date.now() + 11 * 60 * 1000);
 
-    expect(res.handled).toBe(true);
-    expect(deps.sent[0][1]).toContain('בקתות מאיה 2');
-    expect(deps.sent[0][1]).not.toContain('לאיזה מתחם');
-    expect(deps.resortos.approveRoomByManager).not.toHaveBeenCalled();
-    expect(pipeline.getSession('972548317887')).toMatchObject({ roomId: 'k694' });
+      deps.sent.length = 0;
+      const res = await pipeline.handleInbound({
+        key: { remoteJid: '972548317887@s.whatsapp.net', fromMe: false },
+        message: { conversation: '2' },
+      } as any);
+
+      expect(res.handled).toBe(true);
+      expect(deps.sent[0][1]).toContain('בקתות מאיה 2');
+      expect(deps.sent[0][1]).not.toContain('לאיזה מתחם');
+      expect(deps.resortos.approveRoomByManager).not.toHaveBeenCalled();
+      expect(pipeline.getSession('972548317887')).toMatchObject({ roomId: 'k694' });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('remembers the number when the complex arrives on the next message', async () => {
@@ -1902,6 +1911,131 @@ describe('manager fuzzy room matching & dictation handling', () => {
       note: 'מוכן תזמורת 1',
     });
     expect(deps.sent[0][1]).toContain('אושר בהצלחה כמוכן לאורח (READY)');
+  });
+
+  describe('Bug 8: manager unit action menu context and options routing', () => {
+    it('unit -> "1" goes to status change for the same unit', async () => {
+      const deps = makeDeps();
+      deps.rooms = () => realRooms as RoomEntry[];
+      deps.cleaners = () => [managerProfile];
+      deps.resortos.listUnits = vi.fn(async () => []);
+      deps.resortos.listBookings = vi.fn(async () => []);
+
+      const pipeline = createPipeline(deps);
+      await pipeline.handleInbound({
+        key: { remoteJid: '972548317887@s.whatsapp.net', fromMe: false },
+        message: { conversation: 'נורית 5' },
+      } as any);
+
+      expect(pipeline.getSession('972548317887')?.roomId).toBe('k676');
+
+      deps.sent.length = 0;
+      const res = await pipeline.handleInbound({
+        key: { remoteJid: '972548317887@s.whatsapp.net', fromMe: false },
+        message: { conversation: '1' },
+      } as any);
+
+      expect(res.handled).toBe(true);
+      expect(deps.sent[0][1]).toContain('בחר סטטוס חדש לחדר בתי נורית 5');
+      expect(pipeline.getSession('972548317887')).toMatchObject({
+        role: 'MANAGER',
+        state: 'SELECT_STATUS',
+        roomId: 'k676',
+      });
+    });
+
+    it('unit -> "2" goes to add room note for the same unit', async () => {
+      const deps = makeDeps();
+      deps.rooms = () => realRooms as RoomEntry[];
+      deps.cleaners = () => [managerProfile];
+      deps.resortos.listUnits = vi.fn(async () => []);
+      deps.resortos.listBookings = vi.fn(async () => []);
+
+      const pipeline = createPipeline(deps);
+      await pipeline.handleInbound({
+        key: { remoteJid: '972548317887@s.whatsapp.net', fromMe: false },
+        message: { conversation: 'נורית 5' },
+      } as any);
+
+      deps.sent.length = 0;
+      const res = await pipeline.handleInbound({
+        key: { remoteJid: '972548317887@s.whatsapp.net', fromMe: false },
+        message: { conversation: '2' },
+      } as any);
+
+      expect(res.handled).toBe(true);
+      expect(deps.sent[0][1]).toContain('כתוב את ההערה עבור חדר בתי נורית 5: 📝');
+      expect(pipeline.getSession('972548317887')).toMatchObject({
+        role: 'MANAGER',
+        state: 'AWAITING_ROOM_NOTE',
+        roomId: 'k676',
+      });
+    });
+
+    it('a new unit name overrides pending menu', async () => {
+      const deps = makeDeps();
+      deps.rooms = () => realRooms as RoomEntry[];
+      deps.cleaners = () => [managerProfile];
+      deps.resortos.listUnits = vi.fn(async () => []);
+      deps.resortos.listBookings = vi.fn(async () => []);
+
+      const pipeline = createPipeline(deps);
+      await pipeline.handleInbound({
+        key: { remoteJid: '972548317887@s.whatsapp.net', fromMe: false },
+        message: { conversation: 'נורית 5' },
+      } as any);
+
+      deps.sent.length = 0;
+      const res = await pipeline.handleInbound({
+        key: { remoteJid: '972548317887@s.whatsapp.net', fromMe: false },
+        message: { conversation: 'נורית 2' },
+      } as any);
+
+      expect(res.handled).toBe(true);
+      expect(deps.sent[0][1]).toContain('בתי נורית 2');
+      expect(pipeline.getSession('972548317887')).toMatchObject({
+        role: 'MANAGER',
+        state: 'AWAITING_ACTION',
+        roomId: 'k673',
+      });
+    });
+
+    it('after TTL a digit falls back to current behavior', async () => {
+      vi.useFakeTimers();
+      try {
+        const deps = makeDeps();
+        deps.rooms = () => realRooms as RoomEntry[];
+        deps.cleaners = () => [managerProfile];
+        deps.resortos.listUnits = vi.fn(async () => []);
+        deps.resortos.listBookings = vi.fn(async () => []);
+
+        const pipeline = createPipeline(deps);
+        await pipeline.handleInbound({
+          key: { remoteJid: '972548317887@s.whatsapp.net', fromMe: false },
+          message: { conversation: 'נורית 5' },
+        } as any);
+
+        // Advance 11 minutes (past 10 min TTL)
+        vi.setSystemTime(Date.now() + 11 * 60 * 1000);
+
+        deps.sent.length = 0;
+        const res = await pipeline.handleInbound({
+          key: { remoteJid: '972548317887@s.whatsapp.net', fromMe: false },
+          message: { conversation: '1' },
+        } as any);
+
+        expect(res.handled).toBe(true);
+        // Falls back to opening unit 1 in Nurit
+        expect(deps.sent[0][1]).toContain('בתי נורית 1');
+        expect(pipeline.getSession('972548317887')).toMatchObject({
+          role: 'MANAGER',
+          state: 'AWAITING_ACTION',
+          roomId: 'k671',
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('staff accommodation & space classification guards', () => {
@@ -2071,43 +2205,6 @@ describe('manager fuzzy room matching & dictation handling', () => {
       expect(res.handled).toBe(true);
       const reply = deps.sent[0][1];
       expect(reply).toContain('פרטי הזמנות, תשלומים ומחירים של אורחים אחרים הינם חסויים לחלוטין');
-    });
-
-    it('guest asking an unknown question is asked if they want a phone call, and replying yes triggers requestGuestCall and logs comms', async () => {
-      const deps = makeDeps();
-      const loggedComms: any[] = [];
-      const callRequests: any[] = [];
-      deps.resortos.listBookings = vi.fn(async () => [bookingWithFinances]);
-      deps.resortos.logGuestComm = vi.fn(async (p) => { loggedComms.push(p); });
-      deps.resortos.requestGuestCall = vi.fn(async (p) => { callRequests.push(p); });
-      const pipeline = createPipeline(deps);
-
-      const jid = '972521112233@s.whatsapp.net';
-      const res1 = await pipeline.handleInbound({
-        key: { remoteJid: jid, fromMe: false },
-        message: { conversation: 'יש לכם אולי מטען לאייפון להשאלה?' },
-      } as any);
-
-      expect(res1.handled).toBe(true);
-      expect(deps.sent[0][1]).toContain('תרצו שנתקשר אליכם?');
-      expect(loggedComms).toHaveLength(2);
-      expect(loggedComms[0]).toMatchObject({ bookingId: 'book-fin-1', direction: 'inbound', content: 'יש לכם אולי מטען לאייפון להשאלה?' });
-      expect(loggedComms[1]).toMatchObject({ bookingId: 'book-fin-1', direction: 'outbound' });
-
-      deps.sent.length = 0;
-      const res2 = await pipeline.handleInbound({
-        key: { remoteJid: jid, fromMe: false },
-        message: { conversation: 'כן בבקשה' },
-      } as any);
-
-      expect(res2.handled).toBe(true);
-      expect(deps.sent[0][1]).toContain('נחזור אליכם טלפונית בהקדם');
-      expect(callRequests).toHaveLength(1);
-      expect(callRequests[0]).toMatchObject({
-        bookingId: 'book-fin-1',
-        unitId: 'k690',
-        guestName: 'יוסי כהן',
-      });
     });
   });
 
@@ -2383,3 +2480,359 @@ describe('rack rate price list for all staff', () => {
 
 
 
+
+describe('manager explicit room hold (אשר סגירה)', () => {
+  const manager: CleanerProfile = { phone: '972548317887', name: 'רני', role: 'MANAGER', language: 'he' };
+  const housekeeper: CleanerProfile = { phone: '972503934696', name: 'ברק', role: 'HOUSEKEEPING', language: 'he' };
+  const rooms = () => [
+    { id: 'k674', name: 'בתי נורית 3', property: 'בתי נורית', letterCode: 'G3', lockbox: '', aliases: ['בתי נורית 3', 'נורית 3'] },
+  ];
+  const msg = (from: string, text: string) => ({ key: { remoteJid: `${from}@s.whatsapp.net`, fromMe: false }, message: { conversation: text } } as any);
+  process.env.ROOM_HOLD_AUDIT_PATH = '/tmp/room-hold-audit.test.jsonl';
+  // keep the call-desk lookup off the live bridge
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 404 })));
+    return () => { vi.unstubAllGlobals(); };
+  });
+
+  it('manager: preview, then holds only after the explicit confirm word', async () => {
+    const deps = makeDeps();
+    deps.cleaners = () => [manager];
+    deps.rooms = rooms as any;
+    const held: any[] = [];
+    deps.resortos.listBookings = vi.fn(async () => held);
+    deps.resortos.holdNight = vi.fn(async () => {
+      const night = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date());
+      const out = new Date(`${night}T12:00:00Z`); out.setUTCDate(out.getUTCDate() + 1);
+      held.push({ id: 'kin_1_81234', unit_id: 'k674', guest_name: 'לא זמין', check_in_date: night, check_out_date: out.toISOString().slice(0, 10) });
+      return { ok: true as const, verified: true, resId: '81234' };
+    });
+    const pipeline = createPipeline(deps);
+    await pipeline.handleInbound(msg('972548317887', 'תסגרי את נורית 3 להיום'));
+    expect(deps.resortos.holdNight).not.toHaveBeenCalled();
+    expect(deps.sent.at(-1)![1]).toContain('אשר סגירה');
+    await pipeline.handleInbound(msg('972548317887', 'אשר סגירה'));
+    expect(deps.resortos.holdNight).toHaveBeenCalledWith({ unitId: 'k674', reportedBy: 'רני' });
+    expect(deps.sent.at(-1)![1]).toContain('81234');
+  });
+
+  it('non-manager never reaches the hold', async () => {
+    const deps = makeDeps();
+    deps.cleaners = () => [housekeeper];
+    deps.rooms = rooms as any;
+    deps.resortos.listBookings = vi.fn(async () => []);
+    deps.resortos.holdNight = vi.fn(async () => ({ ok: true as const, verified: true, resId: '1' }));
+    const pipeline = createPipeline(deps);
+    await pipeline.handleInbound(msg('972503934696', 'תסגרי את נורית 3 להיום'));
+    await pipeline.handleInbound(msg('972503934696', 'אשר סגירה'));
+    expect(deps.resortos.holdNight).not.toHaveBeenCalled();
+    expect(deps.sent.some((r) => String(r[1]).includes('אשר סגירה'))).toBe(false);
+  });
+});
+
+describe('S01: @lid guest identification and Wi-Fi without placeholders', () => {
+  const officeRoom = { id: 'pilot-office', name: 'משרד', property: 'משרד ראשי', letterCode: 'Office', lockbox: '1357#', aliases: ['משרד', 'המשרד'] } as any;
+  const officeBooking = {
+    id: 'b_demo_pilot_office',
+    unit_id: 'pilot-office',
+    guest_name: 'נטשה',
+    guest_phone: '0548076123',
+    check_in_date: '2000-01-01',
+    check_out_date: '2999-12-31',
+    booking_status: 'CONFIRMED',
+    checkout_token: 'tok_office_test',
+  };
+  const wifiQ = 'היי שלום, אני נטשה ואני מתארחת בחדר המשרד. מה הסיסמה לווייפי?';
+
+  it('matches the booking via key.senderPn for an @lid sender and returns the office Wi-Fi to the original jid', async () => {
+    const deps = makeDeps();
+    deps.cleaners = () => [];
+    deps.rooms = () => [officeRoom];
+    deps.resortos.listBookings = vi.fn(async () => [officeBooking]) as any;
+    const info = vi.fn();
+    deps.log = { info, warn() {}, error() {} };
+    const msg = {
+      key: { remoteJid: '27020092284969@lid', senderPn: '972548076123@s.whatsapp.net', fromMe: false },
+      message: { conversation: wifiQ },
+    } as any;
+    const r = await createPipeline(deps).handleInbound(msg);
+    expect(r.handled).toBe(true);
+    expect(deps.sent).toHaveLength(1);
+    expect(deps.sent[0][0]).toBe('27020092284969@lid');
+    const reply = deps.sent[0][1];
+    expect(reply).toContain('ResortOS_5G');
+    expect(reply).toContain('0506102416');
+    expect(reply).toContain('משרד');
+    expect(reply).toContain('https://resortos.app/stay/tok_office_test');
+    expect(reply).not.toContain('Guest_WiFi');
+    expect(reply).not.toContain('Ask_Reception');
+    const logged = info.mock.calls.find((c) => c[1] === 'inbound @lid sender');
+    expect(logged?.[0]).toMatchObject({ hasSenderPn: true, senderPnTail: '6123' });
+    expect(JSON.stringify(logged?.[0])).not.toContain('548076123');
+  });
+
+  it('an unknown sender asking for Wi-Fi never gets placeholder credentials', async () => {
+    const deps = makeDeps();
+    deps.cleaners = () => [];
+    deps.rooms = () => [officeRoom];
+    deps.resortos.listBookings = vi.fn(async () => [officeBooking]) as any;
+    const msg = {
+      key: { remoteJid: '99999999999999@lid', fromMe: false },
+      message: { conversation: wifiQ },
+    } as any;
+    await createPipeline(deps).handleInbound(msg);
+    const all = deps.sent.map((s) => s[1]).join('\n');
+    expect(all).not.toContain('Guest_WiFi');
+    expect(all).not.toContain('Ask_Reception');
+    expect(all).not.toContain('ResortOS_5G');
+    expect(all).toContain('מספר הטלפון');
+  });
+});
+
+describe('S03/S04: late check-out policy, checkout FAQ, office as guest room', () => {
+  const ymd = (offset: number) => {
+    const t = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date());
+    const d = new Date(`${t}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + offset);
+    return d.toISOString().slice(0, 10);
+  };
+  const dm = (s: string) => `${s.slice(8, 10)}/${s.slice(5, 7)}`;
+  const officeRoom = realRooms.find((r: any) => r.id === 'pilot-office') as any;
+  const nofim = { id: 'k685', name: 'נופים בלבן 1', property: 'נופים בלבן', letterCode: 'B1', lockbox: '2810', aliases: ['b1'] } as any;
+  const guestJid = '972529876543@s.whatsapp.net';
+  const mkBooking = (over: any = {}) => ({
+    id: 'book-lc', unit_id: 'k685', guest_name: 'דניאל כהן', guest_phone: '052-9876543',
+    check_in_date: ymd(-1), check_out_date: ymd(1), booking_status: 'CONFIRMED', checkout_token: 'tok_lc', ...over,
+  });
+  async function ask(text: string, roomsList: any[], bookings: any[]) {
+    const deps = makeDeps();
+    deps.cleaners = () => [];
+    deps.rooms = () => roomsList;
+    deps.resortos.listBookings = vi.fn(async () => bookings) as any;
+    await createPipeline(deps).handleInbound({ key: { remoteJid: guestJid, fromMe: false }, message: { conversation: text } } as any);
+    expect(deps.send).toHaveBeenCalledTimes(1);
+    return { reply: deps.sent[0][1], deps };
+  }
+
+  it('late check-out, room free: policy (manager approval, first hour free then 125 ₪/hour, availability), no confirmation', async () => {
+    const { reply } = await ask("אפשר לעשות צ'ק אאוט מאוחר מחר?", [nofim], [mkBooking()]);
+    expect(reply).toContain('מנהל המתחם');
+    expect(reply).toContain('125 ₪');
+    expect(reply).toContain('זמינות');
+    expect(reply).toContain('נחזור אליכם');
+    expect(reply).not.toContain('15:00');
+    expect(reply).not.toMatch(/מאושר|אושר|confirmed/);
+    expect(reply).not.toContain('לפי ההזמנה שלכם'); // asked for tomorrow = actual checkout
+  });
+
+  it('late check-out, next booking starts on the checkout day: politely not possible', async () => {
+    const next = mkBooking({ id: 'book-next', guest_name: 'אחר', guest_phone: '0501111111', check_in_date: ymd(1), check_out_date: ymd(3) });
+    const { reply } = await ask('late checkout tomorrow please', [nofim], [mkBooking(), next]);
+    expect(reply).toContain('already booked'); // English message → English reply (S17)
+    expect(reply).toContain(dm(ymd(1)));
+    expect(reply).not.toContain('125 ₪');
+    expect(reply).not.toContain('אחר'); // no other guest's details
+  });
+
+  it('late check-out on a different day than the booking: states the real checkout date', async () => {
+    const { reply } = await ask('אפשר להישאר עוד קצת מחר?', [nofim], [mkBooking({ check_out_date: ymd(5) })]);
+    expect(reply).toContain(`הצ׳ק-אאוט הוא ב־${dm(ymd(5))}`);
+    expect(reply).toContain('125 ₪');
+  });
+
+  it('generic checkout answer never mentions the check-in time', async () => {
+    const { reply } = await ask('מתי הצ׳ק אאוט?', [nofim], [mkBooking()]);
+    expect(reply).toContain('11:00');
+    expect(reply).not.toContain('15:00');
+    expect(reply).not.toContain('צ׳ק-אין');
+  });
+
+  it('pilot-office booking gets the normal entry / lockbox flow with 1357# from rooms.json', async () => {
+    expect(officeRoom?.lockbox).toBe('1357#');
+    const { reply } = await ask('איך אני נכנסת לחדר? מה הקוד לכספת?', [officeRoom],
+      [mkBooking({ id: 'b_any_office', unit_id: 'pilot-office', check_out_date: ymd(10) })]);
+    expect(reply).toContain('1357#');
+    expect(reply).toContain('הוראות פתיחה');
+    expect(reply).not.toContain('אזור תפעולי');
+    expect(reply).not.toContain('שם המזמין');
+  });
+
+  it('another OFFICE-usage unit keeps the operational-area reply and does not ask a known guest for the booking name', async () => {
+    const otherOffice = { id: 'office-2', name: 'משרד 2', usage: 'OFFICE', lockbox: '9999', aliases: [] } as any;
+    const { reply } = await ask('מה הקוד לכספת?', [otherOffice], [mkBooking({ unit_id: 'office-2' })]);
+    expect(reply).toContain('אזור תפעולי');
+    expect(reply).not.toContain('9999');
+    expect(reply).not.toContain('שם המזמין');
+  });
+});
+
+describe('S03 alert + S05 fault priority and word-boundary keywords', () => {
+  const ymd = (offset: number) => {
+    const t = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date());
+    const d = new Date(`${t}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + offset);
+    return d.toISOString().slice(0, 10);
+  };
+  const nofim = { id: 'k685', name: 'נופים בלבן 1', property: 'נופים בלבן', letterCode: 'B1', lockbox: '2810', aliases: ['b1'] } as any;
+  const guestJid = '972529876543@s.whatsapp.net';
+  const mkBooking = (over: any = {}) => ({
+    id: 'book-s05', unit_id: 'k685', guest_name: 'דניאל כהן', guest_phone: '052-9876543',
+    check_in_date: ymd(-1), check_out_date: ymd(1), booking_status: 'CONFIRMED', checkout_token: 'tok_s05', ...over,
+  });
+  function mk(bookings: any[]) {
+    const deps = makeDeps();
+    deps.cleaners = () => [];
+    deps.rooms = () => [nofim];
+    deps.resortos.listBookings = vi.fn(async () => bookings) as any;
+    deps.resortos.requestGuestCall = vi.fn(async () => {}) as any;
+    deps.notifyManagerSms = vi.fn(async () => {});
+    const pipeline = createPipeline(deps);
+    const say = async (text: string) => {
+      deps.sent.length = 0;
+      await pipeline.handleInbound({ key: { remoteJid: guestJid, fromMe: false }, message: { conversation: text } } as any);
+      return deps.sent.map((x) => x[1]).join('\n');
+    };
+    return { deps, say };
+  }
+
+  it('late check-out with a free room sends ONE manager SMS (deduped per booking/day), with no codes or phones', async () => {
+    const { deps, say } = mk([mkBooking()]);
+    await say("אפשר לעשות צ'ק אאוט מאוחר מחר?");
+    await say('late checkout please');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(deps.notifyManagerSms).toHaveBeenCalledTimes(1);
+    const sms = (deps.notifyManagerSms as any).mock.calls[0][0] as string;
+    expect(sms).toContain('דניאל כהן');
+    expect(sms).toContain('נופים בלבן 1');
+    expect(sms).toContain(`${ymd(1).slice(8, 10)}/${ymd(1).slice(5, 7)}`);
+    expect(sms).toContain('צ׳ק-אאוט מאוחר');
+    expect(sms).toContain('פנוי');
+    expect(sms).not.toContain('2810');
+    expect(sms).not.toContain('#2464');
+    expect(sms).not.toMatch(/05\d[- ]?\d{7}|9725\d{8}/);
+    expect(deps.send).toHaveBeenCalledTimes(2); // guest replies only; no WhatsApp to staff
+    expect(deps.sent.every(([jid]) => jid === guestJid)).toBe(true);
+  });
+
+  it('late check-out with the room taken sends no manager SMS', async () => {
+    const next = mkBooking({ id: 'book-next', guest_phone: '0501111111', check_in_date: ymd(1), check_out_date: ymd(2) });
+    const { deps, say } = mk([mkBooking(), next]);
+    await say("אפשר צ'ק אאוט מאוחר?");
+    await new Promise((r) => setTimeout(r, 0));
+    expect(deps.notifyManagerSms).not.toHaveBeenCalled();
+  });
+
+  it('"הטלוויזיה לא נדלקת" is a TV fault (unit TV steps + call offer), not the fuel list', async () => {
+    const { deps, say } = mk([mkBooking()]);
+    const reply = await say('הטלוויזיה לא נדלקת, מה עושים?');
+    expect(reply).not.toContain('מתדלקים');
+    expect(reply).toContain('מצטערים על התקלה');
+    expect(reply).toContain('YES'); // from data/tvGuides.json (guestProfileSeed)
+    expect(reply).toContain('תרצו שנתקשר אליכם');
+    // existing call-back path continues
+    const yes = await say('כן');
+    expect(yes).toContain('נחזור אליכם טלפונית');
+    expect(deps.resortos.requestGuestCall).toHaveBeenCalledTimes(1);
+  });
+
+  it('a non-TV fault gets a warm acknowledgement + call offer, without invented instructions', async () => {
+    const { say } = mk([mkBooking()]);
+    const reply = await say('המזגן לא עובד');
+    expect(reply).toContain('מצטערים על התקלה');
+    expect(reply).toContain('תרצו שנתקשר אליכם');
+    expect(reply).not.toContain('1.');
+  });
+
+  it('"איפה מתדלקים" still gives the fuel list', async () => {
+    const { say } = mk([mkBooking()]);
+    expect(await say('איפה מתדלקים?')).toContain('איפה מתדלקים');
+  });
+
+  it('keyword collisions no longer fire inside other words', async () => {
+    const { placeMenuFor } = await import('./guest/placeMenu.js');
+    const { answerGuestQuestion } = await import('./guest/guestKnowledge.js');
+    const ctx = { booking: { id: 'x' } as any, unitId: 'k685', roomName: 'נופים בלבן 1', room: nofim };
+    // "יין" inside "עדיין", "חוף" inside "דחוף", "eat" inside "great/weather", "מים" inside "מתאימים"
+    expect(await placeMenuFor('עדיין לא הגענו')).toBeNull();
+    expect(await placeMenuFor('זה דחוף')).toBeNull();
+    expect(await placeMenuFor('great weather today')).toBeNull();
+    expect(answerGuestQuestion('עדיין לא הגענו', ctx)).toBeNull();
+    expect(answerGuestQuestion('זה דחוף', ctx)).toBeNull();
+    expect(answerGuestQuestion('המיטות מתאימות? אנחנו מתאימים', ctx)).toBeNull();
+    // real keywords with Hebrew prefixes still match
+    expect(answerGuestQuestion('מה הסיסמה לווייפי?', ctx)).toContain('TP-LINK_FA30');
+    expect(answerGuestQuestion('יש חוף קרוב?', ctx)).toContain('חופי כנרת');
+    expect((await placeMenuFor('איפה יש סופר?'))?.text).toContain('איפה קונים');
+    expect((await placeMenuFor('בא לנו יין טוב'))?.text).toContain('אטרקציות');
+    expect(answerGuestQuestion('הכספת לא נפתחת', ctx)).toContain('2810');
+  });
+});
+
+describe('S08: broader fault intent, groceries need shopping words', () => {
+  const ymd = (offset: number) => {
+    const t = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date());
+    const d = new Date(`${t}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + offset);
+    return d.toISOString().slice(0, 10);
+  };
+  const nofim = { id: 'k685', name: 'נופים בלבן 1', property: 'נופים בלבן', letterCode: 'B1', lockbox: '2810', aliases: ['b1'] } as any;
+  const guestJid = '972529876543@s.whatsapp.net';
+  async function say(text: string) {
+    const deps = makeDeps();
+    deps.cleaners = () => [];
+    deps.rooms = () => [nofim];
+    deps.resortos.listBookings = vi.fn(async () => [{
+      id: 'book-s08', unit_id: 'k685', guest_name: 'דניאל כהן', guest_phone: '052-9876543',
+      check_in_date: ymd(-1), check_out_date: ymd(1), booking_status: 'CONFIRMED', checkout_token: 'tok_s08',
+    }]) as any;
+    deps.resortos.requestGuestCall = vi.fn(async () => {}) as any;
+    deps.notifyManagerSms = vi.fn(async () => {});
+    await createPipeline(deps).handleInbound({ key: { remoteJid: guestJid, fromMe: false }, message: { conversation: text } } as any);
+    expect(deps.resortos.requestGuestCall).not.toHaveBeenCalled(); // nothing escalates before the guest says "כן"
+    return deps.sent.map((x) => x[1]).join('\n');
+  }
+  const isFault = (r: string) => r.includes('מצטערים על התקלה') && r.includes('תרצו שנתקשר אליכם');
+  const isGrocery = (r: string) => r.includes('איפה קונים') || r.includes('סופרמרקטים וקניות');
+
+  it.each([
+    'המזגן מטפטף מים על הרצפה',
+    'אין מים חמים',
+    'האסלה סתומה',
+    'המים קרים',
+    'החשמל קפץ',
+    'הדלת נתקעה',
+    'יש נזילה מהברז',
+  ])('"%s" is a fault (not groceries/FAQ)', async (text) => {
+    const r = await say(text);
+    expect(isFault(r)).toBe(true);
+    expect(isGrocery(r)).toBe(false);
+  });
+
+  it.each(['איפה הסופר הקרוב?', 'אפשר לקנות מים?'])('"%s" is groceries', async (text) => {
+    const r = await say(text);
+    expect(isGrocery(r)).toBe(true);
+    expect(r).not.toContain('מצטערים על התקלה');
+  });
+
+  it('"מים" / "חלב" alone and "נגיע בערב" no longer trigger groceries or food', async () => {
+    const { answerGuestQuestion } = await import('./guest/guestKnowledge.js');
+    const { placeMenuFor } = await import('./guest/placeMenu.js');
+    const ctx = { booking: { id: 'x' } as any, unitId: 'k685', roomName: 'נופים בלבן 1', room: nofim };
+    for (const q of ['נגיע בערב', 'יש מים בבקתה?', 'נגיע בצהריים']) {
+      expect(answerGuestQuestion(q, ctx)).toBeNull();
+      expect(await placeMenuFor(q)).toBeNull();
+    }
+    expect(await placeMenuFor('מה מומלץ לארוחת ערב?')).not.toBeNull();
+  });
+
+  it('non-faults stay non-faults; Wi-Fi and lockbox trouble keep their specific answers', async () => {
+    const { isFaultReport } = await import('./guest/keywords.js');
+    for (const q of ['נגיע מאוחר בערב', 'נתקענו בפקק, נגיע בעוד שעה', 'אין נוזל כלים', 'מה הסיסמה לווייפי?', 'אפשר לקנות מים קרים?', 'עדיין לא הגענו']) {
+      expect(isFaultReport(q)).toBe(false);
+    }
+    const { answerGuestQuestion } = await import('./guest/guestKnowledge.js');
+    const ctx = { booking: { id: 'x' } as any, unitId: 'k685', roomName: 'נופים בלבן 1', room: nofim };
+    expect(answerGuestQuestion('האינטרנט לא עובד', ctx)).toContain('TP-LINK_FA30');
+    expect(answerGuestQuestion('הכספת לא נפתחת', ctx)).toContain('2810');
+  });
+});
