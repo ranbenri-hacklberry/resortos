@@ -35,7 +35,7 @@ const CATEGORIES = [
   { id: 'finance_vat', label: 'דיווחי מע״מ 2026', icon: Receipt },
   { id: 'finance_corporate', label: 'תאגיד, בעלים ומשפטי', icon: Briefcase },
   { id: 'contracts', label: 'הסכמים וחוזים אישיים', icon: ShieldCheck },
-  { id: 'procurement', label: 'רכש, הזמנות עבודה וספקים', icon: Wrench },
+  { id: 'procurement', label: 'רכש ומלאי ספקים', icon: Wrench },
   { id: 'qr', label: 'מדבקות ושלטי QR', icon: QrCode },
   { id: 'hospitality', label: 'תפעול אירוח וחדרים', icon: Building2 },
   { id: 'reports', label: 'דוחות תפעול וכספים חיים', icon: FileSpreadsheet },
@@ -672,7 +672,7 @@ export default function PriorityForms({
     },
 
     // =========================================================================
-    // 8. מדבקות ושלטי QR
+    // 8. מדבקות ושלטי QR (מסמכים עצמאיים ללא תפריטים)
     // =========================================================================
     {
       id: 'qr-rooms-5x5',
@@ -707,7 +707,7 @@ export default function PriorityForms({
     {
       id: 'qr-grounds-stickers',
       category: 'qr',
-      title: 'מדבקות QR לחצרות ולבריכות',
+      title: 'מדבקות QR לחצרות ולבריכות (5×5 ס״מ)',
       subtitle: 'עיצוב תואם למדבקות החדרים · 28 שטחים ובריכות',
       description: 'גיליון מדבקות שטח ובריכות בעיצוב זהה למדבקות החדרים (5×5 ס״מ): תג ירוק לחצר / כחול לבריכה, QR סריקה ממוקד והנחיות דיווח סטטוס מהיר לקלואי.',
       formatBadge: 'A4 · מדבקות שטח תואמות',
@@ -718,6 +718,36 @@ export default function PriorityForms({
       updatedAt: 'אוקטובר 2026',
       parties: '28 חצרות ובריכות בריזורט',
       sheetPreviewType: 'qr-grounds'
+    },
+    {
+      id: 'qr-rooms-compact',
+      category: 'qr',
+      title: 'מדבקות QR קומפקטיות לחדרים (דף יחיד)',
+      subtitle: 'כל 41 מדבקות החדרים על גבי דף A4 אחד',
+      description: 'גיליון קומפקטי מרוכז בגודל 28×34 מ״מ לכל מדבקה, המכיל את כל 41 היחידות בדף מודפס אחד לצורכי חירום וגיבוי מהיר.',
+      formatBadge: 'A4 · 41 מדבקות בדף',
+      tagColor: 'amber',
+      url: '/qr-rooms-compact.html',
+      downloadName: 'מדבקות_QR_קומפקטיות_דף_יחיד.html',
+      isHtml: true,
+      updatedAt: 'אוקטובר 2026',
+      parties: '41 יחידות ריזורט',
+      sheetPreviewType: 'qr-units'
+    },
+    {
+      id: 'qr-safe-table',
+      category: 'qr',
+      title: 'טבלת קודי כספות ומפתחות מרוכזת (41 יחידות)',
+      subtitle: 'דוח מעקב קודי כספות, אותיות חדרים ומתחמים',
+      description: 'טבלה מרוכזת מלאה של כל 41 היחידות והבקתות, קוד הכספת (#XXXX), האות באנגלית, ושם המתחם.',
+      formatBadge: 'טבלה רשמית A4',
+      tagColor: 'blue',
+      url: '/qr-safe-table.html',
+      downloadName: 'טבלת_קודי_כספות_ומפתחות_41_יחידות.html',
+      isHtml: true,
+      updatedAt: 'אוקטובר 2026',
+      parties: 'כל מתחמי ויחידות הריזורט',
+      sheetPreviewType: 'table'
     },
 
     // =========================================================================
@@ -1060,12 +1090,8 @@ export default function PriorityForms({
                           className="form-btn is-print"
                           title="הדפסה מיידית"
                           onClick={() => {
-                            const win = window.open(item.url, '_blank', 'noopener');
-                            if (win) {
-                              win.addEventListener('load', () => {
-                                setTimeout(() => { win.print(); }, 400);
-                              });
-                            }
+                            const printUrl = item.url + (item.url.includes('?') ? '&print=1' : '?print=1');
+                            window.open(printUrl, '_blank');
                           }}
                         >
                           <Printer size={13} /> הדפסה
@@ -1121,10 +1147,8 @@ export default function PriorityForms({
                   type="button"
                   className="tb-btn is-highlight"
                   onClick={() => {
-                    const iframe = document.getElementById('preview-doc-frame');
-                    if (iframe && iframe.contentWindow) {
-                      iframe.contentWindow.print();
-                    }
+                    const printUrl = previewItem.url + (previewItem.url.includes('?') ? '&print=1' : '?print=1');
+                    window.open(printUrl, '_blank');
                   }}
                 >
                   <Printer size={14} /> הדפס / PDF

@@ -922,6 +922,8 @@ function StaffTab({
           isNew={isNew}
           staffForm={staffForm}
           setStaffForm={setStaffForm}
+          staffList={staffList}
+          editingId={editingId}
           pickerUnits={pickerUnits}
           staffBusy={staffBusy}
           onSave={onSave}
@@ -1059,7 +1061,7 @@ function AgentForm({ isLight, agentForm, setAgentForm, staffBusy, onSave, t }) {
   );
 }
 
-function StaffForm({ isLight, isManager, canOpenAgents = false, isNew, staffForm, setStaffForm, pickerUnits, staffBusy, onSave, t }) {
+function StaffForm({ isLight, isManager, canOpenAgents = false, isNew, staffForm, setStaffForm, staffList = [], editingId = '', pickerUnits, staffBusy, onSave, t }) {
   const selected = new Set(normalizeAllowedUnitIds(staffForm.allowed_units));
   const groups = groupedInventoryUnits(pickerUnits || []);
   const allIds = (pickerUnits || []).map((unit) => unit.id);

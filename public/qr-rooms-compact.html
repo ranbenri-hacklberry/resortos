@@ -2,7 +2,7 @@
 <html dir="rtl" lang="he">
 <head>
   <meta charset="utf-8">
-  <title>מדבקות QR קומפקטיות לחדרים - דף A4 יחיד - מיאליס ריזורט</title>
+  <title>מדבקות QR קומפקטיות לחדרים - דף A4 יחיד</title>
   <style>
     @page {
       size: A4 portrait;
@@ -15,9 +15,11 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
     }
     body {
-      background: #f1f5f9;
-      padding: 20px;
+      background: #f8fafc;
+      padding: 16px;
       color: #0f172a;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
     }
     .container {
       max-width: 1040px;
@@ -25,82 +27,82 @@
     }
     .header-bar {
       background: #ffffff;
-      padding: 16px 22px;
-      border-radius: 14px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-      margin-bottom: 20px;
+      padding: 14px 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+      margin-bottom: 16px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       flex-wrap: wrap;
-      gap: 14px;
+      gap: 12px;
       border: 1px solid #e2e8f0;
     }
     .header-title h1 {
-      font-size: 20px;
+      font-size: 19px;
       font-weight: 800;
       color: #0f172a;
-      margin-bottom: 3px;
+      margin-bottom: 2px;
     }
     .header-title p {
-      font-size: 13px;
+      font-size: 12.5px;
       color: #64748b;
-    }
-    .actions {
-      display: flex;
-      gap: 10px;
-      align-items: center;
     }
     .btn {
       background: #0f172a;
       color: #fff;
       border: none;
-      padding: 10px 18px;
-      border-radius: 10px;
-      font-size: 14px;
+      padding: 9px 18px;
+      border-radius: 8px;
+      font-size: 13.5px;
       font-weight: 700;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       text-decoration: none;
       transition: background 0.15s;
     }
     .btn:hover { background: #1e293b; }
 
-    /* ---- SINGLE-PAGE COMPACT VIEW (All 41 on 1 page) ---- */
+    /* ---- SINGLE-PAGE COMPACT GRID ---- */
     .grid-compact {
-      display: grid;
-      grid-template-columns: repeat(6, 28mm);
-      gap: 2.5mm 2.5mm;
-      justify-content: center;
-      margin: 0 auto;
+      display: grid !important;
+      grid-template-columns: repeat(6, 28mm) !important;
+      gap: 2.5mm 2.5mm !important;
+      justify-content: center !important;
+      margin: 0 auto !important;
     }
     .sticker-compact {
-      width: 28mm;
-      height: 34mm;
-      border: 1px dashed #64748b;
-      border-radius: 3mm;
-      padding: 1.5mm 1mm;
-      background: #ffffff;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: space-between;
-      text-align: center;
-      page-break-inside: avoid;
-      break-inside: avoid;
+      width: 28mm !important;
+      height: 34mm !important;
+      border: 1px dashed #64748b !important;
+      border-radius: 3mm !important;
+      padding: 1.5mm 1mm !important;
+      background: #ffffff !important;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      justify-content: space-between !important;
+      text-align: center !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
     }
     .sc-code {
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 900;
       color: #0f172a;
       line-height: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
     }
     .sc-qr img {
       width: 20mm;
       height: 20mm;
       display: block;
+      margin: 0 auto;
     }
     .sc-sub {
       font-size: 5.8px;
@@ -114,13 +116,13 @@
         background: #ffffff !important;
         margin: 0 !important;
         padding: 0 !important;
-        width: 100% !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
       .container {
         max-width: 100% !important;
         margin: 0 auto !important;
         padding: 0 !important;
-        width: 100% !important;
       }
       .header-bar {
         display: none !important;
@@ -131,7 +133,6 @@
         gap: 2.5mm 2.5mm !important;
         margin: 0 auto !important;
         justify-content: center !important;
-        width: fit-content !important;
       }
       .sticker-compact {
         width: 28mm !important;
@@ -139,6 +140,8 @@
         border: 1px dashed #475569 !important;
         page-break-inside: avoid !important;
         break-inside: avoid !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
     }
   </style>
@@ -147,15 +150,14 @@
   <div class="container">
     <header class="header-bar">
       <div class="header-title">
-        <h1>📄 מדבקות QR קומפקטיות לחדרים - דף A4 יחיד (41 יחידות)</h1>
-        <p>כל 41 המדבקות מרוכזות על דף A4 בודד · גודל ~3.1×3.5 ס״מ · חסכוני</p>
+        <h1>📄 מדבקות QR קומפקטיות לחדרים (דף A4 יחיד)</h1>
+        <p>כל 41 המדבקות מרוכזות על דף A4 בודד · גודל ~3×3.5 ס״מ · חסכוני</p>
       </div>
       <div class="actions">
         <button class="btn" onclick="window.print()">🖨️ הדפס דף יחיד (A4)</button>
       </div>
     </header>
     <div class="grid-compact">
-        
       <div class="sticker-compact">
         <div class="sc-code">קאסה נובה · Aura</div>
         <div class="sc-qr">
@@ -163,7 +165,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">קאסה נובה · Bloom</div>
@@ -172,7 +173,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">צימר בגבעה 1</div>
@@ -181,7 +181,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">צימר בגבעה 2</div>
@@ -190,7 +189,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">צימר בגבעה 3</div>
@@ -199,7 +197,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">צימר בגבעה 4</div>
@@ -208,7 +205,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">כיפת שמיים כחול</div>
@@ -217,7 +213,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">כיפת שמיים אדום</div>
@@ -226,7 +221,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">כיפת שמיים ירוק</div>
@@ -235,7 +229,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">וילה מיאליס ריזורט</div>
@@ -244,7 +237,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">סוויטה 1 (הירוקה)</div>
@@ -253,7 +245,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">סוויטה 2 (הורודה)</div>
@@ -262,7 +253,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">G1</div>
@@ -271,7 +261,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">G2</div>
@@ -280,7 +269,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">G3</div>
@@ -289,7 +277,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">G4</div>
@@ -298,7 +285,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">G5</div>
@@ -307,7 +293,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">G6</div>
@@ -316,7 +301,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">G7</div>
@@ -325,7 +309,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">G8</div>
@@ -334,7 +317,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">E1</div>
@@ -343,7 +325,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">E2</div>
@@ -352,7 +333,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">E3</div>
@@ -361,7 +341,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">E4</div>
@@ -370,7 +349,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">A1</div>
@@ -379,7 +357,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">A2</div>
@@ -388,7 +365,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">A3</div>
@@ -397,7 +373,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">A4</div>
@@ -406,7 +381,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">A5</div>
@@ -415,7 +389,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">B1</div>
@@ -424,7 +397,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">B2</div>
@@ -433,7 +405,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">C1</div>
@@ -442,7 +413,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">C2</div>
@@ -451,7 +421,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">C3</div>
@@ -460,7 +429,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">D1</div>
@@ -469,7 +437,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">D2</div>
@@ -478,7 +445,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">D3</div>
@@ -487,7 +453,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">F1</div>
@@ -496,7 +461,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">F2</div>
@@ -505,7 +469,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">F3</div>
@@ -514,7 +477,6 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
 
       <div class="sticker-compact">
         <div class="sc-code">Office</div>
@@ -523,8 +485,12 @@
         </div>
         <div class="sc-sub">סרקו ולחצו <strong>שלח</strong> בווטסאפ ↗</div>
       </div>
-    
-      </div>
+    </div>
   </div>
+  <script>
+    if (new URLSearchParams(window.location.search).has('print')) {
+      window.addEventListener('load', () => setTimeout(() => window.print(), 350));
+    }
+  </script>
 </body>
 </html>
