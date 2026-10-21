@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'fs'; import os from 'os'; import path from 'path';
-import { registerExpenseRoutes } from './expenses.js';
+import { registerExpenseRoutes, validateExpense } from './expenses.js';
 
 function harness(authOk = true) {
   const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'exp-')), 'expenses.jsonl');
@@ -48,4 +48,11 @@ test('auth enforced (401)', async () => {
   const r = await h.call('POST /api/finance/expenses', { body, query: {} });
   assert.equal(r.status, 401);
   assert.equal(fs.existsSync(h.file), false);
+});
+
+test('keeps the site field (bug: Chloe sent related site, server dropped it)', () => {
+  const { e, errors } = validateExpense({ supplier: 'טואטי', invoice_no: '1', total: 5782, approved_by: 'רני', site: 'בתי נורית (G/23)' });
+  assert.deepEqual(errors, []);
+  assert.equal(e.site, 'בתי נורית (G/23)');
+  assert.equal(validateExpense({ supplier: 'x', invoice_no: '1', total: 1, approved_by: 'r' }).e.site, null);
 });

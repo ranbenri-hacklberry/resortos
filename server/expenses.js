@@ -18,7 +18,7 @@ export function readExpenses(file = defaultFile()) {
 export function validateExpense(body) {
   const e = {
     supplier: str(body?.supplier, 80), date: str(body?.date, 10), invoice_no: str(String(body?.invoice_no ?? ''), 30),
-    subtotal: num(body?.subtotal), vat: num(body?.vat), total: num(body?.total), category: str(body?.category, 40) || 'אחר',
+    subtotal: num(body?.subtotal), vat: num(body?.vat), total: num(body?.total), category: str(body?.category, 40) || 'אחר', site: str(body?.site, 60) || null,
     paid: body?.paid === true ? true : body?.paid === false ? false : null,
     image_paths: Array.isArray(body?.image_paths) ? body.image_paths.filter((p) => typeof p === 'string' && p).slice(0, 5) : [],
     approved_by: str(body?.approved_by, 160), source: str(body?.source, 60) || 'manual',
