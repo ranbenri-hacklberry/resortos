@@ -56,6 +56,12 @@ export class ResortOSError extends Error {
   }
 }
 
+function shiftYmd(ymd: string, days: number): string {
+  const d = new Date(`${ymd}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 export class ResortOSClient {
   private unitsCache?: { data: UnitRow[]; expiresAt: number };
   private bookingsCache = new Map<string, { data: BookingRow[]; expiresAt: number }>();
@@ -124,6 +130,17 @@ export class ResortOSClient {
   }
 
   async listBookings(params?: { from?: string; to?: string }): Promise<BookingRow[]> {
+    // Ran 2026-10-22 (D1 / עמית מלכה): the server filters check_in_date < to, so {from: today, to: today}
+    // dropped today's check-ins, and no params returned only the oldest 1000 rows. Always ask for a window
+    // (default yesterday..today+30), extend `to` by one day, then keep check_in <= to client-side.
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date());
+    const from = params?.from || shiftYmd(today, -1);
+    const to = params?.to || shiftYmd(today, 30);
+    const rows = await this.listBookingsRaw({ from, to: shiftYmd(to, 1) });
+    return rows.filter((b) => !b.check_in_date || b.check_in_date <= to);
+  }
+
+  private async listBookingsRaw(params?: { from?: string; to?: string }): Promise<BookingRow[]> {
     const q = new URLSearchParams();
     if (params?.from) q.set('from', params.from);
     if (params?.to) q.set('to', params.to);
