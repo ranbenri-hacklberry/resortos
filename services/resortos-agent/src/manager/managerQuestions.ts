@@ -75,6 +75,20 @@ export function unitShortStatus(unit: UnitRow | undefined, occupancy: RoomOccupa
   return clean;
 }
 
+/** Ran 2026-10-22: vacant-room status from the real ResortOS operational_status values. */
+export function roomStatusLabel(unit: UnitRow | undefined): string {
+  const st = unit?.operational_status;
+  const reason = unit?.custom_reason || '';
+  if (st === 'OUT_OF_ORDER' || st === 'CLOSED' || st === 'UNAVAILABLE' || st === 'BLOCKED') return 'לא זמין ⛔';
+  if (st === 'MAINTENANCE_ALERT') return 'תקלה ⚠️';
+  if (st === 'GARDENING') return 'עבודת גינון 🌿';
+  if (st === 'IN_PROGRESS') return `בנקיון 🟡${unit?.assigned_staff ? ` | ${unit.assigned_staff}` : ''}`;
+  if (st === 'NEEDS_COMPLETIONS' || (st === 'READY' && /ביקורת|בדיקה/.test(reason))) return 'ממתין לבדיקה 🔍';
+  if (st === 'READY') return 'מוכן לאורח 🟢';
+  if (st === 'DIRTY') return 'ממתין לניקיון 🔴';
+  return st ? `${st} ❔` : 'לא ידוע ❔';
+}
+
 function guestLabel(booking?: BookingRow): string {
   return booking?.guest_name || 'ללא שם';
 }
@@ -91,10 +105,6 @@ export function formatManagerInitialCard(
   occupancy: RoomOccupancyInfo,
   room?: RoomEntry
 ): string {
-  const baseCleaning = getCleaningStatusLabel(unit?.operational_status, unit?.custom_reason);
-  const cleaningLabel = unit?.operational_status === 'IN_PROGRESS' && unit?.assigned_staff
-    ? `${baseCleaning} | ${unit.assigned_staff}`
-    : baseCleaning;
   let card = `📋 *${roomLabel}*\n`;
 
 
@@ -105,33 +115,28 @@ export function formatManagerInitialCard(
   }
   card += `🔑 קוד כספת: *${lockbox}*\n`;
 
-  const guestInside = Boolean(occupancy.outBooking || occupancy.stayingBooking);
-  if (guestInside) {
-    if (occupancy.outBooking) {
-      card += `🟠 צ׳ק אאוט היום (${guestLabel(occupancy.outBooking)})\n`;
-    } else {
-      card += `בשהייה (${guestLabel(occupancy.stayingBooking)})\n`;
-      card += `אין יציאה היום\n`;
-    }
-    card += occupancy.inBooking
-      ? `🟢 צ׳ק אין היום (${guestLabel(occupancy.inBooking)})`
-      : 'אין כניסה היום';
-    return card;
-  }
+  // Ran 2026-10-22: one "סטטוס:" line. Precedence: occupied → unavailable / fault → cleaning flow. Unknown → raw value.
+  const staffOcc = (unit as any)?.staff_occupancy;
+  const occupiedBooking = occupancy.stayingBooking
+    || (staffOcc === 'OCCUPIED' ? (occupancy.inBooking || occupancy.outBooking) : undefined)
+    || (occupancy.outBooking && staffOcc !== 'VACANT' ? occupancy.outBooking : undefined);
+  const occupied = staffOcc === 'OCCUPIED' || Boolean(occupancy.stayingBooking) || Boolean(occupancy.outBooking && staffOcc !== 'VACANT');
+  const status = occupied
+    ? `🏠 מאוכלס${occupiedBooking ? ` (${guestLabel(occupiedBooking)})` : ''}`
+    : roomStatusLabel(unit);
+  card += `סטטוס: ${status}\n`;
 
-  // Ran 2026-10-22 (D1): ResortOS marks a checked-in room staff_occupancy = OCCUPIED → show it as occupied,
-  // not "check-in today" with a stale cleaning mark. A same-day booking not yet checked in stays "צ׳ק אין היום".
-  if ((unit as any)?.staff_occupancy === 'OCCUPIED') {
-    card += occupancy.inBooking
-      ? `🏠 מאוכלס (${guestLabel(occupancy.inBooking)})\nאין יציאה היום`
-      : `🏠 מאוכלס`;
-    return card;
+  if (occupancy.outBooking) {
+    card += `🟠 צ׳ק אאוט היום (${guestLabel(occupancy.outBooking)})\n`;
+  } else if (occupied) {
+    card += `אין יציאה היום\n`;
   }
-
-  card += `🧹 סטטוס ניקיון: ${cleaningLabel}\n`;
-  card += occupancy.inBooking
-    ? `🟢 צ׳ק אין היום (${guestLabel(occupancy.inBooking)})`
-    : `👥 סטטוס תפוסה: ${occupancy.statusSummary}`;
+  if (occupancy.inBooking && occupiedBooking !== occupancy.inBooking) {
+    card += `🟢 צ׳ק אין היום (${guestLabel(occupancy.inBooking)})`;
+  } else if (occupied && !occupancy.inBooking) {
+    card += 'אין כניסה היום';
+  }
+  card = card.replace(/\n$/, '');
   if (unit?.operational_status === 'READY' && (unit?.custom_reason === 'ממתין לביקורת מנהל' || unit?.custom_reason?.includes('ביקורת'))) {
     card += `\n\n💡 _לאישור החדר לאחר בדיקה, השב: *מוכן*_`;
   }

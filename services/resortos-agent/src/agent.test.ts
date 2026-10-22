@@ -888,8 +888,8 @@ describe('manager short status & numeric action menu', () => {
     const reply = deps.sent[0][1];
     expect(reply).toContain('נופים בלבן 1');
     expect(reply).toContain('2810');
-    expect(reply).toContain('סטטוס ניקיון: ממתין לניקיון 🔴');
-    expect(reply).toContain('סטטוס תפוסה: פנוי ⚪');
+    expect(reply).toContain('סטטוס: ממתין לניקיון 🔴');
+    expect(reply).not.toContain('סטטוס תפוסה');
     expect(reply).toContain('1 - שנה סטטוס');
     expect(reply).toContain('2 - הוסף הערה');
     expect(reply).toContain('3 - דווח אחזקה או חוסר');

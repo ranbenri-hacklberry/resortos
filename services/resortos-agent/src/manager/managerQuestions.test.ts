@@ -33,8 +33,8 @@ describe('manager room card', () => {
       id: 'k693',
       operational_status: 'READY',
     }, occupancy, room as any);
-    expect(card).toContain('סטטוס ניקיון: מוכן לאורח 🟢');
-    expect(card).toContain('סטטוס תפוסה: פנוי ⚪');
+    expect(card).toContain('סטטוס: מוכן לאורח 🟢');
+    expect(card).not.toContain('סטטוס תפוסה');
   });
 
   it('answers פרטי לקוח with the guest on the room, including a turnover', () => {
