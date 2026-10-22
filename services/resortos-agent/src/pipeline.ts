@@ -645,6 +645,14 @@ export function createPipeline(deps: PipelineDeps) {
     const currentSession = sessionStates.get(sessionKey);
 
     let text = d.extractText(msg);
+    // Ran 2026-10-22: a voice note (incl. forwarded) from Ran (admin) → reply to Ran only with its transcript.
+    if (isManager && !msg.key.fromMe && !text?.trim() && d.isAudio(msg) &&
+        [cleaner?.phone, senderPhone, senderPn].some((p) => normalizePhoneTail(p || '') === normalizePhoneTail('972548317887'))) {
+      const tr = await d.transcribe(msg, 'he');
+      const said = tr?.text?.trim();
+      await d.send(jid, said ? `תמלול: ${said}` : 'לא הצלחתי לתמלל את ההקלטה.');
+      return { handled: true, transcript: tr };
+    }
     // Unidentified-sender verification (Ran 2026-10-22). A typed phone never releases a code in WhatsApp.
     if (!cleaner && currentSession?.role === 'GUEST' && text?.trim() &&
         (currentSession.state === 'VERIFY_HAS_BOOKING' || currentSession.state === 'VERIFY_PHONE' || currentSession.state === 'VERIFY_OTP' || currentSession.state === 'AWAITING_BOOKING_PHONE')) {
