@@ -32,7 +32,7 @@ import {
   managerStatusMenu,
   withManagerActions,
 } from './llm/prompts.js';
-import { answerGuestQuestion, answerStaffPlaceQuestion, staffPlaceNeedsRoom, type GuestContext } from './guest/guestKnowledge.js';
+import { isLateCheckoutQuestion, isLateCheckoutFollowUp, lateCheckoutManagerSms, answerLateCheckout, israelClock, answerGuestQuestion, answerStaffPlaceQuestion, staffPlaceNeedsRoom, type GuestContext } from './guest/guestKnowledge.js';
 import { answerRackRate } from './pricing/priceList.js';
 import { exactStaticReply, lookupExact } from './pricing/exactLookup.js';
 import {
@@ -319,6 +319,26 @@ export interface InboundResult {
   reason?: string;
 }
 
+/** Ran 2026-10-22: Barak gets every guest message Sun–Thu 19:00–21:00 (max 1 per guest per 15 min). */
+export const BARAK_FORWARD_PHONE = '972503934696';
+const BARAK_FORWARD_GAP_MS = 15 * 60 * 1000;
+export function inBarakForwardWindow(now: Date = new Date()): boolean {
+  const { hour, dow } = israelClock(now);
+  return dow >= 0 && dow <= 4 && hour >= 19 && hour < 21;
+}
+export function barakForwardText(p: { name?: string | null; unit?: string | null; hhmm: string; summary: string; phone: string }): string {
+  return `🌙 פנייה מאורח אחרי 19:00\n👤 ${p.name || 'לא זוהה'} · ${p.unit || 'לא זוהה'}\n🕐 ${p.hhmm}\n💬 ${p.summary}\n📲 לענות לאורח: https://wa.me/${p.phone}`;
+}
+function intlPhone(raw?: string | null): string {
+  const d = String(raw || '').replace(/\D/g, '');
+  if (d.startsWith('972')) return d;
+  if (d.startsWith('0')) return `972${d.slice(1)}`;
+  return d;
+}
+/** Guest asked not to be called / WhatsApp only (Ran 2026-10-22). */
+const NO_CALL_RE = /לא\s*(?:ל|ת)?התקשר|בלי\s*(?:שיחה|טלפון)|אל\s*תתקשר|בוו?א?טס?א?פ|no\s*calls?|don'?t\s*call|whatsapp\s*only|by\s*whatsapp/i;
+const WHATSAPP_CALLBACK_REPLY = `בשמחה! העברנו את הבקשה לצוות המתחם ונחזור אליכם כאן בוואטסאפ בהקדם. 💬`;
+
 const LOCKBOX_QUERY_REGEX = /קוד|כספת|מפתח|רหัส|เซฟ|كود|خزنة|مفتاح/i;
 
 export function formatRoomDisplay(roomId: string, rooms: RoomEntry[]): string {
@@ -409,6 +429,8 @@ export function createPipeline(deps: PipelineDeps) {
     ...(wrappedSendImage ? { sendImage: wrappedSendImage } : {}),
   };
 
+  const barakForwardLast = new Map<string, number>();
+  const lastCheckoutAsk = new Map<string, number>();
   const rawSessionStates = new Map<string, SessionState>();
   const sessionStates = {
     get: (key: string): SessionState | undefined => {
@@ -550,9 +572,38 @@ export function createPipeline(deps: PipelineDeps) {
       logConversation({ direction: 'inbound', jid, text: inboundText || (isAudioMsg ? '[voice note]' : ''), route });
       currentRoute = { jid, route };
       const result = await handleInboundInner(msg, channelId);
+      if (route === 'guest' && jid && !msg.key.fromMe && channelId === 'resortos') void forwardGuestToBarak(jid, inPn, inboundText || (isAudioMsg ? '[הודעה קולית]' : ''));
       logConversation({ direction: 'result', jid, route, handled: result.handled, reason: (result as any).reason, text: (result as any).transcript?.text });
       return result;
     });
+  }
+
+  async function forwardGuestToBarak(jid: string, senderPn: string | null | undefined, text: string): Promise<void> {
+    try {
+      const now = new Date();
+      if (!inBarakForwardWindow(now) || !text.trim()) return;
+      const phone = intlPhone(jid.endsWith('@lid') ? senderPn : phoneOf(jid));
+      const key = phone || jid;
+      if (now.getTime() - (barakForwardLast.get(key) || 0) < BARAK_FORWARD_GAP_MS) return;
+      barakForwardLast.set(key, now.getTime());
+      let name: string | null = null;
+      let unit: string | null = null;
+      if (phone) {
+        const bookings = ((await d.resortos.listBookings?.()) || []).filter((b) => phonesMatch(b.guest_phone, phone) && !b.deleted_at && b.booking_status !== 'CANCELED');
+        const today = getIsraelToday();
+        const b = bookings.find((x) => today >= (x.check_in_date || '') && today <= (x.check_out_date || '')) || bookings[0];
+        if (b) {
+          name = b.guest_name || null;
+          const room = d.rooms().find((r) => r.id === b.unit_id);
+          unit = room?.name || room?.letterCode || b.unit_id || null;
+        }
+      }
+      const summary = text.replace(/\s+/g, ' ').trim().slice(0, 300);
+      await d.send(`${BARAK_FORWARD_PHONE}@s.whatsapp.net`, barakForwardText({ name, unit, hhmm: israelClock(now).hhmm, summary, phone: phone || 'לא ידוע' }), 'resortos');
+      d.log.info({ guestTail: phone ? phone.slice(-4) : null }, 'guest message forwarded to Barak');
+    } catch (err) {
+      d.log.warn({ err: String((err as any)?.message || err) }, 'Barak forward failed');
+    }
   }
 
   async function handleInboundInner(msg: WAMessage, channelId: ChannelId = 'resortos'): Promise<InboundResult> {
@@ -1365,7 +1416,7 @@ export function createPipeline(deps: PipelineDeps) {
           sessionStates.delete(sessionKey);
           const replyText = askByName(
             currentSession.guestName,
-            `בשמחה! העברנו את הבקשה לצוות המתחם ונחזור אליכם טלפונית בהקדם. 📞`
+            NO_CALL_RE.test(heard) ? WHATSAPP_CALLBACK_REPLY : `בשמחה! העברנו את הבקשה לצוות המתחם ונחזור אליכם טלפונית בהקדם. 📞`
           );
           void logGuestWhatsAppExchange(
             { id: currentSession.bookingId, guest_phone: currentSession.guestPhone || senderPhone } as BookingRow,
@@ -2484,6 +2535,29 @@ export function createPipeline(deps: PipelineDeps) {
             guestName: booking.guest_name,
           };
 
+          // Late check-out (Ran 2026-10-22): never approve/deny, always SMS Ran. Follow-up "ב12:00 אפשרי?" counts too.
+          {
+            const nowLc = new Date();
+            ctx.now = nowLc;
+            const prevAsk = lastCheckoutAsk.get(sessionKey) || 0;
+            const isLc = isLateCheckoutQuestion(text) || (nowLc.getTime() - prevAsk < 30 * 60 * 1000 && isLateCheckoutFollowUp(text));
+            if (/צ['׳"]?ק[- ]?אאוט|check-?out|יציאה|לעזוב|לצאת/i.test(text || '')) lastCheckoutAsk.set(sessionKey, nowLc.getTime());
+            if (isLc) {
+              lastCheckoutAsk.set(sessionKey, nowLc.getTime());
+              const lcReply = answerLateCheckout(text || '', ctx);
+              void logGuestWhatsAppExchange(booking, text || '', lcReply);
+              if (d.notifyManagerSms) {
+                const sms = lateCheckoutManagerSms(text || '', ctx, guestPhone);
+                void Promise.resolve(d.notifyManagerSms(sms)).then(
+                  () => d.log.info({ bookingId: booking.id, unitId: booking.unit_id }, 'late-checkout manager SMS sent'),
+                  (err: unknown) => d.log.warn({ bookingId: booking.id, err: String((err as any)?.message || err) }, 'late-checkout manager SMS failed'),
+                );
+              }
+              await d.send(jid, lcReply);
+              return { handled: true, transcript };
+            }
+          }
+
           // Bug 2 (Ran 2026-10-20): occupancy / arrivals questions are staff questions, never the guest fallback.
           if (isStaffOpsQuestion(text)) {
             void logGuestWhatsAppExchange(booking, text, STAFF_OPS_ONLY_REPLY);
@@ -2510,7 +2584,7 @@ export function createPipeline(deps: PipelineDeps) {
           if (/(?:תתקשר|להתקשר|תחזרו אלי|תחזור אלי|אפשר שיחה|שיחזרו אלי|דברו איתי)/i.test(text || '')) {
             const callReply = askByName(
               booking.guest_name,
-              `בשמחה! העברנו את הבקשה לצוות המתחם ונחזור אליכם טלפונית בהקדם. 📞`
+              NO_CALL_RE.test(text || '') ? WHATSAPP_CALLBACK_REPLY : `בשמחה! העברנו את הבקשה לצוות המתחם ונחזור אליכם טלפונית בהקדם. 📞`
             );
             void logGuestWhatsAppExchange(booking, text || '', callReply);
             if (d.resortos.requestGuestCall) {

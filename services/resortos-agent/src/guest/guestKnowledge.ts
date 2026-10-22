@@ -48,6 +48,8 @@ export function faultReply(question: string, ctx: { unitId?: string; roomName?: 
 }
 
 export interface GuestContext {
+  /** Clock (injectable for tests); late-checkout reply depends on Israel time. */
+  now?: Date;
   booking: BookingRow;
   room?: RoomEntry;
   unitId: string;
@@ -113,7 +115,7 @@ export const GUEST_UNIT_OVERRIDES = new Set<string>(['pilot-office']);
 export const LATE_CHECKOUT_FEE_PER_HOUR = 125;
 
 const LATE_CHECKOUT_RE =
-  /late\s*check[- ]?out|check[- ]?out\s*(?:later|late)|leave\s*later|stay\s*(?:longer|later)|(?:צ['׳"]?ק|צק)[- ]?אאוט\s*(?:\S+\s*)?(?:מאוחר|מאוחרת|יותר מאוחר)|(?:לעזוב|לצאת|לפנות|לעשות\s*צ['׳]?ק[- ]?אאוט)\s*(?:\S+\s*)?(?:מאוחר|יותר מאוחר|מאוחר יותר)|להישאר\s*(?:עוד|יותר|קצת|עד)|להשאר\s*(?:עוד|יותר|קצת|עד)/i;
+  /late\s*check[- ]?out|check[- ]?out\s*(?:later|late)|leave\s*later|stay\s*(?:longer|later)|(?:צ['׳"]?ק|צק)[- ]?אאוט\s*(?:\S+\s*){0,4}(?:מאוחר|מאוחרת|יותר מאוחר)|(?:לעזוב|לצאת|לפנות|לעשות\s*צ['׳]?ק[- ]?אאוט)\s*(?:\S+\s*){0,4}(?:מאוחר|יותר מאוחר|מאוחר יותר)|להישאר\s*(?:עוד|יותר|קצת|עד)|להשאר\s*(?:עוד|יותר|קצת|עד)/i;
 
 /** Manager-SMS trigger: HE/EN/RU/AR late check-out phrasing (RU/AR approved by Ran 2026-10-19 13:31). */
 export function isLateCheckoutSmsTrigger(text?: string | null): boolean {
@@ -217,30 +219,69 @@ export function lateCheckoutStatus(ctx: GuestContext): 'free' | 'taken' | 'unkno
   return unitTakenOnDate(ctx.bookings, ctx.unitId, checkout, booking.id) ? 'taken' : 'free';
 }
 
-/** Short Hebrew SMS for the manager. No codes, no phone numbers. */
-export function lateCheckoutManagerSms(question: string, ctx: GuestContext): string {
-  const booking = ctx.booking as BookingRow;
-  const checkout = booking.check_out_date || '';
-  const asked = mentionedDate(question, ctx.today || israelToday());
-  return `בקשת צ׳ק-אאוט מאוחר: ${booking.guest_name || 'אורח/ת'} · ${ctx.roomName} · צ׳ק-אאוט ${ddmm(checkout)}` +
-    (asked && asked !== checkout ? ` (ביקש/ה ל־${ddmm(asked)})` : '') +
-    ` · החדר פנוי בתאריך הזה. ממתין לאישורך (גם לשעה הראשונה ללא חיוב; מהשעה השנייה 125 ₪ לשעה).`;
+/** Israel wall clock: hour/minute/day-of-week (0=Sunday). */
+export function israelClock(now: Date = new Date()): { hour: number; minute: number; dow: number; hhmm: string } {
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit', weekday: 'short', hour12: false }).formatToParts(now);
+  const get = (t: string) => parts.find((x) => x.type === t)?.value || '';
+  const hour = Number(get('hour')) % 24;
+  const minute = Number(get('minute'));
+  const dow = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(get('weekday'));
+  return { hour, minute, dow, hhmm: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}` };
 }
 
+/** Ran 2026-10-22: 19:00–07:59 Israel time → "we'll get back to you tomorrow morning". */
+export function isAfterHoursIL(now: Date = new Date()): boolean {
+  const { hour } = israelClock(now);
+  return hour >= 19 || hour < 8;
+}
+
+/** Ran 2026-10-22: "ב12:00 אפשרי?" right after a check-out question is a late check-out request (12:00–16:00). */
+export function isLateCheckoutFollowUp(text?: string | null): boolean {
+  const t = String(text || '').trim();
+  if (!t || /\d{1,2}[./]\d{1,2}/.test(t)) return false;
+  const m = t.match(/(?:^|\s|ב-?|עד\s*|at\s*|until\s*)(1[2-6])(?::(\d{2}))?(?!\d)/i);
+  return Boolean(m);
+}
+
+function requestedHourText(question: string): string | null {
+  const m = String(question || '').match(/(?:^|\s|ב-?|עד\s*|בשעה\s*|at\s*|until\s*)(1[2-9]|20)(?::(\d{2}))?(?!\d)/i);
+  if (m) return `${m[1]}:${m[2] || '00'}`;
+  const h = mentionedHour(String(question || ''));
+  return h !== null && h >= 12 && h <= 20 ? `${h}:00` : null;
+}
+
+/**
+ * Late check-out (Ran 2026-10-22): Chloe never approves/denies and never quotes a fee.
+ * Before 19:00: the manager will update; 19:00–07:59: answer tomorrow morning.
+ */
 export function answerLateCheckout(question: string, ctx: GuestContext): string {
   const lang = detectGuestLang(question);
-  const policy = T.lateCheckoutPolicy(lang, LATE_CHECKOUT_FEE_PER_HOUR);
-  const booking = ctx.booking as BookingRow | undefined;
-  const checkout = booking?.check_out_date || '';
-  if (!ctx.unitId || !booking?.id || !checkout) return T.lateCheckoutNeedBooking(lang, policy);
-  const today = ctx.today || israelToday();
-  const asked = mentionedDate(question, today);
-  const dateNote = asked && asked !== checkout ? T.lateCheckoutDateNote(lang, checkout, asked) : '';
-  const url = ctx.stayUrl ? `\n\n📱 ${ctx.stayUrl}` : '';
-  if (unitTakenOnDate(ctx.bookings, ctx.unitId, checkout, booking.id)) {
-    return dateNote + T.lateCheckoutTaken(lang, ctx.roomName, checkout) + url;
+  const hour = requestedHourText(question);
+  const afterHours = isAfterHoursIL(ctx.now || new Date());
+  const name = ctx.guestName ? `${ctx.guestName}, ` : '';
+  if (lang === 'he') {
+    const until = hour ? ` עד השעה ${hour}` : '';
+    return afterHours
+      ? `${name}קיבלתי את הבקשה לצ׳ק־אאוט מאוחר${until} 🙏 העברתי אותה למנהל, ונחזור אליכם מחר בבוקר עם תשובה.`
+      : `${name}קיבלתי את הבקשה לצ׳ק־אאוט מאוחר${until} 🙏 אני מעבירה אותה עכשיו למנהל, והוא יעדכן אתכם בהקדם.`;
   }
-  return dateNote + T.lateCheckoutFree(lang, policy) + url;
+  const until = hour ? ` until ${hour}` : '';
+  return afterHours
+    ? `${name}I got your late check-out request${until} 🙏 I've passed it to the manager, and we'll get back to you tomorrow morning with an answer.`
+    : `${name}I got your late check-out request${until} 🙏 I'm passing it to the manager now, and he'll update you shortly.`;
+}
+
+/** Manager SMS to Ran: guest, unit, checkout date, requested time, quote, wa.me link. No codes. */
+export function lateCheckoutManagerSms(question: string, ctx: GuestContext, guestPhone?: string | null): string {
+  const booking = ctx.booking as BookingRow | undefined;
+  const checkout = booking?.check_out_date ? ddmm(booking.check_out_date) : 'לא ידוע';
+  const hour = requestedHourText(question) || 'לא צוין';
+  const digits = String(guestPhone || booking?.guest_phone || '').replace(/\D/g, '');
+  const intl = digits.startsWith('972') ? digits : digits.startsWith('0') ? `972${digits.slice(1)}` : digits;
+  const quote = String(question || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+  const asked = booking?.check_out_date ? mentionedDate(question, ctx.today || israelToday()) : null;
+  return `בקשת צ׳ק-אאוט מאוחר: ${booking?.guest_name || ctx.guestName || 'אורח/ת'} · ${ctx.roomName || 'יחידה לא זוהתה'} · יציאה ${checkout}${asked && asked !== booking?.check_out_date ? ` (ביקש/ה ל־${ddmm(asked)})` : ''} · מבוקש: ${hour} · "${quote}"` +
+    (intl ? ` · wa.me/${intl}` : '');
 }
 
 export interface WifiInfo {
