@@ -8,39 +8,17 @@ export function shiftDays(ymd, delta) {
 }
 
 export function getResortDefaultUnits(tenantId, todayStr = israelToday()) {
-  const customStatusMap = {
-    'mialis-villa': { operational_status: 'DIRTY', custom_reason: 'יציאה הבוקר · כניסה היום בצהריים' },
-    'k808': { operational_status: 'DIRTY', custom_reason: 'יציאה הבוקר · כניסה היום בצהריים' },
-    'suite-1': { operational_status: 'READY', custom_reason: 'מוכן לחלוטין לכניסה' },
-    'suite-2': { staff_occupancy: 'OCCUPIED' },
-    'hill-1': { operational_status: 'IN_PROGRESS', assigned_staff: 'נועה (משק בית)', cleaning_started_at: new Date().toISOString() },
-    'hill-2': { operational_status: 'READY' },
-    'hill-3': { staff_occupancy: 'OCCUPIED' },
-    'hill-4': { operational_status: 'MAINTENANCE_ALERT', operational_domain: 'MAINTENANCE', custom_reason: 'מזגן בסלון לא מקרר כראוי - דורש בדיקת גז', is_escalated: true },
-    'dome-blue': { staff_occupancy: 'OCCUPIED' },
-    'k671': { operational_status: 'DIRTY', custom_reason: 'ניקוי לאחר יציאה' },
-    'k673': { staff_occupancy: 'OCCUPIED' },
-    'k674': { operational_status: 'MAINTENANCE_ALERT', operational_domain: 'MAINTENANCE', custom_reason: 'נזילה בברז ג׳קוזי ראשי - דורש החלפת אטם', is_escalated: true, assigned_staff: 'קלואי (סוכנת ווטסאפ)' },
-    'k680': { operational_status: 'READY' },
-    'k685': { staff_occupancy: 'OCCUPIED' },
-    'k687': { operational_status: 'NEEDS_COMPLETIONS', custom_reason: 'חוסר: 2 מארזי קפסולות אספרסו ומגבות גוף' },
-    'k690': { staff_occupancy: 'OCCUPIED' },
-    'k691': { operational_status: 'MAINTENANCE_ALERT', operational_domain: 'MAINTENANCE', custom_reason: 'תאורת שביל כניסה מהבהבת' },
-    'k693': { operational_status: 'DIRTY', custom_reason: 'ממתין למשק בית' }
-  };
-
   return DEFAULT_RESORT_UNITS.map((unit) => {
-    const overrides = customStatusMap[unit.id] || {};
     return {
       ...unit,
       tenant_id: tenantId,
-      operational_status: overrides.operational_status || 'READY',
-      operational_domain: overrides.operational_domain || 'HOUSEKEEPING',
-      custom_reason: overrides.custom_reason || '',
-      staff_occupancy: overrides.staff_occupancy || 'VACANT',
-      assigned_staff: overrides.assigned_staff || 'צוות תפעול',
-      cleaning_started_at: overrides.cleaning_started_at || null,
-      is_escalated: Boolean(overrides.is_escalated),
+      operational_status: 'READY',
+      operational_domain: 'HOUSEKEEPING',
+      custom_reason: '',
+      staff_occupancy: 'VACANT',
+      assigned_staff: '',
+      cleaning_started_at: null,
+      is_escalated: false,
       is_active: true,
       updated_at: new Date().toISOString()
     };
@@ -340,6 +318,24 @@ export function getResortDefaultSupplies() {
  * demo housekeeping/maintenance status on real unit ids (only when the unit
  * still carries the exact demo text, so real staff notes are never touched).
  */
+const KNOWN_DEMO_REASONS = new Set([
+  'מזגן בסלון לא מקרר כראוי - דורש בדיקת גז',
+  'נזילה בברז ג׳קוזי ראשי - דורש החלפת אטם',
+  'נזילה בברז גקוזי ראשי - דורש החלפת אטם',
+  'תאורת שביל כניסה מהבהבת',
+  'חוסר: 2 מארזי קפסולות אספרסו ומגבות גוף',
+  'יציאה הבוקר · כניסה היום בצהריים',
+  'ניקוי לאחר יציאה',
+  'ממתין למשק בית',
+  'מוכן לחלוטין לכניסה'
+]);
+
+const KNOWN_DEMO_STAFF = new Set([
+  'נועה (משק בית)',
+  'נועה',
+  'קלואי (סוכנת ווטסאפ)'
+]);
+
 export async function purgeDemoSeedFromDexie(db) {
   if (!db) return { bookings: 0, units: 0 };
   let bookings = 0;
@@ -360,9 +356,9 @@ export async function purgeDemoSeedFromDexie(db) {
       const demo = demoUnits[i];
       const row = rows[i];
       if (!row) continue;
-      const demoReason = demo.custom_reason && row.custom_reason === demo.custom_reason;
-      const demoStaff = demo.assigned_staff === 'נועה (משק בית)' && row.assigned_staff === demo.assigned_staff;
-      if (!demoReason && !demoStaff) continue;
+      const isDemoReason = row.custom_reason && KNOWN_DEMO_REASONS.has(row.custom_reason);
+      const isDemoStaff = row.assigned_staff && KNOWN_DEMO_STAFF.has(row.assigned_staff);
+      if (!isDemoReason && !isDemoStaff) continue;
       await db.units.put({
         ...row,
         operational_status: 'READY',
