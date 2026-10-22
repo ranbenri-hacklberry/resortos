@@ -452,8 +452,9 @@ describe('pipeline: guards & dispatch', () => {
         guest_name: 'דניאל כהן',
         guest_phone: '052-9876543',
         check_in_date: today,
-        check_out_date: '2026-10-18',
+        check_out_date: '2099-12-31',
         booking_status: 'CONFIRMED',
+        payment_status: 'PAID',
         checkout_token: 'tok_guest_777',
       },
     ]);
@@ -491,8 +492,9 @@ describe('pipeline: guards & dispatch', () => {
         guest_name: 'דניאל כהן',
         guest_phone: '052-9876543',
         check_in_date: today,
-        check_out_date: '2026-10-18',
+        check_out_date: '2099-12-31',
         booking_status: 'CONFIRMED',
+        payment_status: 'PAID',
         checkout_token: 'tok_guest_777',
       },
     ]);
@@ -505,8 +507,8 @@ describe('pipeline: guards & dispatch', () => {
     const r = await createPipeline(deps).handleInbound(msg);
     expect(r.handled).toBe(true);
     const reply = deps.sent[0][1];
-    expect(reply).toContain('עדיין בהכנה');
-    expect(reply).toContain('15:00');
+    expect(reply).toContain('בהכנה');
+    expect(reply).not.toContain('15:00'); // No rigid 15:00 barrier per Natasha policy
     expect(reply).not.toContain('2810'); // Must NOT leak key code yet!
     expect(reply).toContain('https://resortos.app/stay/tok_guest_777');
   });
@@ -527,6 +529,7 @@ describe('pipeline: guards & dispatch', () => {
         check_in_date: '2026-10-15',
         check_out_date: '2026-10-18',
         booking_status: 'CONFIRMED',
+        payment_status: 'PAID',
         checkout_token: 'tok_guest_777',
       },
     ]);
@@ -540,10 +543,10 @@ describe('pipeline: guards & dispatch', () => {
     const r = await createPipeline(deps).handleInbound(msg);
     expect(r.handled).toBe(true);
     const reply = deps.sent[0][1];
-    expect(reply).toContain('סרקת את כספת חדר נופים בלבן 2');
-    expect(reply).toContain('וההזמנה שלך היא עבור נופים בלבן 1');
-    expect(reply).toContain('2810');
-    expect(reply).toContain('https://resortos.app/stay/tok_guest_777');
+    expect(reply).toContain('שאינה תואמת להזמנה');
+    expect(reply).toContain('מטעמי ביטחון ופרטיות');
+    expect(reply).not.toContain('2810'); // Security: Never leak lockbox code
+    expect(reply).not.toContain('2820');
   });
 
   it('politely informs unrecognized sender scanning QR to reply in chat without exposing private phone numbers', async () => {
