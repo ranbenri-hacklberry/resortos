@@ -338,9 +338,10 @@ export function useLiveBookings(tenantId: string, unitId?: string): Booking[] {
   const rows = useLiveQuery(
     async () => {
       if (!tenantId) return [];
-      const results = await db.bookings.where('tenant_id').equals(tenantId).toArray();
+      const results = await db.bookings.toArray();
       return results.filter((b) => {
         if (b.deleted_at) return false;
+        if (b.tenant_id && b.tenant_id !== tenantId) return false;
         if (unitId && b.unit_id !== unitId) return false;
         return true;
       });

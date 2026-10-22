@@ -239,6 +239,9 @@ export default function MobileOperationsView({
   const cleaningRooms = useMemo(() => {
     return (effectiveUnits || []).filter((unit) => {
       const status = unit.operational_status;
+      // If the unit is already marked READY, it has been cleaned and is not waiting for cleaning
+      if (status === 'READY') return false;
+
       const isDirtyOrProgress = status === 'DIRTY' || status === 'IN_PROGRESS' || status === 'NEEDS_COMPLETIONS';
       const hasCheckoutToday = (effectiveBookings || []).some((b) => (
         b.unit_id === unit.id &&
@@ -256,8 +259,8 @@ export default function MobileOperationsView({
       ));
 
       if (isDirtyOrProgress) return true;
-      if (hasCheckoutToday && status !== 'READY') return true;
-      if (hasCheckinToday && status !== 'READY') return true;
+      if (hasCheckoutToday) return true;
+      if (hasCheckinToday) return true;
       return false;
     }).map((unit) => {
       const checkoutBooking = (effectiveBookings || []).find((b) => (
@@ -305,11 +308,12 @@ export default function MobileOperationsView({
         b.unit_id === unit.id &&
         !b.deleted_at &&
         b.booking_status !== 'CANCELED' &&
+        b.booking_status !== 'CHECKED_OUT' &&
         !isUnavailableHoldBooking(b) &&
         b.check_in_date <= todayStr &&
         b.check_out_date > todayStr
       ));
-      if (hasInHouse && unit.staff_occupancy !== 'VACANT') return true;
+      if (hasInHouse) return true;
       return false;
     }).map((unit) => {
       const activeBooking = (effectiveBookings || []).find((b) => (

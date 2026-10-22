@@ -241,7 +241,10 @@ export async function onRequest(context) {
 
     // Authoritative replica fallback from D1 guest_context
     const replica = await loadCalendarReplica(env);
-    const stays = Array.isArray(replica?.stays) ? replica.stays : [];
+    const stays = (Array.isArray(replica?.stays) ? replica.stays : []).map((b) => ({
+      ...b,
+      tenant_id: b.tenant_id || tenantId || DEMO_TENANT_ID
+    }));
     let bookings = stays;
     if (from && to) {
       bookings = stays.filter((b) => {

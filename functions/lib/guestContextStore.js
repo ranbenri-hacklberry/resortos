@@ -41,6 +41,7 @@ export function compactStayRow(row) {
   const clearing = Array.isArray(row?.clearing_payments) ? row.clearing_payments : [];
   return {
     id: row.id || null,
+    tenant_id: row.tenant_id || '22222222-2222-2222-2222-222222222222',
     unit_id: row.unit_id,
     guest_name: row.guest_name || '',
     guest_phone: row.guest_phone || '',
