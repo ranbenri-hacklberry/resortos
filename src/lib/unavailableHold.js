@@ -17,7 +17,7 @@ export function unavailableHoldLabel(text) {
   if (folded.includes('לא זמינ') || folded.includes('לא פנו')) return 'לא זמין';
   if (folded.includes('לא נקי')) return 'לא נקי';
   if (folded.includes('סגור')) return 'סגור';
-  if (folded.includes('מקולקל') || folded.includes('בריכה לא עובד') || folded.includes('תקלה בבריכ') || folded.includes('תחזוק')) return 'מקולקל';
+  if (folded.includes('לא תקינ') || folded.includes('מקולקל') || folded.includes('בריכה לא עובד') || folded.includes('תקלה בבריכ') || folded.includes('תחזוק')) return 'מקולקל';
   if (folded.includes('תפוס')) return 'תפוס';
   if (folded.includes('חסומ') || folded.includes('בעלימ')) return 'לא זמין';
   return '';

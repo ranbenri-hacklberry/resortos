@@ -303,7 +303,6 @@ export default function MobileOperationsView({
   // 3. OCCUPIED ROOMS (חדרים מאוכלסים)
   const occupiedRooms = useMemo(() => {
     return (effectiveUnits || []).filter((unit) => {
-      if (unit.staff_occupancy === 'OCCUPIED') return true;
       const hasInHouse = (effectiveBookings || []).some((b) => (
         b.unit_id === unit.id &&
         !b.deleted_at &&
@@ -314,9 +313,18 @@ export default function MobileOperationsView({
         b.check_out_date > todayStr
       ));
       if (hasInHouse) return true;
+      if (unit.staff_occupancy === 'OCCUPIED' && unit.operational_status !== 'READY') return true;
       return false;
     }).map((unit) => {
       const activeBooking = (effectiveBookings || []).find((b) => (
+        b.unit_id === unit.id &&
+        !b.deleted_at &&
+        b.booking_status !== 'CANCELED' &&
+        b.booking_status !== 'CHECKED_OUT' &&
+        !isUnavailableHoldBooking(b) &&
+        b.check_in_date <= todayStr &&
+        b.check_out_date > todayStr
+      )) || (effectiveBookings || []).find((b) => (
         b.unit_id === unit.id &&
         !b.deleted_at &&
         b.booking_status !== 'CANCELED' &&
@@ -330,7 +338,7 @@ export default function MobileOperationsView({
         id: unit.id,
         unitName: fieldUnitDisplayName(unit),
         booking: activeBooking,
-        guestName: activeBooking?.guest_name || 'אורח שוהה',
+        guestName: activeBooking?.guest_name || 'תפוס ידנית (ללא פרטי אורח)',
         phone: activeBooking?.guest_phone || activeBooking?.phone || '',
         checkoutDate: activeBooking?.check_out_date || '',
         lockbox: lockboxCodeForUnit(unit)
