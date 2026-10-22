@@ -96,7 +96,7 @@ describe('Barak evening forward (Sun–Thu 19:00–21:00)', () => {
     expect(barakForwardText({ name: 'Yuval', unit: 'מול הנוף 2', hhmm: '19:54', summary: 'צ׳ק אאוט מאוחר', phone: '972545550000' }))
       .toBe('🌙 פנייה מאורח אחרי 19:00\n👤 Yuval · מול הנוף 2\n🕐 19:54\n💬 צ׳ק אאוט מאוחר\n📲 לענות לאורח: https://wa.me/972545550000');
   });
-  it('forwards once per guest per 15 minutes, and not outside the window', async () => {
+  it('late check-out (and its "ב12:00 אפשרי?" follow-up) inside the window goes ONLY to Ran by SMS — not Barak, not staff/call desk', async () => {
     at('2026-10-21T19:54:54+03:00');
     const d = makeDeps();
     const p = createPipeline(d);
@@ -105,9 +105,24 @@ describe('Barak evening forward (Sun–Thu 19:00–21:00)', () => {
     at('2026-10-21T19:55:11+03:00');
     await p.handleInbound(msg('ב12:00 אפשרי?'));
     await new Promise((r) => setImmediate(r));
+    expect(barak(d)).toHaveLength(0);
+    expect(d.sent.every((x) => x.jid.startsWith(GUEST))).toBe(true);
+    expect(d.resortos.requestGuestCall).not.toHaveBeenCalled();
+    expect(d.sms).toHaveLength(2);
+  });
+  it('forwards other guest messages once per guest per 15 minutes, and not outside the window', async () => {
+    at('2026-10-21T19:54:54+03:00');
+    const d = makeDeps();
+    const p = createPipeline(d);
+    await p.handleInbound(msg('איפה המחצלת שהייתה בחניה?'));
+    await new Promise((r) => setImmediate(r));
+    at('2026-10-21T19:55:11+03:00');
+    await p.handleInbound(msg('אשמח לקבל אותה חזרה'));
+    await new Promise((r) => setImmediate(r));
     expect(barak(d)).toHaveLength(1);
     expect(barak(d)[0]).toContain('https://wa.me/972545550000');
     expect(barak(d)[0]).toContain('Yuval');
+    expect(d.sms).toHaveLength(0);
     at('2026-10-21T21:10:00+03:00');
     await p.handleInbound(msg('תודה'));
     await new Promise((r) => setImmediate(r));

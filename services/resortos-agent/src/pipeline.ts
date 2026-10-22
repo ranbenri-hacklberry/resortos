@@ -571,7 +571,7 @@ export function createPipeline(deps: PipelineDeps) {
       logConversation({ direction: 'inbound', jid, text: inboundText || (isAudioMsg ? '[voice note]' : ''), route });
       currentRoute = { jid, route };
       const result = await handleInboundInner(msg, channelId);
-      if (route === 'guest' && jid && !msg.key.fromMe && channelId === 'resortos') void forwardGuestToBarak(jid, inPn, inboundText || (isAudioMsg ? '[הודעה קולית]' : ''));
+      if (route === 'guest' && jid && !msg.key.fromMe && channelId === 'resortos' && result.reason !== 'late_checkout') void forwardGuestToBarak(jid, inPn, inboundText || (isAudioMsg ? '[הודעה קולית]' : ''));
       logConversation({ direction: 'result', jid, route, handled: result.handled, reason: (result as any).reason, text: (result as any).transcript?.text });
       return result;
     });
@@ -2554,7 +2554,8 @@ export function createPipeline(deps: PipelineDeps) {
                 );
               }
               await d.send(jid, lcReply);
-              return { handled: true, transcript };
+              // Ran 2026-10-22: late check-out goes ONLY to Ran by SMS — never to Barak / staff / call desk.
+              return { handled: true, transcript, reason: 'late_checkout' };
             }
           }
 
