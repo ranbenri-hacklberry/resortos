@@ -17,10 +17,7 @@ import {
 import OfficePilotCard from './OfficePilotCard';
 import MobileOperationsView from './operations/MobileOperationsView';
 import { BOARD_AREA_FILTERS, unitMatchesBoardArea } from '../lib/dailyDutyReport';
-import {
-  getResortDefaultUnits,
-  getResortDefaultBookings
-} from '../lib/resortOperationalData';
+import { purgeDemoSeedFromDexie } from '../lib/resortOperationalData';
 
 const RATING_KEYS_BY_DOMAIN = {
   HOUSEKEEPING: ['clean', 'showerToilets', 'linens', 'orderLook'],
@@ -201,52 +198,56 @@ export default function ResortOSOperations({
   }, [rawUnits, allowedUnitIds, boardArea]);
   const rawBookings = useLiveBookings(tenantId);
 
-  // Auto-seed Dexie with resort operational data if empty (fresh or remote browser)
+  // Clean any demo rows that older builds seeded into this device's IndexedDB.
   useEffect(() => {
-    async function seedDexieIfEmpty() {
-      if (!tenantId) return;
-      try {
-        const uCount = await db.units.count();
-        if (uCount === 0) {
-          const defaultUnits = getResortDefaultUnits(tenantId);
-          await db.units.bulkPut(defaultUnits);
-        }
-        const bCount = await db.bookings.count();
-        if (bCount === 0) {
-          const defaultBookings = getResortDefaultBookings(tenantId);
-          await db.bookings.bulkPut(defaultBookings);
-        }
-      } catch (err) {
-        console.warn('Dexie auto-seed error:', err);
-      }
-    }
-    seedDexieIfEmpty();
+    purgeDemoSeedFromDexie(db).catch(() => {});
+  }, []);
+
+  // Real data only — an empty board shows a loading / offline state, never demo guests.
+  const effectiveUnits = units || [];
+  const effectiveBookings = rawBookings || [];
+
+  // Sync status for the board: 'loading' until the first pull, then 'ok' or 'error'.
+  const [syncState, setSyncState] = useState({ status: 'loading', lastSyncAt: null, error: '' });
+
+  const runCloudSync = useCallback(async () => {
+    const [bookingsResult, unitsResult] = await Promise.all([
+      syncCloudBookingsToDexie(tenantId, { viaEdge: true }).catch((err) => ({ ok: false, error: String(err?.message || err) })),
+      syncUnitOpsToDexie(tenantId, { viaEdge: true }).catch((err) => ({ ok: false, error: String(err?.message || err) }))
+    ]);
+    const ok = Boolean(bookingsResult?.ok || unitsResult?.ok);
+    setSyncState((prev) => ({
+      status: ok ? 'ok' : 'error',
+      lastSyncAt: ok ? new Date().toISOString() : prev.lastSyncAt,
+      error: ok ? '' : (bookingsResult?.error || unitsResult?.error || 'SYNC_FAILED')
+    }));
+    return ok;
   }, [tenantId]);
 
-  const effectiveUnits = useMemo(() => {
-    if (units && units.length > 0) return units;
-    return getResortDefaultUnits(tenantId);
-  }, [units, tenantId]);
-
-  const effectiveBookings = useMemo(() => {
-    if (rawBookings && rawBookings.length > 0) return rawBookings;
-    return getResortDefaultBookings(tenantId);
-  }, [rawBookings, tenantId]);
+  const retryCloudSync = useCallback(() => {
+    setSyncState((prev) => ({ ...prev, status: 'loading' }));
+    return runCloudSync();
+  }, [runCloudSync]);
 
   // Real-time Cloud Sync — soft poll; skip no-op Dexie writes in syncUnitOpsToDexie.
   useEffect(() => {
-    syncCloudBookingsToDexie(tenantId, { viaEdge: true });
-    syncUnitOpsToDexie(tenantId, { viaEdge: true });
+    runCloudSync();
     ensureCanonicalUnitCatalog().catch(() => {});
     const unsubscribe = subscribeToOpsEdgeEvents();
     const pollId = setInterval(() => {
-      syncUnitOpsToDexie(tenantId, { viaEdge: true });
+      syncUnitOpsToDexie(tenantId, { viaEdge: true }).then((result) => {
+        if (result?.ok) {
+          setSyncState({ status: 'ok', lastSyncAt: new Date().toISOString(), error: '' });
+        } else {
+          setSyncState((prev) => ({ ...prev, status: 'error', error: result?.error || 'SYNC_FAILED' }));
+        }
+      });
     }, 30000);
     return () => {
       clearInterval(pollId);
       if (typeof unsubscribe === 'function') unsubscribe();
     };
-  }, [tenantId]);
+  }, [tenantId, runCloudSync]);
 
   useEffect(() => {
     if (!tenantId) return;
@@ -1218,6 +1219,8 @@ export default function ResortOSOperations({
             units={effectiveUnits}
             bookings={effectiveBookings}
             customTickets={customTickets}
+            syncState={syncState}
+            onRetrySync={retryCloudSync}
             onStartTask={handleStartTask}
             onFinishTask={handleFinishTask}
             onOpenTaskDetail={handleOpenTaskDetail}

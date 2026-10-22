@@ -471,47 +471,6 @@ export default function DashboardApp() {
                 />
               </div>
 
-              <div style={{ background: 'rgba(197, 160, 89, 0.1)', border: '1px solid rgba(197, 160, 89, 0.3)', borderRadius: '12px', padding: '0.65rem 0.85rem', fontSize: '0.76rem', color: '#F1D699' }}>
-                <div>💡 <b>פרטי כניסה מוכנים מראש:</b></div>
-                <div style={{ marginTop: '0.35rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={() => { setUsername('max'); setPassword('123456'); }}
-                    style={{ background: 'rgba(197, 160, 89, 0.25)', border: '1px solid #C5A059', color: '#FFFFFF', borderRadius: '8px', padding: '0.2rem 0.55rem', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
-                  >
-                    מקס: max / 123456
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setUsername('0506102416'); setPassword('123456'); }}
-                    style={{ background: 'rgba(197, 160, 89, 0.25)', border: '1px solid #C5A059', color: '#FFFFFF', borderRadius: '8px', padding: '0.2rem 0.55rem', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
-                  >
-                    מקס (נייד): 0506102416 / 123456
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setUsername('0548317887'); setPassword('123456'); }}
-                    style={{ background: 'rgba(197, 160, 89, 0.25)', border: '1px solid #C5A059', color: '#FFFFFF', borderRadius: '8px', padding: '0.2rem 0.55rem', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
-                  >
-                    מקס (ווטסאפ): 0548317887 / 123456
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setUsername('adam'); setPassword('123456'); }}
-                    style={{ background: 'rgba(255, 255, 255, 0.08)', border: '1px solid rgba(255, 255, 255, 0.2)', color: '#D4C5B9', borderRadius: '8px', padding: '0.2rem 0.55rem', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
-                  >
-                    אדם: adam / 123456
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setUsername('daniel'); setPassword('123456'); }}
-                    style={{ background: 'rgba(255, 255, 255, 0.08)', border: '1px solid rgba(255, 255, 255, 0.2)', color: '#D4C5B9', borderRadius: '8px', padding: '0.2rem 0.55rem', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
-                  >
-                    דניאל: daniel / 123456
-                  </button>
-                </div>
-              </div>
-
               <button
                 type="submit"
                 disabled={loading}
@@ -549,7 +508,7 @@ export default function DashboardApp() {
                     cursor: 'pointer'
                   }}
                 >
-                  חזרה לכניסה מהירה באמצעות OTP בוואטסאפ
+                  חזרה לכניסה מהירה באמצעות קוד SMS (OTP)
                 </button>
               </div>
             </form>
