@@ -142,6 +142,9 @@ export function classifyForDate(booking, date, { now = new Date(), unit = null, 
   const ng = nonGuestReason(booking, unit);
   if (ng) return { ...base, send: false, reason: ng, nonGuest: true };
   if (isCheckedOut(booking, { date })) return { ...base, send: false, reason: 'כבר עזב' };
+  // SMS targeting unchanged (Ran 2026-10-22): legacy CHECKED_OUT still skips the SMS,
+  // but it is not shown as a real departure.
+  if (isCheckedOut(booking)) return { ...base, send: false, reason: 'לא נשלח – מסומן CHECKED_OUT בקינרות (עזיבה לא אומתה)', legacyCheckedOut: true };
   if (wifiQuietlyLeft(booking, now)) return { ...base, send: false, reason: 'עזב בשקט (WiFi)' };
   const phone = normalizeIsraeliMobile(booking?.guest_phone);
   if (!phone) return { ...base, send: false, reason: booking?.guest_phone ? 'טלפון לא תקין' : 'אין טלפון' };
