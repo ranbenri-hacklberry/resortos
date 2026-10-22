@@ -799,6 +799,15 @@ export async function syncCloudBookingsToDexie(tenantId, options = {}) {
       }
       if (!data.length) {
         if (attempt < 2) continue;
+        if (options.viaEdge) {
+          const demoRows = (liveLocal || []).filter((r) => (
+            r.id.startsWith('cf-b') || r.id.startsWith('b-arr-') || r.id.startsWith('b-dep-') || r.id.startsWith('b-occ-') || r.id.startsWith('demo-')
+          ));
+          if (demoRows.length) {
+            await db.bookings.bulkDelete(demoRows.map((r) => r.id));
+          }
+          return { ok: true, count: 0 };
+        }
         if (liveLocal.length) return { ok: true, count: liveLocal.length, keptLocal: true };
         return { ok: false, count: 0, error: 'EMPTY_PULL' };
       }
