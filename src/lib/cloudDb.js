@@ -1082,13 +1082,16 @@ export async function pushUnitToCloud(patch, options = {}) {
 }
 
 export async function syncUnitOpsToDexie(tenantId, options = {}) {
-  if (!tenantId && !options.viaEdge) return;
+  if (!tenantId && !options.viaEdge) return { ok: false, count: 0, error: 'NO_TENANT' };
   try {
     const data = await listUnitOperations();
     for (const row of data) {
       await applyOpsRowToDexie(row);
     }
-  } catch (_) {}
+    return { ok: true, count: Array.isArray(data) ? data.length : 0 };
+  } catch (err) {
+    return { ok: false, count: 0, error: String(err?.message || err) };
+  }
 }
 
 export function subscribeToRealtimeUnitOps() {

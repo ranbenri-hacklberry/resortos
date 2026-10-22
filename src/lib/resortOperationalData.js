@@ -332,3 +332,50 @@ export function getResortDefaultSupplies() {
     { id: 'shop-def-4', text: 'נורות לד חמות לתאורת שביל', unitName: 'החצר המוסיקלית', done: false }
   ];
 }
+
+/**
+ * Older builds seeded the demo dataset above into the browser's IndexedDB
+ * whenever it was empty, so real boards could show invented guests and faults.
+ * This removes those leftovers from a device: demo bookings by id, and the
+ * demo housekeeping/maintenance status on real unit ids (only when the unit
+ * still carries the exact demo text, so real staff notes are never touched).
+ */
+export async function purgeDemoSeedFromDexie(db) {
+  if (!db) return { bookings: 0, units: 0 };
+  let bookings = 0;
+  let units = 0;
+  try {
+    const demoBookingIds = getResortDefaultBookings('demo').map((b) => b.id);
+    const existing = await db.bookings.bulkGet(demoBookingIds);
+    const toDelete = demoBookingIds.filter((id, i) => existing[i]);
+    if (toDelete.length) {
+      await db.bookings.bulkDelete(toDelete);
+      bookings = toDelete.length;
+    }
+  } catch (_) {}
+  try {
+    const demoUnits = getResortDefaultUnits('demo');
+    const rows = await db.units.bulkGet(demoUnits.map((u) => u.id));
+    for (let i = 0; i < demoUnits.length; i += 1) {
+      const demo = demoUnits[i];
+      const row = rows[i];
+      if (!row) continue;
+      const demoReason = demo.custom_reason && row.custom_reason === demo.custom_reason;
+      const demoStaff = demo.assigned_staff === 'נועה (משק בית)' && row.assigned_staff === demo.assigned_staff;
+      if (!demoReason && !demoStaff) continue;
+      await db.units.put({
+        ...row,
+        operational_status: 'READY',
+        operational_domain: 'HOUSEKEEPING',
+        custom_reason: '',
+        assigned_staff: '',
+        is_escalated: false,
+        cleaning_started_at: null,
+        // Old timestamp so the next cloud pull always wins over this reset.
+        updated_at: '1970-01-01T00:00:00.000Z'
+      });
+      units += 1;
+    }
+  } catch (_) {}
+  return { bookings, units };
+}

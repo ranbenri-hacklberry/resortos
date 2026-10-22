@@ -338,7 +338,7 @@ export async function onRequest(context) {
       ].filter(Boolean);
 
       if (!allowedPasswords.includes(password)) {
-        return errorJson('סיסמה שגויה. (ברירת מחדל: 123456)', 401, 'BAD_PASSWORD');
+        return errorJson('סיסמה שגויה', 401, 'BAD_PASSWORD');
       }
 
       const token = await signSessionToken(env, staff);

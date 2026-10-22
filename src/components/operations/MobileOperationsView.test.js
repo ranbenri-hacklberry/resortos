@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { israelToday } from '../../lib/cabinAccess';
+import { israelToday } from '../../lib/cabinAccess.js';
 
 describe('MobileOperationsView data structure and logic', () => {
   it('correctly detects same-day turnovers for urgent cleaning alert', () => {
