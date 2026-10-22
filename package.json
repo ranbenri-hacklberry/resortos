@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "NODE_OPTIONS=--dns-result-order=ipv4first vite --port 3001 --host",
     "bridge": "node server/index.js",
-    "build": "vite build",
+    "build": "npm run build:site",
     "build:landing": "vite build --config vite.landing.config.js && cp dist-landing/landing.html dist-landing/index.html && cp resources/favicon.png resources/apple-touch-icon.png public/hero-resort.jpg dist-landing/",
     "build:sparkstay": "vite build --config vite.sparkstay.config.js && cp dist-sparkstay/sparkstay.html dist-sparkstay/index.html && cp public/sparkstay-hero.jpg public/sparkstay-favicon.svg public/sparkstay-favicon.png public/sparkstay-apple-touch-icon.png dist-sparkstay/ && cp public/sparkstay-favicon.png dist-sparkstay/favicon.png && cp public/sparkstay-apple-touch-icon.png dist-sparkstay/apple-touch-icon.png",
     "deploy:landing": "npm run build:landing && wrangler pages deploy dist-landing --project-name cabinos --commit-dirty=true",
@@ -14,7 +14,7 @@
     "build:agents": "vite build --config vite.agents.config.js && cp dist-agents/agents.html dist-agents/index.html",
     "deploy:agents": "npm run build:agents && wrangler pages deploy dist-agents --project-name resortos-agents --commit-dirty=true",
     "build:site": "npm run build:guest && npm run build:landing && npm run build:agents && npm run build:sparkstay && mkdir -p dist/portal dist/agent dist/sparkstay dist/ramot dist/desk dist/dashboard && cp dist/guest.html dist/portal/index.html && cp dist/desk.html dist/desk/index.html && cp dist/dashboard.html dist/dashboard/index.html && cp dist-agents/index.html dist/agent/index.html && cp -R dist-agents/assets/. dist/assets/ && cp dist-landing/index.html dist/index.html && cp -R dist-landing/assets/. dist/assets/ && cp -f dist-landing/favicon.png dist-landing/apple-touch-icon.png dist-landing/hero-resort.jpg dist/ 2>/dev/null || true && cp dist-sparkstay/index.html dist/sparkstay/index.html && cp -R dist-sparkstay/assets/. dist/sparkstay/assets/ && cp -f dist-sparkstay/sparkstay-hero.jpg dist-sparkstay/favicon.png dist-sparkstay/apple-touch-icon.png dist-sparkstay/sparkstay-favicon.svg dist/sparkstay/ 2>/dev/null || true && cp -f public/ramot/index.html dist/ramot/index.html && cp -f public/_redirects dist/_redirects",
-    "deploy:guest": "npm run build:site && wrangler pages deploy dist --project-name resortos --commit-dirty=true",
+    "deploy:guest": "npm run build:site && wrangler pages deploy dist --project-name resortos --branch main --commit-dirty=true",
     "dev:sms": "wrangler dev --config sms-worker/wrangler.toml",
     "deploy:sms": "wrangler deploy --config sms-worker/wrangler.toml",
     "build:reviews": "vite build --config vite.reviews.config.js && cp dist-reviews/reviews.html dist-reviews/index.html && cp resources/favicon.png resources/apple-touch-icon.png dist-reviews/",

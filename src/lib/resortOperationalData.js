@@ -303,20 +303,13 @@ export function getResortDefaultMaintenance() {
 }
 
 export function getResortDefaultSupplies() {
-  return [
-    { id: 'shop-def-1', text: '10 מגבות בריכה גדולות', unitName: 'מיאליס וילה', isChloe: true, done: false },
-    { id: 'shop-def-2', text: '2 מארזי קפסולות נספרסו ונייר טואלט', unitName: 'טוסקנה 1', done: false },
-    { id: 'shop-def-3', text: '5 סטים של סבוני רחצה ושמפו יוקרתי', unitName: 'כללי', done: false },
-    { id: 'shop-def-4', text: 'נורות לד חמות לתאורת שביל', unitName: 'החצר המוסיקלית', done: false }
-  ];
+  return [];
 }
 
 /**
- * Older builds seeded the demo dataset above into the browser's IndexedDB
+ * Older builds seeded demo records into the browser's IndexedDB and localStorage
  * whenever it was empty, so real boards could show invented guests and faults.
- * This removes those leftovers from a device: demo bookings by id, and the
- * demo housekeeping/maintenance status on real unit ids (only when the unit
- * still carries the exact demo text, so real staff notes are never touched).
+ * This actively purges those leftovers from the device.
  */
 const KNOWN_DEMO_REASONS = new Set([
   'מזגן בסלון לא מקרר כראוי - דורש בדיקת גז',
@@ -340,38 +333,66 @@ export async function purgeDemoSeedFromDexie(db) {
   if (!db) return { bookings: 0, units: 0 };
   let bookings = 0;
   let units = 0;
+
+  // 1. Purge localStorage snapshots and fake supplies
   try {
-    const demoBookingIds = getResortDefaultBookings('demo').map((b) => b.id);
-    const existing = await db.bookings.bulkGet(demoBookingIds);
-    const toDelete = demoBookingIds.filter((id, i) => existing[i]);
+    if (typeof localStorage !== 'undefined') {
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('resortos_bookings_snap_v1:')) keysToRemove.push(k);
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+
+      const shopRaw = localStorage.getItem('resortos-ops-shopping-list-v1');
+      if (shopRaw && shopRaw.includes('shop-def-')) {
+        localStorage.removeItem('resortos-ops-shopping-list-v1');
+      }
+    }
+  } catch (_) {}
+
+  // 2. Purge demo bookings from Dexie by ID prefix or exact match
+  try {
+    const allBookings = await db.bookings.toArray();
+    const toDelete = allBookings.filter((b) => (
+      b.id.startsWith('cf-b') ||
+      b.id.startsWith('b-arr-') ||
+      b.id.startsWith('b-dep-') ||
+      b.id.startsWith('b-occ-') ||
+      b.id.startsWith('demo-') ||
+      b.guest_name === 'משפחת שרון' ||
+      b.guest_name === 'דניאל ומוריה אהרוני' ||
+      b.guest_name === 'קבוצת היי-טק שריון'
+    )).map((b) => b.id);
+
     if (toDelete.length) {
       await db.bookings.bulkDelete(toDelete);
       bookings = toDelete.length;
     }
   } catch (_) {}
+
+  // 3. Purge demo reasons/alerts on units in Dexie
   try {
-    const demoUnits = getResortDefaultUnits('demo');
-    const rows = await db.units.bulkGet(demoUnits.map((u) => u.id));
-    for (let i = 0; i < demoUnits.length; i += 1) {
-      const demo = demoUnits[i];
-      const row = rows[i];
-      if (!row) continue;
+    const allUnits = await db.units.toArray();
+    for (const row of allUnits) {
       const isDemoReason = row.custom_reason && KNOWN_DEMO_REASONS.has(row.custom_reason);
       const isDemoStaff = row.assigned_staff && KNOWN_DEMO_STAFF.has(row.assigned_staff);
-      if (!isDemoReason && !isDemoStaff) continue;
-      await db.units.put({
-        ...row,
-        operational_status: 'READY',
-        operational_domain: 'HOUSEKEEPING',
-        custom_reason: '',
-        assigned_staff: '',
-        is_escalated: false,
-        cleaning_started_at: null,
-        // Old timestamp so the next cloud pull always wins over this reset.
-        updated_at: '1970-01-01T00:00:00.000Z'
-      });
-      units += 1;
+      const isFakeAlert = isDemoReason && (row.operational_status === 'MAINTENANCE_ALERT' || row.operational_status === 'DIRTY' || row.operational_status === 'NEEDS_COMPLETIONS');
+      if (isDemoReason || isDemoStaff || isFakeAlert) {
+        await db.units.put({
+          ...row,
+          operational_status: 'READY',
+          operational_domain: 'HOUSEKEEPING',
+          custom_reason: '',
+          assigned_staff: '',
+          is_escalated: false,
+          cleaning_started_at: null,
+          updated_at: new Date().toISOString()
+        });
+        units += 1;
+      }
     }
   } catch (_) {}
+
   return { bookings, units };
 }
