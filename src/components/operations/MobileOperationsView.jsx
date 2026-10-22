@@ -163,7 +163,7 @@ export default function MobileOperationsView({
             unitId: u.id,
             unitName: fieldUnitDisplayName(u),
             text,
-            isChloe: true,
+            isChloe: Boolean(u.assigned_staff && u.assigned_staff.includes('קלואי')),
             done: false
           });
         }
@@ -363,7 +363,7 @@ export default function MobileOperationsView({
       title: fieldUnitDisplayName(u),
       description: u.custom_reason || 'תקלת אחזקה פתוחה ביחידה',
       urgency: u.is_escalated ? 'CRITICAL' : 'HIGH',
-      reportedBy: u.assigned_staff || 'קלואי (סוכנת ווטסאפ)',
+      reportedBy: u.assigned_staff || 'צוות תפעול',
       photos: u.image_urls || [],
       isUnit: true
     }));
@@ -1774,7 +1774,7 @@ export default function MobileOperationsView({
                 </span>
               </div>
               <div style={{ fontSize: '0.74rem', color: brand.textMuted, marginTop: '2px', fontWeight: 700 }}>
-                {maintenanceTickets.length > 0 ? `${maintenanceTickets.length} קריאות שירות · כולל דיווחי ווטסאפ (קלואי)` : '✓ אין תקלות פתוחות, הכל תקין'}
+                {maintenanceTickets.length > 0 ? `${maintenanceTickets.length} קריאות שירות בטיפול` : '✓ אין תקלות פתוחות, הכל תקין'}
               </div>
             </div>
           </div>
