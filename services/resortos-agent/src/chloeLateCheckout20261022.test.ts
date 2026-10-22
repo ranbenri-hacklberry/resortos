@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createPipeline, inBarakForwardWindow, barakForwardText, type PipelineDeps } from './pipeline.js';
-import { isLateCheckoutQuestion, isLateCheckoutFollowUp, answerLateCheckout, lateCheckoutManagerSms } from './guest/guestKnowledge.js';
+import { isLateCheckoutQuestion, isLateCheckoutFollowUp, answerLateCheckout, lateCheckoutManagerSms, whatsappCallbackReply } from './guest/guestKnowledge.js';
 import realRooms from '../data/rooms.json' with { type: 'json' };
 
 // Regression for 2026-10-21 (Yuval, מול הנוף 2): late check-out got the generic FAQ, no SMS to Ran, "נחזור טלפונית" after "לא להתקשר".
@@ -24,6 +24,7 @@ function makeDeps(): PipelineDeps & { sent: { jid: string; text: string }[]; sms
       listUnits: vi.fn(async () => []), listBookings: vi.fn(async () => [booking]),
     },
     notifyManagerSms: vi.fn(async (m: string) => void sms.push(m)),
+    barakForwardEnabled: true,
     cleaners: () => [],
     rooms: () => rooms,
     log: { info() {}, warn() {}, error() {} },
@@ -113,3 +114,19 @@ describe('Barak evening forward (Sun–Thu 19:00–21:00)', () => {
     expect(barak(d)).toHaveLength(1);
   });
 });
+
+describe('RU/AR translations (Ran 2026-10-22)', () => {
+  const c = (iso: string): any => ({ unitId: 'k681', roomName: 'מול הנוף 2', booking, guestName: 'Yuval', now: new Date(iso) });
+  it('late check-out before/after 19:00', () => {
+    expect(answerLateCheckout('Можно поздний выезд?', c('2026-10-21T15:00:00+03:00'))).toBe('Yuval, я получила вашу просьбу о позднем выезде 🙏 Сейчас передаю её менеджеру, он скоро с вами свяжется.');
+    expect(answerLateCheckout('Можно поздний выезд?', c('2026-10-21T20:00:00+03:00'))).toBe('Yuval, я получила вашу просьбу о позднем выезде 🙏 Я передала её менеджеру, и завтра утром мы ответим вам.');
+    expect(answerLateCheckout('ممكن خروج متأخر؟', c('2026-10-21T15:00:00+03:00'))).toBe('Yuval, استلمت طلبكم لتسجيل خروج متأخر 🙏 أحوّله الآن إلى المدير، وسيُبلغكم قريبًا.');
+    expect(answerLateCheckout('ممكن خروج متأخر؟', c('2026-10-21T20:00:00+03:00'))).toBe('Yuval, استلمت طلبكم لتسجيل خروج متأخر 🙏 حوّلته إلى المدير، وسنعود إليكم غدًا صباحًا بالإجابة.');
+  });
+  it('WhatsApp-only callback reply', () => {
+    expect(whatsappCallbackReply('ru')).toContain('WhatsApp');
+    expect(whatsappCallbackReply('ar')).toContain('واتساب');
+    expect(whatsappCallbackReply('he')).toBe('בשמחה! העברנו את הבקשה לצוות המתחם ונחזור אליכם כאן בוואטסאפ בהקדם. 💬');
+  });
+});
+

@@ -448,21 +448,28 @@ describe('Check-in wording mid-stay (QA 13:26)', () => {
   });
 });
 
-describe('Late check-out in EN/RU/AR (QA 13:26)', () => {
+// Ran 2026-10-22: late check-out → "passing to the manager" (before 19:00) / "answer tomorrow morning" (19:00–07:59); never approve/deny, no fee.
+const LC_RE: Record<string, RegExp> = {
+  he: /קיבלתי את הבקשה לצ׳ק־אאוט מאוחר.*(?:אני מעבירה אותה עכשיו למנהל, והוא יעדכן אתכם בהקדם|העברתי אותה למנהל, ונחזור אליכם מחר בבוקר עם תשובה)/,
+  en: /late check-out request.*(?:passing it to the manager now|passed it to the manager, and we'll get back to you tomorrow morning)/,
+  ru: /просьбу о позднем выезде.*(?:Сейчас передаю её менеджеру|Я передала её менеджеру, и завтра утром мы ответим вам)/,
+  ar: /طلبكم لتسجيل خروج متأخر.*(?:أحوّله الآن إلى المدير|حوّلته إلى المدير، وسنعود إليكم غدًا صباحًا)/,
+};
+const LC_FORBIDDEN = /125|₪|מאושר|אושר|approved|confirmed|одобрен|подтвержд|تمت الموافقة|لا يمكن|not possible|невозможно|לא ניתן|אין אפשרות/;
+describe('Late check-out in EN/RU/AR (Ran 2026-10-22: hand to the manager)', () => {
   it.each([
-    ['Can we do a late check-out?', "the first hour is free of charge, and from the second hour it's ₪125 per hour"],
-    ['Можно поздний выезд?', 'первый час бесплатно, со второго часа — 125 ₪ в час'],
-    ['ممكن خروج متأخر؟', 'الساعة الأولى بدون رسوم، ومن الساعة الثانية 125 ₪ للساعة'],
-  ])('%s', (q, expected) => {
+    ['Can we do a late check-out?', 'en'],
+    ['Можно поздний выезд?', 'ru'],
+    ['ممكن خروج متأخر؟', 'ar'],
+    ["אפשר לעשות צ'ק אאוט מאוחר?", 'he'],
+  ])('%s', (q, lang) => {
     const r = answerGuestQuestion(q, ctxNofim({ bookings: [] }))!;
-    expect(r).toContain(expected);
+    expect(r).toMatch(LC_RE[lang]);
+    expect(r).not.toMatch(LC_FORBIDDEN);
     expect(r).not.toContain('15:00');
-  });
-  it('Hebrew late check-out text is unchanged', () => {
-    const r = answerGuestQuestion("אפשר לעשות צ'ק אאוט מאוחר?", ctxNofim({ bookings: [] }))!;
-    expect(r).toContain('בשמחה נבדוק עבורכם! 🌿\nצ׳ק-אאוט מאוחר אפשרי רק באישור מנהל המתחם ובכפוף לזמינות: השעה הראשונה ללא חיוב, ומהשעה השנייה 125 ₪ לשעה. גם השעה הראשונה וגם כל זמן נוסף מחייבים אישור של המנהל.');
-    expect(r).toContain('עד לקבלת אישור, שעת הצ׳ק-אאוט נשארת עד 11:00');
-    expect(r).not.toContain('15:00');
+    const nb = answerGuestQuestion(q, { booking: {} as any, unitId: '', roomName: '' })!;
+    expect(nb).toMatch(LC_RE[lang]);
+    expect(nb).not.toMatch(LC_FORBIDDEN);
   });
   it('the manager-SMS trigger covers HE/EN/RU/AR late check-out (Ran 13:31)', async () => {
     const { isLateCheckoutSmsTrigger } = await import('./guestKnowledge.js');
@@ -475,12 +482,12 @@ describe('Late check-out in EN/RU/AR (QA 13:26)', () => {
   });
 });
 
-describe('Late check-out manager SMS for RU/AR (mocked, Ran 13:31)', () => {
+describe('Late check-out manager SMS for RU/AR (mocked; Ran 2026-10-22: SMS on every request, even if the room is taken)', () => {
   const withNext = () => [
     { id: 'book-b', unit_id: 'k685', guest_name: 'דניאל כהן', guest_phone: '052-9876543', check_in_date: ymd(-1), check_out_date: ymd(2), booking_status: 'CONFIRMED', checkout_token: 'tok_b' },
     { id: 'next', unit_id: 'k685', guest_name: 'אחר', guest_phone: '050-0000000', check_in_date: ymd(2), check_out_date: ymd(4), booking_status: 'CONFIRMED' },
   ];
-  it.each(['Можно поздний выезд?', 'ممكن خروج متأخر؟'])('%s → one SMS when the room is free; dedupe holds on repeat', async (q) => {
+  it.each(['Можно поздний выезд?', 'ممكن خروج متأخر؟'])('%s → one SMS per request, no codes, wa.me link to the guest', async (q) => {
     const deps = makeDeps();
     const p = createPipeline(deps);
     await p.handleInbound(msg(q));
@@ -488,56 +495,27 @@ describe('Late check-out manager SMS for RU/AR (mocked, Ran 13:31)', () => {
     expect(deps.notifyManagerSms).toHaveBeenCalledTimes(1);
     const sms = (deps.notifyManagerSms as any).mock.calls[0][0] as string;
     expect(sms).toContain('בקשת צ׳ק-אאוט מאוחר');
-    expect(sms).not.toMatch(/2464|2810|05\d-?\d{7}/);
+    expect(sms).not.toMatch(/2464|2810|125/);
+    expect(sms).toMatch(/wa\.me\/972\d+/);
     await p.handleInbound(msg(q));
     await new Promise((r) => setTimeout(r, 0));
-    expect(deps.notifyManagerSms).toHaveBeenCalledTimes(1);
+    expect(deps.notifyManagerSms).toHaveBeenCalledTimes(2);
     expect(deps.resortos.requestGuestCall).not.toHaveBeenCalled();
     noWrites(deps);
   });
-  it('no SMS when the room is taken on the checkout day', async () => {
+  it('SMS is sent even when the room is taken on the checkout day; the guest is not told it is taken', async () => {
     const deps = makeDeps({}, withNext());
-    await ask('Можно поздний выезд?', deps);
-    await ask('ممكن خروج متأخر؟', deps);
+    const r1 = await ask('Можно поздний выезд?', deps);
+    const r2 = await ask('ممكن خروج متأخر؟', deps);
     await new Promise((r) => setTimeout(r, 0));
-    expect(deps.notifyManagerSms).not.toHaveBeenCalled();
+    expect(deps.notifyManagerSms).toHaveBeenCalledTimes(2);
+    for (const r of [r1, r2]) expect(String(r)).not.toMatch(LC_FORBIDDEN);
   });
   it.each(['Во сколько выезд?', 'Где парковка?', 'Можно продлить ещё одну ночь?', 'متى تسجيل الخروج؟', 'وين الموقف؟', 'نمدد ليلة إضافية؟', 'Кондиционер не работает', 'Спасибо, всё отлично!'])('no SMS for other intents: %s', async (q) => {
     const deps = makeDeps();
     await ask(q, deps);
     await new Promise((r) => setTimeout(r, 0));
     expect(deps.notifyManagerSms).not.toHaveBeenCalled();
-  });
-});
-
-describe('Late check-out: first hour free, approval always required (Ran 13:35/13:36)', () => {
-  it.each([
-    ["אפשר לעשות צ'ק אאוט מאוחר?", 'השעה הראשונה ללא חיוב', 'מהשעה השנייה 125 ₪ לשעה', 'שעת הצ׳ק-אאוט נשארת עד 11:00',
-      ['רק באישור מנהל המתחם', 'גם השעה הראשונה וגם כל זמן נוסף מחייבים אישור של המנהל']],
-    ['Can we do a late check-out?', 'the first hour is free of charge', "from the second hour it's ₪125 per hour", 'check-out stays at 11:00',
-      ["only with the site manager's approval", "Both the free first hour and any extra paid time need the manager's approval"]],
-    ['Можно поздний выезд?', 'первый час бесплатно', 'со второго часа — 125 ₪ в час', 'выезд остаётся до 11:00',
-      ['только с согласия менеджера', 'И бесплатный первый час, и любое дополнительное время требуют согласия менеджера']],
-    ['ممكن خروج متأخر؟', 'الساعة الأولى بدون رسوم', 'ومن الساعة الثانية 125 ₪ للساعة', 'يبقى تسجيل الخروج حتى الساعة 11:00',
-      ['فقط بموافقة مدير المجمع', 'الساعة الأولى المجانية وأي وقت إضافي مدفوع يحتاجان موافقة المدير']],
-  ])('%s', (q, free, fee, stays, approval) => {
-    const r = answerGuestQuestion(q, ctxNofim({ bookings: [] }))!;
-    for (const x of [free, fee, stays, ...(approval as string[])]) expect(r).toContain(x);
-    expect(r).not.toMatch(/15:00|3:00 PM/);
-    // no-booking variant states the same policy, approval included
-    const nb = answerGuestQuestion(q, { booking: {} as any, unitId: '', roomName: '' })!;
-    for (const x of [free, fee, ...(approval as string[])]) expect(nb).toContain(x);
-  });
-  it('manager SMS (mocked) states the new pricing and that the free hour needs approval, once', async () => {
-    const deps = makeDeps();
-    const p = createPipeline(deps);
-    await p.handleInbound(msg('Можно поздний выезд?'));
-    await new Promise((r) => setTimeout(r, 0));
-    await p.handleInbound(msg('Можно поздний выезд?'));
-    await new Promise((r) => setTimeout(r, 0));
-    expect(deps.notifyManagerSms).toHaveBeenCalledTimes(1);
-    const sms = (deps.notifyManagerSms as any).mock.calls[0][0] as string;
-    expect(sms).toContain('ממתין לאישורך (גם לשעה הראשונה ללא חיוב; מהשעה השנייה 125 ₪ לשעה)');
   });
 });
 

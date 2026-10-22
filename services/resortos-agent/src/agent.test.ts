@@ -2614,30 +2614,27 @@ describe('S03/S04: late check-out policy, checkout FAQ, office as guest room', (
     return { reply: deps.sent[0][1], deps };
   }
 
-  it('late check-out, room free: policy (manager approval, first hour free then 125 ₪/hour, availability), no confirmation', async () => {
+  // Ran 2026-10-22: late check-out always goes to the manager; never approve/deny, no fee, no availability verdict.
+  it('late check-out, room free: hands the request to the manager, no fee, no confirmation', async () => {
     const { reply } = await ask("אפשר לעשות צ'ק אאוט מאוחר מחר?", [nofim], [mkBooking()]);
-    expect(reply).toContain('מנהל המתחם');
-    expect(reply).toContain('125 ₪');
-    expect(reply).toContain('זמינות');
-    expect(reply).toContain('נחזור אליכם');
+    expect(reply).toMatch(/קיבלתי את הבקשה לצ׳ק־אאוט מאוחר.*(?:אני מעבירה אותה עכשיו למנהל|העברתי אותה למנהל, ונחזור אליכם מחר בבוקר)/);
+    expect(reply).not.toContain('125 ₪');
     expect(reply).not.toContain('15:00');
     expect(reply).not.toMatch(/מאושר|אושר|confirmed/);
-    expect(reply).not.toContain('לפי ההזמנה שלכם'); // asked for tomorrow = actual checkout
   });
 
-  it('late check-out, next booking starts on the checkout day: politely not possible', async () => {
+  it('late check-out, next booking starts on the checkout day: still handed to the manager, guest not told it is taken', async () => {
     const next = mkBooking({ id: 'book-next', guest_name: 'אחר', guest_phone: '0501111111', check_in_date: ymd(1), check_out_date: ymd(3) });
     const { reply } = await ask('late checkout tomorrow please', [nofim], [mkBooking(), next]);
-    expect(reply).toContain('already booked'); // English message → English reply (S17)
-    expect(reply).toContain(dm(ymd(1)));
-    expect(reply).not.toContain('125 ₪');
+    expect(reply).toMatch(/late check-out request.*(?:passing it to the manager now|passed it to the manager)/); // English → English (S17)
+    expect(reply).not.toMatch(/already booked|not possible|125/);
     expect(reply).not.toContain('אחר'); // no other guest's details
   });
 
-  it('late check-out on a different day than the booking: states the real checkout date', async () => {
+  it('late check-out on a different day than the booking: handed to the manager, SMS notes the requested day', async () => {
     const { reply } = await ask('אפשר להישאר עוד קצת מחר?', [nofim], [mkBooking({ check_out_date: ymd(5) })]);
-    expect(reply).toContain(`הצ׳ק-אאוט הוא ב־${dm(ymd(5))}`);
-    expect(reply).toContain('125 ₪');
+    expect(reply).toMatch(/קיבלתי את הבקשה לצ׳ק־אאוט מאוחר.*(?:אני מעבירה אותה עכשיו למנהל|העברתי אותה למנהל, ונחזור אליכם מחר בבוקר)/);
+    expect(reply).not.toContain('125 ₪');
   });
 
   it('generic checkout answer never mentions the check-in time', async () => {
@@ -2695,31 +2692,31 @@ describe('S03 alert + S05 fault priority and word-boundary keywords', () => {
     return { deps, say };
   }
 
-  it('late check-out with a free room sends ONE manager SMS (deduped per booking/day), with no codes or phones', async () => {
+  it('late check-out sends a manager SMS on every request (Ran 2026-10-22), with no codes; wa.me link to the guest', async () => {
     const { deps, say } = mk([mkBooking()]);
     await say("אפשר לעשות צ'ק אאוט מאוחר מחר?");
     await say('late checkout please');
     await new Promise((r) => setTimeout(r, 0));
-    expect(deps.notifyManagerSms).toHaveBeenCalledTimes(1);
+    expect(deps.notifyManagerSms).toHaveBeenCalledTimes(2);
     const sms = (deps.notifyManagerSms as any).mock.calls[0][0] as string;
     expect(sms).toContain('דניאל כהן');
     expect(sms).toContain('נופים בלבן 1');
     expect(sms).toContain(`${ymd(1).slice(8, 10)}/${ymd(1).slice(5, 7)}`);
     expect(sms).toContain('צ׳ק-אאוט מאוחר');
-    expect(sms).toContain('פנוי');
     expect(sms).not.toContain('2810');
     expect(sms).not.toContain('#2464');
-    expect(sms).not.toMatch(/05\d[- ]?\d{7}|9725\d{8}/);
+    expect(sms).not.toContain('125');
+    expect(sms).toContain('wa.me/972529876543');
     expect(deps.send).toHaveBeenCalledTimes(2); // guest replies only; no WhatsApp to staff
     expect(deps.sent.every(([jid]) => jid === guestJid)).toBe(true);
   });
 
-  it('late check-out with the room taken sends no manager SMS', async () => {
+  it('late check-out with the room taken still sends the manager SMS (Ran 2026-10-22)', async () => {
     const next = mkBooking({ id: 'book-next', guest_phone: '0501111111', check_in_date: ymd(1), check_out_date: ymd(2) });
     const { deps, say } = mk([mkBooking(), next]);
     await say("אפשר צ'ק אאוט מאוחר?");
     await new Promise((r) => setTimeout(r, 0));
-    expect(deps.notifyManagerSms).not.toHaveBeenCalled();
+    expect(deps.notifyManagerSms).toHaveBeenCalledTimes(1);
   });
 
   it('"הטלוויזיה לא נדלקת" is a TV fault (unit TV steps + call offer), not the fuel list', async () => {

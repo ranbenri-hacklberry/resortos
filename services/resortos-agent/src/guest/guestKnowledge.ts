@@ -265,6 +265,18 @@ export function answerLateCheckout(question: string, ctx: GuestContext): string 
       ? `${name}קיבלתי את הבקשה לצ׳ק־אאוט מאוחר${until} 🙏 העברתי אותה למנהל, ונחזור אליכם מחר בבוקר עם תשובה.`
       : `${name}קיבלתי את הבקשה לצ׳ק־אאוט מאוחר${until} 🙏 אני מעבירה אותה עכשיו למנהל, והוא יעדכן אתכם בהקדם.`;
   }
+  if (lang === 'ru') {
+    const until = hour ? ` до ${hour}` : '';
+    return afterHours
+      ? `${name}я получила вашу просьбу о позднем выезде${until} 🙏 Я передала её менеджеру, и завтра утром мы ответим вам.`
+      : `${name}я получила вашу просьбу о позднем выезде${until} 🙏 Сейчас передаю её менеджеру, он скоро с вами свяжется.`;
+  }
+  if (lang === 'ar') {
+    const until = hour ? ` حتى الساعة ${hour}` : '';
+    return afterHours
+      ? `${name}استلمت طلبكم لتسجيل خروج متأخر${until} 🙏 حوّلته إلى المدير، وسنعود إليكم غدًا صباحًا بالإجابة.`
+      : `${name}استلمت طلبكم لتسجيل خروج متأخر${until} 🙏 أحوّله الآن إلى المدير، وسيُبلغكم قريبًا.`;
+  }
   const until = hour ? ` until ${hour}` : '';
   return afterHours
     ? `${name}I got your late check-out request${until} 🙏 I've passed it to the manager, and we'll get back to you tomorrow morning with an answer.`
@@ -272,6 +284,14 @@ export function answerLateCheckout(question: string, ctx: GuestContext): string 
 }
 
 /** Manager SMS to Ran: guest, unit, checkout date, requested time, quote, wa.me link. No codes. */
+/** "We'll get back to you here on WhatsApp" (guest asked not to be called), per language. */
+export function whatsappCallbackReply(lang: GuestLang): string {
+  if (lang === 'ru') return 'С радостью! Мы передали просьбу команде и ответим вам здесь, в WhatsApp, как можно скорее. 💬';
+  if (lang === 'ar') return 'بكل سرور! حوّلنا الطلب إلى فريق المجمع وسنرد عليكم هنا عبر واتساب في أقرب وقت. 💬';
+  if (lang === 'en' || lang === 'th') return "Sure! We've passed your request to the team and will get back to you here on WhatsApp shortly. 💬";
+  return 'בשמחה! העברנו את הבקשה לצוות המתחם ונחזור אליכם כאן בוואטסאפ בהקדם. 💬';
+}
+
 export function lateCheckoutManagerSms(question: string, ctx: GuestContext, guestPhone?: string | null): string {
   const booking = ctx.booking as BookingRow | undefined;
   const checkout = booking?.check_out_date ? ddmm(booking.check_out_date) : 'לא ידוע';

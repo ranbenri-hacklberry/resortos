@@ -32,7 +32,7 @@ import {
   managerStatusMenu,
   withManagerActions,
 } from './llm/prompts.js';
-import { isLateCheckoutQuestion, isLateCheckoutFollowUp, lateCheckoutManagerSms, answerLateCheckout, israelClock, answerGuestQuestion, answerStaffPlaceQuestion, staffPlaceNeedsRoom, type GuestContext } from './guest/guestKnowledge.js';
+import { whatsappCallbackReply, isLateCheckoutQuestion, isLateCheckoutFollowUp, lateCheckoutManagerSms, answerLateCheckout, israelClock, answerGuestQuestion, answerStaffPlaceQuestion, staffPlaceNeedsRoom, type GuestContext } from './guest/guestKnowledge.js';
 import { answerRackRate } from './pricing/priceList.js';
 import { exactStaticReply, lookupExact } from './pricing/exactLookup.js';
 import {
@@ -336,8 +336,7 @@ function intlPhone(raw?: string | null): string {
   return d;
 }
 /** Guest asked not to be called / WhatsApp only (Ran 2026-10-22). */
-const NO_CALL_RE = /לא\s*(?:ל|ת)?התקשר|בלי\s*(?:שיחה|טלפון)|אל\s*תתקשר|בוו?א?טס?א?פ|no\s*calls?|don'?t\s*call|whatsapp\s*only|by\s*whatsapp/i;
-const WHATSAPP_CALLBACK_REPLY = `בשמחה! העברנו את הבקשה לצוות המתחם ונחזור אליכם כאן בוואטסאפ בהקדם. 💬`;
+const NO_CALL_RE = /לא\s*(?:ל|ת)?התקשר|בלי\s*(?:שיחה|טלפון)|אל\s*תתקשר|בוו?א?טס?א?פ|no\s*calls?|don'?t\s*call|whatsapp\s*only|by\s*whatsapp|не\s*звоните|только\s*(?:в\s*)?whatsapp|لا\s*تتصل|بدون\s*اتصال|عبر\s*واتساب/i;
 
 const LOCKBOX_QUERY_REGEX = /קוד|כספת|מפתח|רหัส|เซฟ|كود|خزنة|مفتاح/i;
 
@@ -581,6 +580,7 @@ export function createPipeline(deps: PipelineDeps) {
   async function forwardGuestToBarak(jid: string, senderPn: string | null | undefined, text: string): Promise<void> {
     try {
       const now = new Date();
+      if ((d as any).barakForwardEnabled === false || (process.env.VITEST && (d as any).barakForwardEnabled !== true)) return;
       if (!inBarakForwardWindow(now) || !text.trim()) return;
       const phone = intlPhone(jid.endsWith('@lid') ? senderPn : phoneOf(jid));
       const key = phone || jid;
@@ -1416,7 +1416,7 @@ export function createPipeline(deps: PipelineDeps) {
           sessionStates.delete(sessionKey);
           const replyText = askByName(
             currentSession.guestName,
-            NO_CALL_RE.test(heard) ? WHATSAPP_CALLBACK_REPLY : `בשמחה! העברנו את הבקשה לצוות המתחם ונחזור אליכם טלפונית בהקדם. 📞`
+            NO_CALL_RE.test(heard) ? whatsappCallbackReply(detectGuestLang(heard)) : `בשמחה! העברנו את הבקשה לצוות המתחם ונחזור אליכם טלפונית בהקדם. 📞`
           );
           void logGuestWhatsAppExchange(
             { id: currentSession.bookingId, guest_phone: currentSession.guestPhone || senderPhone } as BookingRow,
@@ -2584,7 +2584,7 @@ export function createPipeline(deps: PipelineDeps) {
           if (/(?:תתקשר|להתקשר|תחזרו אלי|תחזור אלי|אפשר שיחה|שיחזרו אלי|דברו איתי)/i.test(text || '')) {
             const callReply = askByName(
               booking.guest_name,
-              NO_CALL_RE.test(text || '') ? WHATSAPP_CALLBACK_REPLY : `בשמחה! העברנו את הבקשה לצוות המתחם ונחזור אליכם טלפונית בהקדם. 📞`
+              NO_CALL_RE.test(text || '') ? whatsappCallbackReply(detectGuestLang(text || '')) : `בשמחה! העברנו את הבקשה לצוות המתחם ונחזור אליכם טלפונית בהקדם. 📞`
             );
             void logGuestWhatsAppExchange(booking, text || '', callReply);
             if (d.resortos.requestGuestCall) {
