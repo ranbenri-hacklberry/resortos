@@ -3,13 +3,13 @@ import type { WAMessage } from '@whiskeysockets/baileys';
 import type { ChannelId, InboundEnvelope } from './whatsapp/types.js';
 import { cleaningCredit, config, isBookableRoom, isStaffRoom, isOfficeRoom, type CleanerProfile, type Lang, type RoomEntry } from './config.js';
 import type { InboundIntent } from './llm/client.js';
-import { detectGuestLang, T, GUEST_YES_RE, type GuestLang } from './guest/i18n.js';
+import { detectGuestLang, type GuestLang } from './guest/i18n.js';
 import { resolveRoomByAlias } from './llm/client.js';
 import { alertRecipients, alertRoomLabel, buildUnknownScanAlert, createAlertMemory, displaySender, explainAlert, isWhatIsThis } from './manager/scanAlert.js';
 import { handleManagerInventory, type InventoryClient } from './manager/inventoryQuestion.js';
 import type { InvoiceIntake, InvoiceMedia } from './invoice/intake.js';
 import { detectInventoryIntent } from './llm/client.js';
-import { AWAITING_INSPECTION_REASON, ResortOSError, isBookingPaid, type ReadyResult, type BookingRow, type UnitRow } from './integration/resortos.js';
+import { AWAITING_INSPECTION_REASON, ResortOSError, type ReadyResult, type BookingRow, type UnitRow } from './integration/resortos.js';
 import type { Transcript } from './whatsapp/media.js';
 import { resolveStaffPhone } from './whatsapp/client.js';
 import { generateRoomQrPng } from './whatsapp/qrGenerator.js';
@@ -32,7 +32,7 @@ import {
   managerStatusMenu,
   withManagerActions,
 } from './llm/prompts.js';
-import { answerGuestQuestion, answerStaffPlaceQuestion, staffPlaceNeedsRoom, type GuestContext } from './guest/guestKnowledge.js';
+import { whatsappCallbackReply, isLateCheckoutQuestion, isLateCheckoutFollowUp, lateCheckoutManagerSms, answerLateCheckout, israelClock, answerGuestQuestion, answerStaffPlaceQuestion, staffPlaceNeedsRoom, type GuestContext } from './guest/guestKnowledge.js';
 import { answerRackRate } from './pricing/priceList.js';
 import { exactStaticReply, lookupExact } from './pricing/exactLookup.js';
 import {
@@ -122,7 +122,6 @@ export type ManagerSessionState =
   | { role: 'MANAGER'; state: 'AWAITING_GUEST_LINK'; roomId: string; bookingId: string; phone: string; stayUrl: string; guestName: string };
 
 export type GuestSessionState =
-  | { role: 'GUEST'; state: 'IN_HOUSE'; bookingId: string; roomId: string; checkedIn: boolean }
   | { role: 'GUEST'; state: 'AWAITING_PLACE'; placeIds: string[]; bookingId?: string }
   | { role: 'GUEST'; state: 'AWAITING_CALL_CONFIRM'; bookingId: string; unitId: string; roomName: string; guestName?: string | null; guestPhone?: string | null }
   | { role: 'GUEST'; state: 'AWAITING_BOOKING_PHONE'; pendingText: string; askedAt: number };
@@ -320,6 +319,25 @@ export interface InboundResult {
   reason?: string;
 }
 
+/** Ran 2026-10-22: Barak gets every guest message Sun–Thu 19:00–21:00 (max 1 per guest per 15 min). */
+export const BARAK_FORWARD_PHONE = '972503934696';
+const BARAK_FORWARD_GAP_MS = 15 * 60 * 1000;
+export function inBarakForwardWindow(now: Date = new Date()): boolean {
+  const { hour, dow } = israelClock(now);
+  return dow >= 0 && dow <= 4 && hour >= 19 && hour < 21;
+}
+export function barakForwardText(p: { name?: string | null; unit?: string | null; hhmm: string; summary: string; phone: string }): string {
+  return `🌙 פנייה מאורח אחרי 19:00\n👤 ${p.name || 'לא זוהה'} · ${p.unit || 'לא זוהה'}\n🕐 ${p.hhmm}\n💬 ${p.summary}\n📲 לענות לאורח: https://wa.me/${p.phone}`;
+}
+function intlPhone(raw?: string | null): string {
+  const d = String(raw || '').replace(/\D/g, '');
+  if (d.startsWith('972')) return d;
+  if (d.startsWith('0')) return `972${d.slice(1)}`;
+  return d;
+}
+/** Guest asked not to be called / WhatsApp only (Ran 2026-10-22). */
+const NO_CALL_RE = /לא\s*(?:ל|ת)?התקשר|בלי\s*(?:שיחה|טלפון)|אל\s*תתקשר|בוו?א?טס?א?פ|no\s*calls?|don'?t\s*call|whatsapp\s*only|by\s*whatsapp|не\s*звоните|только\s*(?:в\s*)?whatsapp|لا\s*تتصل|بدون\s*اتصال|عبر\s*واتساب/i;
+
 const LOCKBOX_QUERY_REGEX = /קוד|כספת|מפתח|רหัส|เซฟ|كود|خزنة|مفتاح/i;
 
 export function formatRoomDisplay(roomId: string, rooms: RoomEntry[]): string {
@@ -410,6 +428,8 @@ export function createPipeline(deps: PipelineDeps) {
     ...(wrappedSendImage ? { sendImage: wrappedSendImage } : {}),
   };
 
+  const barakForwardLast = new Map<string, number>();
+  const lastCheckoutAsk = new Map<string, number>();
   const rawSessionStates = new Map<string, SessionState>();
   const sessionStates = {
     get: (key: string): SessionState | undefined => {
@@ -551,9 +571,39 @@ export function createPipeline(deps: PipelineDeps) {
       logConversation({ direction: 'inbound', jid, text: inboundText || (isAudioMsg ? '[voice note]' : ''), route });
       currentRoute = { jid, route };
       const result = await handleInboundInner(msg, channelId);
+      if (route === 'guest' && jid && !msg.key.fromMe && channelId === 'resortos' && result.reason !== 'late_checkout') void forwardGuestToBarak(jid, inPn, inboundText || (isAudioMsg ? '[הודעה קולית]' : ''));
       logConversation({ direction: 'result', jid, route, handled: result.handled, reason: (result as any).reason, text: (result as any).transcript?.text });
       return result;
     });
+  }
+
+  async function forwardGuestToBarak(jid: string, senderPn: string | null | undefined, text: string): Promise<void> {
+    try {
+      const now = new Date();
+      if ((d as any).barakForwardEnabled === false || (process.env.VITEST && (d as any).barakForwardEnabled !== true)) return;
+      if (!inBarakForwardWindow(now) || !text.trim()) return;
+      const phone = intlPhone(jid.endsWith('@lid') ? senderPn : phoneOf(jid));
+      const key = phone || jid;
+      if (now.getTime() - (barakForwardLast.get(key) || 0) < BARAK_FORWARD_GAP_MS) return;
+      barakForwardLast.set(key, now.getTime());
+      let name: string | null = null;
+      let unit: string | null = null;
+      if (phone) {
+        const bookings = ((await d.resortos.listBookings?.()) || []).filter((b) => phonesMatch(b.guest_phone, phone) && !b.deleted_at && b.booking_status !== 'CANCELED');
+        const today = getIsraelToday();
+        const b = bookings.find((x) => today >= (x.check_in_date || '') && today <= (x.check_out_date || '')) || bookings[0];
+        if (b) {
+          name = b.guest_name || null;
+          const room = d.rooms().find((r) => r.id === b.unit_id);
+          unit = room?.name || room?.letterCode || b.unit_id || null;
+        }
+      }
+      const summary = text.replace(/\s+/g, ' ').trim().slice(0, 300);
+      await d.send(`${BARAK_FORWARD_PHONE}@s.whatsapp.net`, barakForwardText({ name, unit, hhmm: israelClock(now).hhmm, summary, phone: phone || 'לא ידוע' }), 'resortos');
+      d.log.info({ guestTail: phone ? phone.slice(-4) : null }, 'guest message forwarded to Barak');
+    } catch (err) {
+      d.log.warn({ err: String((err as any)?.message || err) }, 'Barak forward failed');
+    }
   }
 
   async function handleInboundInner(msg: WAMessage, channelId: ChannelId = 'resortos'): Promise<InboundResult> {
@@ -758,6 +808,7 @@ export function createPipeline(deps: PipelineDeps) {
       const specific = asked ? answerManagerRoomQuestion(asked, roomLabel, lockbox, unit, occupancy, r) : null;
       const body = specific || formatManagerInitialCard(roomLabel, lockbox, unit, occupancy, r);
       if (!jid) return;
+      roomMenuShownAt.set(sessionKey, Date.now()); // menu-loop fix: same key as the lookup
       await d.send(jid, `🔍 נבחר: *${roomLabel}*\n\n${withManagerActions(body, roomLabel)}`);
     }
 
@@ -1362,15 +1413,12 @@ export function createPipeline(deps: PipelineDeps) {
       if (currentSession?.role === 'GUEST' && currentSession.state === 'AWAITING_CALL_CONFIRM') {
         const heard = (text?.trim() || '');
         const ans = confirmAnswer(heard);
-        if (ans === 'yes' || /(?:תתקשר|להתקשר|תחזרו|תחזור|אשמח|כן|בטח|בבקשה)/i.test(heard) || GUEST_YES_RE.test(heard)) {
+        if (ans === 'yes' || /(?:תתקשר|להתקשר|תחזרו|תחזור|אשמח|כן|בטח|בבקשה)/i.test(heard)) {
           sessionStates.delete(sessionKey);
-          const lang = detectGuestLang(heard);
-          const replyText = lang !== 'he'
-            ? T.callConfirmed(lang)
-            : askByName(
-                currentSession.guestName,
-                `בשמחה! העברנו את הבקשה לצוות המתחם ונחזור אליכם טלפונית בהקדם. 📞`
-              );
+          const replyText = askByName(
+            currentSession.guestName,
+            NO_CALL_RE.test(heard) ? whatsappCallbackReply(detectGuestLang(heard)) : `בשמחה! העברנו את הבקשה לצוות המתחם ונחזור אליכם טלפונית בהקדם. 📞`
+          );
           void logGuestWhatsAppExchange(
             { id: currentSession.bookingId, guest_phone: currentSession.guestPhone || senderPhone } as BookingRow,
             heard,
@@ -1659,12 +1707,14 @@ export function createPipeline(deps: PipelineDeps) {
               if (currentSession.pendingQuestion) {
                 const answer = answerManagerRoomQuestion(currentSession.pendingQuestion, roomLabel, lockbox, unit, occupancy, r);
                 if (answer) {
+                  roomMenuShownAt.set(sessionKey, Date.now()); // menu-loop fix: same key as the lookup
                   await d.send(jid, `🔍 נבחר: *${roomLabel}*\n\n${withManagerActions(answer, roomLabel)}`);
                   return { handled: true, transcript };
                 }
               }
 
               const initialCard = formatManagerInitialCard(roomLabel, lockbox, unit, occupancy, r);
+              roomMenuShownAt.set(sessionKey, Date.now()); // menu-loop fix: same key as the lookup
               await d.send(jid, `🔍 נבחר: *${roomLabel}*\n\n${withManagerActions(initialCard, roomLabel)}`);
               return { handled: true, transcript };
             }
@@ -1705,11 +1755,12 @@ export function createPipeline(deps: PipelineDeps) {
           // Check if manager is switching to another room (e.g. typing "B2", scanning QR, or asking about a different room)
           const otherRoomId = resolveRoomByAlias(trimmed, d.rooms());
           const fuzzySwitch = matchManagerRoomIntent(trimmed, d.rooms());
-          if (otherRoomId && otherRoomId !== currentSession.roomId) {
+          // Menu-loop fix (Ran 2026-10-22): a bare menu number never switches rooms.
+          if (!isMenuNumber && otherRoomId && otherRoomId !== currentSession.roomId) {
             sessionStates.delete(sessionKey);
-          } else if (fuzzySwitch.type === 'RESOLVED' && fuzzySwitch.roomId !== currentSession.roomId) {
+          } else if (!isMenuNumber && fuzzySwitch.type === 'RESOLVED' && fuzzySwitch.roomId !== currentSession.roomId) {
             sessionStates.delete(sessionKey);
-          } else if (fuzzySwitch.type === 'AMBIGUOUS_COMPLEX') {
+          } else if (!isMenuNumber && fuzzySwitch.type === 'AMBIGUOUS_COMPLEX') {
             sessionStates.delete(sessionKey);
           } else if (trimmed === '1' || trimmed === '1.' || /^שנה\s*סטטוס$|^עדכ[ןו]\s*סטטוס$|^סטטוס$/i.test(trimmed)) {
             sessionStates.set(sessionKey, { role: 'MANAGER', state: 'SELECT_STATUS', roomId: currentSession.roomId });
@@ -2139,8 +2190,8 @@ export function createPipeline(deps: PipelineDeps) {
       // 4. Scan or direct room query detection:
       // Examples: "START_B1", "START B1", "הגעתי ל-B1", "צ'ק אין B1", or manager typing "B1"
       let rawRoomCode: string | null = null;
-      const qrScanMatch = text.match(/(?:^|[\s,.:!])START[_\s]+([a-zA-Z0-9_\-\u0590-\u05FF]+)\s*$/i);
-      const arrivalMatch = text.match(/(?:^|[\s,.:!])(?:שלום[, ]*|היי[, ]*|hi[, ]*|hello[, ]*)?(?:הגעתי|הגענו|צ['׳]?ק[- ]?אין|כניסה|arrived|check[- ]?in)\s+(?:ל|אל\s+|at\s+|to\s+)?(?:חדר|בקתה|סוויטה|cabin|room|suite\s+)?([a-zA-Z0-9_\-\u0590-\u05FF]+)\s*$/i);
+      const qrScanMatch = text.match(/^\s*START[_\s]+([a-zA-Z0-9_\-\u0590-\u05FF]+)\s*$/i);
+      const arrivalMatch = text.match(/^\s*(?:שלום[, ]*)?(?:הגעתי|צ['׳]?ק[- ]?אין|כניסה)\s+(?:ל|אל\s+)?(?:חדר|בקתה|סוויטה\s+)?([a-zA-Z0-9_\-\u0590-\u05FF]+)\s*$/i);
       const managerQueryMatch = isManager ? text.match(/^\s*(?:סטטוס|מצב|כרטיס|מידע)?\s*([a-zA-Z0-9_\-\u0590-\u05FF]{1,10})\s*$/i) : null;
 
       if (qrScanMatch) {
@@ -2181,6 +2232,7 @@ export function createPipeline(deps: PipelineDeps) {
 
           const managerReply = withManagerActions(formatManagerInitialCard(roomLabel, lockbox, unit, occupancy, r), roomLabel);
 
+          roomMenuShownAt.set(sessionKey, Date.now()); // menu-loop fix: same key as the lookup
           await d.send(jid, managerReply);
           return {
             handled: true,
@@ -2244,13 +2296,15 @@ export function createPipeline(deps: PipelineDeps) {
           ? bookings.find((b) => phonesMatch(b.guest_phone, guestPhone) && !b.deleted_at && b.booking_status !== 'CANCELED')
           : undefined;
 
-        const guestLang = detectGuestLang(text);
-
         if (otherBooking) {
-          // Security policy: Do NOT disclose the assigned room or its access code unless ResortOS has authorized disclosure.
-          const reply = T.checkinWrongRoom(guestLang, {
-            scannedRoom: r?.name || r?.letterCode || 'יחידה זו',
-          });
+          const correctRoom = d.rooms().find((x) => x.id === otherBooking.unit_id);
+          const correctLabel = correctRoom?.name || correctRoom?.letterCode || otherBooking.unit_id;
+          const stayUrl = stayUrlOf(otherBooking);
+          const reply = `נראה שסרקת את כספת חדר ${r?.name || r?.letterCode}, וההזמנה שלך היא עבור ${correctLabel}.\n\n` +
+            `אנא גש אל ${correctLabel} וסרוק את הכספת שם, או השתמש בקוד הכספת של החדר שלך:\n` +
+            `🔑 קוד כספת מפתח עבור ${correctLabel}: ${correctRoom?.lockbox || 'לא מוגדר'}\n\n` +
+            (stayUrl ? `📱 דף האורח הדיגיטלי שלך:\n${stayUrl}\n\n` : '') +
+            `לכל שאלה אנו זמינים כאן בווטסאפ.`;
           void logGuestWhatsAppExchange(otherBooking, text, reply);
           await d.send(jid, reply);
           return { handled: true, transcript };
@@ -2264,75 +2318,43 @@ export function createPipeline(deps: PipelineDeps) {
           const stayUrl = stayUrlOf(roomBooking);
 
           if (isTodayOrStay) {
-            // ResortOS Authoritative Check 1: Payment verification
-            const paid = isBookingPaid(roomBooking);
-            if (!paid) {
-              const reply = T.checkinUnpaid(guestLang, {
-                room: r?.name || r?.letterCode || 'החדר',
-                url: stayUrl,
-              });
-              void logGuestWhatsAppExchange(roomBooking, text, reply);
-              await d.send(jid, reply);
-              return { handled: true, transcript };
-            }
-
-            // ResortOS Authoritative Check 2: Room readiness verification
             const units = (await d.resortos.listUnits?.()) || [];
             const unit = units.find((u) => u.id === resolvedId);
             const isReady = unit?.operational_status === 'READY';
 
             if (isReady) {
-              if (d.resortos.publishBookingStay) {
-                void d.resortos.publishBookingStay(roomBooking).catch(() => {});
-              }
-              const currentSess = sessionStates.get(sessionKey);
-              const isRepeated = currentSess?.role === 'GUEST' && (currentSess as any).checkedIn === true;
-              sessionStates.set(sessionKey, {
-                role: 'GUEST',
-                state: 'IN_HOUSE',
-                roomId: resolvedId,
-                bookingId: roomBooking.id,
-                checkedIn: true,
-              });
-
-              const reply = isRepeated
-                ? T.checkinRepeatedScan(guestLang, {
-                    room: r?.name || r?.letterCode || '',
-                    lockbox,
-                    url: stayUrl,
-                  })
-                : T.checkinReady(guestLang, {
-                    property: r?.property || 'נופים בלבן',
-                    room: r?.name || r?.letterCode || '',
-                    lockbox,
-                    url: stayUrl,
-                  });
+              const reply = `ברוכים הבאים ל${r?.property || 'נופים בלבן'} 🌿\n` +
+                `שמחים שהגעתם, בקתה ${r?.name || r?.letterCode} מוכנה ומחכה לכם!\n\n` +
+                `🔑 *קוד כספת המפתח שלכם:* *${lockbox}*\n\n` +
+                `📍 *הוראות פתיחת הכספת:*\n` +
+                `1. הזינו את הקוד: *${lockbox}* בגלגלות / לחצנים.\n` +
+                `2. לחצו על מתג הפתיחה ומשכו את מכסה הכספת כלפי מטה.\n` +
+                `3. הוציאו את מפתח הבקתה.\n` +
+                `4. ערבלו את הגלגלות וסגרו את מכסה הכספת.\n\n` +
+                (stayUrl ? `📱 *דף האורח הדיגיטלי שלכם* (קוד WiFi, שירותים, אטרקציות וצ'ק-אאוט):\n${stayUrl}\n\n` : '') +
+                `ℹ️ שעת צ'ק-אאוט: 11:00\n\n` +
+                `מאחלים לכם חופשה נפלאה ושלווה! לכל בקשה או שאלה במהלך השהות, פשוט כתבו לנו כאן בווטסאפ 🏡`;
               void logGuestWhatsAppExchange(roomBooking, text, reply);
               await d.send(jid, reply);
               return { handled: true, transcript };
             } else {
-              // Room still being prepared and cleaned - early check-in is free, no rigid 15:00 waiting period!
-              const reply = T.checkinNotReady(guestLang, {
-                room: r?.name || r?.letterCode || '',
-                url: stayUrl,
-              });
+              const reply = `בקתה ${r?.name || r?.letterCode} עדיין בהכנה. שעת צ'ק-אין היא מ-15:00 🌿\n\n` +
+                `ברגע שהבקתה תהיה מוכנה ומאושרת ע״י המנהל, נשלח לכם לכאן אוטומטית הודעה עם קוד הכספת והוראות הכניסה!\n\n` +
+                (stayUrl ? `בינתיים תוכלו להתעדכן בדף השהות הדיגיטלי שלכם:\n${stayUrl}\n\n` : '') +
+                `לכל שאלה אנו זמינים כאן בווטסאפ.`;
               void logGuestWhatsAppExchange(roomBooking, text, reply);
               await d.send(jid, reply);
               return { handled: true, transcript };
             }
           } else if (isFuture) {
-            const reply = T.checkinFuture(guestLang, {
-              room: r?.name || r?.letterCode || '',
-              checkIn,
-              url: stayUrl,
-            });
+            const reply = `ההזמנה לבקתה ${r?.name || r?.letterCode} רשומה לתאריך ${checkIn}.\n` +
+              `נשמח מאוד לארח אתכם במועד הגעתכם! 🌿\n\n` +
+              (stayUrl ? `לצפייה בפרטי ההזמנה שלכם בדף האורח:\n${stayUrl}` : '');
             void logGuestWhatsAppExchange(roomBooking, text, reply);
             await d.send(jid, reply);
             return { handled: true, transcript };
           } else {
-            const reply = T.checkinPast(guestLang, {
-              room: r?.name || r?.letterCode || '',
-            });
+            const reply = `ההזמנה לבקתה ${r?.name || r?.letterCode} הסתיימה. שמחנו לארח אתכם 🌿`;
             void logGuestWhatsAppExchange(roomBooking, text, reply);
             await d.send(jid, reply);
             return { handled: true, transcript };
@@ -2427,6 +2449,7 @@ export function createPipeline(deps: PipelineDeps) {
           const body = specificAnswer || formatManagerInitialCard(roomLabel, lockbox, unit, occupancy, r);
           const managerReply = `🔍 זיהיתי: *${roomLabel}*\n\n${withManagerActions(body, roomLabel)}`;
 
+          roomMenuShownAt.set(sessionKey, Date.now()); // menu-loop fix: same key as the lookup
           await d.send(jid, managerReply);
           return {
             handled: true,
@@ -2518,6 +2541,30 @@ export function createPipeline(deps: PipelineDeps) {
             guestName: booking.guest_name,
           };
 
+          // Late check-out (Ran 2026-10-22): never approve/deny, always SMS Ran. Follow-up "ב12:00 אפשרי?" counts too.
+          {
+            const nowLc = new Date();
+            ctx.now = nowLc;
+            const prevAsk = lastCheckoutAsk.get(sessionKey) || 0;
+            const isLc = isLateCheckoutQuestion(text) || (nowLc.getTime() - prevAsk < 30 * 60 * 1000 && isLateCheckoutFollowUp(text));
+            if (/צ['׳"]?ק[- ]?אאוט|check-?out|יציאה|לעזוב|לצאת/i.test(text || '')) lastCheckoutAsk.set(sessionKey, nowLc.getTime());
+            if (isLc) {
+              lastCheckoutAsk.set(sessionKey, nowLc.getTime());
+              const lcReply = answerLateCheckout(text || '', ctx);
+              void logGuestWhatsAppExchange(booking, text || '', lcReply);
+              if (d.notifyManagerSms) {
+                const sms = lateCheckoutManagerSms(text || '', ctx, guestPhone);
+                void Promise.resolve(d.notifyManagerSms(sms)).then(
+                  () => d.log.info({ bookingId: booking.id, unitId: booking.unit_id }, 'late-checkout manager SMS sent'),
+                  (err: unknown) => d.log.warn({ bookingId: booking.id, err: String((err as any)?.message || err) }, 'late-checkout manager SMS failed'),
+                );
+              }
+              await d.send(jid, lcReply);
+              // Ran 2026-10-22: late check-out goes ONLY to Ran by SMS — never to Barak / staff / call desk.
+              return { handled: true, transcript, reason: 'late_checkout' };
+            }
+          }
+
           // Bug 2 (Ran 2026-10-20): occupancy / arrivals questions are staff questions, never the guest fallback.
           if (isStaffOpsQuestion(text)) {
             void logGuestWhatsAppExchange(booking, text, STAFF_OPS_ONLY_REPLY);
@@ -2544,7 +2591,7 @@ export function createPipeline(deps: PipelineDeps) {
           if (/(?:תתקשר|להתקשר|תחזרו אלי|תחזור אלי|אפשר שיחה|שיחזרו אלי|דברו איתי)/i.test(text || '')) {
             const callReply = askByName(
               booking.guest_name,
-              `בשמחה! העברנו את הבקשה לצוות המתחם ונחזור אליכם טלפונית בהקדם. 📞`
+              NO_CALL_RE.test(text || '') ? whatsappCallbackReply(detectGuestLang(text || '')) : `בשמחה! העברנו את הבקשה לצוות המתחם ונחזור אליכם טלפונית בהקדם. 📞`
             );
             void logGuestWhatsAppExchange(booking, text || '', callReply);
             if (d.resortos.requestGuestCall) {
@@ -2570,17 +2617,14 @@ export function createPipeline(deps: PipelineDeps) {
             guestName: booking.guest_name,
             guestPhone: booking.guest_phone || displayPhone(guestPhone) || guestPhone,
           });
-          const lang = detectGuestLang(text);
-          const fallbackReply = lang !== 'he'
-            ? T.fallback(lang, ctx.roomName, stayUrl)
-            : askByName(
-                booking.guest_name,
-                `אין לי תשובה מדויקת לשאלה הזו כרגע — תרצו שנתקשר אליכם? (השיבו *כן* ונחזור אליכם בהקדם 📞)`
-              ) + `\n\n` +
-                (stayUrl
-                  ? `בינתיים, כל המידע על שהותכם ב${ctx.roomName} (קוד WiFi, שער הישוב, הוראות ג'קוזי, מסעדות, אטרקציות וצ'ק-אאוט) זמין תמיד בדף האורח שלכם:\n📱 ${stayUrl}\n\n`
-                  : '') +
-                `מאחלים לכם שהות נעימה ושלווה!`;
+          const fallbackReply = askByName(
+            booking.guest_name,
+            `אין לי תשובה מדויקת לשאלה הזו כרגע — תרצו שנתקשר אליכם? (השיבו *כן* ונחזור אליכם בהקדם 📞)`
+          ) + `\n\n` +
+            (stayUrl
+              ? `בינתיים, כל המידע על שהותכם ב${ctx.roomName} (קוד WiFi, שער הישוב, הוראות ג'קוזי, מסעדות, אטרקציות וצ'ק-אאוט) זמין תמיד בדף האורח שלכם:\n📱 ${stayUrl}\n\n`
+              : '') +
+            `מאחלים לכם שהות נעימה ושלווה!`;
           void logGuestWhatsAppExchange(booking, text, fallbackReply);
           await d.send(jid, fallbackReply);
           return { handled: true, transcript };
