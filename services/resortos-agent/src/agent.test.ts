@@ -559,8 +559,8 @@ describe('pipeline: guards & dispatch', () => {
     const r = await createPipeline(deps).handleInbound(msg);
     expect(r.handled).toBe(true);
     const reply = deps.sent[0][1];
-    expect(reply).toContain('רגע, אני בודקת את ההזמנה שלך');
-    expect(reply).toContain('שם מלא ותאריכי הגעה');
+    // Ran 2026-10-22 verification flow: first ask whether they have a booking for this cabin today (was: ask booking phone / name+dates).
+    expect(reply).toContain('יש לכם הזמנה ל');
     expect(reply).not.toContain('לא זוהתה הזמנה');
     expect(reply).not.toContain('054-831-7887');
   });

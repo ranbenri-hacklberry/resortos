@@ -4,6 +4,7 @@ import type { ChannelId, InboundEnvelope } from './whatsapp/types.js';
 import { cleaningCredit, config, isBookableRoom, isStaffRoom, isOfficeRoom, type CleanerProfile, type Lang, type RoomEntry } from './config.js';
 import type { InboundIntent } from './llm/client.js';
 import { detectGuestLang, type GuestLang } from './guest/i18n.js';
+import { V, newOtp, isYes, isNo, extractOtp, OTP_TTL_MS, OTP_MAX_ATTEMPTS, HANDOFF_GAP_MS } from './guest/verify.js';
 import { resolveRoomByAlias } from './llm/client.js';
 import { alertRecipients, alertRoomLabel, buildUnknownScanAlert, createAlertMemory, displaySender, explainAlert, isWhatIsThis } from './manager/scanAlert.js';
 import { handleManagerInventory, type InventoryClient } from './manager/inventoryQuestion.js';
@@ -124,7 +125,10 @@ export type ManagerSessionState =
 export type GuestSessionState =
   | { role: 'GUEST'; state: 'AWAITING_PLACE'; placeIds: string[]; bookingId?: string }
   | { role: 'GUEST'; state: 'AWAITING_CALL_CONFIRM'; bookingId: string; unitId: string; roomName: string; guestName?: string | null; guestPhone?: string | null }
-  | { role: 'GUEST'; state: 'AWAITING_BOOKING_PHONE'; pendingText: string; askedAt: number };
+  | { role: 'GUEST'; state: 'AWAITING_BOOKING_PHONE'; pendingText: string; askedAt: number }
+  | { role: 'GUEST'; state: 'VERIFY_HAS_BOOKING'; roomId?: string; pendingText: string; askedAt: number }
+  | { role: 'GUEST'; state: 'VERIFY_PHONE'; roomId?: string; pendingText: string; askedAt: number; tries: number }
+  | { role: 'GUEST'; state: 'VERIFY_OTP'; roomId?: string; pendingText: string; bookingId: string; bookingPhone: string; code: string; expiresAt: number; attempts: number };
 
 export type SessionState = CleanerSessionState | ManagerSessionState | GuestSessionState;
 
@@ -465,6 +469,21 @@ export function createPipeline(deps: PipelineDeps) {
   // @lid guests matched by a phone they typed (jid -> booking phone), and jids already asked once for the booking phone (no loops).
   const bookingPhoneOverride = new Map<string, string>();
   const bookingPhoneAsked = new Set<string>();
+  // Unidentified-sender verification (Ran 2026-10-22): handoff SMS to Ran only, max one per sender per 15 min.
+  const handoffLast = new Map<string, number>();
+  const otpIssued = new Set<string>();
+  async function handoffToRan(key: string, p: { sender: string; name?: string | null; room?: string | null; text: string; why: string }): Promise<void> {
+    const now = Date.now();
+    if (now - (handoffLast.get(key) || 0) < HANDOFF_GAP_MS) return;
+    handoffLast.set(key, now);
+    if (!d.notifyManagerSms) return;
+    try { await Promise.resolve(d.notifyManagerSms(V.handoffSms(p))); } catch (err) {
+      d.log.warn({ err: String((err as any)?.message || err) }, 'handoff SMS failed');
+    }
+  }
+  function activeToday(b: BookingRow, today: string): boolean {
+    return !b.deleted_at && b.booking_status !== 'CANCELED' && today >= (b.check_in_date || '') && today <= (b.check_out_date || '');
+  }
 
   const getSession = (phone: string, channelId?: ChannelId) => {
     const tail = normalizePhoneTail(phone);
@@ -626,21 +645,82 @@ export function createPipeline(deps: PipelineDeps) {
     const currentSession = sessionStates.get(sessionKey);
 
     let text = d.extractText(msg);
-    // Guest was asked once for the booking phone: retry the lookup with a typed number; anything else falls through (name+dates as before).
-    if (!cleaner && currentSession?.role === 'GUEST' && currentSession.state === 'AWAITING_BOOKING_PHONE' && text?.trim()) {
-      const typed = extractTypedPhone(text);
-      if (typed) {
+    // Unidentified-sender verification (Ran 2026-10-22). A typed phone never releases a code in WhatsApp.
+    if (!cleaner && currentSession?.role === 'GUEST' && text?.trim() &&
+        (currentSession.state === 'VERIFY_HAS_BOOKING' || currentSession.state === 'VERIFY_PHONE' || currentSession.state === 'VERIFY_OTP' || currentSession.state === 'AWAITING_BOOKING_PHONE')) {
+      const cs: any = currentSession;
+      const t0: string = text;
+      const today = getIsraelToday();
+      const roomId: string | undefined = cs.roomId || undefined;
+      const roomName = roomId ? (d.rooms().find((x) => x.id === roomId)?.name || roomId) : null;
+      const senderLabel = (senderPn ? phoneOf(senderPn) : null) || (jid.endsWith('@lid') ? jid : senderPhone) || jid;
+      const name = (msg as any).pushName || null;
+      const hkey = normalizePhoneTail(senderPn || senderPhone) || jid;
+      const handoff = async (why: string) => {
         sessionStates.delete(sessionKey);
-        const all = (await d.resortos.listBookings?.()) || [];
-        const hit = all.find((b) => phonesMatch(b.guest_phone, typed) && !b.deleted_at && b.booking_status !== 'CANCELED');
-        d.log.info({ jid, typedTail: typed.slice(-4), matched: Boolean(hit) }, 'guest typed booking phone');
-        if (hit) {
-          bookingPhoneOverride.set(jid, typed);
-          return handleInboundInner({ ...msg, message: { conversation: currentSession.pendingText } } as any);
+        await handoffToRan(hkey, { sender: senderLabel, name, room: roomName, text: [cs.pendingText, t0].filter(Boolean).join(' | '), why });
+        await d.send(jid, V.handoff());
+        return { handled: true, reason: 'verify_handoff' } as InboundResult;
+      };
+      const t = t0.trim();
+      if (cs.state === 'VERIFY_OTP') {
+        if (Date.now() > cs.expiresAt) return handoff('פג תוקף קוד האימות');
+        const otp = extractOtp(t);
+        if (otp && otp === cs.code) {
+          sessionStates.delete(sessionKey);
+          bookingPhoneOverride.set(jid, cs.bookingPhone);
+          d.log.info({ jid, bookingId: cs.bookingId }, 'guest verified by OTP');
+          await d.send(jid, V.verified());
+          if (cs.pendingText) return handleInboundInner({ ...msg, message: { conversation: cs.pendingText } } as any, channelId);
+          return { handled: true, reason: 'verify_ok' };
         }
-        await d.send(jid, bookingPhoneNotFound(detectGuestLang(text)));
-        return { handled: true };
+        const attempts = cs.attempts + 1;
+        if (attempts >= OTP_MAX_ATTEMPTS) return handoff('קוד אימות שגוי 3 פעמים');
+        sessionStates.set(sessionKey, { ...cs, attempts });
+        await d.send(jid, V.otpWrong(OTP_MAX_ATTEMPTS - attempts));
+        return { handled: true, reason: 'verify_otp_wrong' };
       }
+      const typed = extractTypedPhone(t);
+      if (cs.state === 'VERIFY_HAS_BOOKING' && !typed) {
+        if (isNo(t)) return handoff('אין הזמנה');
+        if (isYes(t)) {
+          sessionStates.set(sessionKey, { role: 'GUEST', state: 'VERIFY_PHONE', roomId, pendingText: cs.pendingText, askedAt: Date.now(), tries: 0 });
+          await d.send(jid, V.askPhone());
+          return { handled: true, reason: 'verify_ask_phone' };
+        }
+        return handoff('שאלה מאורח לא מזוהה');
+      }
+      if (!typed) {
+        const tries = (cs.tries || 0) + 1;
+        if (tries > 1) return handoff('לא נמסר מספר טלפון');
+        sessionStates.set(sessionKey, { role: 'GUEST', state: 'VERIFY_PHONE', roomId, pendingText: cs.pendingText, askedAt: Date.now(), tries });
+        await d.send(jid, V.askPhoneAgain());
+        return { handled: true, reason: 'verify_ask_phone' };
+      }
+      const all = (await d.resortos.listBookings?.()) || [];
+      const hit = all.find((b) => activeToday(b, today) && phonesMatch(b.guest_phone, typed) && (!roomId || b.unit_id === roomId));
+      d.log.info({ jid, typedTail: typed.slice(-4), matched: Boolean(hit) }, 'guest typed booking phone');
+      if (hit) {
+        const url = stayUrlOf(hit);
+        if (!url || !d.resortos.sendGuestLinkSms || !hit.guest_phone) return handoff('נמצאה הזמנה אך אין אפשרות לשלוח קישור');
+        try {
+          await d.resortos.sendGuestLinkSms({ bookingId: hit.id, phone: hit.guest_phone, message: V.linkSms(url), reportedBy: 'Chloe verify' });
+        } catch { return handoff('שליחת קישור ב-SMS נכשלה'); }
+        sessionStates.delete(sessionKey);
+        await d.send(jid, V.linkSent());
+        return { handled: true, reason: 'verify_link_sms' };
+      }
+      const rb = roomId ? all.find((b) => b.unit_id === roomId && activeToday(b, today) && b.guest_phone) : undefined;
+      const otpKey = rb ? `${jid}|${rb.id}|${today}` : '';
+      if (!rb || !d.resortos.sendGuestLinkSms || otpIssued.has(otpKey)) return handoff('המספר לא תואם להזמנה');
+      const code = newOtp();
+      try {
+        await d.resortos.sendGuestLinkSms({ bookingId: rb.id, phone: rb.guest_phone!, message: V.otpSms(code), reportedBy: 'Chloe verify' });
+      } catch { return handoff('שליחת קוד אימות נכשלה'); }
+      otpIssued.add(otpKey);
+      sessionStates.set(sessionKey, { role: 'GUEST', state: 'VERIFY_OTP', roomId, pendingText: cs.pendingText, bookingId: rb.id, bookingPhone: rb.guest_phone!, code, expiresAt: Date.now() + OTP_TTL_MS, attempts: 0 });
+      await d.send(jid, V.otpSent());
+      return { handled: true, reason: 'verify_otp_sent' };
     }
     if (text?.trim()) {
       if (isManager) {
@@ -2327,6 +2407,14 @@ export function createPipeline(deps: PipelineDeps) {
             const unit = units.find((u) => u.id === resolvedId);
             const isReady = unit?.operational_status === 'READY';
 
+            if (isReady && !r?.lockbox) {
+              // Ran 2026-10-22: no configured code → never a default; manager handoff.
+              await handoffToRan(`nocode|${roomBooking.id}`, { sender: roomBooking.guest_name || 'אורח', room: r?.name || resolvedId, text: text || '', why: 'אין קוד כספת מוגדר לחדר' });
+              const reply = V.noCode();
+              void logGuestWhatsAppExchange(roomBooking, text || '', reply);
+              await d.send(jid, reply);
+              return { handled: true, transcript };
+            }
             if (isReady) {
               const reply = `ברוכים הבאים ל${r?.property || 'נופים בלבן'} 🌿\n` +
                 `שמחים שהגעתם, בקתה ${r?.name || r?.letterCode} מוכנה ומחכה לכם!\n\n` +
@@ -2380,14 +2468,9 @@ export function createPipeline(deps: PipelineDeps) {
           return { handled: true, transcript };
         }
         const roomLabel = alertRoomLabel(r);
-        // Phone not matched: never tell the sender they are not a guest (bookings from OTAs often lack a phone).
-        // Ask once for the booking phone (@lid / different number); afterwards the plain name+dates request.
-        const askPhone = !bookingPhoneAsked.has(jid);
-        const reply = askPhone ? askBookingPhone(detectGuestLang(String(text || '').replace(/\b[A-Z]+_[A-Z]*\d+\b/g, ''))) : 'רגע, אני בודקת את ההזמנה שלך 🙂 אפשר שם מלא ותאריכי הגעה? אני מעדכנת את המנהל.';
-        if (askPhone) {
-          bookingPhoneAsked.add(jid);
-          sessionStates.set(sessionKey, { role: 'GUEST', state: 'AWAITING_BOOKING_PHONE', pendingText: text || '', askedAt: Date.now() });
-        }
+        // Unidentified sender scanned a room QR (Ran 2026-10-22): ask whether they have a booking here today.
+        const reply = V.askHasBooking(r?.name || r?.letterCode || roomLabel);
+        sessionStates.set(sessionKey, { role: 'GUEST', state: 'VERIFY_HAS_BOOKING', roomId: resolvedId, pendingText: text || '', askedAt: Date.now() });
         await d.send(jid, reply);
         try {
           // One alert per scanner per 10 min; never a raw @lid; managers with noAlerts (אדם) are skipped.
@@ -2646,6 +2729,12 @@ export function createPipeline(deps: PipelineDeps) {
           return { handled: true, transcript };
         }
 
+        // Ran 2026-10-22: never drop an unidentified sender's message; start verification / handoff.
+        if (text?.trim() && (jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid'))) {
+          sessionStates.set(sessionKey, { role: 'GUEST', state: 'VERIFY_HAS_BOOKING', pendingText: text, askedAt: Date.now() });
+          await d.send(jid, V.askHasBookingGeneral());
+          return { handled: true, reason: 'verify_ask_booking', transcript };
+        }
         d.log.warn({ jid, senderPhone }, 'message from unknown number ignored');
         return { handled: false, reason: 'unknown sender', transcript };
       }
