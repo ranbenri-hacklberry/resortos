@@ -8,7 +8,9 @@ export type GuestLang = 'he' | 'en' | 'ru' | 'ar' | 'th';
 
 /** Script-based detection: any Hebrew letter → he; else Cyrillic → ru; Arabic script → ar; Latin → en. */
 export function detectGuestLang(text?: string | null): GuestLang {
-  const t = String(text || '');
+  let t = String(text || '');
+  // Strip operational QR tokens like START_B1 so technical tokens don't falsely classify pure QR scans as English
+  t = t.replace(/\bSTART_[A-Za-z0-9_-]+\b/gi, '').trim();
   if (/[\u0E00-\u0E7F]/.test(t)) return 'th';
   if (/[\u0590-\u05FF]/.test(t)) return 'he';
   const cyr = (t.match(/[\u0400-\u04FF]/g) || []).length;
@@ -283,6 +285,169 @@ export const T = {
     ru: `У меня пока нет точного ответа на этот вопрос. ${CALL_OFFERS.ru}\n\nА пока вся информация о проживании в ${room} (Wi-Fi, код ворот, джакузи, рестораны, развлечения и выезд) есть на вашей странице гостя:\n` + (url ? `📱 ${url}` : ''),
     ar: `ليس لدي جواب دقيق على هذا السؤال حاليًا. ${CALL_OFFERS.ar}\n\nفي هذه الأثناء، كل المعلومات عن إقامتكم في ${room} (الواي فاي، رمز البوابة، الجاكوزي، المطاعم، الأنشطة وتسجيل الخروج) موجودة في صفحة الضيف:\n` + (url ? `📱 ${url}` : ''),
   }, lang).trim(),
+
+  /** Automatic Check-In (Natasha / ResortOS Policy): when all checks pass (phone match, QR match, arrival today, paid, READY) */
+  checkinReady: (lang: GuestLang, p: { property: string; room: string; lockbox: string; url?: string }) => pick({
+    he: `ברוכים הבאים ל${p.property}! 😊 החדר שלכם מוכן ואפשר להיכנס כבר עכשיו. איזה כיף שהגעתם!\n` +
+      `הנה פרטי הכניסה שלכם לבקתה ${p.room}:\n\n` +
+      `🔑 *קוד כספת המפתח שלכם:* *${p.lockbox}*\n\n` +
+      `📍 *הוראות פתיחת הכספת:*\n` +
+      `1. הזינו את הקוד: *${p.lockbox}* בגלגלות / לחצנים.\n` +
+      `2. לחצו על מתג הפתיחה ומשכו את מכסה הכספת כלפי מטה.\n` +
+      `3. הוציאו את מפתח הבקתה.\n` +
+      `4. ערבלו את הגלגלות וסגרו את מכסה הכספת.\n\n` +
+      (p.url ? `📱 *דף האורח הדיגיטלי שלכם* (קוד WiFi, שירותים, אטרקציות וצ'ק-אאוט):\n${p.url}\n\n` : '') +
+      `ℹ️ שעת צ'ק-אאוט: עד 11:00\n\n` +
+      `מאחלים לכם חופשה נפלאה ושלווה! לכל בקשה או שאלה במהלך השהות, פשוט כתבו לנו כאן בווטסאפ 🏡`,
+
+    en: `Welcome to ${p.property}! 😊 Your room (${p.room}) is ready and you can enter right now. So glad you're here!\n\n` +
+      `🔑 *Your key lockbox code:* *${p.lockbox}*\n\n` +
+      `📍 *Lockbox opening instructions:*\n` +
+      `1. Enter code: *${p.lockbox}*.\n` +
+      `2. Press the release latch and pull down the compartment.\n` +
+      `3. Take your cabin key.\n` +
+      `4. Scramble the dials and close the lid.\n\n` +
+      (p.url ? `📱 *Your digital guest page* (WiFi code, services, checkout):\n${p.url}\n\n` : '') +
+      `ℹ️ Check-out time: by 11:00 AM\n\n` +
+      `Wishing you a wonderful stay! If you need anything, just message us here on WhatsApp 🏡`,
+
+    ru: `Добро пожаловать в ${p.property}! 😊 Ваш номер (${p.room}) готов, и вы можете зайти прямо сейчас. Мы очень рады вашему приезду!\n\n` +
+      `🔑 *Код от сейфа с ключом:* *${p.lockbox}*\n\n` +
+      `📍 *Инструкция:*\n` +
+      `1. Введите код *${p.lockbox}*.\n` +
+      `2. Нажмите защёлку и откройте крышку сейфа.\n` +
+      `3. Возьмите ключ от номера.\n` +
+      `4. Сбросьте цифры и закройте крышку.\n\n` +
+      (p.url ? `📱 *Ваша страница гостя* (пароль от WiFi, услуги, выезд):\n${p.url}\n\n` : '') +
+      `ℹ️ Время выезда: до 11:00\n\n` +
+      `Желаем вам прекрасного отдыха! По любым вопросам пишите нам сюда в WhatsApp 🏡`,
+
+    ar: `أهلاً وسهلاً بكم في ${p.property}! 😊 غرفتكم (${p.room}) جاهزة ويمكنكم الدخول الآن. سعداء جداً بوصولكم!\n\n` +
+      `🔑 *رمز صندوق المفتاح الخاص بكم:* *${p.lockbox}*\n\n` +
+      `📍 *تعليمات فتح الصندوق:*\n` +
+      `1. أدخلوا الرمز: *${p.lockbox}*.\n` +
+      `2. اضغطوا على زر الفتح واسحبوا الغطاء لأسفل.\n` +
+      `3. خذوا المفتاح.\n` +
+      `4. حرّكوا الأرقام وأغلقوا الغطاء.\n\n` +
+      (p.url ? `📱 *صفحة الضيف الرقمية الخاصة بكم* (واي فاي، خدمات، تسجيل الخروج):\n${p.url}\n\n` : '') +
+      `ℹ️ موعد تسجيل الخروج: حتى 11:00 صباحًا\n\n` +
+      `نتمنى لكم إقامة رائعة وممتعة! لأي طلب או استفسار، تواصلوا معنا هنا عبر واتساب 🏡`,
+  }, lang),
+
+  /** When room is not ready: polite update, no rigid 15:00 barrier */
+  checkinNotReady: (lang: GuestLang, p: { room: string; url?: string }) => pick({
+    he: `ברוכים הבאים! 😊 הבקתה (${p.room}) עדיין בהכנה וניקיון עבורכם.\n\n` +
+      `ברגע שהבקתה תהיה מוכנה ומאושרת ע״י המנהל, נשלח לכם לכאן מיד הודעה עם קוד הכספת והוראות הכניסה!\n\n` +
+      (p.url ? `בינתיים תוכלו להתעדכן בדף השהות הדיגיטלי שלכם:\n${p.url}\n\n` : '') +
+      `לכל שאלה אנו זמינים כאן בווטסאפ 🌿`,
+
+    en: `Welcome! 😊 Your room (${p.room}) is currently being prepared and cleaned for you.\n\n` +
+      `As soon as the room is ready and approved for entry, we will immediately send you your lockbox code and access details here!\n\n` +
+      (p.url ? `In the meantime, you can check your digital guest page:\n${p.url}\n\n` : '') +
+      `If you have any questions, we're right here on WhatsApp 🌿`,
+
+    ru: `Добро пожаловать! 😊 Ваш номер (${p.room}) сейчас готовится и убирается для вас.\n\n` +
+      `Как только номер будет готов и проверен, мы сразу пришлём вам сюда код от сейфа с ключом и данные для входа!\n\n` +
+      (p.url ? `Пока вы можете посмотреть вашу страницу гостя:\n${p.url}\n\n` : '') +
+      `По любым вопросам мы на связи в WhatsApp 🌿`,
+
+    ar: `أهلاً وسهلاً بكم! 😊 غرفتكم (${p.room}) قيد التجهيز والتنظيف حالياً من أجلكم.\n\n` +
+      `بمجرد أن تصبح الغرفة جاهزة ومعتمدة للدخول، سنرسل لكم فوراً رمز الصندوق وتفاصيل الدخول هنا!\n\n` +
+      (p.url ? `في هذه الأثناء، يمكنكم الاطلاع على صفحة الضيف الرقمية:\n${p.url}\n\n` : '') +
+      `نحن هنا للمساعدة لأي استفسار عبر واتساب 🌿`,
+  }, lang),
+
+  /** When payment is incomplete: payment confirmation required before access */
+  checkinUnpaid: (lang: GuestLang, p: { room: string; url?: string }) => pick({
+    he: `ברוכים הבאים! 😊 שמחים שהגעתם ל${p.room}.\n\n` +
+      `כדי שנוכל לספק את קוד הכניסה, נדרש להשלים את אישור התשלום עבור ההזמנה.\n\n` +
+      (p.url ? `💳 לתשלום מאובטח וצפייה בפרטי ההזמנה בדף האורח האישי שלכם:\n${p.url}\n\n` : '') +
+      `אם כבר שילמתם או שתרצו עזרה בהסדרת התשלום, כתבו לנו כאן ונשמח לסייע או לחבר אתכם מיד למנהל 🌿`,
+
+    en: `Welcome! 😊 Glad you arrived at ${p.room}.\n\n` +
+      `Before we can provide your entry code, payment confirmation for the reservation is required.\n\n` +
+      (p.url ? `💳 To view details and complete secure payment on your guest page:\n${p.url}\n\n` : '') +
+      `If you already paid or need assistance, reply here and we will gladly help or connect you directly with the manager 🌿`,
+
+    ru: `Добро пожаловать! 😊 Рады вашему приезду в ${p.room}.\n\n` +
+      `Чтобы получить код для входа, необходимо подтверждение оплаты бронирования.\n\n` +
+      (p.url ? `💳 Для безопасной оплаты и просмотра бронирования на странице гостя:\n${p.url}\n\n` : '') +
+      `Если вы уже оплатили или вам нужна помощь, напишите нам, и мы с радостью поможем или свяжем вас с менеджером 🌿`,
+
+    ar: `أهلاً وسهلاً بكم! 😊 سعداء بوصولكم إلى ${p.room}.\n\n` +
+      `لتزويدكم برمز الدخول، يلزم تأكيد دفع الحجز أولاً.\n\n` +
+      (p.url ? `💳 للدفع الآمن وعرض تفاصيل الحجز في صفحة الضيف:\n${p.url}\n\n` : '') +
+      `إذا كنتم قد دفعتم بالفعل أو تودون المساعدة، راسلونا هنا ويسعدنا مساعدתכם أو وصلכם بالمدير فوراً 🌿`,
+  }, lang),
+
+  /** When guest scans wrong room QR: never leak lockbox code */
+  checkinWrongRoom: (lang: GuestLang, p: { scannedRoom: string }) => pick({
+    he: `שלום! נראה שסרקתם את קוד ה-QR של יחידה שאינה תואמת להזמנה שלכם במתחם.\n\n` +
+      `מטעמי ביטחון ופרטיות, אין אפשרות לפתוח כספת זו. אנא בדקו את שם החדר המדויק המופיע בהודעת אישור ההזמנה שלכם, או השיבו להודעה זו ונשמח להכווין אתכם ליחידה הנכונה ולסייע! 🏡`,
+
+    en: `Hello! It looks like you scanned the QR code of a unit that does not match your booking.\n\n` +
+      `For security and privacy reasons, access cannot be provided for this unit. Please check your booking confirmation for your assigned room, or reply here and we will gladly direct and assist you! 🏡`,
+
+    ru: `Здравствуйте! Похоже, вы отсканировали QR-код номера, который не соответствует вашему бронированию.\n\n` +
+      `В целях безопасности и конфиденциальности доступ к этому сейфу не предоставляется. Пожалуйста, проверьте подтверждение бронирования или напишите нам сюда, и мы поможем вам пройти к вашему номеру! 🏡`,
+
+    ar: `مرحباً بكم! يبدو أنكم قمتم بمسح رمز الـ QR لوحدة لا تتطابق مع حجزكم في المجمع.\n\n` +
+      `لدواعي الأمان والخصوصية، لا يمكن فتح هذا الصندوق. يرجى التحقق من اسم الغرفة المذكور في تأكيد حجزكم، أو الرد على هذه الرسالة وسيسعدنا إرشادكم ומساعدתכם! 🏡`,
+  }, lang),
+
+  /** Repeated QR scan during active stay */
+  checkinRepeatedScan: (lang: GuestLang, p: { room: string; lockbox: string; url?: string }) => pick({
+    he: `ברוכים השבים! 😊 שמחים שאתם איתנו ב${p.room}.\n\n` +
+      `הנה תזכורת לפרטי הכניסה שלכם:\n` +
+      `🔑 *קוד כספת המפתח:* *${p.lockbox}*\n\n` +
+      (p.url ? `📱 *דף האורח הדיגיטלי שלכם:*\n${p.url}\n\n` : '') +
+      `לכל בקשה או שאלה במהלך השהות, אנחנו כאן בווטסאפ לשרותכם 🏡`,
+
+    en: `Welcome back! 😊 Glad to have you with us in ${p.room}.\n\n` +
+      `Here is a reminder of your entry details:\n` +
+      `🔑 *Key lockbox code:* *${p.lockbox}*\n\n` +
+      (p.url ? `📱 *Your digital guest page:*\n${p.url}\n\n` : '') +
+      `For any request or question during your stay, we're right here on WhatsApp 🏡`,
+
+    ru: `С возвращением! 😊 Рады, что вы с нами в ${p.room}.\n\n` +
+      `Напоминаем данные для входа:\n` +
+      `🔑 *Код от сейфа с ключом:* *${p.lockbox}*\n\n` +
+      (p.url ? `📱 *Ваша страница гостя:*\n${p.url}\n\n` : '') +
+      `По любым вопросам во время отдыха мы на связи в WhatsApp 🏡`,
+
+    ar: `أهلاً بعودتكم! 😊 يسعدنا وجودكم معنا في ${p.room}.\n\n` +
+      `إليكم تذكيراً بتفاصيل الدخول:\n` +
+      `🔑 *رمز صندوق المفتاح:* *${p.lockbox}*\n\n` +
+      (p.url ? `📱 *صفحة الضيف الرقمية:*\n${p.url}\n\n` : '') +
+      `لأي طلب או استفسار خلال الإقامة، نحن هنا في خدمتכם عبر واتساب 🏡`,
+  }, lang),
+
+  /** Arrival date in future */
+  checkinFuture: (lang: GuestLang, p: { room: string; checkIn: string; url?: string }) => pick({
+    he: `ההזמנה שלכם לבקתה ${p.room} רשומה לתאריך ${ddmm(p.checkIn)}.\n` +
+      `נשמח מאוד לארח אתכם במועד הגעתכם! 🌿\n\n` +
+      (p.url ? `לצפייה בפרטי ההזמנה שלכם בדף האורח:\n${p.url}` : ''),
+
+    en: `Your booking for ${p.room} is scheduled for ${ddmm(p.checkIn)}.\n` +
+      `We look forward to welcoming you on your arrival date! 🌿\n\n` +
+      (p.url ? `To view your booking details on your guest page:\n${p.url}` : ''),
+
+    ru: `Ваше бронирование номера ${p.room} оформлено на ${ddmm(p.checkIn)}.\n` +
+      `Будем очень рады встретить вас в день заезда! 🌿\n\n` +
+      (p.url ? `Детали бронирования на вашей странице гостя:\n${p.url}` : ''),
+
+    ar: `حجزكم لـ ${p.room} مسجل لتاريخ ${ddmm(p.checkIn)}.\n` +
+      `يسعدنا جداً استقبالכם في موعد وصولكم! 🌿\n\n` +
+      (p.url ? `لعرض تفاصيل حجزكم في صفحة الضيف:\n${p.url}` : ''),
+  }, lang),
+
+  /** Reservation ended in past */
+  checkinPast: (lang: GuestLang, p: { room: string }) => pick({
+    he: `ההזמנה לבקתה ${p.room} הסתיימה. שמחנו מאוד לארח אתכם 🌿`,
+    en: `The booking for ${p.room} has ended. It was a pleasure hosting you 🌿`,
+    ru: `Бронирование номера ${p.room} завершено. Были очень рады принять вас 🌿`,
+    ar: `انتهت فترة الحجز לـ ${p.room}. سعدنا جداً باستضافתכם 🌿`,
+  }, lang),
 };
 
 /** Guest "yes" to a call-back offer, in the guest languages. */

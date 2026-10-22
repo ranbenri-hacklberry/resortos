@@ -50,6 +50,21 @@ export interface BookingRow {
 
 export type ReadyResult = { ok: true } | { ok: false; skipped: 'maintenance_open' | 'unit_not_found' };
 
+/**
+ * Authoritative check if reservation is fully paid.
+ * ResortOS policy requires full payment confirmation before access is authorized.
+ */
+export function isBookingPaid(b?: BookingRow | null): boolean {
+  if (!b) return false;
+  if (b.payment_status === 'PAID' || b.financial_status === 'PAID') return true;
+  const total = Number(b.total_price_agorot);
+  const deposit = Number(b.deposit_agorot);
+  if (Number.isFinite(total) && Number.isFinite(deposit) && total > 0 && deposit >= total) {
+    return true;
+  }
+  return false;
+}
+
 export class ResortOSError extends Error {
   constructor(public status: number, public code: string, path: string) {
     super(`ResortOS ${path} -> HTTP ${status} ${code}`);
