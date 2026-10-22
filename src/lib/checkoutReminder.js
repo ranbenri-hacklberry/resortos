@@ -83,7 +83,7 @@ export function buildCheckoutReminder({ guestName, unitName, checkoutTime, stayU
   return lines.join(' ');
 }
 
-const BLOCK_RE = /לא זמין|מתחם סגור|חסימה|חסום|תחזוקה|maintenance|blocked?|out of order/i;
+const BLOCK_RE = /לא זמין|מתחם סגור|חסימה|חסום|תחזוקה|תפוס[הים]?|תפוסות|maintenance|blocked?|out of order/i;
 const SIESTA_RE = /siesta|סיאסטה/i;
 
 function wifiQuietlyLeft(booking, now) {
@@ -95,10 +95,18 @@ function wifiQuietlyLeft(booking, now) {
   return Number.isFinite(ms) && ms >= 30 * 60 * 1000;
 }
 
-export function isCheckedOut(booking) {
+/**
+ * Real departure evidence. Kinorot sync sets booking_status=CHECKED_OUT as soon as
+ * check_out_date <= today, so on the departure day itself (check_out_date === date)
+ * that status alone is NOT evidence. Pass { date } for the day being evaluated;
+ * for earlier check-out dates (e.g. next-day late checkout) CHECKED_OUT still counts.
+ */
+export function isCheckedOut(booking, { date = null } = {}) {
   const s = booking?.stay || {};
+  const statusCounts = booking?.booking_status === 'CHECKED_OUT'
+    && !(date && booking?.check_out_date && booking.check_out_date >= date);
   return Boolean(
-    booking?.booking_status === 'CHECKED_OUT'
+    statusCounts
     || booking?.checked_out_at
     || s.self_checked_out_at || s.auto_checked_out_at || s.manager_checked_out_at
     || ['self_departed', 'auto_departed'].includes(booking?.checkout_status)
@@ -133,7 +141,7 @@ export function classifyForDate(booking, date, { now = new Date(), unit = null, 
   if (dep !== date) return null;
   const ng = nonGuestReason(booking, unit);
   if (ng) return { ...base, send: false, reason: ng, nonGuest: true };
-  if (isCheckedOut(booking)) return { ...base, send: false, reason: 'כבר עזב' };
+  if (isCheckedOut(booking, { date })) return { ...base, send: false, reason: 'כבר עזב' };
   if (wifiQuietlyLeft(booking, now)) return { ...base, send: false, reason: 'עזב בשקט (WiFi)' };
   const phone = normalizeIsraeliMobile(booking?.guest_phone);
   if (!phone) return { ...base, send: false, reason: booking?.guest_phone ? 'טלפון לא תקין' : 'אין טלפון' };
@@ -171,8 +179,8 @@ export function formatPlan(date, items, unitNameOf, { dryRun = true } = {}) {
 
 export function formatReport(date, items, unitNameOf) {
   const guests = items.filter((i) => !i.nonGuest && !i.deferred);
-  const out = guests.filter((i) => isCheckedOut(i.booking));
-  const stay = guests.filter((i) => !isCheckedOut(i.booking));
+  const out = guests.filter((i) => isCheckedOut(i.booking, { date }));
+  const stay = guests.filter((i) => !isCheckedOut(i.booking, { date }));
   const lines = [`🧹 מצב עזיבות ${date} (11:30)`, `עזבו: ${out.length}`];
   for (const i of out) lines.push(`✅ ${unitNameOf(i.booking.unit_id)} – ${i.booking.guest_name || 'ללא שם'}`);
   lines.push(`עוד לא עזבו: ${stay.length}`);

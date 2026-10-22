@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   normalizeIsraeliMobile, buildCheckoutReminder, dedupeKey, classifyForDate,
-  effectiveDepartureDate, checkoutTimeFor, formatReport
+  effectiveDepartureDate, checkoutTimeFor, formatReport, isCheckedOut
 } from './checkoutReminder.js';
 
 const g = (o = {}) => ({ id: 'b1', unit_id: 'k681', guest_name: 'יובל כהן', guest_phone: '054-5726177',
@@ -34,7 +34,9 @@ describe('skips', () => {
     [{ guest_name: 'מתחם סגור לא להזמין' }, 'חסימה / לא זמין'],
     [{ guest_name: 'תחזוקה' }, 'חסימה / לא זמין'],
     [{ channel_source: 'Siesta' }, 'סיאסטה'],
-    [{ booking_status: 'CHECKED_OUT' }, 'כבר עזב'],
+    [{ checked_out_at: '2026-10-22T08:00:00Z' }, 'כבר עזב'],
+    [{ guest_name: "טאג' מאהל 4 – תפוס" }, 'חסימה / לא זמין'],
+    [{ guest_name: 'תפוסה' }, 'חסימה / לא זמין'],
     [{ stay: { self_checked_out_at: '2026-10-22T07:00:00Z' } }, 'כבר עזב'],
     [{ guest_phone: null }, 'אין טלפון'],
     [{ guest_phone: '1929333' }, 'טלפון לא תקין']
@@ -87,7 +89,7 @@ describe('template', () => {
 
 describe('report', () => {
   it('splits out / not yet, ignores non-guests', () => {
-    const items = [classifyForDate(g({ id: 'a', booking_status: 'CHECKED_OUT' }), D), classifyForDate(g({ id: 'b' }), D), classifyForDate(g({ id: 'c', guest_name: 'לא זמין' }), D)];
+    const items = [classifyForDate(g({ id: 'a', checked_out_at: '2026-10-22T08:00:00Z' }), D), classifyForDate(g({ id: 'b' }), D), classifyForDate(g({ id: 'c', guest_name: 'לא זמין' }), D)];
     const t = formatReport(D, items, (u) => u);
     expect(t).toContain('עזבו: 1'); expect(t).toContain('עוד לא עזבו: 1');
   });
@@ -116,5 +118,24 @@ describe('sms unit name (Ran 2026-10-21)', () => {
     const m = buildCheckoutReminder({ guestName: 'משה', unitName: 'בקתות מאיה · בקתה 1' });
     expect(m).toContain('מבקתות מאיה 1.');
     expect(m).not.toMatch(/בקתה בקתות|מבקתה/);
+  });
+});
+
+describe('real departures (Ran 2026-10-22)', () => {
+  it('today + CHECKED_OUT only → not departed, still gets SMS', () => {
+    const b = g({ booking_status: 'CHECKED_OUT' });
+    expect(isCheckedOut(b, { date: D })).toBe(false);
+    expect(classifyForDate(b, D).send).toBe(true);
+  });
+  it('today + checked_out_at → departed', () => {
+    expect(isCheckedOut(g({ booking_status: 'CHECKED_OUT', checked_out_at: '2026-10-22T08:00:00Z' }), { date: D })).toBe(true);
+  });
+  it('earlier check-out date + CHECKED_OUT → departed', () => {
+    expect(isCheckedOut(g({ booking_status: 'CHECKED_OUT', check_out_date: '2026-10-21' }), { date: D })).toBe(true);
+  });
+  it('report: CHECKED_OUT-only today is "not yet", תפוס ignored', () => {
+    const items = [classifyForDate(g({ id: 'a', booking_status: 'CHECKED_OUT' }), D), classifyForDate(g({ id: 'b', stay: { self_checked_out_at: '2026-10-22T07:00:00Z' } }), D), classifyForDate(g({ id: 'c', guest_name: "טאג' מאהל 4 – תפוס" }), D)];
+    const t = formatReport(D, items, (u) => u);
+    expect(t).toContain('עזבו: 1'); expect(t).toContain('עוד לא עזבו: 1'); expect(t).not.toContain('תפוס');
   });
 });
