@@ -808,6 +808,7 @@ export function createPipeline(deps: PipelineDeps) {
       const specific = asked ? answerManagerRoomQuestion(asked, roomLabel, lockbox, unit, occupancy, r) : null;
       const body = specific || formatManagerInitialCard(roomLabel, lockbox, unit, occupancy, r);
       if (!jid) return;
+      roomMenuShownAt.set(sessionKey, Date.now()); // menu-loop fix: same key as the lookup
       await d.send(jid, `🔍 נבחר: *${roomLabel}*\n\n${withManagerActions(body, roomLabel)}`);
     }
 
@@ -1706,12 +1707,14 @@ export function createPipeline(deps: PipelineDeps) {
               if (currentSession.pendingQuestion) {
                 const answer = answerManagerRoomQuestion(currentSession.pendingQuestion, roomLabel, lockbox, unit, occupancy, r);
                 if (answer) {
+                  roomMenuShownAt.set(sessionKey, Date.now()); // menu-loop fix: same key as the lookup
                   await d.send(jid, `🔍 נבחר: *${roomLabel}*\n\n${withManagerActions(answer, roomLabel)}`);
                   return { handled: true, transcript };
                 }
               }
 
               const initialCard = formatManagerInitialCard(roomLabel, lockbox, unit, occupancy, r);
+              roomMenuShownAt.set(sessionKey, Date.now()); // menu-loop fix: same key as the lookup
               await d.send(jid, `🔍 נבחר: *${roomLabel}*\n\n${withManagerActions(initialCard, roomLabel)}`);
               return { handled: true, transcript };
             }
@@ -1752,11 +1755,12 @@ export function createPipeline(deps: PipelineDeps) {
           // Check if manager is switching to another room (e.g. typing "B2", scanning QR, or asking about a different room)
           const otherRoomId = resolveRoomByAlias(trimmed, d.rooms());
           const fuzzySwitch = matchManagerRoomIntent(trimmed, d.rooms());
-          if (otherRoomId && otherRoomId !== currentSession.roomId) {
+          // Menu-loop fix (Ran 2026-10-22): a bare menu number never switches rooms.
+          if (!isMenuNumber && otherRoomId && otherRoomId !== currentSession.roomId) {
             sessionStates.delete(sessionKey);
-          } else if (fuzzySwitch.type === 'RESOLVED' && fuzzySwitch.roomId !== currentSession.roomId) {
+          } else if (!isMenuNumber && fuzzySwitch.type === 'RESOLVED' && fuzzySwitch.roomId !== currentSession.roomId) {
             sessionStates.delete(sessionKey);
-          } else if (fuzzySwitch.type === 'AMBIGUOUS_COMPLEX') {
+          } else if (!isMenuNumber && fuzzySwitch.type === 'AMBIGUOUS_COMPLEX') {
             sessionStates.delete(sessionKey);
           } else if (trimmed === '1' || trimmed === '1.' || /^שנה\s*סטטוס$|^עדכ[ןו]\s*סטטוס$|^סטטוס$/i.test(trimmed)) {
             sessionStates.set(sessionKey, { role: 'MANAGER', state: 'SELECT_STATUS', roomId: currentSession.roomId });
@@ -2228,6 +2232,7 @@ export function createPipeline(deps: PipelineDeps) {
 
           const managerReply = withManagerActions(formatManagerInitialCard(roomLabel, lockbox, unit, occupancy, r), roomLabel);
 
+          roomMenuShownAt.set(sessionKey, Date.now()); // menu-loop fix: same key as the lookup
           await d.send(jid, managerReply);
           return {
             handled: true,
@@ -2444,6 +2449,7 @@ export function createPipeline(deps: PipelineDeps) {
           const body = specificAnswer || formatManagerInitialCard(roomLabel, lockbox, unit, occupancy, r);
           const managerReply = `🔍 זיהיתי: *${roomLabel}*\n\n${withManagerActions(body, roomLabel)}`;
 
+          roomMenuShownAt.set(sessionKey, Date.now()); // menu-loop fix: same key as the lookup
           await d.send(jid, managerReply);
           return {
             handled: true,
