@@ -13,7 +13,11 @@ function withAllowedUnits(user) {
 
 export function getStoredToken() {
   try {
-    return localStorage.getItem(TOKEN_KEY) || '';
+    return (
+      localStorage.getItem(TOKEN_KEY) ||
+      localStorage.getItem('resortos_dashboard_token_v1') ||
+      ''
+    );
   } catch {
     return '';
   }
