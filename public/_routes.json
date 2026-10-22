@@ -1,5 +1,20 @@
 {
   "version": 1,
-  "include": ["/api/*", "/stay", "/stay/*", "/demo", "/demo/", "/demo/form", "/checkout/*"],
+  "include": [
+    "/api/*",
+    "/stay",
+    "/stay/*",
+    "/demo",
+    "/demo/",
+    "/demo/form",
+    "/checkout/*",
+    "/finance",
+    "/finance/*",
+    "/beinleumi-statement.json",
+    "/checks.json",
+    "/daily-collection.csv",
+    "/hyp-payments.json",
+    "/max-credits.json"
+  ],
   "exclude": []
 }
