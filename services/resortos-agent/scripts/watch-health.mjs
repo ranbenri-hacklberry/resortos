@@ -1,5 +1,5 @@
 import { execFile, spawn } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { openSync, readFileSync, writeFileSync } from 'node:fs';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -80,10 +80,12 @@ async function restartAgent() {
     // Already stopped.
   }
   await new Promise((resolve) => setTimeout(resolve, 1500));
+  // Append Chloe's stdout/stderr to the monitored log (Ran 2026-10-22), never /dev/null.
+  const logFd = openSync(process.env.AGENT_LOG || '/tmp/resortos-agent.log', 'a');
   const child = spawn('/opt/homebrew/bin/node', ['dist/index.js'], {
     cwd: root,
     detached: true,
-    stdio: 'ignore',
+    stdio: ['ignore', logFd, logFd],
   });
   child.unref();
   console.log(`[agent-watch] restarted pid ${child.pid}`);
