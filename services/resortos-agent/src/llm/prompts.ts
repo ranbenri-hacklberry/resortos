@@ -21,9 +21,9 @@ Thai housekeeping staff ONLY know and use English letter codes (A, B, C, D, E, F
 - Complex B (נופים בלבן): B1, B2 -> IDs: k685, k686
 - Complex C (טוסקנה): C1, C2, C3 -> IDs: k687, k688, k689
 - Complex D (חצר מוסיקלית): D1, D2, D3 -> IDs: k690 (חליל), k691 (מיתר), k692 (פעמון)
-- Complex E (טאג' מאהל): E1, E2, E3, E4 -> IDs: k808, k809, k810, k811
+- Complex E (טאג' מאהל): E1=k808, E2=k809, E3=k810, E4=k811
 - Complex F (בקתות מאיה): F1, F2, F3 -> IDs: k693, k694, k695
-- Complex G (בתי נורית): G1, G2, G3, G4, G5, G6, G7, G8 -> IDs: k671, k673, k674, k675, k676, k677, k678, k679
+- Complex G (בתי נורית): G1=k671, G2=k673, G3=k674, G4=k675, G5=k676, G6=k677, G7=k678, G8=k679 (note: there is NO k672; never shift IDs by position)
 - Hill (צימר בגבעה): Hill 1..4 -> IDs: hill-1, hill-2, hill-3, hill-4
 - Domes (כיפת שמיים): Blue (dome-blue), Red (dome-red), Green (dome-green)
 - Mialees: Villa (mialis-villa), Green Suite 1 (suite-1), Pink Suite 2 (suite-2)
