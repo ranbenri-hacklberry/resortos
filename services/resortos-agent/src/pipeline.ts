@@ -430,6 +430,7 @@ export function createPipeline(deps: PipelineDeps) {
 
   const barakForwardLast = new Map<string, number>();
   const lastCheckoutAsk = new Map<string, number>();
+  const wrongQrAlerted = new Set<string>();
   const rawSessionStates = new Map<string, SessionState>();
   const sessionStates = {
     get: (key: string): SessionState | undefined => {
@@ -2297,16 +2298,20 @@ export function createPipeline(deps: PipelineDeps) {
           : undefined;
 
         if (otherBooking) {
-          const correctRoom = d.rooms().find((x) => x.id === otherBooking.unit_id);
-          const correctLabel = correctRoom?.name || correctRoom?.letterCode || otherBooking.unit_id;
-          const stayUrl = stayUrlOf(otherBooking);
-          const reply = `נראה שסרקת את כספת חדר ${r?.name || r?.letterCode}, וההזמנה שלך היא עבור ${correctLabel}.\n\n` +
-            `אנא גש אל ${correctLabel} וסרוק את הכספת שם, או השתמש בקוד הכספת של החדר שלך:\n` +
-            `🔑 קוד כספת מפתח עבור ${correctLabel}: ${correctRoom?.lockbox || 'לא מוגדר'}\n\n` +
-            (stayUrl ? `📱 דף האורח הדיגיטלי שלך:\n${stayUrl}\n\n` : '') +
-            `לכל שאלה אנו זמינים כאן בווטסאפ.`;
-          void logGuestWhatsAppExchange(otherBooking, text, reply);
+          // Ran 2026-10-22: wrong-room QR never reveals the assigned room or any lockbox code.
+          const reply = `שלום! 😊 נראה שקוד ה-QR שסרקתם לא תואם להזמנה שלכם.\n\n` +
+            `אנא בדקו את השלט על דלת הבקתה, או השיבו כאן ומנהל המתחם יעזור לכם בהקדם 🏡`;
+          void logGuestWhatsAppExchange(otherBooking, text || '', reply);
           await d.send(jid, reply);
+          const wrongKey = `${otherBooking.id}|${resolvedId}|${getIsraelToday()}`;
+          if (!wrongQrAlerted.has(wrongKey)) {
+            wrongQrAlerted.add(wrongKey);
+            const scanned = r?.name || r?.letterCode || resolvedId;
+            const alert = `🔑 סריקת QR לא תואמת: ${otherBooking.guest_name || 'אורח'} סרק/ה את ${scanned}, שאינה היחידה שבהזמנה. נא לעזור לאורח.`;
+            for (const m of alertRecipients(d.cleaners())) {
+              await d.send(`${m.phone}@s.whatsapp.net`, alert).catch(() => {});
+            }
+          }
           return { handled: true, transcript };
         }
 

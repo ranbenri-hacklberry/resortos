@@ -540,10 +540,11 @@ describe('pipeline: guards & dispatch', () => {
     const r = await createPipeline(deps).handleInbound(msg);
     expect(r.handled).toBe(true);
     const reply = deps.sent[0][1];
-    expect(reply).toContain('סרקת את כספת חדר נופים בלבן 2');
-    expect(reply).toContain('וההזמנה שלך היא עבור נופים בלבן 1');
-    expect(reply).toContain('2810');
-    expect(reply).toContain('https://resortos.app/stay/tok_guest_777');
+    // Ran 2026-10-22: wrong-room QR must not reveal the assigned room or any code (was: room name + 2810 + stay link).
+    expect(reply).toContain('לא תואם להזמנה');
+    expect(reply).not.toContain('נופים בלבן 1');
+    expect(reply).not.toContain('2810');
+    expect(reply).not.toContain('2820');
   });
 
   it('politely informs unrecognized sender scanning QR to reply in chat without exposing private phone numbers', async () => {
