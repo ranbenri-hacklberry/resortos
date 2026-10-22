@@ -141,7 +141,9 @@ export function managerActionMenu(roomLabel: string): string {
     `1 - שנה סטטוס\n` +
     `2 - הוסף הערה\n` +
     `3 - דווח אחזקה או חוסר\n` +
-    `4 - שליחת קישור לאורח`;
+    `4 - שליחת קישור לאורח\n` +
+    `5 - פרטי לקוח\n` +
+    `6 - פרטי רשת WiFi`;
 }
 
 export function withManagerActions(body: string, roomLabel: string): string {

@@ -3,6 +3,7 @@ import { COMPLEXES, type ComplexDefinition } from './managerFuzzyMatcher.js';
 import { readFileSync } from 'node:fs';
 import type { RoomEntry } from '../config.js';
 import type { BookingRow, UnitRow } from '../integration/resortos.js';
+import { getWifiForUnit } from '../guest/guestKnowledge.js';
 
 let ROOM_CONFIGURATIONS: Record<string, any> = {};
 try {
@@ -582,4 +583,20 @@ export function answerComplexCheckinsQuestion(
   }
 
   return `📋 *כניסות ב${complex.officialName} (${dateRange.label}):*\n${lines.join('\n')}`;
+}
+
+/** Manager menu option 6 (Ran 2026-10-22): WiFi of the room on screen only. Never invents credentials. */
+export function formatRoomWifi(roomLabel: string, unitId?: string | null): string {
+  const w = unitId ? getWifiForUnit(unitId) : null;
+  if (!w) return `📶 אין אצלי פרטי וויפי שמורים ל*${roomLabel}*.`;
+  return `📶 *פרטי רשת WiFi · ${roomLabel}*\n• רשת: *${w.ssid}*\n• סיסמה: *${w.password}*`;
+}
+
+/** Words that pick menu option 5 / 6 while a room is on screen. */
+export function roomMenuPick(text: string): 'guest' | 'wifi' | null {
+  const t = String(text || '').trim();
+  if (/^5\.?$/.test(t)) return 'guest';
+  if (/^6\.?$/.test(t)) return 'wifi';
+  if (/^(?:ה)?(?:וויפי|ווייפי|ויפי|וייפי|wi-?fi|ไวไฟ|วายฟาย)\??$|פרטי\s*(?:ה)?רשת|סיסמ[אה]\s*(?:ל|של\s*)?(?:ה)?(?:רשת|וויפי|ויפי|wi-?fi|אינטרנט)|(?:מה|מה ה)\s*(?:וויפי|ויפי|wi-?fi)|רשת\s*wi-?fi/i.test(t)) return 'wifi';
+  return null;
 }

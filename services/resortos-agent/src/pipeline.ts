@@ -49,8 +49,12 @@ import { holdConfirmText, holdDoneText, holdProgressText, proposesNightHold } fr
 import { fileAudit, handleManagerRoomHold } from './manager/roomHold.js';
 import { join as joinPath } from 'node:path';
 import { placeDetail, placeMenuFor } from './guest/placeMenu.js';
+import { handleManagerWifi } from './manager/managerWifi.js';
 import {
   formatManagerInitialCard,
+  formatRoomWifi,
+  roomMenuPick,
+  formatGuestDetails,
   answerManagerRoomQuestion,
   answerComplexCheckinsQuestion,
   unitShortStatus,
@@ -1858,6 +1862,17 @@ export function createPipeline(deps: PipelineDeps) {
           } else if (trimmed === '4' || trimmed === '4.' || /^שלח(?:י|ו)?\s*קישור|^קישור\s*לאורח|^שליחת\s*קישור/i.test(trimmed)) {
             await beginGuestLink(currentSession.roomId);
             return { handled: true, transcript };
+          } else if ((isMenuNumber || !/^\s*[56]\.?\s*$/.test(trimmed)) && roomMenuPick(trimmed)) {
+            // Ran 2026-10-22: menu 5 = guest details, 6 = WiFi, for the room on screen only (manager session).
+            const pick = roomMenuPick(trimmed);
+            if (pick === 'wifi') {
+              await d.send(jid, formatRoomWifi(roomLabel, currentSession.roomId));
+            } else {
+              const today = getIsraelToday();
+              const bookings = (await d.resortos.listBookings?.({ from: today, to: today })) || [];
+              await d.send(jid, formatGuestDetails(roomLabel, getRoomOccupancy(currentSession.roomId, bookings, today)));
+            }
+            return { handled: true, transcript };
           } else if (/^הערת אורח$/i.test(trimmed)) {
             sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_GUEST_NOTE', roomId: currentSession.roomId, bookingId: currentSession.bookingId });
             await d.send(jid, askByName(cleaner?.name, `כתוב את ההערה עבור אורח חדר ${roomLabel}: 👤`));
@@ -2122,6 +2137,14 @@ export function createPipeline(deps: PipelineDeps) {
       }
       // Bug 2 (Ran 2026-10-20): "מי נכנס לבתי נורית בסופ״ש" → per-complex arrivals, not a room picker.
       // Only one named complex per answer; never a summary of all units over WhatsApp.
+      // Ran 2026-10-22: manager WiFi question (named complex -> SSID+password; unnamed -> ask, 10-min follow-up).
+      if (isManager && jid) {
+        const wifiReply = handleManagerWifi(sessionKey, text);
+        if (wifiReply) {
+          await d.send(jid, wifiReply);
+          return { handled: true, transcript };
+        }
+      }
       if (isManager && jid && isStaffOpsQuestion(text)) {
         if (isComplexCheckinsQuestion(text)) {
           const bookings = (await d.resortos.listBookings?.()) || [];
