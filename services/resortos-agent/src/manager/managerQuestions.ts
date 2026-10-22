@@ -119,6 +119,15 @@ export function formatManagerInitialCard(
     return card;
   }
 
+  // Ran 2026-10-22 (D1): ResortOS marks a checked-in room staff_occupancy = OCCUPIED → show it as occupied,
+  // not "check-in today" with a stale cleaning mark. A same-day booking not yet checked in stays "צ׳ק אין היום".
+  if ((unit as any)?.staff_occupancy === 'OCCUPIED') {
+    card += occupancy.inBooking
+      ? `🏠 מאוכלס (${guestLabel(occupancy.inBooking)})\nאין יציאה היום`
+      : `🏠 מאוכלס`;
+    return card;
+  }
+
   card += `🧹 סטטוס ניקיון: ${cleaningLabel}\n`;
   card += occupancy.inBooking
     ? `🟢 צ׳ק אין היום (${guestLabel(occupancy.inBooking)})`
