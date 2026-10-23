@@ -9,6 +9,7 @@ import { createHypPaymentPage } from './functions/lib/hypPay.js';
 import { UNIT_DISPLAY_NAMES, UNIT_PROPERTY } from './functions/lib/unitNames.js';
 import { readSharedTracker, writeSharedTracker } from './server/sharedTracker.js';
 import { tryHandleOps } from './server/opsGateway.js';
+import { tryHandleMcp } from './server/mcpHttp.js';
 import { tryHandleClimate } from './server/climateGateway.js';
 import { tryHandleNetwork } from './server/routerGateway.js';
 import { tryHandleAssetBeacons } from './server/assetBeaconWatch.js';
@@ -120,6 +121,7 @@ function staffAuthPlugin(env) {
       console.log('[hotelos-auth] middleware attached');
       server.middlewares.use(async (req, res, next) => {
         try {
+          if (await tryHandleMcp(req, res)) return;
           if (await tryHandleClimate(req, res)) return;
           if (await tryHandleNetwork(req, res)) return;
           if (await tryHandleAssetBeacons(req, res)) return;

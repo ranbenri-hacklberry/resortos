@@ -3,180 +3,525 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>דף חדר A4</title>
+  <title>דפי חדר A4 — מיאליס ריזורט</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700;800;900&family=David+Libre:wght@500;700&family=Frank+Ruhl+Libre:wght@700;800;900&display=swap" rel="stylesheet">
   <style>
     :root {
-      --cream: #F3EBDA;
-      --ink: #1A1410;
-      --muted: #4A433A;
-      --line: #2C281F;
+      --bg-sheet: #FDFBF7;
+      --ink-primary: #1C1917;
+      --ink-secondary: #44403C;
+      --ink-muted: #78716C;
+      --gold-primary: #C5A059;
+      --gold-deep: #9E7D3B;
+      --gold-light: #F7F1E5;
+      --gold-subtle: rgba(197, 160, 89, 0.12);
+      --border-fine: #E7DFCE;
+      --border-dark: #292524;
+      --alert-bg: #FEF2F2;
+      --alert-border: #FCA5A5;
+      --alert-text: #991B1B;
     }
-    * { box-sizing: border-box; }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
     html, body {
-      margin: 0;
-      background: #E8DFCC;
-      color: var(--ink);
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #EAE3D2;
+      color: var(--ink-primary);
+      font-family: 'Assistant', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       -webkit-font-smoothing: antialiased;
+      direction: rtl;
     }
+
+    /* ---- TOOLBAR (SCREEN ONLY) ---- */
     .toolbar {
       max-width: 210mm;
       margin: 16px auto;
+      padding: 12px 18px;
+      background: #FFFFFF;
+      border: 1px solid #D6CEBE;
+      border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.06);
       display: flex;
-      gap: 10px;
+      flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
-      padding: 0 8px;
+      gap: 12px;
     }
-    .toolbar select, .toolbar button {
+    .toolbar-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .toolbar label {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--ink-secondary);
+    }
+    .toolbar select {
       font: inherit;
-      font-size: 15px;
-      padding: 8px 12px;
-      border: 1px solid #8A8170;
-      background: var(--cream);
-      color: var(--ink);
+      font-size: 14px;
+      font-weight: 600;
+      padding: 7px 12px;
+      border: 1.5px solid #C5A059;
+      background: #FFFDF9;
+      color: var(--ink-primary);
       border-radius: 8px;
-    }
-    .toolbar button {
-      background: var(--ink);
-      color: var(--cream);
-      font-weight: 800;
+      outline: none;
       cursor: pointer;
     }
-    .hint { font-size: 13px; color: var(--muted); max-width: 42ch; }
+    .toolbar .btn {
+      font: inherit;
+      font-size: 13.5px;
+      font-weight: 700;
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+    .btn-primary {
+      background: var(--ink-primary);
+      color: #FFFDF9;
+    }
+    .btn-primary:hover { background: #292524; }
+    .btn-gold {
+      background: var(--gold-primary);
+      color: #1C1917;
+    }
+    .btn-gold:hover { background: var(--gold-deep); color: #FFF; }
+    .toolbar-hint {
+      width: 100%;
+      font-size: 12px;
+      color: var(--ink-muted);
+      border-top: 1px dashed #E2DAC8;
+      padding-top: 8px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* ---- A4 SHEET PAGE ---- */
+    .sheet-wrapper {
+      margin: 0 auto 30px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
     .sheet {
       position: relative;
       width: 210mm;
-      height: 295mm;
-      margin: 0 auto 24px;
-      background: var(--cream);
+      height: 297mm;
+      background: var(--bg-sheet);
+      color: var(--ink-primary);
+      padding: 10mm;
       overflow: hidden;
-      color: var(--ink);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.12);
     }
-    .content {
+
+    /* Inner Frame & Double Border */
+    .sheet-inner {
       height: 100%;
-      padding: 24mm 16mm 22mm;
+      border: 2px solid var(--ink-primary);
+      padding: 8mm 9mm 6mm;
       display: flex;
       flex-direction: column;
-      gap: 7mm;
+      justify-content: space-between;
+      position: relative;
     }
-    h1 {
-      margin: 0;
-      font-size: 18px;
-      font-weight: 500;
-      letter-spacing: 0.08em;
-      color: var(--muted);
+    .sheet-inner::before {
+      content: "";
+      position: absolute;
+      top: 2.5mm;
+      left: 2.5mm;
+      right: 2.5mm;
+      bottom: 2.5mm;
+      border: 0.8px solid var(--gold-primary);
+      pointer-events: none;
     }
-    h2 {
-      margin: 6px 0 0;
-      font-size: 54px;
-      line-height: 1.1;
+
+    /* Corner Luxury Accents */
+    .corner-ornament {
+      position: absolute;
+      width: 12mm;
+      height: 12mm;
+      pointer-events: none;
+      border-color: var(--gold-primary);
+    }
+    .corner-tl { top: 3.5mm; right: 3.5mm; border-top: 2px solid var(--gold-primary); border-right: 2px solid var(--gold-primary); }
+    .corner-tr { top: 3.5mm; left: 3.5mm; border-top: 2px solid var(--gold-primary); border-left: 2px solid var(--gold-primary); }
+    .corner-bl { bottom: 3.5mm; right: 3.5mm; border-bottom: 2px solid var(--gold-primary); border-right: 2px solid var(--gold-primary); }
+    .corner-br { bottom: 3.5mm; left: 3.5mm; border-bottom: 2px solid var(--gold-primary); border-left: 2px solid var(--gold-primary); }
+
+    /* ---- HEADER ---- */
+    .header {
+      text-align: center;
+      padding-bottom: 3.5mm;
+      border-bottom: 1.5px solid var(--ink-primary);
+      position: relative;
+    }
+    .brand-crown {
+      font-size: 11px;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--gold-deep);
       font-weight: 800;
-      letter-spacing: -0.03em;
+      margin-bottom: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
     }
-    .rule {
-      height: 1px;
-      background: var(--ink);
-      opacity: 0.22;
+    .brand-crown::before, .brand-crown::after {
+      content: "—";
+      color: var(--gold-primary);
+      letter-spacing: 0;
     }
-    .grid {
+    .welcome-title {
+      font-family: 'Frank Ruhl Libre', 'David Libre', serif;
+      font-size: 34px;
+      font-weight: 900;
+      color: var(--ink-primary);
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+      margin: 2px 0;
+    }
+    .unit-hero-name {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--gold-deep);
+      margin-top: 1px;
+      display: inline-block;
+      padding: 2px 14px;
+      background: var(--gold-subtle);
+      border-radius: 20px;
+      border: 1px solid rgba(197, 160, 89, 0.4);
+    }
+    .prop-location {
+      font-size: 12px;
+      color: var(--ink-muted);
+      margin-top: 3px;
+      font-weight: 600;
+    }
+
+    /* ---- TIMES ROW ---- */
+    .times-row {
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
-      gap: 6mm 8mm;
+      gap: 4mm;
+      margin: 3.5mm 0;
+      text-align: center;
     }
-    .split {
+    .time-card {
+      background: #FFFFFF;
+      border: 1px solid var(--border-fine);
+      border-radius: 6px;
+      padding: 3mm 2mm;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.02);
+    }
+    .time-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--ink-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 2px;
+    }
+    .time-val {
+      font-size: 22px;
+      font-weight: 900;
+      color: var(--ink-primary);
+      line-height: 1.1;
+      font-family: 'Assistant', sans-serif;
+    }
+    .time-val.saturday {
+      font-size: 18px;
+      color: var(--gold-deep);
+    }
+
+    /* ---- ACCESS & CODES GRID ---- */
+    .access-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8mm 12mm;
+      grid-template-columns: 1fr 1fr 1.35fr;
+      gap: 3.5mm;
+      margin-bottom: 3.5mm;
     }
-    .stack {
+    .access-card {
+      background: #FFFFFF;
+      border: 1px solid var(--border-fine);
+      border-top: 3px solid var(--gold-primary);
+      border-radius: 6px;
+      padding: 3mm 3.5mm;
       display: flex;
       flex-direction: column;
-      gap: 8mm;
+      justify-content: space-between;
     }
-    .label {
-      font-size: 18px;
-      font-weight: 500;
-      color: var(--muted);
-      margin-bottom: 4px;
+    .access-header {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--ink-secondary);
+      margin-bottom: 2px;
     }
-    .value {
-      font-size: 39px;
-      font-weight: 800;
-      letter-spacing: -0.02em;
-      line-height: 1.15;
+    .access-icon {
+      font-size: 13px;
     }
-    .value.small { font-size: 27px; letter-spacing: 0; }
-    .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; letter-spacing: 0.08em; }
-    #lockbox, #gate {
+    .access-value {
+      font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+      font-size: 24px;
+      font-weight: 900;
+      color: var(--ink-primary);
       direction: ltr;
-      unicode-bidi: isolate;
-      text-align: right;
-      font-size: 48px;
+      text-align: center;
+      letter-spacing: 0.08em;
+      line-height: 1.15;
+      padding: 2px 0;
     }
-    .note {
-      font-size: 21px;
-      line-height: 1.45;
-      color: var(--muted);
+    .access-sub {
+      font-size: 10px;
+      color: var(--ink-muted);
+      text-align: center;
+      line-height: 1.25;
     }
-    .checkin-phone {
-      margin-top: auto;
-      border: 1px solid var(--ink);
-      padding: 5mm 6mm 4mm;
+    .wifi-details {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      direction: ltr;
+      text-align: left;
     }
-    .checkin-phone .label {
+    .wifi-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 11.5px;
+      border-bottom: 1px dotted #EAE2D2;
+      padding-bottom: 2px;
+    }
+    .wifi-row .w-label {
+      font-size: 10px;
+      color: var(--ink-muted);
+      direction: rtl;
+    }
+    .wifi-row .w-val {
+      font-family: ui-monospace, Menlo, monospace;
+      font-weight: 800;
+      color: var(--ink-primary);
+      font-size: 13px;
+    }
+
+    /* ---- HOUSE RULES & REGULATIONS BOX (NEW!) ---- */
+    .rules-section {
+      background: #FFFDF9;
+      border: 1.5px solid var(--gold-primary);
+      border-radius: 8px;
+      padding: 4mm 5mm 3.5mm;
+      box-shadow: 0 2px 8px rgba(197, 160, 89, 0.08);
+      margin-bottom: 3.5mm;
+    }
+    .rules-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(197, 160, 89, 0.35);
+      padding-bottom: 2.5mm;
       margin-bottom: 3mm;
     }
-    .checkin-phone .value {
-      font-size: 24mm;
-      line-height: 1;
-      letter-spacing: -0.04em;
+    .rules-title {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 14px;
+      font-weight: 900;
+      color: var(--ink-primary);
+    }
+    .rules-badge {
+      font-size: 10px;
       font-weight: 800;
-      direction: ltr;
-      unicode-bidi: isolate;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: var(--alert-bg);
+      border: 1px solid var(--alert-border);
+      color: var(--alert-text);
+      letter-spacing: 0.02em;
+    }
+    .rules-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2.8mm 5mm;
+    }
+    .rule-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      font-size: 11px;
+      line-height: 1.38;
+      color: var(--ink-secondary);
+    }
+    .rule-icon {
+      font-size: 14px;
+      line-height: 1;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .rule-item strong {
+      color: var(--ink-primary);
+      font-weight: 800;
+    }
+
+    /* ---- DIGITAL GUEST HUB & QR ---- */
+    .digital-hub {
+      background: #FFFFFF;
+      border: 1px solid var(--border-fine);
+      border-radius: 8px;
+      padding: 3mm 4mm;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 4mm;
+      align-items: center;
+      margin-bottom: 3.5mm;
+    }
+    .hub-content h3 {
+      font-size: 13.5px;
+      font-weight: 800;
+      color: var(--ink-primary);
+      margin-bottom: 2px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .hub-content p {
+      font-size: 11px;
+      color: var(--ink-secondary);
+      line-height: 1.35;
+      margin-bottom: 4px;
+    }
+    .hub-highlights {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 10px;
+      font-size: 10.5px;
+      font-weight: 700;
+      color: var(--gold-deep);
+    }
+    .hub-highlights span {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .hub-qr-wrap {
       text-align: center;
-      white-space: nowrap;
+      padding: 2px 4px;
     }
+    .hub-qr {
+      width: 22mm;
+      height: 22mm;
+      display: block;
+      margin: 0 auto;
+      border: 1px solid #D1C8B4;
+      border-radius: 4px;
+      padding: 1.5px;
+      background: #FFF;
+    }
+    .qr-caption {
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--ink-muted);
+      margin-top: 2px;
+    }
+
+    /* ---- FOOTER & SERVICE CONTACT ---- */
     .footer {
-      font-size: 18px;
-      line-height: 1.4;
-      color: var(--muted);
+      border-top: 1.5px solid var(--ink-primary);
+      padding-top: 3mm;
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 4mm;
+      align-items: center;
     }
-    .office {
-      margin-top: 10px;
-      font-size: 16px;
-      line-height: 1.4;
-      color: var(--muted);
+    .service-box {
+      background: var(--gold-light);
+      border: 1px solid rgba(197, 160, 89, 0.4);
+      border-radius: 6px;
+      padding: 2.5mm 3.5mm;
     }
+    .service-box .s-label {
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--gold-deep);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 1px;
+    }
+    .service-box .s-phone {
+      font-size: 19px;
+      font-weight: 900;
+      color: var(--ink-primary);
+      direction: ltr;
+      text-align: right;
+      letter-spacing: 0.03em;
+      font-family: 'Assistant', sans-serif;
+    }
+    .checkout-instructions {
+      font-size: 10.5px;
+      color: var(--ink-secondary);
+      line-height: 1.35;
+      text-align: left;
+      direction: rtl;
+    }
+    .checkout-instructions strong {
+      color: var(--ink-primary);
+      font-weight: 800;
+    }
+    .customer-care {
+      font-size: 9.5px;
+      color: var(--ink-muted);
+      margin-top: 2px;
+    }
+
+    /* ---- PRINT RULES (SINGLE A4 PAGE ENFORCED) ---- */
     @page {
       size: A4 portrait;
       margin: 0;
     }
+
     @media print {
-      html {
+      html, body {
+        background: #FFFFFF !important;
         margin: 0 !important;
         padding: 0 !important;
-        height: 100% !important;
-        overflow: hidden !important;
-        background: var(--cream) !important;
-      }
-      body {
         width: 210mm !important;
-        height: 295mm !important;
-        margin: 0 !important;
-        padding: 0 !important;
+        height: 297mm !important;
         overflow: hidden !important;
-        background: var(--cream) !important;
       }
       .toolbar { display: none !important; }
+      .sheet-wrapper {
+        margin: 0 !important;
+        padding: 0 !important;
+        page-break-after: avoid !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
       .sheet {
         width: 210mm !important;
-        height: 295mm !important;
+        height: 297mm !important;
         margin: 0 !important;
-        overflow: hidden !important;
-        background: var(--cream) !important;
+        padding: 8mm !important;
+        box-shadow: none !important;
+        background: #FFFDF9 !important;
+        page-break-after: always !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
       }
-      html, body, .sheet, .sheet * {
+      .sheet:last-of-type {
+        page-break-after: avoid !important;
+      }
+      * {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
         color-adjust: exact !important;
@@ -185,165 +530,346 @@
   </style>
 </head>
 <body>
+
+  <!-- ADMIN / STAFF TOOLBAR -->
   <div class="toolbar">
-    <label>
-      בקתה
-      <select id="unit"></select>
-    </label>
-    <span class="hint">הדפסה: A4, צבע, עמוד אחד. בטלו «Print headers and footers» בחלון ההדפסה.</span>
-    <button type="button" onclick="window.print()">הדפסה</button>
+    <div class="toolbar-group">
+      <label for="unit-select">בחר יחידה להדפסה:</label>
+      <select id="unit-select"></select>
+    </div>
+    <div class="toolbar-group">
+      <button type="button" class="btn btn-gold" onclick="window.print()">🖨️ הדפס דף זה (A4)</button>
+      <button type="button" class="btn btn-primary" onclick="printAllUnits()">📚 הפק להדפסה את כל 41 היחידות</button>
+    </div>
+    <div class="toolbar-hint">
+      <span>💡 מוגדר בדיוק למידות A4 בעמוד אחד. בחלון ההדפסה יש לסמן <strong>Background graphics</strong> ולבטל <strong>Headers and footers</strong>.</span>
+      <span id="unit-counter">יחידה 1 מתוך 41</span>
+    </div>
   </div>
 
-  <article class="sheet" id="sheet">
-    <div class="content">
-      <header>
-        <h1>ברוכים הבאים</h1>
-        <h2 id="property">בתי נורית</h2>
-      </header>
+  <!-- A4 PRINTABLE SHEET -->
+  <div class="sheet-wrapper" id="sheet-wrapper">
+    <article class="sheet" id="sheet">
+      <div class="sheet-inner">
+        <!-- Corner Accents -->
+        <div class="corner-ornament corner-tl"></div>
+        <div class="corner-ornament corner-tr"></div>
+        <div class="corner-ornament corner-bl"></div>
+        <div class="corner-ornament corner-br"></div>
 
-      <div class="rule"></div>
-
-      <div class="grid">
-        <div>
-          <div class="label">צ׳ק-אין</div>
-          <div class="value">15:00</div>
-        </div>
-        <div>
-          <div class="label">צ׳ק-אאוט</div>
-          <div class="value">11:00</div>
-        </div>
-        <div>
-          <div class="label">שבת — יציאה</div>
-          <div class="value small" id="saturday">15:00</div>
-        </div>
-      </div>
-
-      <div class="rule"></div>
-
-      <div class="split">
-        <div class="stack">
-          <div id="lockbox-block">
-            <div class="label">קוד כספת מפתח</div>
-            <div class="value mono" id="lockbox">2310</div>
+        <!-- HEADER -->
+        <header class="header">
+          <div class="brand-crown">MIALEES RESORT COLLECTION · קולקציית האירוח מיאליס</div>
+          <h1 class="welcome-title">ברוכים הבאים</h1>
+          <div>
+            <span class="unit-hero-name" id="hero-unit-name">טוסקנה · שאטו</span>
           </div>
-          <div id="gate-block">
-            <div class="label">קוד שער המושב</div>
-            <div class="value mono" id="gate">#2464</div>
+          <div class="prop-location" id="prop-location">מושב רמות, רמת הגולן</div>
+        </header>
+
+        <!-- CHECK-IN / CHECK-OUT TIMES -->
+        <div class="times-row">
+          <div class="time-card">
+            <div class="time-label">שעת כניסה (צ׳ק-אין)</div>
+            <div class="time-val">15:00</div>
+          </div>
+          <div class="time-card">
+            <div class="time-label">שעת יציאה (צ׳ק-אאוט)</div>
+            <div class="time-val">11:00</div>
+          </div>
+          <div class="time-card">
+            <div class="time-label">יציאה בשבת</div>
+            <div class="time-val saturday" id="saturday-val">15:00</div>
           </div>
         </div>
-        <div class="stack">
-          <div id="wifi-block">
-            <div class="label">רשת Wi-Fi</div>
-            <div class="value small" id="ssid">MIALEES RESORT</div>
+
+        <!-- ACCESS & CONNECTIVITY -->
+        <div class="access-grid">
+          <!-- Key Safe / Lockbox -->
+          <div class="access-card" id="lockbox-card">
+            <div class="access-header">
+              <span class="access-icon">🔑</span>
+              <span>כספת מפתח</span>
+            </div>
+            <div class="access-value" id="lockbox-val">2730</div>
+            <div class="access-sub">קוד פתיחה ונעילת מפתח היחידה</div>
           </div>
-          <div id="pass-block">
-            <div class="label">סיסמת Wi-Fi</div>
-            <div class="value small mono" id="pass">MIAL2026</div>
+
+          <!-- Village Gate Code -->
+          <div class="access-card" id="gate-card">
+            <div class="access-header">
+              <span class="access-icon">🚪</span>
+              <span>שער כניסה</span>
+            </div>
+            <div class="access-value" id="gate-val">#2464</div>
+            <div class="access-sub" id="gate-sub">חיוג או הקשת קוד בשער</div>
+          </div>
+
+          <!-- Wi-Fi -->
+          <div class="access-card" id="wifi-card">
+            <div class="access-header">
+              <span class="access-icon">📶</span>
+              <span>אינטרנט אלחוטי (Wi-Fi)</span>
+            </div>
+            <div class="wifi-details">
+              <div class="wifi-row">
+                <span class="w-label">רשת:</span>
+                <span class="w-val" id="wifi-ssid">Toscana</span>
+              </div>
+              <div class="wifi-row">
+                <span class="w-label">סיסמה:</span>
+                <span class="w-val" id="wifi-pass">12345678</span>
+              </div>
+            </div>
+            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
           </div>
         </div>
-      </div>
 
-      <div class="rule"></div>
+        <!-- HOUSE RULES & PROHIBITIONS (NEW) -->
+        <section class="rules-section">
+          <div class="rules-header">
+            <div class="rules-title">
+              <span>📋</span>
+              <span>כללי האירוח והשהייה במתחם — לתשומת לבכם ולמען חופשה נעימה</span>
+            </div>
+            <span class="rules-badge">תקנון המתחם</span>
+          </div>
 
-      <div class="note">
-        דף השהייה בטלפון נשלח אליכם בהודעה — שם מופיעים ניווט, צ׳ק-אין, והקודים אחרי הכניסה.
-        אם אין קישור, חייגו לשירות בשטח.
-      </div>
+          <div class="rules-grid">
+            <div class="rule-item">
+              <span class="rule-icon">🚭</span>
+              <div>
+                <strong>איסור עישון מוחלט בחדר:</strong> העישון (כולל סיגריות, נרגילה ואידוי / Vape) מותר אך ורק במרפסות ובחצר הפתוחה. עישון בתוך היחידה אסור בהחלט ויגרור חיוב דמי ניקוי מיוחד ע״ס ₪500.
+              </div>
+            </div>
 
-      <div class="checkin-phone">
-        <div class="label">שירות בזמן צ׳ק-אין</div>
-        <div class="value" id="service">054-713-6676</div>
-      </div>
+            <div class="rule-item">
+              <span class="rule-icon">🔇</span>
+              <div>
+                <strong>שקט, שלווה ואיסור מסיבות:</strong> חל איסור על הכנסת מערכות הגברה, רמקולים ניידים (בוקסות), קריוקי ומסיבות. יש לשמור על שקט מוחלט בין 23:00 ל-07:00 ובין 14:00 ל-16:00.
+              </div>
+            </div>
 
-      <div class="footer" id="footer">
-        ביציאה מחזירים את המפתח לכספת וסוגרים אותה. צ׳ק-אאוט מאוחר בתיאום מראש.
-        <div class="office">
-          שירות לקוחות 08:00–20:00 · 050-950-6222<br />
-          לתשלומים, חיובים, חשבוניות או הארכת שהייה
+            <div class="rule-item">
+              <span class="rule-icon">🥩</span>
+              <div>
+                <strong>הדלקת אש ומנגל (BBQ):</strong> מותרת אך ורק בעמדות המנגל המוסדרות בחצר, ולעולם לא על גבי דק העץ או בתוך המבנה. אין להבעיר אש בשבת.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">👥</span>
+              <div>
+                <strong>אורחים ומבקרים:</strong> השהייה מיועדת אך ורק למספר האורחים הנקוב בהזמנה המאושרת. חל איסור על הכנסת אורחים נוספים או לינה ללא תיאום ואישור מראש.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🛁</span>
+              <div>
+                <strong>בטיחות בג׳קוזי ובריכה:</strong> חובה לוודא שגובה המים מכסה את כל פתחי הסילונים (הג׳טים) לפני הפעלת המתג למניעת שריפת מנוע. חל איסור על כלי זכוכית, שמנים או סבונים במים.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🐾</span>
+              <div>
+                <strong>בעלי חיים וחיות מחמד:</strong> כניסת חיות מחמד אסורה בהחלט, אלא אם תואמה ואושרה מראש ובכתב מול הנהלת הריזורט טרם ההגעה.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- DIGITAL GUEST HUB & QR -->
+        <div class="digital-hub">
+          <div class="hub-content">
+            <h3><span>📱</span><span>דף האורח הדיגיטלי והמדריך המלא שלכם</span></h3>
+            <p>
+              סרקו את הקוד עם מצלמת הטלפון כדי לפתוח את פורטל השהייה: ניווט מדויק, המלצות על מסעדות מקומיות וקצביות, מעיינות נסתרים, מדריכי הפעלה ליחידה, וצ׳ק-אאוט דיגיטלי בקליק.
+            </p>
+            <div class="hub-highlights">
+              <span>🍽️ מסעדות מומלצות</span>
+              <span>🌿 מעיינות ואטרקציות</span>
+              <span>📺 מדריך ג׳קוזי ו-TV</span>
+              <span>💬 וואטסאפ שירות מהיר</span>
+            </div>
+          </div>
+          <div class="hub-qr-wrap">
+            <img id="hub-qr-img" class="hub-qr" alt="QR Code" src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https%3A%2F%2Fresortos.app%2Fguest&color=1C1917" />
+            <div class="qr-caption">סריקה במצלמה</div>
+          </div>
         </div>
+
+        <!-- FOOTER & SERVICE CONTACT -->
+        <footer class="footer">
+          <div class="service-box">
+            <div class="s-label">שירות בשטח וסיוע בצ׳ק-אין (מענה מהיר)</div>
+            <div class="s-phone" id="service-phone">054-713-6676</div>
+          </div>
+
+          <div class="checkout-instructions">
+            <div><strong>הנחיות עזיבה:</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div class="customer-care">
+              שירות לקוחות ומשרד: <strong>050-950-6222</strong> (08:00–20:00) · לחיובים, חשבוניות או הארכת שהייה
+            </div>
+          </div>
+        </footer>
       </div>
-    </div>
-  </article>
+    </article>
+  </div>
 
   <script>
     const UNITS = [
-      { id: 'k671', property: 'בתי נורית', cabin: 'בתי נורית 1', ramot: true, lockbox: '2310', gate: '#2464', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
-      { id: 'k673', property: 'בתי נורית', cabin: 'בתי נורית 2', ramot: true, lockbox: '2320', gate: '#2464', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
-      { id: 'k674', property: 'בתי נורית', cabin: 'בתי נורית 3', ramot: true, lockbox: '2330', gate: '#2464', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
-      { id: 'k675', property: 'בתי נורית', cabin: 'בתי נורית 4', ramot: true, lockbox: '2340', gate: '#2464', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
-      { id: 'k676', property: 'בתי נורית', cabin: 'בתי נורית 5', ramot: true, lockbox: '2350', gate: '#2464', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
-      { id: 'k677', property: 'בתי נורית', cabin: 'בתי נורית 6', ramot: true, lockbox: '2360', gate: '#2464', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
-      { id: 'k678', property: 'בתי נורית', cabin: 'בתי נורית 7', ramot: true, lockbox: '2370', gate: '#2464', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
-      { id: 'k679', property: 'בתי נורית', cabin: 'בתי נורית 8', ramot: true, lockbox: '2380', gate: '#2464', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
-      { id: 'suite-1', property: 'מיאליס ריזורט', cabin: 'סוויטה 1 (הירוקה)', ramot: false, lockbox: '', gate: 'חיוג לשער', ssid: 'CASAMIA', pass: 'CASAMIA10' },
-      { id: 'suite-2', property: 'מיאליס ריזורט', cabin: 'סוויטה 2 (הורודה)', ramot: false, lockbox: '', gate: 'חיוג לשער', ssid: 'CASAMIA', pass: 'CASAMIA10' },
-      { id: 'mialis-villa', property: 'מיאליס ריזורט', cabin: 'וילה מיאליס ריזורט', ramot: false, lockbox: '', gate: 'חיוג לשער', ssid: 'CASAMIA', pass: 'CASAMIA10' },
-      { id: 'k808', property: "טאג' מאהל", cabin: "טאג' מאהל · בקתה 1", ramot: true, lockbox: '2510', gate: '#2464', ssid: 'LUTUS', pass: '12345678' },
-      { id: 'k809', property: "טאג' מאהל", cabin: "טאג' מאהל · בקתה 2", ramot: true, lockbox: '2520', gate: '#2464', ssid: 'LUTUS', pass: '12345678' },
-      { id: 'k810', property: "טאג' מאהל", cabin: "טאג' מאהל · בקתה 3", ramot: true, lockbox: '2530', gate: '#2464', ssid: 'LUTUS', pass: '12345678' },
-      { id: 'k811', property: "טאג' מאהל", cabin: "טאג' מאהל · בקתה 4", ramot: true, lockbox: '2540', gate: '#2464', ssid: 'LUTUS', pass: '12345678' },
-      { id: 'k680', property: 'מול הנוף', cabin: 'מול הנוף · בקתה 1', ramot: true, lockbox: '2910', gate: '#2464', ssid: 'Mol_hanof', pass: '12345678' },
-      { id: 'k681', property: 'מול הנוף', cabin: 'מול הנוף · בקתה 2', ramot: true, lockbox: '2920', gate: '#2464', ssid: 'Mol_hanof', pass: '12345678' },
-      { id: 'k682', property: 'מול הנוף', cabin: 'מול הנוף · בקתה 3', ramot: true, lockbox: '2930', gate: '#2464', ssid: 'Mol_hanof', pass: '12345678' },
-      { id: 'k683', property: 'מול הנוף', cabin: 'מול הנוף · בקתה 4', ramot: true, lockbox: '2940', gate: '#2464', ssid: 'Mol_hanof', pass: '12345678' },
-      { id: 'k684', property: 'מול הנוף', cabin: 'מול הנוף · בקתה 5', ramot: true, lockbox: '2950', gate: '#2464', ssid: 'Mol_hanof', pass: '12345678' },
-      { id: 'k685', property: 'נופים בלבן', cabin: 'נופים בלבן · בקתה 1', ramot: true, lockbox: '2810', gate: '#2464', ssid: 'TP-LINK_FA30', pass: '15107312' },
-      { id: 'k686', property: 'נופים בלבן', cabin: 'נופים בלבן · בקתה 2', ramot: true, lockbox: '2810', gate: '#2464', ssid: '', pass: '' },
-      { id: 'k687', property: 'בקתות טוסקנה', cabin: 'טוסקנה · פירנצה 1', ramot: true, lockbox: '2710', gate: '#2464', ssid: 'Toscana', pass: '12345678' },
-      { id: 'k688', property: 'בקתות טוסקנה', cabin: 'טוסקנה · פירנצה 2', ramot: true, lockbox: '2720', gate: '#2464', ssid: 'Toscana', pass: '12345678' },
-      { id: 'k689', property: 'בקתות טוסקנה', cabin: 'טוסקנה · שאטו', ramot: true, lockbox: '2730', gate: '#2464', ssid: 'Toscana', pass: '12345678' },
-      { id: 'k690', property: 'החצר המוסיקלית', cabin: 'חצר מוסיקלית · חליל', ramot: true, lockbox: '2610', gate: '#2464', ssid: 'Music yard', pass: '12345678' },
-      { id: 'k691', property: 'החצר המוסיקלית', cabin: 'חצר מוסיקלית · מיתר', ramot: true, lockbox: '2610', gate: '#2464', ssid: 'Music yard', pass: '12345678' },
-      { id: 'k692', property: 'החצר המוסיקלית', cabin: 'חצר מוסיקלית · פעמון', ramot: true, lockbox: '2610', gate: '#2464', ssid: 'Music yard', pass: '12345678' },
-      { id: 'k693', property: 'בקתות מאיה', cabin: 'בקתות מאיה · בקתה 1', ramot: true, lockbox: '2410', gate: '#2464', ssid: '', pass: '12345678' },
-      { id: 'k694', property: 'בקתות מאיה', cabin: 'בקתות מאיה · בקתה 2', ramot: true, lockbox: '2420', gate: '#2464', ssid: '', pass: '12345678' },
-      { id: 'k695', property: 'בקתות מאיה', cabin: 'בקתות מאיה · בקתה 3', ramot: true, lockbox: '2430', gate: '#2464', ssid: '', pass: '12345678' },
-      { id: 'k826', property: 'קאסה נובה', cabin: 'קאסה נובה · Aura', ramot: false, lockbox: '', gate: '', ssid: 'MIALEES', pass: 'AD654321' },
-      { id: 'k827', property: 'קאסה נובה', cabin: 'קאסה נובה · Bloom', ramot: false, lockbox: '', gate: '', ssid: 'MIALEES', pass: 'AD654321' }
+      // 1. בתי נורית (מושב רמות)
+      { id: 'k671', property: 'בתי נורית', cabin: 'בתי נורית 1', loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2310', gate: '#2464', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
+      { id: 'k673', property: 'בתי נורית', cabin: 'בתי נורית 2', loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2320', gate: '#2464', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
+      { id: 'k674', property: 'בתי נורית', cabin: 'בתי נורית 3', loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2330', gate: '#2464', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
+      { id: 'k675', property: 'בתי נורית', cabin: 'בתי נורית 4', loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2340', gate: '#2464', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
+      { id: 'k676', property: 'בתי נורית', cabin: 'בתי נורית 5', loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2350', gate: '#2464', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
+      { id: 'k677', property: 'בתי נורית', cabin: 'בתי נורית 6', loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2360', gate: '#2464', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
+      { id: 'k678', property: 'בתי נורית', cabin: 'בתי נורית 7', loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2370', gate: '#2464', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
+      { id: 'k679', property: 'בתי נורית', cabin: 'בתי נורית 8', loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2380', gate: '#2464', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
+
+      // 2. בקתות טוסקנה (מושב רמות)
+      { id: 'k687', property: 'בקתות טוסקנה', cabin: 'טוסקנה · פירנצה 1', loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2710', gate: '#2464', ssid: 'Toscana', pass: '12345678' },
+      { id: 'k688', property: 'בקתות טוסקנה', cabin: 'טוסקנה · פירנצה 2', loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2720', gate: '#2464', ssid: 'Toscana', pass: '12345678' },
+      { id: 'k689', property: 'בקתות טוסקנה', cabin: 'טוסקנה · שאטו', loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2730', gate: '#2464', ssid: 'Toscana', pass: '12345678' },
+
+      // 3. טאג' מאהל (מושב רמות)
+      { id: 'k808', property: "טאג' מאהל", cabin: "טאג' מאהל · בקתה 1", loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2510', gate: '#2464', ssid: 'LUTUS', pass: '12345678' },
+      { id: 'k809', property: "טאג' מאהל", cabin: "טאג' מאהל · בקתה 2", loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2520', gate: '#2464', ssid: 'LUTUS', pass: '12345678' },
+      { id: 'k810', property: "טאג' מאהל", cabin: "טאג' מאהל · בקתה 3", loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2530', gate: '#2464', ssid: 'LUTUS', pass: '12345678' },
+      { id: 'k811', property: "טאג' מאהל", cabin: "טאג' מאהל · בקתה 4", loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2540', gate: '#2464', ssid: 'LUTUS', pass: '12345678' },
+
+      // 4. מול הנוף (מושב רמות)
+      { id: 'k680', property: 'מול הנוף', cabin: 'מול הנוף · בקתה 1', loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2910', gate: '#2464', ssid: 'Mol_hanof', pass: '12345678' },
+      { id: 'k681', property: 'מול הנוף', cabin: 'מול הנוף · בקתה 2', loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2920', gate: '#2464', ssid: 'Mol_hanof', pass: '12345678' },
+      { id: 'k682', property: 'מול הנוף', cabin: 'מול הנוף · בקתה 3', loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2930', gate: '#2464', ssid: 'Mol_hanof', pass: '12345678' },
+      { id: 'k683', property: 'מול הנוף', cabin: 'מול הנוף · בקתה 4', loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2940', gate: '#2464', ssid: 'Mol_hanof', pass: '12345678' },
+      { id: 'k684', property: 'מול הנוף', cabin: 'מול הנוף · בקתה 5', loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2950', gate: '#2464', ssid: 'Mol_hanof', pass: '12345678' },
+
+      // 5. נופים בלבן (מושב רמות)
+      { id: 'k685', property: 'נופים בלבן', cabin: 'נופים בלבן · בקתה 1', loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2810', gate: '#2464', ssid: 'TP-LINK_FA30', pass: '15107312' },
+      { id: 'k686', property: 'נופים בלבן', cabin: 'נופים בלבן · בקתה 2', loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2810', gate: '#2464', ssid: 'TP-LINK_FA30', pass: '15107312' },
+
+      // 6. החצר המוסיקלית (מושב רמות)
+      { id: 'k690', property: 'החצר המוסיקלית', cabin: 'חצר מוסיקלית · בקתה 1 (חליל)', loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2610', gate: '#2464', ssid: 'Music yard', pass: '12345678' },
+      { id: 'k691', property: 'החצר המוסיקלית', cabin: 'חצר מוסיקלית · בקתה 2 (מיתר)', loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2610', gate: '#2464', ssid: 'Music yard', pass: '12345678' },
+      { id: 'k692', property: 'החצר המוסיקלית', cabin: 'חצר מוסיקלית · בקתה 3 (פעמון)', loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2610', gate: '#2464', ssid: 'Music yard', pass: '12345678' },
+
+      // 7. בקתות מאיה (מושב רמות)
+      { id: 'k693', property: 'בקתות מאיה', cabin: 'בקתות מאיה · בקתה 1', loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2410', gate: '#2464', ssid: 'maya', pass: '12345678' },
+      { id: 'k694', property: 'בקתות מאיה', cabin: 'בקתות מאיה · בקתה 2', loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2420', gate: '#2464', ssid: 'maya', pass: '12345678' },
+      { id: 'k695', property: 'בקתות מאיה', cabin: 'בקתות מאיה · בקתה 3', loc: 'מושב רמות, רמת הגולן', ramot: true, lockbox: '2430', gate: '#2464', ssid: 'maya', pass: '12345678' },
+
+      // 8. מיאליס ריזורט (גבעת יואב)
+      { id: 'suite-1', property: 'מיאליס ריזורט', cabin: 'סוויטה 1 (הירוקה)', loc: 'גבעת יואב, דרום רמת הגולן', ramot: false, lockbox: '1010', gate: 'חיוג לשער', ssid: 'CASAMIA', pass: 'CASAMIA10' },
+      { id: 'suite-2', property: 'מיאליס ריזורט', cabin: 'סוויטה 2 (הורודה)', loc: 'גבעת יואב, דרום רמת הגולן', ramot: false, lockbox: '2020', gate: 'חיוג לשער', ssid: 'CASAMIA', pass: 'CASAMIA10' },
+      { id: 'mialis-villa', property: 'מיאליס ריזורט', cabin: 'וילה מיאליס ריזורט', loc: 'גבעת יואב, דרום רמת הגולן', ramot: false, lockbox: '0000', gate: 'חיוג לשער', ssid: 'CASAMIA', pass: 'CASAMIA10' },
+
+      // 9. כיפת שמיים (גבעת יואב)
+      { id: 'dome-blue', property: 'כיפת שמיים', cabin: 'כיפת שמיים כחול', loc: 'גבעת יואב, דרום רמת הגולן', ramot: false, lockbox: '3010', gate: 'חיוג לשער', ssid: 'Kipat_Shamayim', pass: '12345678' },
+      { id: 'dome-green', property: 'כיפת שמיים', cabin: 'כיפת שמיים ירוק', loc: 'גבעת יואב, דרום רמת הגולן', ramot: false, lockbox: '3020', gate: 'חיוג לשער', ssid: 'Kipat_Shamayim', pass: '12345678' },
+      { id: 'dome-red', property: 'כיפת שמיים', cabin: 'כיפת שמיים אדום', loc: 'גבעת יואב, דרום רמת הגולן', ramot: false, lockbox: '3030', gate: 'חיוג לשער', ssid: 'Kipat_Shamayim', pass: '12345678' },
+
+      // 10. צימר בגבעה (גבעת יואב)
+      { id: 'hill-1', property: 'צימר בגבעה', cabin: 'צימר בגבעה 1', loc: 'גבעת יואב, דרום רמת הגולן', ramot: false, lockbox: '4010', gate: 'חיוג לשער', ssid: 'Zimer_Giva', pass: '12345678' },
+      { id: 'hill-2', property: 'צימר בגבעה', cabin: 'צימר בגבעה 2', loc: 'גבעת יואב, דרום רמת הגולן', ramot: false, lockbox: '4020', gate: 'חיוג לשער', ssid: 'Zimer_Giva', pass: '12345678' },
+      { id: 'hill-3', property: 'צימר בגבעה', cabin: 'צימר בגבעה 3', loc: 'גבעת יואב, דרום רמת הגולן', ramot: false, lockbox: '4030', gate: 'חיוג לשער', ssid: 'Zimer_Giva', pass: '12345678' },
+      { id: 'hill-4', property: 'צימר בגבעה', cabin: 'צימר בגבעה 4', loc: 'גבעת יואב, דרום רמת הגולן', ramot: false, lockbox: '4040', gate: 'חיוג לשער', ssid: 'Zimer_Giva', pass: '12345678' },
+
+      // 11. קאסה נובה (מושב נוב)
+      { id: 'k826', property: 'קאסה נובה', cabin: 'קאסה נובה · Aura', loc: 'מושב נוב, דרום רמת הגולן', ramot: false, lockbox: '8260', gate: 'חיוג לשער', ssid: 'MIALEES', pass: 'AD654321' },
+      { id: 'k827', property: 'קאסה נובה', cabin: 'קאסה נובה · Bloom', loc: 'מושב נוב, דרום רמת הגולן', ramot: false, lockbox: '8270', gate: 'חיוג לשער', ssid: 'MIALEES', pass: 'AD654321' }
     ];
 
-    const select = document.getElementById('unit');
-    UNITS.forEach((unit) => {
+    const select = document.getElementById('unit-select');
+    const counter = document.getElementById('unit-counter');
+
+    UNITS.forEach((unit, idx) => {
       const option = document.createElement('option');
       option.value = unit.id;
-      option.textContent = unit.cabin;
+      option.textContent = `${unit.property} — ${unit.cabin}`;
       select.appendChild(option);
     });
 
-    function setText(id, value, hideIfEmpty) {
-      const el = document.getElementById(id);
-      const block = document.getElementById(id + '-block');
-      if (hideIfEmpty && !value) {
-        if (block) block.style.display = 'none';
-        return;
-      }
-      if (block) block.style.display = '';
-      el.textContent = value || 'שם הרשת במקום';
-    }
+    function renderUnit(unit) {
+      if (!unit) return;
 
-    function render(unit) {
-      document.getElementById('property').textContent = unit.property;
-      document.getElementById('saturday').textContent = unit.property === 'קאסה נובה' ? 'צאת השבת' : '15:00';
-      document.getElementById('service').textContent = unit.ramot ? '054-713-6676' : '050-759-7944';
-      setText('lockbox', unit.lockbox, true);
-      setText('gate', unit.gate, true);
-      const wifiBlock = document.getElementById('wifi-block');
-      const passBlock = document.getElementById('pass-block');
-      if (!unit.pass) {
-        wifiBlock.style.display = 'none';
-        passBlock.style.display = 'none';
-      } else {
-        wifiBlock.style.display = '';
-        passBlock.style.display = '';
-        document.getElementById('ssid').textContent = unit.ssid || 'שם הרשת במקום';
-        document.getElementById('pass').textContent = unit.pass;
-      }
+      document.getElementById('hero-unit-name').textContent = unit.cabin;
+      document.getElementById('prop-location').textContent = unit.loc;
+      document.getElementById('saturday-val').textContent = unit.property === 'קאסה נובה' ? 'צאת השבת' : '15:00';
+      document.getElementById('service-phone').textContent = unit.ramot ? '054-713-6676' : '050-759-7944';
+
+      // Lockbox
+      const lockboxVal = document.getElementById('lockbox-val');
+      lockboxVal.textContent = unit.lockbox || 'ללא כספת';
+
+      // Gate
+      const gateVal = document.getElementById('gate-val');
+      const gateSub = document.getElementById('gate-sub');
+      gateVal.textContent = unit.gate || '#2464';
+      gateSub.textContent = unit.ramot ? 'קוד שער מושב רמות' : 'חיוג מהטלפון לפתיחת השער';
+
+      // Wi-Fi
+      document.getElementById('wifi-ssid').textContent = unit.ssid || 'רשת זמינה במקום';
+      document.getElementById('wifi-pass').textContent = unit.pass || 'ללא סיסמה';
+
+      // QR Link to specific guest portal / unit
+      const guestUrl = `https://resortos.app/guest?unit=${encodeURIComponent(unit.id)}`;
+      document.getElementById('hub-qr-img').src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(guestUrl)}&color=1C1917`;
+
+      const currIdx = UNITS.findIndex(u => u.id === unit.id);
+      counter.textContent = `יחידה ${currIdx + 1} מתוך ${UNITS.length}`;
     }
 
     select.addEventListener('change', () => {
-      render(UNITS.find((unit) => unit.id === select.value));
+      const selected = UNITS.find(u => u.id === select.value);
+      renderUnit(selected);
     });
-    render(UNITS[0]);
+
+    // Initial render
+    renderUnit(UNITS[0]);
+
+    // Batch Print Function
+    function printAllUnits() {
+      const wrapper = document.getElementById('sheet-wrapper');
+      const originalContent = wrapper.innerHTML;
+      const baseSheetTemplate = document.getElementById('sheet').outerHTML;
+
+      let allSheetsHtml = '';
+      UNITS.forEach((unit) => {
+        // Build sheet clone
+        const div = document.createElement('div');
+        div.innerHTML = baseSheetTemplate;
+        const sheet = div.firstElementChild;
+
+        // Populate clone
+        sheet.querySelector('#hero-unit-name').textContent = unit.cabin;
+        sheet.querySelector('#prop-location').textContent = unit.loc;
+        sheet.querySelector('#saturday-val').textContent = unit.property === 'קאסה נובה' ? 'צאת השבת' : '15:00';
+        sheet.querySelector('#service-phone').textContent = unit.ramot ? '054-713-6676' : '050-759-7944';
+        sheet.querySelector('#lockbox-val').textContent = unit.lockbox || 'ללא כספת';
+        sheet.querySelector('#gate-val').textContent = unit.gate || '#2464';
+        sheet.querySelector('#gate-sub').textContent = unit.ramot ? 'קוד שער מושב רמות' : 'חיוג מהטלפון לפתיחת השער';
+        sheet.querySelector('#wifi-ssid').textContent = unit.ssid || 'רשת זמינה במקום';
+        sheet.querySelector('#wifi-pass').textContent = unit.pass || 'ללא סיסמה';
+
+        const guestUrl = `https://resortos.app/guest?unit=${encodeURIComponent(unit.id)}`;
+        sheet.querySelector('#hub-qr-img').src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(guestUrl)}&color=1C1917`;
+
+        allSheetsHtml += sheet.outerHTML;
+      });
+
+      wrapper.innerHTML = allSheetsHtml;
+      window.print();
+
+      // Restore single sheet
+      setTimeout(() => {
+        wrapper.innerHTML = originalContent;
+        renderUnit(UNITS.find(u => u.id === select.value));
+      }, 1000);
+    }
   </script>
 </body>
 </html>
