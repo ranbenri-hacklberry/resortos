@@ -4,6 +4,7 @@ import { loadCalendarReplica } from '../../lib/calendarReplica.js';
 import { compactStayRow } from '../../lib/guestContextStore.js';
 import { createHypPaymentPage, hasHypCreds } from '../../lib/hypPay.js';
 import { UNIT_DISPLAY_NAMES } from '../../lib/unitNames.js';
+import { OFFSET_AMOUNT_ILS } from '../../lib/offsetRule.js';
 import { onRequest as checkoutOnRequest, loadGuestIdPhoto, persistGuestRow, readBooking } from '../checkout/[[path]].js';
 
 const TOKEN_RE = /^tok_[A-Za-z0-9_-]+$/;
@@ -343,7 +344,10 @@ export async function onRequest(context) {
       if (loaded.error) return loaded.error;
       const { replica, token, booking } = loaded;
       const dueNow = Math.max(0, (Number(booking.total_price_agorot) || 0) / 100 - paidIls(booking));
-      const amount = Math.max(0, Number(body.amount_ils) || dueNow || Number(booking.deposit_agorot || 0) / 100 || 0);
+      const isOffsetBody = head === 'mark' && String(body.method || '').toUpperCase() === 'OFFSET';
+      const amount = isOffsetBody
+        ? OFFSET_AMOUNT_ILS
+        : Math.max(0, Number(body.amount_ils) || dueNow || Number(booking.deposit_agorot || 0) / 100 || 0);
 
       if (head === 'total') {
         const totalIls = Math.max(0, Number(body.total_ils) || 0);

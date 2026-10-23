@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Lock, LogOut, Upload } from 'lucide-react';
 import { isUnavailableHoldText } from '../lib/unavailableHold';
 import { unitAccessGroup } from '../lib/units';
 import { HYP_TERMINAL_A, HYP_TERMINAL_B } from '../lib/hypTerminal';
+import { OFFSET_AMOUNT_ILS } from '../../functions/lib/offsetRule.js';
 
 const TOKEN_KEY = 'resortos_desk_session_v2';
 const TERMINAL_KEY = 'resortos_desk_hyp_terminal';
@@ -216,6 +217,10 @@ function PaymentSheet({ booking, busy, hyp, error, payUrl, sessionToken, onClose
   function chooseMethod(next) {
     setMethod(next);
     if (next === 'bank') setReceived(true);
+    if (next === 'offset') {
+      if (!(Number(total) > 0)) setTotal(String(OFFSET_AMOUNT_ILS));
+      setDue(String(OFFSET_AMOUNT_ILS));
+    }
   }
 
   return (
@@ -247,7 +252,7 @@ function PaymentSheet({ booking, busy, hyp, error, payUrl, sessionToken, onClose
               inputMode="decimal"
               value={fullyPaid ? '0' : due}
               placeholder="0"
-              disabled={fullyPaid}
+              disabled={fullyPaid || method === 'offset'}
               onChange={(event) => setDue(event.target.value.replace(/[^\d.]/g, ''))}
             />
           </label>
@@ -576,7 +581,7 @@ export default function DeskApp() {
           body: {
             id: booking.id,
             checkout_token: booking.checkout_token,
-            amount_ils: draft.remainder,
+            amount_ils: draft.method === 'offset' ? OFFSET_AMOUNT_ILS : draft.remainder,
             method: draft.method === 'cash' ? 'CASH' : draft.method === 'bank' ? 'BANK' : draft.method === 'offset' ? 'OFFSET' : 'CARD',
             note: draft.method === 'offset' ? `קיזוז משכר: ${String(draft.ref || '').trim()}` : undefined,
             photo: draft.method === 'bank' ? (draft.photo || '') : undefined,
