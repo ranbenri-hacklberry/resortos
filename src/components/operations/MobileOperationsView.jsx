@@ -230,7 +230,7 @@ export default function MobileOperationsView({
         isReady,
         sameDayTurnover
       };
-    });
+    }).filter((room) => !(room.unit?.staff_occupancy === 'OCCUPIED' && !room.sameDayTurnover));
   }, [effectiveBookings, effectiveUnits, todayStr]);
 
   const arrivingCleanCount = arrivingRooms.filter((r) => r.isReady).length;
@@ -310,10 +310,11 @@ export default function MobileOperationsView({
         b.booking_status !== 'CHECKED_OUT' &&
         !isUnavailableHoldBooking(b) &&
         b.check_in_date <= todayStr &&
-        b.check_out_date > todayStr
+        b.check_out_date > todayStr &&
+        (b.check_in_date < todayStr || (unit.staff_occupancy === 'OCCUPIED' && !arrivingRooms.some((r) => r.id === unit.id)))
       ));
       if (hasInHouse) return true;
-      if (unit.staff_occupancy === 'OCCUPIED' && unit.operational_status !== 'READY') return true;
+      if (unit.staff_occupancy === 'OCCUPIED' && unit.operational_status !== 'READY' && !arrivingRooms.some((r) => r.id === unit.id)) return true;
       return false;
     }).map((unit) => {
       const activeBooking = (effectiveBookings || []).find((b) => (
@@ -344,7 +345,7 @@ export default function MobileOperationsView({
         lockbox: lockboxCodeForUnit(unit)
       };
     });
-  }, [effectiveUnits, effectiveBookings, todayStr]);
+  }, [effectiveUnits, effectiveBookings, arrivingRooms, todayStr]);
 
   // 4. VACANT ROOMS (חדרים פנויים ומוכנים)
   const vacantRooms = useMemo(() => {
