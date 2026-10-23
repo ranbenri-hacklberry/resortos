@@ -203,7 +203,7 @@ function PaymentSheet({ booking, busy, hyp, error, payUrl, sessionToken, onClose
   const remainder = Math.max(0, Number(due) || 0);
   const locked = busy === booking.id;
   const payments = booking.payments || [];
-  const recordNow = received || method === 'bank';
+  const recordNow = received || method === 'bank' || method === 'offset';
   const fullyPaid = Boolean(booking.recorded_paid) || (totalIls > 0 && paid + 0.5 >= totalIls);
 
   function editTotal(value) {
@@ -289,6 +289,7 @@ function PaymentSheet({ booking, busy, hyp, error, payUrl, sessionToken, onClose
               <button type="button" className={method === 'cash' ? 'on' : ''} onClick={() => chooseMethod('cash')}>מזומן</button>
               <button type="button" className={method === 'bank' ? 'on' : ''} onClick={() => chooseMethod('bank')}>העברה בנקאית</button>
               <button type="button" className={method === 'voucher' ? 'on' : ''} onClick={() => chooseMethod('voucher')}>שובר</button>
+              <button type="button" className={method === 'offset' ? 'on' : ''} onClick={() => chooseMethod('offset')}>קיזוז</button>
             </div>
 
             {method === 'card' && !recordNow ? (
@@ -308,6 +309,12 @@ function PaymentSheet({ booking, busy, hyp, error, payUrl, sessionToken, onClose
                   תאריך ושעה ששולם
                   <input type="datetime-local" value={paidAt} onChange={(event) => setPaidAt(event.target.value)} />
                 </label>
+                {method === 'offset' ? (
+                  <label>
+                    שם העובד
+                    <input value={ref} placeholder="שם העובד לקיזוז משכר" onChange={(event) => setRef(event.target.value)} />
+                  </label>
+                ) : null}
                 {method === 'card' ? (
                   <label>
                     מספר אישור / אסמכתא
@@ -555,7 +562,8 @@ export default function DeskApp() {
         window.location.assign(nextUrl);
         return;
       }
-      if (draft.method === 'cash' || draft.method === 'bank' || draft.method === 'card') {
+      if (draft.method === 'cash' || draft.method === 'bank' || draft.method === 'card' || draft.method === 'offset') {
+        if (draft.method === 'offset' && !String(draft.ref || '').trim()) throw new Error('ציינו שם עובד לקיזוז.');
         if (draft.method === 'bank') {
           const hasPhoto = (draft.photo || '').startsWith('data:image/');
           const hasRef = Boolean(String(draft.ref || '').trim());
@@ -569,7 +577,8 @@ export default function DeskApp() {
             id: booking.id,
             checkout_token: booking.checkout_token,
             amount_ils: draft.remainder,
-            method: draft.method === 'cash' ? 'CASH' : draft.method === 'bank' ? 'BANK' : 'CARD',
+            method: draft.method === 'cash' ? 'CASH' : draft.method === 'bank' ? 'BANK' : draft.method === 'offset' ? 'OFFSET' : 'CARD',
+            note: draft.method === 'offset' ? `קיזוז משכר: ${String(draft.ref || '').trim()}` : undefined,
             photo: draft.method === 'bank' ? (draft.photo || '') : undefined,
             at: draft.method === 'bank' ? '' : (draft.paidAt || ''),
             ref: String(draft.ref || '').trim()

@@ -699,6 +699,7 @@ ON CONFLICT (id) DO UPDATE SET
   END,
   payment_mode = CASE
     WHEN public.hotelos_bookings.payment_mode = 'CASH' THEN 'CASH'
+    WHEN public.hotelos_bookings.payment_mode = 'OFFSET' THEN 'OFFSET'
     ELSE COALESCE(EXCLUDED.payment_mode, public.hotelos_bookings.payment_mode)
   END,
   clearing_payments = CASE
@@ -722,6 +723,8 @@ ON CONFLICT (id) DO UPDATE SET
   END,
   payment_status = CASE
     WHEN public.hotelos_bookings.payment_status IN ('PAID', 'PENDING_CASH', 'PENDING_BANK')
+      THEN public.hotelos_bookings.payment_status
+    WHEN public.hotelos_bookings.payment_mode = 'OFFSET'
       THEN public.hotelos_bookings.payment_status
     WHEN EXCLUDED.payment_mode IN ('VOUCHER', 'COMP', 'BOOKING') THEN 'PAID'
     WHEN EXCLUDED.clearing_payments <> '[]'::jsonb AND EXCLUDED.payment_status IN ('PAID', 'DEPOSIT_PAID', 'PARTIAL')

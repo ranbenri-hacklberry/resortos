@@ -17,6 +17,7 @@ export const PAYMENT_METHODS = [
   { key: 'CARD_CASH', label: 'אשראי + מזומן', mode: 'CARD_CASH' },
   { key: 'BANK', label: 'העברה', mode: 'BANK_TRANSFER' },
   { key: 'VOUCHER', label: 'שובר', mode: 'VOUCHER' },
+  { key: 'OFFSET', label: 'קיזוז', mode: 'OFFSET' },
   { key: 'BOOKING', label: 'בוקינג', mode: 'BOOKING' },
   { key: 'AIRBNB', label: 'Airbnb', mode: 'AIRBNB' }
 ];
@@ -82,6 +83,7 @@ function clearingKind(raw) {
   if (row.source === 'CASH' || row.accountKey === 'CASH' || method === 'cash' || /_cash$/.test(txn)) return 'cash';
   if (row.source === 'BANK' || row.accountKey === 'BANK' || method === 'bank' || /_bank$/.test(txn)) return 'bank';
   if (row.source === 'VOUCHER' || method === 'voucher') return 'voucher';
+  if (row.source === 'OFFSET' || method === 'offset') return 'offset';
   if (row.source === 'BOOKING') return 'booking';
   if (row.source === 'AIRBNB') return 'airbnb';
   if (
@@ -96,7 +98,7 @@ function clearingKind(raw) {
 }
 
 export function paymentParts(booking) {
-  const parts = { card: 0, cash: 0, bank: 0, voucher: 0, booking: 0, airbnb: 0 };
+  const parts = { card: 0, cash: 0, bank: 0, voucher: 0, offset: 0, booking: 0, airbnb: 0 };
   for (const raw of Array.isArray(booking?.clearing_payments) ? booking.clearing_payments : []) {
     const kind = clearingKind(raw);
     if (!kind) continue;
@@ -122,6 +124,7 @@ export function priorityMethodKey(booking) {
   if (mode === 'AIRBNB') return 'AIRBNB';
   if (mode === 'BOOKING' || kinorotSettlementKind(booking) === 'booking') return 'BOOKING';
   if (mode === 'VOUCHER') return 'VOUCHER';
+  if (mode === 'OFFSET') return 'OFFSET';
   const parts = paymentParts(booking);
   if (parts.card > 0 && parts.cash > 0) return 'CARD_CASH';
   if (mode === 'CARD_CASH') return 'CARD_CASH';

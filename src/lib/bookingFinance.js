@@ -114,6 +114,7 @@ function methodsFromBooking(booking) {
   if (mode === 'CASH' || mode === 'CASH_TRUST' || status === 'PENDING_CASH') return ['מזומן'];
   if (mode === 'BANK_TRANSFER' || status === 'PENDING_BANK') return ['העברה בנקאית'];
   if (mode === 'VOUCHER') return ['שובר'];
+  if (mode === 'OFFSET') return ['קיזוז'];
   if (mode === 'COMP') return ['ללא תשלום'];
   return ['אשראי'];
 }
@@ -193,6 +194,7 @@ export function hasHypProof(booking) {
 
 export function paymentKind(row) {
   const buckets = methodBucket(row?.methods || []);
+  if (buckets.offset && !buckets.credit && !buckets.transfer && !buckets.cash) return 'offset';
   if (buckets.credit) return 'credit';
   if (buckets.transfer) return 'transfer';
   if (buckets.cash) return 'cash';
@@ -253,6 +255,7 @@ export function paidMethodTotal(rows, method) {
 
 function movementMethod(payment) {
   const key = `${payment.source || ''} ${payment.accountKey || ''}`;
+  if (/OFFSET/i.test(key)) return 'offset';
   if (/CASH/i.test(key)) return 'cash';
   if (/BANK|BEINLEUMI/i.test(key)) return 'transfer';
   return 'credit';
@@ -616,7 +619,8 @@ export function financeStayRollup(bookings, units, { month = '', throughDate = '
     const creditMoves = moves.filter(isCollectedCredit);
     const cashMoves = moves.filter((item) => item.method === 'cash' && item.amount > 0);
     const transferMoves = moves.filter((item) => item.method === 'transfer' && item.amount > 0);
-    const paid = moneyRound(sumMovements(creditMoves) + sumMovements(cashMoves) + sumMovements(transferMoves));
+    const offsetMoves = moves.filter((item) => item.method === 'offset' && item.amount > 0);
+    const paid = moneyRound(sumMovements(creditMoves) + sumMovements(cashMoves) + sumMovements(transferMoves) + sumMovements(offsetMoves));
     stayCount += 1;
     booked += due;
     collected += paid;
@@ -741,6 +745,7 @@ export function paymentKindLabel(kind) {
   if (kind === 'cash') return 'מזומן';
   if (kind === 'check') return 'צ׳ק';
   if (kind === 'voucher') return 'שובר';
+  if (kind === 'offset') return 'קיזוז';
   if (kind === 'ota') return 'OTA';
   return 'לא ידוע';
 }

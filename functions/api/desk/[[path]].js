@@ -97,6 +97,7 @@ function paymentLabel(item) {
   if (source === 'BANK') return 'העברה';
   if (source === 'HYP' || source.startsWith('HYP') || source === 'CARD') return 'אשראי';
   if (source === 'VOUCHER') return 'שובר';
+  if (source === 'OFFSET') return 'קיזוז';
   return 'תשלום';
 }
 
@@ -484,6 +485,10 @@ export async function onRequest(context) {
         const methodName = String(body.method || 'CARD').toUpperCase();
         const isCash = methodName === 'CASH';
         const isBank = methodName === 'BANK';
+        const isOffset = methodName === 'OFFSET';
+        if (isOffset && !String(body.note || body.ref || '').trim()) {
+          return errorJson('ציינו שם עובד לקיזוז', 400, 'OFFSET_NOTE');
+        }
         const photo = String(body.photo || '');
         if (isBank && photo && !photo.startsWith('data:image/')) {
           return errorJson('הצילום לא תקין', 400, 'BAD_PHOTO');
@@ -493,12 +498,12 @@ export async function onRequest(context) {
         const atIso = Number.isNaN(atDate.getTime()) ? new Date().toISOString() : atDate.toISOString();
         const ref = String(body.ref || '').trim();
         payments.push({
-          source: isCash ? 'CASH' : (isBank ? 'BANK' : 'CARD'),
+          source: isCash ? 'CASH' : (isBank ? 'BANK' : (isOffset ? 'OFFSET' : 'CARD')),
           amount_agorot: paidAgorot,
           date: atIso.slice(0, 10),
           at: atIso,
           ref,
-          note: String(body.note || (isCash ? 'מזומן בדלפק' : isBank ? 'העברה בנקאית' : 'אשראי שהתקבל'))
+          note: String(body.note || (isCash ? 'מזומן בדלפק' : isBank ? 'העברה בנקאית' : isOffset ? 'קיזוז משכר עובד' : 'אשראי שהתקבל'))
         });
         const totalAgorot = Number(live.total_price_agorot) || paidAgorot;
         const nextPaid = payments.reduce((sum, item) => sum + (Number(item.amount_agorot) || 0), 0);
@@ -513,8 +518,8 @@ export async function onRequest(context) {
           ...booking,
           checkout_token: token,
           clearing_payments: payments,
-          payment_mode: isCash ? 'CASH' : (isBank ? 'BANK_TRANSFER' : (booking.payment_mode || live.payment_mode || 'CARD')),
-          payment_status: statusAfterPayments(totalAgorot, payments, isCash ? 'CASH' : (isBank ? 'BANK_TRANSFER' : 'CARD')),
+          payment_mode: isCash ? 'CASH' : (isBank ? 'BANK_TRANSFER' : (isOffset ? 'OFFSET' : (booking.payment_mode || live.payment_mode || 'CARD'))),
+          payment_status: statusAfterPayments(totalAgorot, payments, isCash ? 'CASH' : (isBank ? 'BANK_TRANSFER' : (isOffset ? 'OFFSET' : 'CARD'))),
           stay
         };
         const stored = await saveDeskRow(env, token, marked);
