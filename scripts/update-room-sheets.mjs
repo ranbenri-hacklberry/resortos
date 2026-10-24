@@ -574,48 +574,56 @@ function buildHtml(units) {
     /* ---- FOOTER & SERVICE CONTACT ---- */
     .footer {
       border-top: 1.5px solid var(--ink-primary);
-      padding-top: 2.5mm;
+      padding-top: 2.2mm;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 4mm;
+      gap: 3.5mm;
     }
     .service-box {
       background: #FFFFFF;
-      border: 1px solid var(--border-fine);
-      border-radius: 6px;
-      padding: 2mm 3.5mm;
+      border: 1.5px solid var(--gold-primary);
+      border-radius: 7px;
+      padding: 2.2mm 3.8mm;
       display: flex;
       flex-direction: column;
-      gap: 1px;
+      gap: 1.5px;
+      box-shadow: 0 1px 4px rgba(197, 160, 89, 0.15);
+      flex: 1.15;
     }
     .s-label {
-      font-size: 9.5px;
-      font-weight: 700;
-      color: var(--ink-muted);
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--ink-secondary);
+      display: flex;
+      align-items: center;
+      gap: 4px;
     }
     .s-phone {
-      font-size: 14.5px;
+      font-size: 18px;
       font-weight: 900;
       color: var(--gold-deep);
       direction: ltr;
       text-align: right;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.05em;
+      line-height: 1.15;
+    }
+    .s-hours {
+      font-size: 8.8px;
+      color: var(--ink-muted);
+      line-height: 1.3;
+      margin-top: 1.5px;
     }
     .checkout-instructions {
-      font-size: 9.8px;
+      font-size: 9.6px;
       color: var(--ink-muted);
       line-height: 1.35;
-      text-align: left;
+      text-align: right;
       direction: rtl;
+      flex: 1;
     }
     .checkout-instructions strong {
       color: var(--ink-primary);
-    }
-    .checkout-instructions .customer-care {
-      margin-top: 1px;
-      font-size: 9.2px;
-      color: var(--ink-secondary);
     }
 
     /* ---- PRINT RULES (SINGLE A4 PER PAGE STRICT) ---- */
@@ -845,15 +853,13 @@ function buildHtml(units) {
         <!-- FOOTER & SERVICE CONTACT -->
         <footer class="footer">
           <div class="service-box">
-            <div class="s-label">שירות בשטח וסיוע בצ׳ק-אין (מענה מהיר)</div>
-            <div class="s-phone" id="service-phone">054-713-6676</div>
+            <div class="s-label">📞 שירות בשטח וסיוע לאורחים</div>
+            <div class="s-phone" id="service-phone">050-950-6222</div>
+            <div class="s-hours">השירות פעיל עד השעה 21:00 בערב · ניתן להשאיר הודעות אחרי 21:00 ונתייחס אליהן על הבוקר</div>
           </div>
 
           <div class="checkout-instructions">
-            <div><strong>הנחיות עזיבה:</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
-            <div class="customer-care">
-              שירות לקוחות ומשרד: <strong>050-950-6222</strong> (08:00–20:00) · לחיובים, חשבוניות או הארכת שהייה
-            </div>
+            <div><strong>הנחיות עזיבה (עד 11:00):</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
           </div>
         </footer>
       </div>
@@ -889,8 +895,8 @@ function buildHtml(units) {
       // Shabbat exit time
       sheetElement.querySelector('#saturday-val').textContent = (unit.zone === 'casa-nova') ? 'צאת השבת' : '15:00';
 
-      // Service phone: Ramot -> 054-713-6676 (Daniel), Other (Neot Golan, Givat Yoav, Nov) -> 050-759-7944 (Adam)
-      sheetElement.querySelector('#service-phone').textContent = (unit.zone === 'ramot') ? '054-713-6676' : '050-759-7944';
+      // Field service phone is 050-950-6222
+      sheetElement.querySelector('#service-phone').textContent = '050-950-6222';
 
       // Lockbox logic (Rule 1):
       // Exact code from room sheet, never copied, if no code write 'הקוד יימסר בהודעה', no 0000.
@@ -1221,15 +1227,13 @@ function buildSamplesHtml(complexes, units) {
 
         <footer class="footer">
           <div class="service-box">
-            <div class="s-label">שירות בשטח וסיוע בצ׳ק-אין (מענה מהיר)</div>
-            <div class="s-phone">${phone}</div>
+            <div class="s-label">📞 שירות בשטח וסיוע לאורחים</div>
+            <div class="s-phone">050-950-6222</div>
+            <div class="s-hours">השירות פעיל עד השעה 21:00 בערב · ניתן להשאיר הודעות אחרי 21:00 ונתייחס אליהן על הבוקר</div>
           </div>
 
           <div class="checkout-instructions">
-            <div><strong>הנחיות עזיבה:</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
-            <div class="customer-care">
-              שירות לקוחות ומשרד: <strong>050-950-6222</strong> (08:00–20:00) · לחיובים, חשבוניות או הארכת שהייה
-            </div>
+            <div><strong>הנחיות עזיבה (עד 11:00):</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
           </div>
         </footer>
       </div>
@@ -1433,13 +1437,13 @@ function buildSamplesHtml(complexes, units) {
     .hub-qr { width: 25mm; height: 25mm; display: block; image-rendering: pixelated; }
     .qr-caption { font-size: 8.5px; font-weight: 800; letter-spacing: 0.05em; color: var(--ink-primary); margin-top: 2px; }
 
-    .footer { border-top: 1.5px solid var(--ink-primary); padding-top: 2.5mm; display: flex; justify-content: space-between; align-items: center; gap: 4mm; }
-    .service-box { background: #FFFFFF; border: 1px solid var(--border-fine); border-radius: 6px; padding: 2mm 3.5mm; display: flex; flex-direction: column; gap: 1px; }
-    .s-label { font-size: 9.5px; font-weight: 700; color: var(--ink-muted); }
-    .s-phone { font-size: 14.5px; font-weight: 900; color: var(--gold-deep); direction: ltr; text-align: right; }
-    .checkout-instructions { font-size: 9.8px; color: var(--ink-muted); line-height: 1.35; text-align: left; direction: rtl; }
+    .footer { border-top: 1.5px solid var(--ink-primary); padding-top: 2.2mm; display: flex; justify-content: space-between; align-items: center; gap: 3.5mm; }
+    .service-box { background: #FFFFFF; border: 1.5px solid var(--gold-primary); border-radius: 7px; padding: 2.2mm 3.8mm; display: flex; flex-direction: column; gap: 1.5px; box-shadow: 0 1px 4px rgba(197, 160, 89, 0.15); flex: 1.15; }
+    .s-label { font-size: 10px; font-weight: 800; color: var(--ink-secondary); display: flex; align-items: center; gap: 4px; }
+    .s-phone { font-size: 18px; font-weight: 900; color: var(--gold-deep); direction: ltr; text-align: right; letter-spacing: 0.05em; line-height: 1.15; }
+    .s-hours { font-size: 8.8px; color: var(--ink-muted); line-height: 1.3; margin-top: 1.5px; }
+    .checkout-instructions { font-size: 9.6px; color: var(--ink-muted); line-height: 1.35; text-align: right; direction: rtl; flex: 1; }
     .checkout-instructions strong { color: var(--ink-primary); }
-    .checkout-instructions .customer-care { margin-top: 1px; font-size: 9.2px; color: var(--ink-secondary); }
 
     @media print {
       @page { size: A4 portrait; margin: 0; }
