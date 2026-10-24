@@ -72,6 +72,7 @@ export function usableGuestName(raw) {
 /** Same /stay/:token link. Unpaid card bookings stay on the agreement, even if the desk already marked them confirmed. */
 export function guestShouldSeeStayPortal(booking) {
   if (!booking) return false;
+  if (booking.is_cabin_portal) return true;
   const status = booking.booking_status;
   if (status === 'CHECKED_IN' || status === 'CHECKED_OUT') return true;
   const pay = booking.payment_status;

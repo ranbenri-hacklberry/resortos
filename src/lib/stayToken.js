@@ -82,6 +82,13 @@ export function resolveStayToken() {
     return token;
   }
 
+  // If unit is specified in the URL query, do NOT fall back to localStorage.
+  // The user scanned a specific cabin's QR code. Falling back to an old token
+  // from a different cabin in localStorage causes the wrong cabin to open.
+  if (params.get('unit')) {
+    return '';
+  }
+
   if (!onGuestHost) return '';
 
   try {

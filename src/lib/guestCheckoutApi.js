@@ -38,6 +38,20 @@ export async function fetchGuestCheckout(token, unitId) {
   return response.json();
 }
 
+export async function fetchUnitCheckout(unitId) {
+  if (!unitId) return null;
+  const response = await fetch(`${guestApiBase()}/api/checkout/unit/${encodeURIComponent(unitId)}`, {
+    signal: abortAfter(12000)
+  });
+  if (response.status === 404) {
+    const error = new Error('NOT_FOUND');
+    error.code = 'NOT_FOUND';
+    throw error;
+  }
+  if (!response.ok) throw new Error('LOOKUP_FAILED');
+  return response.json();
+}
+
 export async function startDemoCheckout(stage = 'form') {
   const response = await fetch(`${guestApiBase()}/api/checkout/demo`, {
     method: 'POST',

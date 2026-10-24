@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { fetchGuestCheckout } from './guestCheckoutApi';
+import { fetchGuestCheckout, fetchUnitCheckout } from './guestCheckoutApi';
+import { persistStayToken } from './stayToken';
 
 /** Guest page lookup. Network only — never Dexie, so phones / Brave Shields can still retry. */
 export function useGuestBooking(token) {
@@ -8,7 +9,8 @@ export function useGuestBooking(token) {
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (!token) {
+    const unit = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('unit') : '';
+    if (!token && !unit) {
       setBooking(null);
       setError(null);
       return undefined;
@@ -18,8 +20,22 @@ export function useGuestBooking(token) {
     setError(null);
     (async () => {
       try {
-        const unit = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('unit') : '';
-        const row = await fetchGuestCheckout(token, unit);
+        let row = null;
+        if (token) {
+          row = await fetchGuestCheckout(token, unit);
+        } else if (unit) {
+          row = await fetchUnitCheckout(unit);
+          if (row?.checkout_token) {
+            persistStayToken(row.checkout_token);
+            try {
+              const url = new URL(window.location.href);
+              if (!url.searchParams.get('token')) {
+                url.searchParams.set('token', row.checkout_token);
+                window.history.replaceState({}, '', url);
+              }
+            } catch (_) {}
+          }
+        }
         if (cancelled) return;
         setBooking(row && !row.deleted_at ? row : null);
         if (!row || row.deleted_at) setError('NOT_FOUND');

@@ -49,6 +49,7 @@ import {
   RAMOT_GATE_CODE,
   UNIT_PROPERTY
 } from '../../lib/unitNames.js';
+import { loadCalendarReplica } from '../../lib/calendarReplica.js';
 
 const TOKEN_RE = /^tok_[A-Za-z0-9_-]+$/;
 const BOOKING_PREFIX = 'booking:';
@@ -319,6 +320,7 @@ function publicBooking(row) {
     id: row.id,
     tenant_id: row.tenant_id,
     unit_id: row.unit_id,
+    is_cabin_portal: Boolean(row.is_cabin_portal),
     guest_name: inStay ? firstName : row.guest_name,
     guest_email: inStay ? null : row.guest_email,
     guest_phone: inStay ? null : row.guest_phone,
@@ -722,7 +724,106 @@ export async function loadGuestIdPhoto(env, token) {
   }
 }
 
+function israelTodayIso() {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date());
+  } catch (_) {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
+function buildCabinPortalBooking(unitId, today = israelTodayIso()) {
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const prop = UNIT_PROPERTY[unitId] || '';
+  const wifiList = (UNIT_WIFI[unitId] && UNIT_WIFI[unitId].length)
+    ? UNIT_WIFI[unitId]
+    : (CATALOG_WIFI[prop] || [{ ssid: 'Mialees Resort', password: 'mialees2024' }]);
+  const wifi = wifiList[0] || { ssid: 'Mialees Resort', password: 'mialees2024' };
+  const lockbox = CATALOG_LOCKBOX[unitId] || '';
+  return {
+    id: `cabin_${unitId}`,
+    unit_id: unitId,
+    guest_name: 'אורחי הסוויטה',
+    guest_phone: '',
+    check_in_date: today,
+    check_out_date: tomorrow,
+    booking_status: 'CHECKED_IN',
+    payment_status: 'PAID',
+    payment_mode: 'CASH_TRUST',
+    is_cabin_portal: true,
+    total_price_agorot: 0,
+    deposit_agorot: 0,
+    checkout_token: `tok_unit_${unitId}`,
+    stay: {
+      cabin_ready: true,
+      guest_checked_in_at: new Date().toISOString(),
+      wifi_ssid: wifi.ssid,
+      wifi_password: wifi.password,
+      wifi_networks: wifiList,
+      lockbox_code: lockbox,
+      door_pin: lockbox,
+      gate_code: RAMOT_GATE_CODE,
+      checkout_time: '11:00',
+      folio: []
+    }
+  };
+}
+
+async function findActiveBookingForUnit(env, unitId) {
+  if (!unitId) return null;
+  const today = israelTodayIso();
+  if (env.STAY_DB) {
+    try {
+      await ensureGuestBookingTable(env);
+      const row = await env.STAY_DB.prepare(
+        `SELECT booking_json FROM guest_bookings 
+         WHERE json_extract(booking_json, '$.unit_id') = ?1 
+           AND json_extract(booking_json, '$.check_in_date') <= ?2 
+           AND json_extract(booking_json, '$.check_out_date') >= ?2 
+           AND json_extract(booking_json, '$.booking_status') != 'CANCELED' 
+         ORDER BY 
+           (json_extract(booking_json, '$.booking_status') = 'CHECKED_IN') DESC,
+           (json_extract(booking_json, '$.check_in_date') = ?2) DESC,
+           json_extract(booking_json, '$.check_in_date') DESC
+         LIMIT 1`
+      ).bind(unitId, today).first();
+      if (row?.booking_json) {
+        const parsed = JSON.parse(row.booking_json);
+        const overlay = await readStayOverlay(env, parsed.checkout_token);
+        if (overlay) parsed.stay = mergeStay(parsed.stay, overlay);
+        return parsed;
+      }
+    } catch (err) {
+      console.warn('[findActiveBookingForUnit DB error]', err);
+    }
+  }
+
+  try {
+    const replica = await loadCalendarReplica(env);
+    const stays = Array.isArray(replica?.stays) ? replica.stays : [];
+    const active = stays.find((s) => (
+      s.unit_id === unitId &&
+      s.check_in_date <= today &&
+      s.check_out_date >= today &&
+      s.booking_status !== 'CANCELED'
+    ));
+    if (active?.checkout_token) {
+      const full = await readBooking(env, active.checkout_token);
+      if (full) return full;
+      return active;
+    }
+  } catch (err) {
+    console.warn('[findActiveBookingForUnit replica error]', err);
+  }
+
+  return null;
+}
+
 export async function readBooking(env, token) {
+  if (token && token.startsWith('tok_unit_')) {
+    const unitId = token.replace('tok_unit_', '');
+    return buildCabinPortalBooking(unitId);
+  }
   const raw = await readGuestBooking(env, token);
   if (!raw) return null;
   const overlay = await readStayOverlay(env, token);
@@ -774,9 +875,12 @@ export async function onRequest(context) {
 
 async function handleCheckout(context) {
   const { request, env, params } = context;
-  const segments = [].concat(params.path || []).filter(Boolean);
+  const rawPath = Array.isArray(params.path) ? params.path.join('/') : String(params.path || '');
+  const segments = rawPath.split('/').filter(Boolean);
   const method = request.method.toUpperCase();
   const head = segments[0] || '';
+  const urlObj = new URL(request.url);
+  const queryUnit = urlObj.searchParams.get('unit') || '';
 
   if (method === 'OPTIONS') {
     return new Response(null, {
@@ -813,6 +917,21 @@ async function handleCheckout(context) {
     const saved = await persistGuestRow(env, row.checkout_token, row);
     if (!saved) return json({ error: 'MAILBOX_WRITE_FAILED' }, 503);
     return json(publicBooking(row));
+  }
+
+  if (((head === 'unit' && segments[1]) || (!head && queryUnit)) && method === 'GET') {
+    const unitId = segments[1] || queryUnit;
+    let row = await findActiveBookingForUnit(env, unitId);
+    if (!row) {
+      row = buildCabinPortalBooking(unitId, israelTodayIso());
+    } else {
+      const autoIn = applyPaidArrivalCheckin(row);
+      if (autoIn) {
+        await persistGuestRow(env, row.checkout_token, autoIn);
+        row = autoIn;
+      }
+    }
+    return json(publicView(row, unitId));
   }
 
   if (head === 'hyp' && (method === 'GET' || method === 'POST')) {
