@@ -142,11 +142,15 @@
     }
     .prop-location { font-size: 13px; color: var(--ink-secondary); margin-top: 2px; font-weight: 700; }
 
-    .times-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3mm; margin: 2.2mm 0; text-align: center; }
-    .time-card { background: #FFFFFF; border: 1px solid var(--border-fine); border-radius: 6px; padding: 2.2mm 2mm; box-shadow: 0 1px 4px rgba(0,0,0,0.02); }
+    .times-row { display: grid; grid-template-columns: 1fr 1fr 1.35fr; gap: 3mm; margin: 2.2mm 0; text-align: center; }
+    .time-card {
+      background: #FFFFFF; border: 1px solid var(--border-fine); border-radius: 6px; padding: 2.2mm 2mm;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.02); display: flex; flex-direction: column; justify-content: center; align-items: center;
+    }
     .time-label { font-size: 11.5px; font-weight: 800; color: var(--ink-muted); text-transform: uppercase; margin-bottom: 1px; }
     .time-val { font-size: 24px; font-weight: 900; color: var(--ink-primary); line-height: 1.1; }
     .time-val.saturday { font-size: 20px; color: var(--gold-deep); }
+    .time-sub.saturday-sub { font-size: 10px; font-weight: 800; color: #9A3412; margin-top: 1.5px; line-height: 1.2; }
 
     .access-grid { display: grid; grid-template-columns: 1fr 1.12fr 1.48fr; gap: 3mm; margin-bottom: 2.2mm; }
     .access-card {
@@ -255,7 +259,8 @@
           </div>
           <div class="time-card">
             <div class="time-label">יציאה בשבת</div>
-            <div class="time-val saturday">15:00</div>
+            <div class="time-val saturday">עד 13:00</div>
+            <div class="time-sub saturday-sub">יציאה במוצ״ש במידה וסוכמה בעת ההזמנה</div>
           </div>
         </div>
 
@@ -265,8 +270,8 @@
               <span class="access-icon">🔑</span>
               <span>כספת מפתח</span>
             </div>
-            <div class="access-value is-text">הקוד יימסר בהודעה</div>
-            <div class="access-sub">קוד כספת המפתח יישלח ביום ההגעה</div>
+            <div class="access-value">2310</div>
+            <div class="access-sub">קוד פתיחה ונעילת מפתח היחידה</div>
           </div>
 
           <div class="access-card">
@@ -275,7 +280,7 @@
               <span>שער כניסה</span>
             </div>
             <div class="access-value">#2464</div>
-            <div class="access-sub">קוד שער מושב רמות</div>
+            <div class="access-sub">השער פתוח ביום · סגור רק בלילה (קוד: #2464)</div>
           </div>
 
           <div class="access-card wifi-card">
@@ -384,7 +389,7 @@
           </div>
 
           <div class="checkout-instructions">
-            <div><strong>הנחיות עזיבה (עד 11:00):</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div><strong>הנחיות עזיבה:</strong> ימי חול עד 11:00, שבת עד 13:00 (יציאה במוצ״ש במידה וסוכמה בעת ההזמנה). ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
           </div>
         </footer>
       </div>
@@ -422,7 +427,8 @@
           </div>
           <div class="time-card">
             <div class="time-label">יציאה בשבת</div>
-            <div class="time-val saturday">15:00</div>
+            <div class="time-val saturday">עד 13:00</div>
+            <div class="time-sub saturday-sub">יציאה במוצ״ש במידה וסוכמה בעת ההזמנה</div>
           </div>
         </div>
 
@@ -432,8 +438,8 @@
               <span class="access-icon">🔑</span>
               <span>כספת מפתח</span>
             </div>
-            <div class="access-value is-text">הקוד יימסר בהודעה</div>
-            <div class="access-sub">קוד כספת המפתח יישלח ביום ההגעה</div>
+            <div class="access-value">2710</div>
+            <div class="access-sub">קוד פתיחה ונעילת מפתח היחידה</div>
           </div>
 
           <div class="access-card">
@@ -442,7 +448,7 @@
               <span>שער כניסה</span>
             </div>
             <div class="access-value">#2464</div>
-            <div class="access-sub">קוד שער מושב רמות</div>
+            <div class="access-sub">השער פתוח ביום · סגור רק בלילה (קוד: #2464)</div>
           </div>
 
           <div class="access-card wifi-card">
@@ -551,7 +557,7 @@
           </div>
 
           <div class="checkout-instructions">
-            <div><strong>הנחיות עזיבה (עד 11:00):</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div><strong>הנחיות עזיבה:</strong> ימי חול עד 11:00, שבת עד 13:00 (יציאה במוצ״ש במידה וסוכמה בעת ההזמנה). ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
           </div>
         </footer>
       </div>
@@ -589,7 +595,8 @@
           </div>
           <div class="time-card">
             <div class="time-label">יציאה בשבת</div>
-            <div class="time-val saturday">15:00</div>
+            <div class="time-val saturday">עד 13:00</div>
+            <div class="time-sub saturday-sub">יציאה במוצ״ש במידה וסוכמה בעת ההזמנה</div>
           </div>
         </div>
 
@@ -599,8 +606,8 @@
               <span class="access-icon">🔑</span>
               <span>כספת מפתח</span>
             </div>
-            <div class="access-value is-text">הקוד יימסר בהודעה</div>
-            <div class="access-sub">קוד כספת המפתח יישלח ביום ההגעה</div>
+            <div class="access-value">2510</div>
+            <div class="access-sub">קוד פתיחה ונעילת מפתח היחידה</div>
           </div>
 
           <div class="access-card">
@@ -609,7 +616,7 @@
               <span>שער כניסה</span>
             </div>
             <div class="access-value">#2464</div>
-            <div class="access-sub">קוד שער מושב רמות</div>
+            <div class="access-sub">השער פתוח ביום · סגור רק בלילה (קוד: #2464)</div>
           </div>
 
           <div class="access-card wifi-card">
@@ -718,7 +725,7 @@
           </div>
 
           <div class="checkout-instructions">
-            <div><strong>הנחיות עזיבה (עד 11:00):</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div><strong>הנחיות עזיבה:</strong> ימי חול עד 11:00, שבת עד 13:00 (יציאה במוצ״ש במידה וסוכמה בעת ההזמנה). ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
           </div>
         </footer>
       </div>
@@ -756,7 +763,8 @@
           </div>
           <div class="time-card">
             <div class="time-label">יציאה בשבת</div>
-            <div class="time-val saturday">15:00</div>
+            <div class="time-val saturday">עד 13:00</div>
+            <div class="time-sub saturday-sub">יציאה במוצ״ש במידה וסוכמה בעת ההזמנה</div>
           </div>
         </div>
 
@@ -766,8 +774,8 @@
               <span class="access-icon">🔑</span>
               <span>כספת מפתח</span>
             </div>
-            <div class="access-value is-text">הקוד יימסר בהודעה</div>
-            <div class="access-sub">קוד כספת המפתח יישלח ביום ההגעה</div>
+            <div class="access-value">2910</div>
+            <div class="access-sub">קוד פתיחה ונעילת מפתח היחידה</div>
           </div>
 
           <div class="access-card">
@@ -776,7 +784,7 @@
               <span>שער כניסה</span>
             </div>
             <div class="access-value">#2464</div>
-            <div class="access-sub">קוד שער מושב רמות</div>
+            <div class="access-sub">השער פתוח ביום · סגור רק בלילה (קוד: #2464)</div>
           </div>
 
           <div class="access-card wifi-card">
@@ -885,7 +893,7 @@
           </div>
 
           <div class="checkout-instructions">
-            <div><strong>הנחיות עזיבה (עד 11:00):</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div><strong>הנחיות עזיבה:</strong> ימי חול עד 11:00, שבת עד 13:00 (יציאה במוצ״ש במידה וסוכמה בעת ההזמנה). ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
           </div>
         </footer>
       </div>
@@ -923,7 +931,8 @@
           </div>
           <div class="time-card">
             <div class="time-label">יציאה בשבת</div>
-            <div class="time-val saturday">15:00</div>
+            <div class="time-val saturday">עד 13:00</div>
+            <div class="time-sub saturday-sub">יציאה במוצ״ש במידה וסוכמה בעת ההזמנה</div>
           </div>
         </div>
 
@@ -933,8 +942,8 @@
               <span class="access-icon">🔑</span>
               <span>כספת מפתח</span>
             </div>
-            <div class="access-value is-text">הקוד יימסר בהודעה</div>
-            <div class="access-sub">קוד כספת המפתח יישלח ביום ההגעה</div>
+            <div class="access-value">2810</div>
+            <div class="access-sub">קוד פתיחה ונעילת מפתח היחידה</div>
           </div>
 
           <div class="access-card">
@@ -943,7 +952,7 @@
               <span>שער כניסה</span>
             </div>
             <div class="access-value">#2464</div>
-            <div class="access-sub">קוד שער מושב רמות</div>
+            <div class="access-sub">השער פתוח ביום · סגור רק בלילה (קוד: #2464)</div>
           </div>
 
           <div class="access-card wifi-card">
@@ -1052,7 +1061,7 @@
           </div>
 
           <div class="checkout-instructions">
-            <div><strong>הנחיות עזיבה (עד 11:00):</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div><strong>הנחיות עזיבה:</strong> ימי חול עד 11:00, שבת עד 13:00 (יציאה במוצ״ש במידה וסוכמה בעת ההזמנה). ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
           </div>
         </footer>
       </div>
@@ -1090,7 +1099,8 @@
           </div>
           <div class="time-card">
             <div class="time-label">יציאה בשבת</div>
-            <div class="time-val saturday">15:00</div>
+            <div class="time-val saturday">עד 13:00</div>
+            <div class="time-sub saturday-sub">יציאה במוצ״ש במידה וסוכמה בעת ההזמנה</div>
           </div>
         </div>
 
@@ -1100,8 +1110,8 @@
               <span class="access-icon">🔑</span>
               <span>כספת מפתח</span>
             </div>
-            <div class="access-value is-text">הקוד יימסר בהודעה</div>
-            <div class="access-sub">קוד כספת המפתח יישלח ביום ההגעה</div>
+            <div class="access-value">2610</div>
+            <div class="access-sub">קוד פתיחה ונעילת מפתח היחידה</div>
           </div>
 
           <div class="access-card">
@@ -1110,7 +1120,7 @@
               <span>שער כניסה</span>
             </div>
             <div class="access-value">#2464</div>
-            <div class="access-sub">קוד שער מושב רמות</div>
+            <div class="access-sub">השער פתוח ביום · סגור רק בלילה (קוד: #2464)</div>
           </div>
 
           <div class="access-card wifi-card">
@@ -1219,7 +1229,7 @@
           </div>
 
           <div class="checkout-instructions">
-            <div><strong>הנחיות עזיבה (עד 11:00):</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div><strong>הנחיות עזיבה:</strong> ימי חול עד 11:00, שבת עד 13:00 (יציאה במוצ״ש במידה וסוכמה בעת ההזמנה). ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
           </div>
         </footer>
       </div>
@@ -1257,7 +1267,8 @@
           </div>
           <div class="time-card">
             <div class="time-label">יציאה בשבת</div>
-            <div class="time-val saturday">15:00</div>
+            <div class="time-val saturday">עד 13:00</div>
+            <div class="time-sub saturday-sub">יציאה במוצ״ש במידה וסוכמה בעת ההזמנה</div>
           </div>
         </div>
 
@@ -1267,8 +1278,8 @@
               <span class="access-icon">🔑</span>
               <span>כספת מפתח</span>
             </div>
-            <div class="access-value is-text">הקוד יימסר בהודעה</div>
-            <div class="access-sub">קוד כספת המפתח יישלח ביום ההגעה</div>
+            <div class="access-value">2410</div>
+            <div class="access-sub">קוד פתיחה ונעילת מפתח היחידה</div>
           </div>
 
           <div class="access-card">
@@ -1277,7 +1288,7 @@
               <span>שער כניסה</span>
             </div>
             <div class="access-value">#2464</div>
-            <div class="access-sub">קוד שער מושב רמות</div>
+            <div class="access-sub">השער פתוח ביום · סגור רק בלילה (קוד: #2464)</div>
           </div>
 
           <div class="access-card wifi-card">
@@ -1386,7 +1397,7 @@
           </div>
 
           <div class="checkout-instructions">
-            <div><strong>הנחיות עזיבה (עד 11:00):</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div><strong>הנחיות עזיבה:</strong> ימי חול עד 11:00, שבת עד 13:00 (יציאה במוצ״ש במידה וסוכמה בעת ההזמנה). ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
           </div>
         </footer>
       </div>
@@ -1405,7 +1416,7 @@
           <div class="brand-crown">MIALEES RESORT COLLECTION · קולקציית האירוח מיאליס</div>
           <h1 class="welcome-title">ברוכים הבאים</h1>
           <div>
-            <span class="unit-hero-name">סוויטה 1 (הירוקה)</span>
+            <span class="unit-hero-name">וילה מיאליס ריזורט</span>
           </div>
           <div class="prop-location">מושב נאות גולן, דרום רמת הגולן</div>
           <div style="font-size: 11px; color: #9E7D3B; font-weight: 700; margin-top: 3px;">
@@ -1424,7 +1435,8 @@
           </div>
           <div class="time-card">
             <div class="time-label">יציאה בשבת</div>
-            <div class="time-val saturday">15:00</div>
+            <div class="time-val saturday">עד 13:00</div>
+            <div class="time-sub saturday-sub">יציאה במוצ״ש במידה וסוכמה בעת ההזמנה</div>
           </div>
         </div>
 
@@ -1434,8 +1446,8 @@
               <span class="access-icon">🔑</span>
               <span>כספת מפתח</span>
             </div>
-            <div class="access-value is-text">הקוד יימסר בהודעה</div>
-            <div class="access-sub">קוד כספת המפתח יישלח ביום ההגעה</div>
+            <div class="access-value">3050</div>
+            <div class="access-sub">קוד פתיחה ונעילת מפתח היחידה</div>
           </div>
 
           <div class="access-card">
@@ -1443,8 +1455,8 @@
               <span class="access-icon">🚪</span>
               <span>שער כניסה</span>
             </div>
-            <div class="access-value is-text">השער נפתח רק למספרים שמורים.<br>בהגעה התקשרו לאדם: <strong style="direction:ltr; display:inline-block; font-size:15px; color:#1C1917; font-weight:900;">054-338-7383</strong></div>
-            <div class="access-sub">פתיחת שער המושב עם ההגעה</div>
+            <div class="access-value is-text">פתוח ביום · סגור רק בלילה.<br>בלילה התקשרו לאדם: <strong style="direction:ltr; display:inline-block; font-size:16px; color:#1C1917; font-weight:900;">054-338-7383</strong></div>
+            <div class="access-sub">השער פתוח בשעות היום · בלילה נפתח למספרים שמורים</div>
           </div>
 
           <div class="access-card wifi-card">
@@ -1540,7 +1552,7 @@
             </div>
           </div>
           <div class="hub-qr-wrap">
-            <img class="hub-qr" alt="QR Code" src="data:image/png;base64,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" />
+            <img class="hub-qr" alt="QR Code" src="data:image/png;base64,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" />
             <div class="qr-caption">סריקה במצלמה</div>
           </div>
         </div>
@@ -1553,7 +1565,7 @@
           </div>
 
           <div class="checkout-instructions">
-            <div><strong>הנחיות עזיבה (עד 11:00):</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div><strong>הנחיות עזיבה:</strong> ימי חול עד 11:00, שבת עד 13:00 (יציאה במוצ״ש במידה וסוכמה בעת ההזמנה). ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
           </div>
         </footer>
       </div>
@@ -1591,7 +1603,8 @@
           </div>
           <div class="time-card">
             <div class="time-label">יציאה בשבת</div>
-            <div class="time-val saturday">15:00</div>
+            <div class="time-val saturday">עד 13:00</div>
+            <div class="time-sub saturday-sub">יציאה במוצ״ש במידה וסוכמה בעת ההזמנה</div>
           </div>
         </div>
 
@@ -1610,8 +1623,8 @@
               <span class="access-icon">🚪</span>
               <span>שער כניסה</span>
             </div>
-            <div class="access-value is-text">השער נפתח רק למספרים שמורים.<br>בהגעה התקשרו לאדם: <strong style="direction:ltr; display:inline-block; font-size:15px; color:#1C1917; font-weight:900;">054-338-7383</strong></div>
-            <div class="access-sub">פתיחת שער המושב עם ההגעה</div>
+            <div class="access-value is-text">פתוח ביום · סגור רק בלילה.<br>בלילה התקשרו לאדם: <strong style="direction:ltr; display:inline-block; font-size:16px; color:#1C1917; font-weight:900;">054-338-7383</strong></div>
+            <div class="access-sub">השער פתוח בשעות היום · בלילה נפתח למספרים שמורים</div>
           </div>
 
           <div class="access-card wifi-card">
@@ -1720,7 +1733,7 @@
           </div>
 
           <div class="checkout-instructions">
-            <div><strong>הנחיות עזיבה (עד 11:00):</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div><strong>הנחיות עזיבה:</strong> ימי חול עד 11:00, שבת עד 13:00 (יציאה במוצ״ש במידה וסוכמה בעת ההזמנה). ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
           </div>
         </footer>
       </div>
@@ -1758,7 +1771,8 @@
           </div>
           <div class="time-card">
             <div class="time-label">יציאה בשבת</div>
-            <div class="time-val saturday">15:00</div>
+            <div class="time-val saturday">עד 13:00</div>
+            <div class="time-sub saturday-sub">יציאה במוצ״ש במידה וסוכמה בעת ההזמנה</div>
           </div>
         </div>
 
@@ -1768,8 +1782,8 @@
               <span class="access-icon">🔑</span>
               <span>כספת מפתח</span>
             </div>
-            <div class="access-value is-text">הקוד יימסר בהודעה</div>
-            <div class="access-sub">קוד כספת המפתח יישלח ביום ההגעה</div>
+            <div class="access-value">3041</div>
+            <div class="access-sub">קוד פתיחה ונעילת מפתח היחידה</div>
           </div>
 
           <div class="access-card">
@@ -1777,8 +1791,8 @@
               <span class="access-icon">🚪</span>
               <span>שער כניסה</span>
             </div>
-            <div class="access-value is-text">השער נפתח רק למספרים שמורים.<br>בהגעה התקשרו לאדם: <strong style="direction:ltr; display:inline-block; font-size:15px; color:#1C1917; font-weight:900;">054-338-7383</strong></div>
-            <div class="access-sub">פתיחת שער המושב עם ההגעה</div>
+            <div class="access-value is-text">פתוח ביום · סגור רק בלילה.<br>בלילה התקשרו לאדם: <strong style="direction:ltr; display:inline-block; font-size:16px; color:#1C1917; font-weight:900;">054-338-7383</strong></div>
+            <div class="access-sub">השער פתוח בשעות היום · בלילה נפתח למספרים שמורים</div>
           </div>
 
           <div class="access-card wifi-card">
@@ -1887,7 +1901,7 @@
           </div>
 
           <div class="checkout-instructions">
-            <div><strong>הנחיות עזיבה (עד 11:00):</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div><strong>הנחיות עזיבה:</strong> ימי חול עד 11:00, שבת עד 13:00 (יציאה במוצ״ש במידה וסוכמה בעת ההזמנה). ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
           </div>
         </footer>
       </div>
@@ -1905,7 +1919,7 @@
           <span class="shabbat-alert-icon">🕯️</span>
           <div class="shabbat-alert-content">
             <strong>הודעת שבת חשובה — קאסה נובה (מושב דתי):</strong>
-            השער נסגר אוטומטית בכניסת שבת (<span>17:35</span>). בימי שישי חובה להגיע לפני שעה זו! אחרי השעה הזו לא ניתן להיכנס עם רכב למושב עד צאת שבת.
+            שער המושב נסגר אוטומטית בכניסת שבת (<span>17:35</span>). בימי שישי חובה להגיע לפני שעה זו! אחרי השעה הזו לא ניתן להיכנס עם רכב למושב עד צאת שבת (היציאה בשבת היא בצאת השבת).
           </div>
         </div>
         
@@ -1934,6 +1948,7 @@
           <div class="time-card">
             <div class="time-label">יציאה בשבת</div>
             <div class="time-val saturday">צאת השבת</div>
+            <div class="time-sub saturday-sub">היציאה תמיד בצאת שבת עקב סגירת שער המושב</div>
           </div>
         </div>
 
@@ -1952,8 +1967,8 @@
               <span class="access-icon">🚪</span>
               <span>שער כניסה (מושב דתי)</span>
             </div>
-            <div class="access-value is-text">השער נסגר אוטומטית בכניסת שבת (17:35). בימי שישי הגיעו לפני שעה זו. אין כניסת רכב עד צאת שבת.</div>
-            <div class="access-sub">קאסה נובה במושב דתי שומר שבת</div>
+            <div class="access-value is-text">פתוח ביום · סגור בלילה.<br><strong style="color:#9A3412;">בשישי-שבת סגירה מוחלטת!</strong> נסגר בכניסת שבת (17:35) עד צאת שבת. אין כניסת רכב.</div>
+            <div class="access-sub">מושב דתי שומר שבת · השער נעול הרמטית לרכבים בשבת</div>
           </div>
 
           <div class="access-card wifi-card">
@@ -2062,7 +2077,7 @@
           </div>
 
           <div class="checkout-instructions">
-            <div><strong>הנחיות עזיבה (עד 11:00):</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div><strong>הנחיות עזיבה:</strong> ימי חול עד 11:00, שבת עד 13:00 (יציאה במוצ״ש במידה וסוכמה בעת ההזמנה). ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
           </div>
         </footer>
       </div>

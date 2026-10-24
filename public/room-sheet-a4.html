@@ -241,7 +241,7 @@
     /* ---- TIMES ROW ---- */
     .times-row {
       display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1.35fr;
       gap: 3mm;
       margin: 2.2mm 0;
       text-align: center;
@@ -252,6 +252,10 @@
       border-radius: 6px;
       padding: 2.2mm 2mm;
       box-shadow: 0 1px 4px rgba(0,0,0,0.02);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
     }
     .time-label {
       font-size: 11.5px;
@@ -271,6 +275,13 @@
     .time-val.saturday {
       font-size: 20px;
       color: var(--gold-deep);
+    }
+    .time-sub.saturday-sub {
+      font-size: 10px;
+      font-weight: 800;
+      color: #9A3412;
+      margin-top: 1.5px;
+      line-height: 1.2;
     }
 
     /* ---- ACCESS & CODES GRID ---- */
@@ -651,7 +662,7 @@
           <span class="shabbat-alert-icon">🕯️</span>
           <div class="shabbat-alert-content">
             <strong>הודעת שבת חשובה — קאסה נובה (מושב דתי):</strong>
-            השער נסגר אוטומטית בכניסת שבת (<span id="shabbat-time-val">17:35</span>). בימי שישי חובה להגיע לפני שעה זו! אחרי השעה הזו לא ניתן להיכנס עם רכב למושב עד צאת שבת.
+            השער נסגר אוטומטית בכניסת שבת (<span id="shabbat-time-val">17:35</span>). בימי שישי חובה להגיע לפני שעה זו! אחרי השעה הזו לא ניתן להיכנס עם רכב למושב עד צאת שבת (היציאה בשבת היא בצאת השבת).
           </div>
         </div>
 
@@ -677,7 +688,8 @@
           </div>
           <div class="time-card">
             <div class="time-label">יציאה בשבת</div>
-            <div class="time-val saturday" id="saturday-val">15:00</div>
+            <div class="time-val saturday" id="saturday-val">עד 13:00</div>
+            <div class="time-sub saturday-sub" id="saturday-sub">יציאה במוצ״ש במידה וסוכמה בעת ההזמנה</div>
           </div>
         </div>
 
@@ -700,7 +712,7 @@
               <span id="gate-header-text">שער כניסה</span>
             </div>
             <div class="access-value" id="gate-val">#2464</div>
-            <div class="access-sub" id="gate-sub">קוד שער מושב רמות</div>
+            <div class="access-sub" id="gate-sub">השער פתוח ביום · סגור רק בלילה (קוד: #2464)</div>
           </div>
 
           <!-- Wi-Fi -->
@@ -813,7 +825,7 @@
           </div>
 
           <div class="checkout-instructions">
-            <div><strong>הנחיות עזיבה (עד 11:00):</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div><strong>הנחיות עזיבה:</strong> ימי חול עד 11:00, שבת עד 13:00 (יציאה במוצ״ש במידה וסוכמה בעת ההזמנה). ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
           </div>
         </footer>
       </div>
@@ -1332,7 +1344,15 @@
       sheetElement.querySelector('#prop-location').textContent = unit.loc;
 
       // Shabbat exit time
-      sheetElement.querySelector('#saturday-val').textContent = (unit.zone === 'casa-nova') ? 'צאת השבת' : '15:00';
+      const satValEl = sheetElement.querySelector('#saturday-val');
+      const satSubEl = sheetElement.querySelector('#saturday-sub');
+      if (unit.zone === 'casa-nova') {
+        satValEl.textContent = 'צאת השבת';
+        if (satSubEl) satSubEl.textContent = 'היציאה תמיד בצאת שבת עקב סגירת שער המושב';
+      } else {
+        satValEl.textContent = 'עד 13:00';
+        if (satSubEl) satSubEl.textContent = 'יציאה במוצ״ש במידה וסוכמה בעת ההזמנה';
+      }
 
       // Field service phone is 050-950-6222
       sheetElement.querySelector('#service-phone').textContent = '050-950-6222';
@@ -1362,19 +1382,19 @@
       if (unit.zone === 'neot-golan' || unit.zone === 'givat-yoav') {
         gateHeaderEl.textContent = 'שער כניסה';
         gateValEl.className = 'access-value is-text';
-        gateValEl.innerHTML = 'השער נפתח רק למספרים שמורים.<br>בהגעה התקשרו לאדם: <strong style="direction:ltr; display:inline-block; font-size:15px; color:#1C1917; font-weight:900;">054-338-7383</strong>';
-        gateSubEl.textContent = 'פתיחת שער המושב עם ההגעה';
+        gateValEl.innerHTML = 'פתוח ביום · סגור רק בלילה.<br>בלילה התקשרו לאדם: <strong style="direction:ltr; display:inline-block; font-size:16px; color:#1C1917; font-weight:900;">054-338-7383</strong>';
+        gateSubEl.textContent = 'השער פתוח בשעות היום · בלילה נפתח למספרים שמורים';
       } else if (unit.zone === 'casa-nova') {
         gateHeaderEl.textContent = 'שער כניסה (מושב דתי)';
         gateValEl.className = 'access-value is-text';
-        gateValEl.innerHTML = 'השער נסגר אוטומטית בכניסת שבת (' + SHABBAT_ENTRY_TIME + '). בימי שישי הגיעו לפני שעה זו. אין כניסת רכב עד צאת שבת.';
-        gateSubEl.textContent = 'קאסה נובה במושב דתי שומר שבת';
+        gateValEl.innerHTML = 'פתוח ביום · סגור בלילה.<br><strong style="color:#9A3412;">בשישי-שבת סגירה מוחלטת!</strong> נסגר בכניסת שבת (' + SHABBAT_ENTRY_TIME + ') עד צאת שבת. אין כניסת רכב.';
+        gateSubEl.textContent = 'מושב דתי שומר שבת · השער נעול הרמטית לרכבים בשבת';
       } else {
         // Ramot
         gateHeaderEl.textContent = 'שער כניסה';
         gateValEl.className = 'access-value';
         gateValEl.textContent = '#2464';
-        gateSubEl.textContent = 'קוד שער מושב רמות';
+        gateSubEl.textContent = 'השער פתוח ביום · סגור רק בלילה (קוד: #2464)';
       }
 
       // Wi-Fi (Rule 2)

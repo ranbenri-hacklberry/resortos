@@ -24,6 +24,8 @@ function property(id, name, village, cluster, sort_order, extra = {}) {
     content: parseGuestContent({
       check_in: '15:00',
       check_out: '11:00',
+      check_out_shabbat: id === 'casa-nova' ? 'צאת השבת' : '13:00',
+      late_checkout_motzash_price: 250,
       guides: { jacuzzi: FALLBACK_JACUZZI, tv: FALLBACK_TV, lock: LOCK_STEPS },
       ...extra.content
     }),

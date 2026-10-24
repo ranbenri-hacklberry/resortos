@@ -153,6 +153,8 @@ export function parseGuestContent(value) {
   return {
     check_in: raw.check_in || undefined,
     check_out: raw.check_out || undefined,
+    check_out_shabbat: raw.check_out_shabbat || undefined,
+    late_checkout_motzash_price: raw.late_checkout_motzash_price !== undefined ? Number(raw.late_checkout_motzash_price) : undefined,
     arrival: raw.arrival || undefined,
     nav: Object.keys(nav).length ? nav : undefined,
     guides: Object.keys(guides).length ? guides : undefined

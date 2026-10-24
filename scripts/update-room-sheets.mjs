@@ -338,7 +338,7 @@ function buildHtml(units) {
     /* ---- TIMES ROW ---- */
     .times-row {
       display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1.35fr;
       gap: 3mm;
       margin: 2.2mm 0;
       text-align: center;
@@ -349,6 +349,10 @@ function buildHtml(units) {
       border-radius: 6px;
       padding: 2.2mm 2mm;
       box-shadow: 0 1px 4px rgba(0,0,0,0.02);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
     }
     .time-label {
       font-size: 11.5px;
@@ -368,6 +372,13 @@ function buildHtml(units) {
     .time-val.saturday {
       font-size: 20px;
       color: var(--gold-deep);
+    }
+    .time-sub.saturday-sub {
+      font-size: 10px;
+      font-weight: 800;
+      color: #9A3412;
+      margin-top: 1.5px;
+      line-height: 1.2;
     }
 
     /* ---- ACCESS & CODES GRID ---- */
@@ -748,7 +759,7 @@ function buildHtml(units) {
           <span class="shabbat-alert-icon">🕯️</span>
           <div class="shabbat-alert-content">
             <strong>הודעת שבת חשובה — קאסה נובה (מושב דתי):</strong>
-            השער נסגר אוטומטית בכניסת שבת (<span id="shabbat-time-val">${shabbatTime}</span>). בימי שישי חובה להגיע לפני שעה זו! אחרי השעה הזו לא ניתן להיכנס עם רכב למושב עד צאת שבת.
+            השער נסגר אוטומטית בכניסת שבת (<span id="shabbat-time-val">${shabbatTime}</span>). בימי שישי חובה להגיע לפני שעה זו! אחרי השעה הזו לא ניתן להיכנס עם רכב למושב עד צאת שבת (היציאה בשבת היא בצאת השבת).
           </div>
         </div>
 
@@ -774,7 +785,8 @@ function buildHtml(units) {
           </div>
           <div class="time-card">
             <div class="time-label">יציאה בשבת</div>
-            <div class="time-val saturday" id="saturday-val">15:00</div>
+            <div class="time-val saturday" id="saturday-val">עד 13:00</div>
+            <div class="time-sub saturday-sub" id="saturday-sub">יציאה במוצ״ש במידה וסוכמה בעת ההזמנה</div>
           </div>
         </div>
 
@@ -797,7 +809,7 @@ function buildHtml(units) {
               <span id="gate-header-text">שער כניסה</span>
             </div>
             <div class="access-value" id="gate-val">#2464</div>
-            <div class="access-sub" id="gate-sub">קוד שער מושב רמות</div>
+            <div class="access-sub" id="gate-sub">השער פתוח ביום · סגור רק בלילה (קוד: #2464)</div>
           </div>
 
           <!-- Wi-Fi -->
@@ -910,7 +922,7 @@ function buildHtml(units) {
           </div>
 
           <div class="checkout-instructions">
-            <div><strong>הנחיות עזיבה (עד 11:00):</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div><strong>הנחיות עזיבה:</strong> ימי חול עד 11:00, שבת עד 13:00 (יציאה במוצ״ש במידה וסוכמה בעת ההזמנה). ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
           </div>
         </footer>
       </div>
@@ -944,7 +956,15 @@ function buildHtml(units) {
       sheetElement.querySelector('#prop-location').textContent = unit.loc;
 
       // Shabbat exit time
-      sheetElement.querySelector('#saturday-val').textContent = (unit.zone === 'casa-nova') ? 'צאת השבת' : '15:00';
+      const satValEl = sheetElement.querySelector('#saturday-val');
+      const satSubEl = sheetElement.querySelector('#saturday-sub');
+      if (unit.zone === 'casa-nova') {
+        satValEl.textContent = 'צאת השבת';
+        if (satSubEl) satSubEl.textContent = 'היציאה תמיד בצאת שבת עקב סגירת שער המושב';
+      } else {
+        satValEl.textContent = 'עד 13:00';
+        if (satSubEl) satSubEl.textContent = 'יציאה במוצ״ש במידה וסוכמה בעת ההזמנה';
+      }
 
       // Field service phone is 050-950-6222
       sheetElement.querySelector('#service-phone').textContent = '050-950-6222';
@@ -974,19 +994,19 @@ function buildHtml(units) {
       if (unit.zone === 'neot-golan' || unit.zone === 'givat-yoav') {
         gateHeaderEl.textContent = 'שער כניסה';
         gateValEl.className = 'access-value is-text';
-        gateValEl.innerHTML = 'השער נפתח רק למספרים שמורים.<br>בהגעה התקשרו לאדם: <strong style="direction:ltr; display:inline-block; font-size:15px; color:#1C1917; font-weight:900;">054-338-7383</strong>';
-        gateSubEl.textContent = 'פתיחת שער המושב עם ההגעה';
+        gateValEl.innerHTML = 'פתוח ביום · סגור רק בלילה.<br>בלילה התקשרו לאדם: <strong style="direction:ltr; display:inline-block; font-size:16px; color:#1C1917; font-weight:900;">054-338-7383</strong>';
+        gateSubEl.textContent = 'השער פתוח בשעות היום · בלילה נפתח למספרים שמורים';
       } else if (unit.zone === 'casa-nova') {
         gateHeaderEl.textContent = 'שער כניסה (מושב דתי)';
         gateValEl.className = 'access-value is-text';
-        gateValEl.innerHTML = 'השער נסגר אוטומטית בכניסת שבת (' + SHABBAT_ENTRY_TIME + '). בימי שישי הגיעו לפני שעה זו. אין כניסת רכב עד צאת שבת.';
-        gateSubEl.textContent = 'קאסה נובה במושב דתי שומר שבת';
+        gateValEl.innerHTML = 'פתוח ביום · סגור בלילה.<br><strong style="color:#9A3412;">בשישי-שבת סגירה מוחלטת!</strong> נסגר בכניסת שבת (' + SHABBAT_ENTRY_TIME + ') עד צאת שבת. אין כניסת רכב.';
+        gateSubEl.textContent = 'מושב דתי שומר שבת · השער נעול הרמטית לרכבים בשבת';
       } else {
         // Ramot
         gateHeaderEl.textContent = 'שער כניסה';
         gateValEl.className = 'access-value';
         gateValEl.textContent = '#2464';
-        gateSubEl.textContent = 'קוד שער מושב רמות';
+        gateSubEl.textContent = 'השער פתוח ביום · סגור רק בלילה (קוד: #2464)';
       }
 
       // Wi-Fi (Rule 2)
@@ -1084,7 +1104,7 @@ const SAMPLES_COMPLEXES = [
   { name: 'נופים בלבן', unitId: 'k685', guest: 'איתי ומורן ברקוביץ׳', cin: '2026-11-26', cout: '2026-11-28', guests: 'זוג' },
   { name: 'החצר המוסיקלית', unitId: 'k690', guest: 'דניאל וטליה שרון', cin: '2026-11-27', cout: '2026-11-29', guests: 'זוג' },
   { name: 'בקתות מאיה', unitId: 'k693', guest: 'גיא ומאיה אברהם', cin: '2026-12-03', cout: '2026-12-05', guests: 'זוג + תינוק' },
-  { name: 'מיאליס ריזורט', unitId: 'suite-1', guest: 'מתן ושני אלון', cin: '2026-12-04', cout: '2026-12-06', guests: 'זוג + ילד' },
+  { name: 'מיאליס ריזורט', unitId: 'mialis-villa', guest: 'מתן ושני אלון', cin: '2026-12-04', cout: '2026-12-06', guests: 'זוג + ילד' },
   { name: 'כיפת שמיים', unitId: 'dome-blue', guest: 'עידו ועמית רז', cin: '2026-12-10', cout: '2026-12-12', guests: 'זוג' },
   { name: 'צימר בגבעה', unitId: 'hill-1', guest: 'אסף ודנה גולן', cin: '2026-12-11', cout: '2026-12-13', guests: 'זוג + 2 ילדים' },
   { name: 'קאסה נובה', unitId: 'k826', guest: 'בנימין ורבקה שוורץ', cin: '2026-12-18', cout: '2026-12-20', guests: 'זוג שומרי שבת' }
@@ -1100,7 +1120,7 @@ function buildSamplesHtml(complexes, units) {
     const isCasaNova = unit.zone === 'casa-nova';
 
     // Lockbox text
-    const isPlainCode = /^\\d{4}$/.test(unit.lockbox);
+    const isPlainCode = /^\d{4}$/.test(unit.lockbox);
     const lockboxValClass = isPlainCode ? 'access-value' : 'access-value is-text';
     const lockboxVal = isPlainCode ? unit.lockbox : 'הקוד יימסר בהודעה';
     const lockboxSub = isPlainCode ? 'קוד פתיחה ונעילת מפתח היחידה' : 'קוד כספת המפתח יישלח ביום ההגעה';
@@ -1109,20 +1129,21 @@ function buildSamplesHtml(complexes, units) {
     let gateHeader = 'שער כניסה';
     let gateValClass = 'access-value';
     let gateValHtml = '#2464';
-    let gateSub = 'קוד שער מושב רמות';
+    let gateSub = 'השער פתוח ביום · סגור רק בלילה (קוד: #2464)';
 
     if (unit.zone === 'neot-golan' || unit.zone === 'givat-yoav') {
       gateValClass = 'access-value is-text';
-      gateValHtml = 'השער נפתח רק למספרים שמורים.<br>בהגעה התקשרו לאדם: <strong style="direction:ltr; display:inline-block; font-size:15px; color:#1C1917; font-weight:900;">054-338-7383</strong>';
-      gateSub = 'פתיחת שער המושב עם ההגעה';
+      gateValHtml = 'פתוח ביום · סגור רק בלילה.<br>בלילה התקשרו לאדם: <strong style="direction:ltr; display:inline-block; font-size:16px; color:#1C1917; font-weight:900;">054-338-7383</strong>';
+      gateSub = 'השער פתוח בשעות היום · בלילה נפתח למספרים שמורים';
     } else if (unit.zone === 'casa-nova') {
       gateHeader = 'שער כניסה (מושב דתי)';
       gateValClass = 'access-value is-text';
-      gateValHtml = 'השער נסגר אוטומטית בכניסת שבת (' + shabbatTime + '). בימי שישי הגיעו לפני שעה זו. אין כניסת רכב עד צאת שבת.';
-      gateSub = 'קאסה נובה במושב דתי שומר שבת';
+      gateValHtml = 'פתוח ביום · סגור בלילה.<br><strong style="color:#9A3412;">בשישי-שבת סגירה מוחלטת!</strong> נסגר בכניסת שבת (' + shabbatTime + ') עד צאת שבת. אין כניסת רכב.';
+      gateSub = 'מושב דתי שומר שבת · השער נעול הרמטית לרכבים בשבת';
     }
 
-    const saturdayVal = (unit.zone === 'casa-nova') ? 'צאת השבת' : '15:00';
+    const saturdayVal = (unit.zone === 'casa-nova') ? 'צאת השבת' : 'עד 13:00';
+    const saturdaySub = (unit.zone === 'casa-nova') ? 'היציאה תמיד בצאת שבת עקב סגירת שער המושב' : 'יציאה במוצ״ש במידה וסוכמה בעת ההזמנה';
 
     sheetsHtml += `
     <article class="sheet">
@@ -1137,7 +1158,7 @@ function buildSamplesHtml(complexes, units) {
           <span class="shabbat-alert-icon">🕯️</span>
           <div class="shabbat-alert-content">
             <strong>הודעת שבת חשובה — קאסה נובה (מושב דתי):</strong>
-            השער נסגר אוטומטית בכניסת שבת (<span>${shabbatTime}</span>). בימי שישי חובה להגיע לפני שעה זו! אחרי השעה הזו לא ניתן להיכנס עם רכב למושב עד צאת שבת.
+            שער המושב נסגר אוטומטית בכניסת שבת (<span>${shabbatTime}</span>). בימי שישי חובה להגיע לפני שעה זו! אחרי השעה הזו לא ניתן להיכנס עם רכב למושב עד צאת שבת (היציאה בשבת היא בצאת השבת).
           </div>
         </div>
         ` : ''}
@@ -1166,6 +1187,7 @@ function buildSamplesHtml(complexes, units) {
           <div class="time-card">
             <div class="time-label">יציאה בשבת</div>
             <div class="time-val saturday">${saturdayVal}</div>
+            <div class="time-sub saturday-sub">${saturdaySub}</div>
           </div>
         </div>
 
@@ -1294,7 +1316,7 @@ function buildSamplesHtml(complexes, units) {
           </div>
 
           <div class="checkout-instructions">
-            <div><strong>הנחיות עזיבה (עד 11:00):</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div><strong>הנחיות עזיבה:</strong> ימי חול עד 11:00, שבת עד 13:00 (יציאה במוצ״ש במידה וסוכמה בעת ההזמנה). ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
           </div>
         </footer>
       </div>
@@ -1446,11 +1468,15 @@ function buildSamplesHtml(complexes, units) {
     }
     .prop-location { font-size: 13px; color: var(--ink-secondary); margin-top: 2px; font-weight: 700; }
 
-    .times-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3mm; margin: 2.2mm 0; text-align: center; }
-    .time-card { background: #FFFFFF; border: 1px solid var(--border-fine); border-radius: 6px; padding: 2.2mm 2mm; box-shadow: 0 1px 4px rgba(0,0,0,0.02); }
+    .times-row { display: grid; grid-template-columns: 1fr 1fr 1.35fr; gap: 3mm; margin: 2.2mm 0; text-align: center; }
+    .time-card {
+      background: #FFFFFF; border: 1px solid var(--border-fine); border-radius: 6px; padding: 2.2mm 2mm;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.02); display: flex; flex-direction: column; justify-content: center; align-items: center;
+    }
     .time-label { font-size: 11.5px; font-weight: 800; color: var(--ink-muted); text-transform: uppercase; margin-bottom: 1px; }
     .time-val { font-size: 24px; font-weight: 900; color: var(--ink-primary); line-height: 1.1; }
     .time-val.saturday { font-size: 20px; color: var(--gold-deep); }
+    .time-sub.saturday-sub { font-size: 10px; font-weight: 800; color: #9A3412; margin-top: 1.5px; line-height: 1.2; }
 
     .access-grid { display: grid; grid-template-columns: 1fr 1.12fr 1.48fr; gap: 3mm; margin-bottom: 2.2mm; }
     .access-card {

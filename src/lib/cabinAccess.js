@@ -108,6 +108,7 @@ export const LATE_NEXT_GUEST = [
 ];
 
 export const LATE_FREE_DAY = [
+  { until: 'motzash', price: 250, label: 'motzash' },
   { until: '18:00', price: 250, label: 'until_18' },
   { until: 'next', price: 390, label: 'extra_night' }
 ];
