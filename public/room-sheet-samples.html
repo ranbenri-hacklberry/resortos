@@ -11,14 +11,14 @@
     :root {
       --bg-sheet: #FDFBF7;
       --ink-primary: #1C1917;
-      --ink-secondary: #44403C;
-      --ink-muted: #78716C;
+      --ink-secondary: #292524;
+      --ink-muted: #57534E;
       --gold-primary: #C5A059;
-      --gold-deep: #9E7D3B;
+      --gold-deep: #8C6D2D;
       --gold-light: #F7F1E5;
-      --gold-subtle: rgba(197, 160, 89, 0.12);
-      --border-fine: #E7DFCE;
-      --border-dark: #292524;
+      --gold-subtle: rgba(197, 160, 89, 0.14);
+      --border-fine: #DCD3C0;
+      --border-dark: #1C1917;
       --alert-bg: #FEF2F2;
       --alert-border: #FCA5A5;
       --alert-text: #991B1B;
@@ -124,83 +124,87 @@
 
     .header { text-align: center; padding-bottom: 2.5mm; border-bottom: 1.5px solid var(--ink-primary); position: relative; }
     .brand-crown {
-      font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase;
-      color: var(--gold-deep); font-weight: 800; margin-bottom: 2px;
+      font-size: 11.5px; letter-spacing: 0.28em; text-transform: uppercase;
+      color: var(--gold-deep); font-weight: 900; margin-bottom: 2px;
       display: flex; align-items: center; justify-content: center; gap: 8px;
     }
     .brand-crown::before, .brand-crown::after { content: "—"; color: var(--gold-primary); }
     .welcome-title {
       font-family: 'Frank Ruhl Libre', 'David Libre', serif;
-      font-size: 32px; font-weight: 900; color: var(--ink-primary);
+      font-size: 34px; font-weight: 900; color: var(--ink-primary);
       letter-spacing: -0.02em; line-height: 1.1; margin: 1px 0;
     }
     .unit-hero-name {
-      font-size: 20px; font-weight: 800; color: var(--gold-deep);
-      margin-top: 1px; display: inline-block; padding: 2px 14px;
+      font-size: 23px; font-weight: 900; color: var(--gold-deep);
+      margin-top: 1px; display: inline-block; padding: 2.5px 16px;
       background: var(--gold-subtle); border-radius: 20px;
-      border: 1px solid rgba(197, 160, 89, 0.4);
+      border: 1.2px solid rgba(197, 160, 89, 0.45);
     }
-    .prop-location { font-size: 12px; color: var(--ink-muted); margin-top: 2px; font-weight: 600; }
+    .prop-location { font-size: 13px; color: var(--ink-secondary); margin-top: 2px; font-weight: 700; }
 
-    .times-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3mm; margin: 2.5mm 0; text-align: center; }
-    .time-card { background: #FFFFFF; border: 1px solid var(--border-fine); border-radius: 6px; padding: 2.5mm 2mm; }
-    .time-label { font-size: 10.5px; font-weight: 700; color: var(--ink-muted); text-transform: uppercase; margin-bottom: 1px; }
-    .time-val { font-size: 20px; font-weight: 900; color: var(--ink-primary); line-height: 1.1; }
-    .time-val.saturday { font-size: 17px; color: var(--gold-deep); }
+    .times-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3mm; margin: 2.2mm 0; text-align: center; }
+    .time-card { background: #FFFFFF; border: 1px solid var(--border-fine); border-radius: 6px; padding: 2.2mm 2mm; box-shadow: 0 1px 4px rgba(0,0,0,0.02); }
+    .time-label { font-size: 11.5px; font-weight: 800; color: var(--ink-muted); text-transform: uppercase; margin-bottom: 1px; }
+    .time-val { font-size: 24px; font-weight: 900; color: var(--ink-primary); line-height: 1.1; }
+    .time-val.saturday { font-size: 20px; color: var(--gold-deep); }
 
-    .access-grid { display: grid; grid-template-columns: 1fr 1.15fr 1.25fr; gap: 3mm; margin-bottom: 2.5mm; }
+    .access-grid { display: grid; grid-template-columns: 1fr 1.12fr 1.48fr; gap: 3mm; margin-bottom: 2.2mm; }
     .access-card {
       background: #FFFFFF; border: 1px solid var(--border-fine); border-top: 3px solid var(--gold-primary);
-      border-radius: 6px; padding: 2.5mm 3mm; display: flex; flex-direction: column; justify-content: space-between; min-height: 28mm;
+      border-radius: 6px; padding: 2.5mm 3mm; display: flex; flex-direction: column; justify-content: space-between; min-height: 29mm;
     }
-    .access-header { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; color: var(--ink-secondary); margin-bottom: 2px; }
-    .access-icon { font-size: 12.5px; }
+    .access-header { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 900; color: var(--ink-primary); margin-bottom: 2px; }
+    .access-icon { font-size: 14px; }
     .access-value {
-      font-family: ui-monospace, Menlo, monospace; font-size: 22px; font-weight: 900;
+      font-family: ui-monospace, Menlo, monospace; font-size: 26px; font-weight: 900;
       color: var(--ink-primary); direction: ltr; text-align: center; letter-spacing: 0.08em; line-height: 1.15; padding: 1px 0;
     }
     .access-value.is-text {
-      font-family: 'Assistant', sans-serif; font-size: 12px; font-weight: 700;
+      font-family: 'Assistant', sans-serif; font-size: 13px; font-weight: 800;
       direction: rtl; letter-spacing: normal; line-height: 1.35; color: var(--ink-primary); text-align: center;
     }
-    .access-sub { font-size: 9.5px; color: var(--ink-muted); text-align: center; line-height: 1.25; margin-top: 1px; }
+    .access-sub { font-size: 10.5px; font-weight: 700; color: var(--ink-muted); text-align: center; line-height: 1.25; margin-top: 1px; }
 
-    .wifi-details { display: flex; flex-direction: column; gap: 2.5px; direction: ltr; text-align: left; }
-    .wifi-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 11px; border-bottom: 1px dotted #EAE2D2; padding-bottom: 1px; }
-    .wifi-row .w-label { font-size: 9.5px; color: var(--ink-muted); direction: rtl; }
-    .wifi-row .w-val { font-family: ui-monospace, Menlo, monospace; font-weight: 800; color: var(--ink-primary); font-size: 12px; }
+    .wifi-body { display: flex; align-items: center; justify-content: space-between; gap: 2.5mm; padding: 0.5mm 0; }
+    .wifi-details { flex: 1; display: flex; flex-direction: column; gap: 2.5px; direction: ltr; text-align: left; }
+    .wifi-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 11.5px; border-bottom: 1px dotted #DCD3C0; padding-bottom: 1px; }
+    .wifi-row .w-label { font-size: 11px; font-weight: 800; color: var(--ink-secondary); direction: rtl; }
+    .wifi-row .w-val { font-family: ui-monospace, Menlo, monospace; font-weight: 900; color: #000; font-size: 14px; }
+    .wifi-qr-wrap { flex-shrink: 0; background: #FFFFFF; border: 1px solid var(--gold-primary); border-radius: 5px; padding: 1.2mm; text-align: center; display: flex; flex-direction: column; align-items: center; }
+    .wifi-qr { width: 15.5mm; height: 15.5mm; display: block; image-rendering: pixelated; }
+    .wifi-qr-sub { font-size: 8px; font-weight: 800; color: var(--gold-deep); margin-top: 1px; white-space: nowrap; }
 
     .rules-section {
       background: #FFFDF9; border: 1.5px solid var(--gold-primary); border-radius: 8px;
-      padding: 3mm 4.5mm 2.5mm; box-shadow: 0 2px 8px rgba(197, 160, 89, 0.08); margin-bottom: 2.5mm;
+      padding: 2.8mm 4.5mm 2.2mm; box-shadow: 0 2px 8px rgba(197, 160, 89, 0.08); margin-bottom: 2.2mm;
     }
-    .rules-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(197, 160, 89, 0.35); padding-bottom: 2mm; margin-bottom: 2.5mm; }
-    .rules-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 900; color: var(--ink-primary); }
-    .rules-badge { font-size: 9.5px; font-weight: 800; padding: 1.5px 7px; border-radius: 4px; background: var(--alert-bg); border: 1px solid var(--alert-border); color: var(--alert-text); }
+    .rules-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(197, 160, 89, 0.35); padding-bottom: 1.8mm; margin-bottom: 2.2mm; }
+    .rules-title { display: flex; align-items: center; gap: 6px; font-size: 14.5px; font-weight: 900; color: var(--ink-primary); }
+    .rules-badge { font-size: 10.5px; font-weight: 900; padding: 1.5px 8px; border-radius: 4px; background: var(--alert-bg); border: 1px solid var(--alert-border); color: var(--alert-text); letter-spacing: 0.03em; }
     .rules-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2mm 5mm; }
-    .rule-item { display: flex; align-items: flex-start; gap: 6px; font-size: 10.2px; line-height: 1.35; color: var(--ink-secondary); }
-    .rule-icon { font-size: 13px; line-height: 1.1; flex-shrink: 0; margin-top: 1px; }
-    .rule-item strong { color: var(--ink-primary); font-weight: 800; }
+    .rule-item { display: flex; align-items: flex-start; gap: 6px; font-size: 11.2px; line-height: 1.38; color: var(--ink-primary); }
+    .rule-icon { font-size: 14.5px; line-height: 1.1; flex-shrink: 0; margin-top: 1px; }
+    .rule-item strong { color: #000000; font-weight: 900; }
 
     .digital-hub {
       background: var(--gold-light); border: 1.5px solid var(--gold-primary); border-radius: 8px;
-      padding: 3mm 4.5mm; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4.5mm; margin-bottom: 2.5mm;
+      padding: 2.8mm 4.5mm; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4.5mm; margin-bottom: 2.2mm;
     }
-    .hub-content h3 { font-size: 13.5px; font-weight: 900; color: var(--ink-primary); margin-bottom: 2px; display: flex; align-items: center; gap: 6px; }
-    .hub-content p { font-size: 10.2px; line-height: 1.35; color: var(--ink-secondary); margin-bottom: 3px; }
-    .hub-highlights { display: flex; flex-wrap: wrap; gap: 3px 8px; font-size: 9.8px; font-weight: 700; color: var(--gold-deep); }
-    .hub-highlights span { background: rgba(197, 160, 89, 0.16); padding: 1px 6px; border-radius: 3px; }
-    .hub-qr-wrap { text-align: center; background: #FFFFFF; padding: 2.5mm; border: 1px solid var(--gold-primary); border-radius: 6px; }
+    .hub-content h3 { font-size: 15px; font-weight: 900; color: var(--ink-primary); margin-bottom: 2px; display: flex; align-items: center; gap: 6px; }
+    .hub-content p { font-size: 11.2px; line-height: 1.38; color: var(--ink-secondary); font-weight: 600; margin-bottom: 3px; }
+    .hub-highlights { display: flex; flex-wrap: wrap; gap: 3px 8px; font-size: 10.5px; font-weight: 800; color: var(--gold-deep); }
+    .hub-highlights span { background: rgba(197, 160, 89, 0.18); padding: 1.5px 7px; border-radius: 3px; }
+    .hub-qr-wrap { text-align: center; background: #FFFFFF; padding: 2.5mm; border: 1px solid var(--gold-primary); border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
     .hub-qr { width: 25mm; height: 25mm; display: block; image-rendering: pixelated; }
-    .qr-caption { font-size: 8.5px; font-weight: 800; letter-spacing: 0.05em; color: var(--ink-primary); margin-top: 2px; }
+    .qr-caption { font-size: 9.5px; font-weight: 900; letter-spacing: 0.05em; color: var(--ink-primary); margin-top: 2px; text-transform: uppercase; }
 
     .footer { border-top: 1.5px solid var(--ink-primary); padding-top: 2.2mm; display: flex; justify-content: space-between; align-items: center; gap: 3.5mm; }
-    .service-box { background: #FFFFFF; border: 1.5px solid var(--gold-primary); border-radius: 7px; padding: 2.2mm 3.8mm; display: flex; flex-direction: column; gap: 1.5px; box-shadow: 0 1px 4px rgba(197, 160, 89, 0.15); flex: 1.15; }
-    .s-label { font-size: 10px; font-weight: 800; color: var(--ink-secondary); display: flex; align-items: center; gap: 4px; }
-    .s-phone { font-size: 18px; font-weight: 900; color: var(--gold-deep); direction: ltr; text-align: right; letter-spacing: 0.05em; line-height: 1.15; }
-    .s-hours { font-size: 8.8px; color: var(--ink-muted); line-height: 1.3; margin-top: 1.5px; }
-    .checkout-instructions { font-size: 9.6px; color: var(--ink-muted); line-height: 1.35; text-align: right; direction: rtl; flex: 1; }
-    .checkout-instructions strong { color: var(--ink-primary); }
+    .service-box { background: #FFFFFF; border: 1.5px solid var(--gold-primary); border-radius: 7px; padding: 2.2mm 4mm; display: flex; flex-direction: column; gap: 1.5px; box-shadow: 0 1px 4px rgba(197, 160, 89, 0.15); flex: 1.15; }
+    .s-label { font-size: 11px; font-weight: 900; color: var(--ink-secondary); display: flex; align-items: center; gap: 4px; }
+    .s-phone { font-size: 21px; font-weight: 900; color: var(--gold-deep); direction: ltr; text-align: right; letter-spacing: 0.05em; line-height: 1.15; }
+    .s-hours { font-size: 9.8px; font-weight: 700; color: var(--ink-muted); line-height: 1.3; margin-top: 1.5px; }
+    .checkout-instructions { font-size: 10.5px; color: var(--ink-secondary); line-height: 1.38; text-align: right; direction: rtl; flex: 1; }
+    .checkout-instructions strong { color: #000000; font-weight: 900; }
 
     @media print {
       @page { size: A4 portrait; margin: 0; }
@@ -274,22 +278,28 @@
             <div class="access-sub">קוד שער מושב רמות</div>
           </div>
 
-          <div class="access-card">
+          <div class="access-card wifi-card">
             <div class="access-header">
               <span class="access-icon">📶</span>
               <span>אינטרנט אלחוטי (Wi-Fi)</span>
             </div>
-            <div class="wifi-details">
-              <div class="wifi-row">
-                <span class="w-label">רשת:</span>
-                <span class="w-val">MIALEES RESORT</span>
+            <div class="wifi-body">
+              <div class="wifi-details">
+                <div class="wifi-row">
+                  <span class="w-label">רשת:</span>
+                  <span class="w-val">MIALEES RESORT</span>
+                </div>
+                <div class="wifi-row">
+                  <span class="w-label">סיסמה:</span>
+                  <span class="w-val">MIAL2026</span>
+                </div>
               </div>
-              <div class="wifi-row">
-                <span class="w-label">סיסמה:</span>
-                <span class="w-val">MIAL2026</span>
+              <div class="wifi-qr-wrap" title="סריקה במצלמת הטלפון לחיבור ישיר לרשת">
+                <img class="wifi-qr" alt="Wi-Fi QR" src="data:image/png;base64,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" />
+                <div class="wifi-qr-sub">סריקה לחיבור</div>
               </div>
             </div>
-            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
+            <div class="access-sub">סרקו במצלמה לחיבור מיידי לרשת</div>
           </div>
         </div>
 
@@ -435,22 +445,28 @@
             <div class="access-sub">קוד שער מושב רמות</div>
           </div>
 
-          <div class="access-card">
+          <div class="access-card wifi-card">
             <div class="access-header">
               <span class="access-icon">📶</span>
               <span>אינטרנט אלחוטי (Wi-Fi)</span>
             </div>
-            <div class="wifi-details">
-              <div class="wifi-row">
-                <span class="w-label">רשת:</span>
-                <span class="w-val">Toscana</span>
+            <div class="wifi-body">
+              <div class="wifi-details">
+                <div class="wifi-row">
+                  <span class="w-label">רשת:</span>
+                  <span class="w-val">Toscana</span>
+                </div>
+                <div class="wifi-row">
+                  <span class="w-label">סיסמה:</span>
+                  <span class="w-val">12345678</span>
+                </div>
               </div>
-              <div class="wifi-row">
-                <span class="w-label">סיסמה:</span>
-                <span class="w-val">12345678</span>
+              <div class="wifi-qr-wrap" title="סריקה במצלמת הטלפון לחיבור ישיר לרשת">
+                <img class="wifi-qr" alt="Wi-Fi QR" src="data:image/png;base64,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" />
+                <div class="wifi-qr-sub">סריקה לחיבור</div>
               </div>
             </div>
-            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
+            <div class="access-sub">סרקו במצלמה לחיבור מיידי לרשת</div>
           </div>
         </div>
 
@@ -596,22 +612,28 @@
             <div class="access-sub">קוד שער מושב רמות</div>
           </div>
 
-          <div class="access-card">
+          <div class="access-card wifi-card">
             <div class="access-header">
               <span class="access-icon">📶</span>
               <span>אינטרנט אלחוטי (Wi-Fi)</span>
             </div>
-            <div class="wifi-details">
-              <div class="wifi-row">
-                <span class="w-label">רשת:</span>
-                <span class="w-val">LUTUS</span>
+            <div class="wifi-body">
+              <div class="wifi-details">
+                <div class="wifi-row">
+                  <span class="w-label">רשת:</span>
+                  <span class="w-val">LUTUS</span>
+                </div>
+                <div class="wifi-row">
+                  <span class="w-label">סיסמה:</span>
+                  <span class="w-val">12345678</span>
+                </div>
               </div>
-              <div class="wifi-row">
-                <span class="w-label">סיסמה:</span>
-                <span class="w-val">12345678</span>
+              <div class="wifi-qr-wrap" title="סריקה במצלמת הטלפון לחיבור ישיר לרשת">
+                <img class="wifi-qr" alt="Wi-Fi QR" src="data:image/png;base64,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" />
+                <div class="wifi-qr-sub">סריקה לחיבור</div>
               </div>
             </div>
-            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
+            <div class="access-sub">סרקו במצלמה לחיבור מיידי לרשת</div>
           </div>
         </div>
 
@@ -757,22 +779,28 @@
             <div class="access-sub">קוד שער מושב רמות</div>
           </div>
 
-          <div class="access-card">
+          <div class="access-card wifi-card">
             <div class="access-header">
               <span class="access-icon">📶</span>
               <span>אינטרנט אלחוטי (Wi-Fi)</span>
             </div>
-            <div class="wifi-details">
-              <div class="wifi-row">
-                <span class="w-label">רשת:</span>
-                <span class="w-val">Mol_hanof</span>
+            <div class="wifi-body">
+              <div class="wifi-details">
+                <div class="wifi-row">
+                  <span class="w-label">רשת:</span>
+                  <span class="w-val">Mol_hanof</span>
+                </div>
+                <div class="wifi-row">
+                  <span class="w-label">סיסמה:</span>
+                  <span class="w-val">12345678</span>
+                </div>
               </div>
-              <div class="wifi-row">
-                <span class="w-label">סיסמה:</span>
-                <span class="w-val">12345678</span>
+              <div class="wifi-qr-wrap" title="סריקה במצלמת הטלפון לחיבור ישיר לרשת">
+                <img class="wifi-qr" alt="Wi-Fi QR" src="data:image/png;base64,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" />
+                <div class="wifi-qr-sub">סריקה לחיבור</div>
               </div>
             </div>
-            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
+            <div class="access-sub">סרקו במצלמה לחיבור מיידי לרשת</div>
           </div>
         </div>
 
@@ -918,22 +946,28 @@
             <div class="access-sub">קוד שער מושב רמות</div>
           </div>
 
-          <div class="access-card">
+          <div class="access-card wifi-card">
             <div class="access-header">
               <span class="access-icon">📶</span>
               <span>אינטרנט אלחוטי (Wi-Fi)</span>
             </div>
-            <div class="wifi-details">
-              <div class="wifi-row">
-                <span class="w-label">רשת:</span>
-                <span class="w-val">TP-LINK_FA30</span>
+            <div class="wifi-body">
+              <div class="wifi-details">
+                <div class="wifi-row">
+                  <span class="w-label">רשת:</span>
+                  <span class="w-val">TP-LINK_FA30</span>
+                </div>
+                <div class="wifi-row">
+                  <span class="w-label">סיסמה:</span>
+                  <span class="w-val">15107312</span>
+                </div>
               </div>
-              <div class="wifi-row">
-                <span class="w-label">סיסמה:</span>
-                <span class="w-val">15107312</span>
+              <div class="wifi-qr-wrap" title="סריקה במצלמת הטלפון לחיבור ישיר לרשת">
+                <img class="wifi-qr" alt="Wi-Fi QR" src="data:image/png;base64,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" />
+                <div class="wifi-qr-sub">סריקה לחיבור</div>
               </div>
             </div>
-            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
+            <div class="access-sub">סרקו במצלמה לחיבור מיידי לרשת</div>
           </div>
         </div>
 
@@ -1079,22 +1113,28 @@
             <div class="access-sub">קוד שער מושב רמות</div>
           </div>
 
-          <div class="access-card">
+          <div class="access-card wifi-card">
             <div class="access-header">
               <span class="access-icon">📶</span>
               <span>אינטרנט אלחוטי (Wi-Fi)</span>
             </div>
-            <div class="wifi-details">
-              <div class="wifi-row">
-                <span class="w-label">רשת:</span>
-                <span class="w-val">Music yard</span>
+            <div class="wifi-body">
+              <div class="wifi-details">
+                <div class="wifi-row">
+                  <span class="w-label">רשת:</span>
+                  <span class="w-val">Music yard</span>
+                </div>
+                <div class="wifi-row">
+                  <span class="w-label">סיסמה:</span>
+                  <span class="w-val">12345678</span>
+                </div>
               </div>
-              <div class="wifi-row">
-                <span class="w-label">סיסמה:</span>
-                <span class="w-val">12345678</span>
+              <div class="wifi-qr-wrap" title="סריקה במצלמת הטלפון לחיבור ישיר לרשת">
+                <img class="wifi-qr" alt="Wi-Fi QR" src="data:image/png;base64,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" />
+                <div class="wifi-qr-sub">סריקה לחיבור</div>
               </div>
             </div>
-            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
+            <div class="access-sub">סרקו במצלמה לחיבור מיידי לרשת</div>
           </div>
         </div>
 
@@ -1240,22 +1280,28 @@
             <div class="access-sub">קוד שער מושב רמות</div>
           </div>
 
-          <div class="access-card">
+          <div class="access-card wifi-card">
             <div class="access-header">
               <span class="access-icon">📶</span>
               <span>אינטרנט אלחוטי (Wi-Fi)</span>
             </div>
-            <div class="wifi-details">
-              <div class="wifi-row">
-                <span class="w-label">רשת:</span>
-                <span class="w-val">maya</span>
+            <div class="wifi-body">
+              <div class="wifi-details">
+                <div class="wifi-row">
+                  <span class="w-label">רשת:</span>
+                  <span class="w-val">maya</span>
+                </div>
+                <div class="wifi-row">
+                  <span class="w-label">סיסמה:</span>
+                  <span class="w-val">12345678</span>
+                </div>
               </div>
-              <div class="wifi-row">
-                <span class="w-label">סיסמה:</span>
-                <span class="w-val">12345678</span>
+              <div class="wifi-qr-wrap" title="סריקה במצלמת הטלפון לחיבור ישיר לרשת">
+                <img class="wifi-qr" alt="Wi-Fi QR" src="data:image/png;base64,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" />
+                <div class="wifi-qr-sub">סריקה לחיבור</div>
               </div>
             </div>
-            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
+            <div class="access-sub">סרקו במצלמה לחיבור מיידי לרשת</div>
           </div>
         </div>
 
@@ -1401,22 +1447,28 @@
             <div class="access-sub">פתיחת שער המושב עם ההגעה</div>
           </div>
 
-          <div class="access-card">
+          <div class="access-card wifi-card">
             <div class="access-header">
               <span class="access-icon">📶</span>
               <span>אינטרנט אלחוטי (Wi-Fi)</span>
             </div>
-            <div class="wifi-details">
-              <div class="wifi-row">
-                <span class="w-label">רשת:</span>
-                <span class="w-val">CASAMIA</span>
+            <div class="wifi-body">
+              <div class="wifi-details">
+                <div class="wifi-row">
+                  <span class="w-label">רשת:</span>
+                  <span class="w-val">CASAMIA</span>
+                </div>
+                <div class="wifi-row">
+                  <span class="w-label">סיסמה:</span>
+                  <span class="w-val">CASAMIA10</span>
+                </div>
               </div>
-              <div class="wifi-row">
-                <span class="w-label">סיסמה:</span>
-                <span class="w-val">CASAMIA10</span>
+              <div class="wifi-qr-wrap" title="סריקה במצלמת הטלפון לחיבור ישיר לרשת">
+                <img class="wifi-qr" alt="Wi-Fi QR" src="data:image/png;base64,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" />
+                <div class="wifi-qr-sub">סריקה לחיבור</div>
               </div>
             </div>
-            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
+            <div class="access-sub">סרקו במצלמה לחיבור מיידי לרשת</div>
           </div>
         </div>
 
@@ -1562,22 +1614,28 @@
             <div class="access-sub">פתיחת שער המושב עם ההגעה</div>
           </div>
 
-          <div class="access-card">
+          <div class="access-card wifi-card">
             <div class="access-header">
               <span class="access-icon">📶</span>
               <span>אינטרנט אלחוטי (Wi-Fi)</span>
             </div>
-            <div class="wifi-details">
-              <div class="wifi-row">
-                <span class="w-label">רשת:</span>
-                <span class="w-val">Kipat_Shamayim</span>
+            <div class="wifi-body">
+              <div class="wifi-details">
+                <div class="wifi-row">
+                  <span class="w-label">רשת:</span>
+                  <span class="w-val">Kipat_Shamayim</span>
+                </div>
+                <div class="wifi-row">
+                  <span class="w-label">סיסמה:</span>
+                  <span class="w-val">12345678</span>
+                </div>
               </div>
-              <div class="wifi-row">
-                <span class="w-label">סיסמה:</span>
-                <span class="w-val">12345678</span>
+              <div class="wifi-qr-wrap" title="סריקה במצלמת הטלפון לחיבור ישיר לרשת">
+                <img class="wifi-qr" alt="Wi-Fi QR" src="data:image/png;base64,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" />
+                <div class="wifi-qr-sub">סריקה לחיבור</div>
               </div>
             </div>
-            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
+            <div class="access-sub">סרקו במצלמה לחיבור מיידי לרשת</div>
           </div>
         </div>
 
@@ -1723,22 +1781,28 @@
             <div class="access-sub">פתיחת שער המושב עם ההגעה</div>
           </div>
 
-          <div class="access-card">
+          <div class="access-card wifi-card">
             <div class="access-header">
               <span class="access-icon">📶</span>
               <span>אינטרנט אלחוטי (Wi-Fi)</span>
             </div>
-            <div class="wifi-details">
-              <div class="wifi-row">
-                <span class="w-label">רשת:</span>
-                <span class="w-val">Zimer_Giva</span>
+            <div class="wifi-body">
+              <div class="wifi-details">
+                <div class="wifi-row">
+                  <span class="w-label">רשת:</span>
+                  <span class="w-val">Zimer_Giva</span>
+                </div>
+                <div class="wifi-row">
+                  <span class="w-label">סיסמה:</span>
+                  <span class="w-val">12345678</span>
+                </div>
               </div>
-              <div class="wifi-row">
-                <span class="w-label">סיסמה:</span>
-                <span class="w-val">12345678</span>
+              <div class="wifi-qr-wrap" title="סריקה במצלמת הטלפון לחיבור ישיר לרשת">
+                <img class="wifi-qr" alt="Wi-Fi QR" src="data:image/png;base64,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" />
+                <div class="wifi-qr-sub">סריקה לחיבור</div>
               </div>
             </div>
-            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
+            <div class="access-sub">סרקו במצלמה לחיבור מיידי לרשת</div>
           </div>
         </div>
 
@@ -1892,22 +1956,28 @@
             <div class="access-sub">קאסה נובה במושב דתי שומר שבת</div>
           </div>
 
-          <div class="access-card">
+          <div class="access-card wifi-card">
             <div class="access-header">
               <span class="access-icon">📶</span>
               <span>אינטרנט אלחוטי (Wi-Fi)</span>
             </div>
-            <div class="wifi-details">
-              <div class="wifi-row">
-                <span class="w-label">רשת:</span>
-                <span class="w-val">MIALEES</span>
+            <div class="wifi-body">
+              <div class="wifi-details">
+                <div class="wifi-row">
+                  <span class="w-label">רשת:</span>
+                  <span class="w-val">MIALEES</span>
+                </div>
+                <div class="wifi-row">
+                  <span class="w-label">סיסמה:</span>
+                  <span class="w-val">AD654321</span>
+                </div>
               </div>
-              <div class="wifi-row">
-                <span class="w-label">סיסמה:</span>
-                <span class="w-val">AD654321</span>
+              <div class="wifi-qr-wrap" title="סריקה במצלמת הטלפון לחיבור ישיר לרשת">
+                <img class="wifi-qr" alt="Wi-Fi QR" src="data:image/png;base64,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" />
+                <div class="wifi-qr-sub">סריקה לחיבור</div>
               </div>
             </div>
-            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
+            <div class="access-sub">סרקו במצלמה לחיבור מיידי לרשת</div>
           </div>
         </div>
 

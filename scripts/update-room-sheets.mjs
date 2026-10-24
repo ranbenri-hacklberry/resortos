@@ -84,6 +84,14 @@ for (const unit of RAW_UNITS) {
     width: 240,
     color: { dark: '#1c1917', light: '#ffffff' }
   });
+
+  const wifiPayload = `WIFI:T:WPA;S:${unit.ssid};P:${unit.pass};;`;
+  unit.wifiQr = await QRCode.toDataURL(wifiPayload, {
+    errorCorrectionLevel: 'M',
+    margin: 1,
+    width: 160,
+    color: { dark: '#1c1917', light: '#ffffff' }
+  });
 }
 
 function buildHtml(units) {
@@ -100,14 +108,14 @@ function buildHtml(units) {
     :root {
       --bg-sheet: #FDFBF7;
       --ink-primary: #1C1917;
-      --ink-secondary: #44403C;
-      --ink-muted: #78716C;
+      --ink-secondary: #292524;
+      --ink-muted: #57534E;
       --gold-primary: #C5A059;
-      --gold-deep: #9E7D3B;
+      --gold-deep: #8C6D2D;
       --gold-light: #F7F1E5;
-      --gold-subtle: rgba(197, 160, 89, 0.12);
-      --border-fine: #E7DFCE;
-      --border-dark: #292524;
+      --gold-subtle: rgba(197, 160, 89, 0.14);
+      --border-fine: #DCD3C0;
+      --border-dark: #1C1917;
       --alert-bg: #FEF2F2;
       --alert-border: #FCA5A5;
       --alert-text: #991B1B;
@@ -284,11 +292,11 @@ function buildHtml(units) {
       position: relative;
     }
     .brand-crown {
-      font-size: 11px;
+      font-size: 11.5px;
       letter-spacing: 0.28em;
       text-transform: uppercase;
       color: var(--gold-deep);
-      font-weight: 800;
+      font-weight: 900;
       margin-bottom: 2px;
       display: flex;
       align-items: center;
@@ -302,7 +310,7 @@ function buildHtml(units) {
     }
     .welcome-title {
       font-family: 'Frank Ruhl Libre', 'David Libre', serif;
-      font-size: 32px;
+      font-size: 34px;
       font-weight: 900;
       color: var(--ink-primary);
       letter-spacing: -0.02em;
@@ -310,21 +318,21 @@ function buildHtml(units) {
       margin: 1px 0;
     }
     .unit-hero-name {
-      font-size: 20px;
-      font-weight: 800;
+      font-size: 23px;
+      font-weight: 900;
       color: var(--gold-deep);
       margin-top: 1px;
       display: inline-block;
-      padding: 2px 14px;
+      padding: 2.5px 16px;
       background: var(--gold-subtle);
       border-radius: 20px;
-      border: 1px solid rgba(197, 160, 89, 0.4);
+      border: 1.2px solid rgba(197, 160, 89, 0.45);
     }
     .prop-location {
-      font-size: 12px;
-      color: var(--ink-muted);
+      font-size: 13px;
+      color: var(--ink-secondary);
       margin-top: 2px;
-      font-weight: 600;
+      font-weight: 700;
     }
 
     /* ---- TIMES ROW ---- */
@@ -332,42 +340,42 @@ function buildHtml(units) {
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
       gap: 3mm;
-      margin: 2.5mm 0;
+      margin: 2.2mm 0;
       text-align: center;
     }
     .time-card {
       background: #FFFFFF;
       border: 1px solid var(--border-fine);
       border-radius: 6px;
-      padding: 2.5mm 2mm;
+      padding: 2.2mm 2mm;
       box-shadow: 0 1px 4px rgba(0,0,0,0.02);
     }
     .time-label {
-      font-size: 10.5px;
-      font-weight: 700;
+      font-size: 11.5px;
+      font-weight: 800;
       color: var(--ink-muted);
       text-transform: uppercase;
       letter-spacing: 0.04em;
       margin-bottom: 1px;
     }
     .time-val {
-      font-size: 20px;
+      font-size: 24px;
       font-weight: 900;
       color: var(--ink-primary);
       line-height: 1.1;
       font-family: 'Assistant', sans-serif;
     }
     .time-val.saturday {
-      font-size: 17px;
+      font-size: 20px;
       color: var(--gold-deep);
     }
 
     /* ---- ACCESS & CODES GRID ---- */
     .access-grid {
       display: grid;
-      grid-template-columns: 1fr 1.15fr 1.25fr;
+      grid-template-columns: 1fr 1.12fr 1.48fr;
       gap: 3mm;
-      margin-bottom: 2.5mm;
+      margin-bottom: 2.2mm;
     }
     .access-card {
       background: #FFFFFF;
@@ -378,23 +386,23 @@ function buildHtml(units) {
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      min-height: 28mm;
+      min-height: 29mm;
     }
     .access-header {
       display: flex;
       align-items: center;
       gap: 5px;
-      font-size: 11px;
-      font-weight: 700;
-      color: var(--ink-secondary);
+      font-size: 13px;
+      font-weight: 900;
+      color: var(--ink-primary);
       margin-bottom: 2px;
     }
     .access-icon {
-      font-size: 12.5px;
+      font-size: 14px;
     }
     .access-value {
       font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-      font-size: 22px;
+      font-size: 26px;
       font-weight: 900;
       color: var(--ink-primary);
       direction: ltr;
@@ -405,8 +413,8 @@ function buildHtml(units) {
     }
     .access-value.is-text {
       font-family: 'Assistant', sans-serif;
-      font-size: 12px;
-      font-weight: 700;
+      font-size: 13px;
+      font-weight: 800;
       direction: rtl;
       letter-spacing: normal;
       line-height: 1.35;
@@ -415,13 +423,22 @@ function buildHtml(units) {
       padding: 0;
     }
     .access-sub {
-      font-size: 9.5px;
+      font-size: 10.5px;
+      font-weight: 700;
       color: var(--ink-muted);
       text-align: center;
       line-height: 1.25;
       margin-top: 1px;
     }
+    .wifi-body {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 2.5mm;
+      padding: 0.5mm 0;
+    }
     .wifi-details {
+      flex: 1;
       display: flex;
       flex-direction: column;
       gap: 2.5px;
@@ -432,20 +449,45 @@ function buildHtml(units) {
       display: flex;
       justify-content: space-between;
       align-items: baseline;
-      font-size: 11px;
-      border-bottom: 1px dotted #EAE2D2;
+      font-size: 11.5px;
+      border-bottom: 1px dotted #DCD3C0;
       padding-bottom: 1px;
     }
     .wifi-row .w-label {
-      font-size: 9.5px;
-      color: var(--ink-muted);
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--ink-secondary);
       direction: rtl;
     }
     .wifi-row .w-val {
       font-family: ui-monospace, Menlo, monospace;
+      font-weight: 900;
+      color: #000;
+      font-size: 14px;
+    }
+    .wifi-qr-wrap {
+      flex-shrink: 0;
+      background: #FFFFFF;
+      border: 1px solid var(--gold-primary);
+      border-radius: 5px;
+      padding: 1.2mm;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .wifi-qr {
+      width: 15.5mm;
+      height: 15.5mm;
+      display: block;
+      image-rendering: pixelated;
+    }
+    .wifi-qr-sub {
+      font-size: 8px;
       font-weight: 800;
-      color: var(--ink-primary);
-      font-size: 12px;
+      color: var(--gold-deep);
+      margin-top: 1px;
+      white-space: nowrap;
     }
 
     /* ---- HOUSE RULES & REGULATIONS BOX ---- */
@@ -453,35 +495,35 @@ function buildHtml(units) {
       background: #FFFDF9;
       border: 1.5px solid var(--gold-primary);
       border-radius: 8px;
-      padding: 3mm 4.5mm 2.5mm;
+      padding: 2.8mm 4.5mm 2.2mm;
       box-shadow: 0 2px 8px rgba(197, 160, 89, 0.08);
-      margin-bottom: 2.5mm;
+      margin-bottom: 2.2mm;
     }
     .rules-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
       border-bottom: 1px solid rgba(197, 160, 89, 0.35);
-      padding-bottom: 2mm;
-      margin-bottom: 2.5mm;
+      padding-bottom: 1.8mm;
+      margin-bottom: 2.2mm;
     }
     .rules-title {
       display: flex;
       align-items: center;
       gap: 6px;
-      font-size: 13px;
+      font-size: 14.5px;
       font-weight: 900;
       color: var(--ink-primary);
     }
     .rules-badge {
-      font-size: 9.5px;
-      font-weight: 800;
-      padding: 1.5px 7px;
+      font-size: 10.5px;
+      font-weight: 900;
+      padding: 1.5px 8px;
       border-radius: 4px;
       background: var(--alert-bg);
       border: 1px solid var(--alert-border);
       color: var(--alert-text);
-      letter-spacing: 0.04em;
+      letter-spacing: 0.03em;
     }
 
     .rules-grid {
@@ -493,19 +535,19 @@ function buildHtml(units) {
       display: flex;
       align-items: flex-start;
       gap: 6px;
-      font-size: 10.2px;
-      line-height: 1.35;
-      color: var(--ink-secondary);
+      font-size: 11.2px;
+      line-height: 1.38;
+      color: var(--ink-primary);
     }
     .rule-icon {
-      font-size: 13px;
+      font-size: 14.5px;
       line-height: 1.1;
       flex-shrink: 0;
       margin-top: 1px;
     }
     .rule-item strong {
-      color: var(--ink-primary);
-      font-weight: 800;
+      color: #000000;
+      font-weight: 900;
     }
 
     /* ---- DIGITAL GUEST HUB & QR ---- */
@@ -513,15 +555,15 @@ function buildHtml(units) {
       background: var(--gold-light);
       border: 1.5px solid var(--gold-primary);
       border-radius: 8px;
-      padding: 3mm 4.5mm;
+      padding: 2.8mm 4.5mm;
       display: grid;
       grid-template-columns: 1fr auto;
       align-items: center;
       gap: 4.5mm;
-      margin-bottom: 2.5mm;
+      margin-bottom: 2.2mm;
     }
     .hub-content h3 {
-      font-size: 13.5px;
+      font-size: 15px;
       font-weight: 900;
       color: var(--ink-primary);
       margin-bottom: 2px;
@@ -530,22 +572,23 @@ function buildHtml(units) {
       gap: 6px;
     }
     .hub-content p {
-      font-size: 10.2px;
-      line-height: 1.35;
+      font-size: 11.2px;
+      line-height: 1.38;
       color: var(--ink-secondary);
+      font-weight: 600;
       margin-bottom: 3px;
     }
     .hub-highlights {
       display: flex;
       flex-wrap: wrap;
       gap: 3px 8px;
-      font-size: 9.8px;
-      font-weight: 700;
+      font-size: 10.5px;
+      font-weight: 800;
       color: var(--gold-deep);
     }
     .hub-highlights span {
-      background: rgba(197, 160, 89, 0.16);
-      padding: 1px 6px;
+      background: rgba(197, 160, 89, 0.18);
+      padding: 1.5px 7px;
       border-radius: 3px;
     }
     .hub-qr-wrap {
@@ -563,8 +606,8 @@ function buildHtml(units) {
       image-rendering: pixelated;
     }
     .qr-caption {
-      font-size: 8.5px;
-      font-weight: 800;
+      font-size: 9.5px;
+      font-weight: 900;
       letter-spacing: 0.05em;
       color: var(--ink-primary);
       margin-top: 2px;
@@ -584,7 +627,7 @@ function buildHtml(units) {
       background: #FFFFFF;
       border: 1.5px solid var(--gold-primary);
       border-radius: 7px;
-      padding: 2.2mm 3.8mm;
+      padding: 2.2mm 4mm;
       display: flex;
       flex-direction: column;
       gap: 1.5px;
@@ -592,15 +635,15 @@ function buildHtml(units) {
       flex: 1.15;
     }
     .s-label {
-      font-size: 10px;
-      font-weight: 800;
+      font-size: 11px;
+      font-weight: 900;
       color: var(--ink-secondary);
       display: flex;
       align-items: center;
       gap: 4px;
     }
     .s-phone {
-      font-size: 18px;
+      font-size: 21px;
       font-weight: 900;
       color: var(--gold-deep);
       direction: ltr;
@@ -609,21 +652,23 @@ function buildHtml(units) {
       line-height: 1.15;
     }
     .s-hours {
-      font-size: 8.8px;
+      font-size: 9.8px;
+      font-weight: 700;
       color: var(--ink-muted);
       line-height: 1.3;
       margin-top: 1.5px;
     }
     .checkout-instructions {
-      font-size: 9.6px;
-      color: var(--ink-muted);
-      line-height: 1.35;
+      font-size: 10.5px;
+      color: var(--ink-secondary);
+      line-height: 1.38;
       text-align: right;
       direction: rtl;
       flex: 1;
     }
     .checkout-instructions strong {
-      color: var(--ink-primary);
+      color: #000000;
+      font-weight: 900;
     }
 
     /* ---- PRINT RULES (SINGLE A4 PER PAGE STRICT) ---- */
@@ -756,22 +801,28 @@ function buildHtml(units) {
           </div>
 
           <!-- Wi-Fi -->
-          <div class="access-card" id="wifi-card">
+          <div class="access-card wifi-card" id="wifi-card">
             <div class="access-header">
               <span class="access-icon">📶</span>
               <span>אינטרנט אלחוטי (Wi-Fi)</span>
             </div>
-            <div class="wifi-details">
-              <div class="wifi-row">
-                <span class="w-label">רשת:</span>
-                <span class="w-val" id="wifi-ssid">Toscana</span>
+            <div class="wifi-body">
+              <div class="wifi-details">
+                <div class="wifi-row">
+                  <span class="w-label">רשת:</span>
+                  <span class="w-val" id="wifi-ssid">Toscana</span>
+                </div>
+                <div class="wifi-row">
+                  <span class="w-label">סיסמה:</span>
+                  <span class="w-val" id="wifi-pass">12345678</span>
+                </div>
               </div>
-              <div class="wifi-row">
-                <span class="w-label">סיסמה:</span>
-                <span class="w-val" id="wifi-pass">12345678</span>
+              <div class="wifi-qr-wrap" title="סריקה במצלמת הטלפון לחיבור ישיר לרשת">
+                <img id="wifi-qr-img" class="wifi-qr" alt="Wi-Fi QR" src="" />
+                <div class="wifi-qr-sub">סריקה לחיבור</div>
               </div>
             </div>
-            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
+            <div class="access-sub">סרקו במצלמה לחיבור מיידי לרשת</div>
           </div>
         </div>
 
@@ -941,8 +992,13 @@ function buildHtml(units) {
       // Wi-Fi (Rule 2)
       sheetElement.querySelector('#wifi-ssid').textContent = unit.ssid || 'רשת זמינה במקום';
       sheetElement.querySelector('#wifi-pass').textContent = unit.pass || 'ללא סיסמה';
+      const wifiQrImg = sheetElement.querySelector('#wifi-qr-img');
+      if (wifiQrImg && unit.wifiQr) {
+        wifiQrImg.setAttribute('src', unit.wifiQr);
+        wifiQrImg.src = unit.wifiQr;
+      }
 
-      // QR Code
+      // Guest Hub QR Code
       const qrImg = sheetElement.querySelector('#hub-qr-img');
       qrImg.setAttribute('src', unit.qr);
       qrImg.src = unit.qr;
@@ -1132,22 +1188,28 @@ function buildSamplesHtml(complexes, units) {
             <div class="access-sub">${gateSub}</div>
           </div>
 
-          <div class="access-card">
+          <div class="access-card wifi-card">
             <div class="access-header">
               <span class="access-icon">📶</span>
               <span>אינטרנט אלחוטי (Wi-Fi)</span>
             </div>
-            <div class="wifi-details">
-              <div class="wifi-row">
-                <span class="w-label">רשת:</span>
-                <span class="w-val">${unit.ssid}</span>
+            <div class="wifi-body">
+              <div class="wifi-details">
+                <div class="wifi-row">
+                  <span class="w-label">רשת:</span>
+                  <span class="w-val">${unit.ssid}</span>
+                </div>
+                <div class="wifi-row">
+                  <span class="w-label">סיסמה:</span>
+                  <span class="w-val">${unit.pass}</span>
+                </div>
               </div>
-              <div class="wifi-row">
-                <span class="w-label">סיסמה:</span>
-                <span class="w-val">${unit.pass}</span>
+              <div class="wifi-qr-wrap" title="סריקה במצלמת הטלפון לחיבור ישיר לרשת">
+                <img class="wifi-qr" alt="Wi-Fi QR" src="${unit.wifiQr}" />
+                <div class="wifi-qr-sub">סריקה לחיבור</div>
               </div>
             </div>
-            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
+            <div class="access-sub">סרקו במצלמה לחיבור מיידי לרשת</div>
           </div>
         </div>
 
@@ -1253,14 +1315,14 @@ function buildSamplesHtml(complexes, units) {
     :root {
       --bg-sheet: #FDFBF7;
       --ink-primary: #1C1917;
-      --ink-secondary: #44403C;
-      --ink-muted: #78716C;
+      --ink-secondary: #292524;
+      --ink-muted: #57534E;
       --gold-primary: #C5A059;
-      --gold-deep: #9E7D3B;
+      --gold-deep: #8C6D2D;
       --gold-light: #F7F1E5;
-      --gold-subtle: rgba(197, 160, 89, 0.12);
-      --border-fine: #E7DFCE;
-      --border-dark: #292524;
+      --gold-subtle: rgba(197, 160, 89, 0.14);
+      --border-fine: #DCD3C0;
+      --border-dark: #1C1917;
       --alert-bg: #FEF2F2;
       --alert-border: #FCA5A5;
       --alert-text: #991B1B;
@@ -1366,83 +1428,87 @@ function buildSamplesHtml(complexes, units) {
 
     .header { text-align: center; padding-bottom: 2.5mm; border-bottom: 1.5px solid var(--ink-primary); position: relative; }
     .brand-crown {
-      font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase;
-      color: var(--gold-deep); font-weight: 800; margin-bottom: 2px;
+      font-size: 11.5px; letter-spacing: 0.28em; text-transform: uppercase;
+      color: var(--gold-deep); font-weight: 900; margin-bottom: 2px;
       display: flex; align-items: center; justify-content: center; gap: 8px;
     }
     .brand-crown::before, .brand-crown::after { content: "—"; color: var(--gold-primary); }
     .welcome-title {
       font-family: 'Frank Ruhl Libre', 'David Libre', serif;
-      font-size: 32px; font-weight: 900; color: var(--ink-primary);
+      font-size: 34px; font-weight: 900; color: var(--ink-primary);
       letter-spacing: -0.02em; line-height: 1.1; margin: 1px 0;
     }
     .unit-hero-name {
-      font-size: 20px; font-weight: 800; color: var(--gold-deep);
-      margin-top: 1px; display: inline-block; padding: 2px 14px;
+      font-size: 23px; font-weight: 900; color: var(--gold-deep);
+      margin-top: 1px; display: inline-block; padding: 2.5px 16px;
       background: var(--gold-subtle); border-radius: 20px;
-      border: 1px solid rgba(197, 160, 89, 0.4);
+      border: 1.2px solid rgba(197, 160, 89, 0.45);
     }
-    .prop-location { font-size: 12px; color: var(--ink-muted); margin-top: 2px; font-weight: 600; }
+    .prop-location { font-size: 13px; color: var(--ink-secondary); margin-top: 2px; font-weight: 700; }
 
-    .times-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3mm; margin: 2.5mm 0; text-align: center; }
-    .time-card { background: #FFFFFF; border: 1px solid var(--border-fine); border-radius: 6px; padding: 2.5mm 2mm; }
-    .time-label { font-size: 10.5px; font-weight: 700; color: var(--ink-muted); text-transform: uppercase; margin-bottom: 1px; }
-    .time-val { font-size: 20px; font-weight: 900; color: var(--ink-primary); line-height: 1.1; }
-    .time-val.saturday { font-size: 17px; color: var(--gold-deep); }
+    .times-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3mm; margin: 2.2mm 0; text-align: center; }
+    .time-card { background: #FFFFFF; border: 1px solid var(--border-fine); border-radius: 6px; padding: 2.2mm 2mm; box-shadow: 0 1px 4px rgba(0,0,0,0.02); }
+    .time-label { font-size: 11.5px; font-weight: 800; color: var(--ink-muted); text-transform: uppercase; margin-bottom: 1px; }
+    .time-val { font-size: 24px; font-weight: 900; color: var(--ink-primary); line-height: 1.1; }
+    .time-val.saturday { font-size: 20px; color: var(--gold-deep); }
 
-    .access-grid { display: grid; grid-template-columns: 1fr 1.15fr 1.25fr; gap: 3mm; margin-bottom: 2.5mm; }
+    .access-grid { display: grid; grid-template-columns: 1fr 1.12fr 1.48fr; gap: 3mm; margin-bottom: 2.2mm; }
     .access-card {
       background: #FFFFFF; border: 1px solid var(--border-fine); border-top: 3px solid var(--gold-primary);
-      border-radius: 6px; padding: 2.5mm 3mm; display: flex; flex-direction: column; justify-content: space-between; min-height: 28mm;
+      border-radius: 6px; padding: 2.5mm 3mm; display: flex; flex-direction: column; justify-content: space-between; min-height: 29mm;
     }
-    .access-header { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; color: var(--ink-secondary); margin-bottom: 2px; }
-    .access-icon { font-size: 12.5px; }
+    .access-header { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 900; color: var(--ink-primary); margin-bottom: 2px; }
+    .access-icon { font-size: 14px; }
     .access-value {
-      font-family: ui-monospace, Menlo, monospace; font-size: 22px; font-weight: 900;
+      font-family: ui-monospace, Menlo, monospace; font-size: 26px; font-weight: 900;
       color: var(--ink-primary); direction: ltr; text-align: center; letter-spacing: 0.08em; line-height: 1.15; padding: 1px 0;
     }
     .access-value.is-text {
-      font-family: 'Assistant', sans-serif; font-size: 12px; font-weight: 700;
+      font-family: 'Assistant', sans-serif; font-size: 13px; font-weight: 800;
       direction: rtl; letter-spacing: normal; line-height: 1.35; color: var(--ink-primary); text-align: center;
     }
-    .access-sub { font-size: 9.5px; color: var(--ink-muted); text-align: center; line-height: 1.25; margin-top: 1px; }
+    .access-sub { font-size: 10.5px; font-weight: 700; color: var(--ink-muted); text-align: center; line-height: 1.25; margin-top: 1px; }
 
-    .wifi-details { display: flex; flex-direction: column; gap: 2.5px; direction: ltr; text-align: left; }
-    .wifi-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 11px; border-bottom: 1px dotted #EAE2D2; padding-bottom: 1px; }
-    .wifi-row .w-label { font-size: 9.5px; color: var(--ink-muted); direction: rtl; }
-    .wifi-row .w-val { font-family: ui-monospace, Menlo, monospace; font-weight: 800; color: var(--ink-primary); font-size: 12px; }
+    .wifi-body { display: flex; align-items: center; justify-content: space-between; gap: 2.5mm; padding: 0.5mm 0; }
+    .wifi-details { flex: 1; display: flex; flex-direction: column; gap: 2.5px; direction: ltr; text-align: left; }
+    .wifi-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 11.5px; border-bottom: 1px dotted #DCD3C0; padding-bottom: 1px; }
+    .wifi-row .w-label { font-size: 11px; font-weight: 800; color: var(--ink-secondary); direction: rtl; }
+    .wifi-row .w-val { font-family: ui-monospace, Menlo, monospace; font-weight: 900; color: #000; font-size: 14px; }
+    .wifi-qr-wrap { flex-shrink: 0; background: #FFFFFF; border: 1px solid var(--gold-primary); border-radius: 5px; padding: 1.2mm; text-align: center; display: flex; flex-direction: column; align-items: center; }
+    .wifi-qr { width: 15.5mm; height: 15.5mm; display: block; image-rendering: pixelated; }
+    .wifi-qr-sub { font-size: 8px; font-weight: 800; color: var(--gold-deep); margin-top: 1px; white-space: nowrap; }
 
     .rules-section {
       background: #FFFDF9; border: 1.5px solid var(--gold-primary); border-radius: 8px;
-      padding: 3mm 4.5mm 2.5mm; box-shadow: 0 2px 8px rgba(197, 160, 89, 0.08); margin-bottom: 2.5mm;
+      padding: 2.8mm 4.5mm 2.2mm; box-shadow: 0 2px 8px rgba(197, 160, 89, 0.08); margin-bottom: 2.2mm;
     }
-    .rules-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(197, 160, 89, 0.35); padding-bottom: 2mm; margin-bottom: 2.5mm; }
-    .rules-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 900; color: var(--ink-primary); }
-    .rules-badge { font-size: 9.5px; font-weight: 800; padding: 1.5px 7px; border-radius: 4px; background: var(--alert-bg); border: 1px solid var(--alert-border); color: var(--alert-text); }
+    .rules-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(197, 160, 89, 0.35); padding-bottom: 1.8mm; margin-bottom: 2.2mm; }
+    .rules-title { display: flex; align-items: center; gap: 6px; font-size: 14.5px; font-weight: 900; color: var(--ink-primary); }
+    .rules-badge { font-size: 10.5px; font-weight: 900; padding: 1.5px 8px; border-radius: 4px; background: var(--alert-bg); border: 1px solid var(--alert-border); color: var(--alert-text); letter-spacing: 0.03em; }
     .rules-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2mm 5mm; }
-    .rule-item { display: flex; align-items: flex-start; gap: 6px; font-size: 10.2px; line-height: 1.35; color: var(--ink-secondary); }
-    .rule-icon { font-size: 13px; line-height: 1.1; flex-shrink: 0; margin-top: 1px; }
-    .rule-item strong { color: var(--ink-primary); font-weight: 800; }
+    .rule-item { display: flex; align-items: flex-start; gap: 6px; font-size: 11.2px; line-height: 1.38; color: var(--ink-primary); }
+    .rule-icon { font-size: 14.5px; line-height: 1.1; flex-shrink: 0; margin-top: 1px; }
+    .rule-item strong { color: #000000; font-weight: 900; }
 
     .digital-hub {
       background: var(--gold-light); border: 1.5px solid var(--gold-primary); border-radius: 8px;
-      padding: 3mm 4.5mm; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4.5mm; margin-bottom: 2.5mm;
+      padding: 2.8mm 4.5mm; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4.5mm; margin-bottom: 2.2mm;
     }
-    .hub-content h3 { font-size: 13.5px; font-weight: 900; color: var(--ink-primary); margin-bottom: 2px; display: flex; align-items: center; gap: 6px; }
-    .hub-content p { font-size: 10.2px; line-height: 1.35; color: var(--ink-secondary); margin-bottom: 3px; }
-    .hub-highlights { display: flex; flex-wrap: wrap; gap: 3px 8px; font-size: 9.8px; font-weight: 700; color: var(--gold-deep); }
-    .hub-highlights span { background: rgba(197, 160, 89, 0.16); padding: 1px 6px; border-radius: 3px; }
-    .hub-qr-wrap { text-align: center; background: #FFFFFF; padding: 2.5mm; border: 1px solid var(--gold-primary); border-radius: 6px; }
+    .hub-content h3 { font-size: 15px; font-weight: 900; color: var(--ink-primary); margin-bottom: 2px; display: flex; align-items: center; gap: 6px; }
+    .hub-content p { font-size: 11.2px; line-height: 1.38; color: var(--ink-secondary); font-weight: 600; margin-bottom: 3px; }
+    .hub-highlights { display: flex; flex-wrap: wrap; gap: 3px 8px; font-size: 10.5px; font-weight: 800; color: var(--gold-deep); }
+    .hub-highlights span { background: rgba(197, 160, 89, 0.18); padding: 1.5px 7px; border-radius: 3px; }
+    .hub-qr-wrap { text-align: center; background: #FFFFFF; padding: 2.5mm; border: 1px solid var(--gold-primary); border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
     .hub-qr { width: 25mm; height: 25mm; display: block; image-rendering: pixelated; }
-    .qr-caption { font-size: 8.5px; font-weight: 800; letter-spacing: 0.05em; color: var(--ink-primary); margin-top: 2px; }
+    .qr-caption { font-size: 9.5px; font-weight: 900; letter-spacing: 0.05em; color: var(--ink-primary); margin-top: 2px; text-transform: uppercase; }
 
     .footer { border-top: 1.5px solid var(--ink-primary); padding-top: 2.2mm; display: flex; justify-content: space-between; align-items: center; gap: 3.5mm; }
-    .service-box { background: #FFFFFF; border: 1.5px solid var(--gold-primary); border-radius: 7px; padding: 2.2mm 3.8mm; display: flex; flex-direction: column; gap: 1.5px; box-shadow: 0 1px 4px rgba(197, 160, 89, 0.15); flex: 1.15; }
-    .s-label { font-size: 10px; font-weight: 800; color: var(--ink-secondary); display: flex; align-items: center; gap: 4px; }
-    .s-phone { font-size: 18px; font-weight: 900; color: var(--gold-deep); direction: ltr; text-align: right; letter-spacing: 0.05em; line-height: 1.15; }
-    .s-hours { font-size: 8.8px; color: var(--ink-muted); line-height: 1.3; margin-top: 1.5px; }
-    .checkout-instructions { font-size: 9.6px; color: var(--ink-muted); line-height: 1.35; text-align: right; direction: rtl; flex: 1; }
-    .checkout-instructions strong { color: var(--ink-primary); }
+    .service-box { background: #FFFFFF; border: 1.5px solid var(--gold-primary); border-radius: 7px; padding: 2.2mm 4mm; display: flex; flex-direction: column; gap: 1.5px; box-shadow: 0 1px 4px rgba(197, 160, 89, 0.15); flex: 1.15; }
+    .s-label { font-size: 11px; font-weight: 900; color: var(--ink-secondary); display: flex; align-items: center; gap: 4px; }
+    .s-phone { font-size: 21px; font-weight: 900; color: var(--gold-deep); direction: ltr; text-align: right; letter-spacing: 0.05em; line-height: 1.15; }
+    .s-hours { font-size: 9.8px; font-weight: 700; color: var(--ink-muted); line-height: 1.3; margin-top: 1.5px; }
+    .checkout-instructions { font-size: 10.5px; color: var(--ink-secondary); line-height: 1.38; text-align: right; direction: rtl; flex: 1; }
+    .checkout-instructions strong { color: #000000; font-weight: 900; }
 
     @media print {
       @page { size: A4 portrait; margin: 0; }
