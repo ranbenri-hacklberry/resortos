@@ -1,3 +1,4 @@
+import { shabbatEntryHHMM } from './shabbatTime.js';
 import type { BookingRow } from '../integration/resortos.js';
 import type { RoomEntry } from '../config.js';
 import { readFileSync } from 'node:fs';
@@ -345,6 +346,8 @@ export const UNIT_TO_PROPERTY: Record<string, string> = {
   k693: 'maya', k694: 'maya', k695: 'maya',
   'mialis-villa': 'mialis', 'suite-1': 'mialis', 'suite-2': 'mialis',
   'k826': 'casa-nova', 'k827': 'casa-nova',
+  'hill-1': 'hill', 'hill-2': 'hill', 'hill-3': 'hill', 'hill-4': 'hill',
+  'dome-red': 'kipat', 'dome-blue': 'kipat', 'dome-green': 'kipat',
   'pilot-office': 'office',
 };
 
@@ -420,6 +423,57 @@ const CABIN_INSIDE: Record<string, string> = {
   mialis: 'בריכה פרטית, ג׳קוזי ספא, מטבחון, פינת קפה ותה, מנגל.',
   'casa-nova': 'בריכה פרטית, ג׳קוזי ספא, מטבחון, פינת קפה ותה, מנגל ו-Wi-Fi.',
 };
+
+/**
+ * Gate access per site (Ran 2026-10-24). 'contacts' = gate opens only for phones saved as contacts,
+ * so the guest calls the contact person. contactPhone left empty until Ran fills it — never invented.
+ */
+export type SiteGate = { mode: 'code' | 'contacts' | 'shabbat'; contactName?: string; contactPhone?: string };
+/** Ran 2026-10-24: נאות גולן + גבעת יואב gates open only for saved contacts → guest calls אדם.
+ *  קאסה נובה (religious moshav): gate closes automatically at Shabbat entry. No automatic alerts to אדם. */
+const ADAM_GATE = { mode: 'contacts' as const, contactName: 'אדם', contactPhone: '054-338-7383' };
+export const SITE_GATE_INFO: Record<string, SiteGate> = {
+  mialis: ADAM_GATE, // נאות גולן
+  hill: ADAM_GATE,   // צימר בגבעה
+  kipat: ADAM_GATE,  // כיפת שמיים
+  'casa-nova': { mode: 'shabbat', contactName: '', contactPhone: '' }, // TODO Ran: who to call if stuck
+};
+
+export function casaNovaShabbatLine(now: Date = new Date()): string {
+  return `🕯️ *שימו לב:* קאסה נובה נמצאת במושב דתי, ושער המושב נסגר אוטומטית בכניסת השבת (ביום שישי בערך ב־${shabbatEntryHHMM(now)}). ` +
+    `כדאי להיכנס ולהחנות את הרכב לפני כן. לא ניתן לצאת או להיכנס ברכב עד צאת השבת.`;
+}
+
+function gateOverviewLine(unitId: string, now: Date = new Date()): string | null {
+  const prop = UNIT_TO_PROPERTY[unitId];
+  if (!prop) return null;
+  const site = SITE_GATE_INFO[prop];
+  if (!site) {
+    return GATE_PROPS_RAMOT.has(prop) ? `🚪 *שער הישוב:* קוד ${GATE_CODE} (כולל סולמית בהתחלה)` : null;
+  }
+  if (site.mode === 'contacts') {
+    return site.contactPhone
+      ? `🚪 *שער:* נפתח רק לטלפונים שמורים. התקשרו ל${site.contactName} ${site.contactPhone} והוא יפתח לכם.`
+      : `🚪 *שער:* נפתח רק לטלפונים שמורים. כתבו לנו כשאתם מגיעים ונדאג שיפתחו לכם.`;
+  }
+  if (site.mode === 'shabbat') return casaNovaShabbatLine(now);
+  return null;
+}
+
+const GATE_PROPS_RAMOT = new Set(['nurit', 'taj', 'mool', 'nofim', 'toscana', 'musical', 'maya']);
+
+/** Room overview (identified guest only): what's inside + lockbox + Wi-Fi + gate. */
+export function roomOverviewLines(ctx: GuestContext, matched: boolean): string[] {
+  const out: string[] = [];
+  if (!ctx.unitId || !(matched || ctx.isStaff)) return out;
+  const lockbox = ctx.room?.lockbox;
+  if (lockbox) out.push(`🔑 *קוד כספת המפתח:* ${lockbox}`);
+  const wifi = getWifiForUnit(ctx.unitId);
+  if (wifi) out.push(`📶 *WiFi:* ${wifi.ssid} · סיסמה: ${wifi.password}`);
+  const gate = gateOverviewLine(ctx.unitId);
+  if (gate) out.push(gate);
+  return out;
+}
 
 function cabinInsideLine(unitId: string): string | null {
   if (unitId === 'k693' || unitId === 'k695') return 'בריכה פרטית מחוממת, ג׳קוזי פנימי, פינת קפה ותה, מנגל ו-Wi-Fi. אין כירה חשמלית ואסור לבשל בבקתה.';
@@ -880,10 +934,12 @@ export function answerGuestQuestion(question: string, ctx: GuestContext): string
     return reply;
   }
 
-  if (/בתוך ה?צימר|בתוך ה?בקתה|בתוך החדר|מה יש ב|מה בבקתה|מה בצימר|מה יש כאן|מה יש בחדר/i.test(q)) {
+  if (/בתוך ה?צימר|בתוך ה?בקתה|בתוך החדר|מה יש ב|מה בבקתה|מה בצימר|מה יש כאן|מה יש בחדר|סקירה על ה?(?:חדר|בקתה|צימר)|פרטי ה?(?:חדר|בקתה|צימר)/i.test(q)) {
     const line = cabinInsideLine(ctx.unitId);
-    if (line) {
-      let reply = `בתוך *${ctx.roomName}*:\n${line}`;
+    const extra = roomOverviewLines(ctx, matched);
+    if (line || extra.length) {
+      let reply = line ? `בתוך *${ctx.roomName}*:\n${line}` : `*${ctx.roomName}*:`;
+      if (extra.length) reply += `\n\n${extra.join('\n')}`;
       if (ctx.stayUrl) reply += `\n\n📱 ${ctx.stayUrl}`;
       return reply;
     }

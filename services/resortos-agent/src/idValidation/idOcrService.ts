@@ -8,6 +8,7 @@
 
 import { validateIsraeliId } from './israeliIdValidator.js';
 import { processWithAppleVision } from './appleVisionOcr.js';
+import { scanIdWithGrok } from './grokIdScan.js';
 import type {
   GuestIDVerificationResult,
   IDOcrServiceOptions,
@@ -137,7 +138,30 @@ export async function processGuestIDDocument(
 
   let rawOutput = '';
   let parsed: RawIDModelOutput | null = null;
-  const engine = options.engine || (input.fetchImpl ? 'qwen' : (process.platform === 'darwin' ? 'auto' : 'qwen'));
+  // Ran 2026-10-24: default engine is Grok vision (strict JSON, system decides). Qwen/Apple remain opt-in.
+  const engine = options.engine || (input.fetchImpl ? 'qwen' : 'grok');
+
+  if (engine === 'grok') {
+    const r = await scanIdWithGrok(Buffer.from(bareBase64, 'base64'), input.mimeType || 'image/jpeg', { bookingGuestName: options.bookingGuestName });
+    const ex = r.extraction;
+    const docType: OfficialDocumentType = !ex ? 'unrecognized'
+      : ex.document_type === 'not_an_id' || ex.document_type === 'other' ? 'unrecognized' : ex.document_type;
+    const id = ex?.id_number || '';
+    return {
+      success: r.decision === 'accept',
+      is_valid_official_id: Boolean(ex && r.checks.is_official),
+      document_type: docType,
+      id_number: docType.startsWith('israeli_') && id ? id.padStart(9, '0') : id,
+      first_name: ex?.first_name || ex?.first_name_en || '',
+      last_name: ex?.last_name || ex?.last_name_en || '',
+      birth_date: ex?.date_of_birth || null,
+      confidence: ex?.confidence ?? 0,
+      is_checksum_valid: r.checks.checksum_valid,
+      rejection_reason: r.decision === 'accept' ? null : (r.reasons.join(',') || r.error || 'manual_review'),
+      latency_ms: Date.now() - startTime,
+      scan: r,
+    } as GuestIDVerificationResult;
+  }
 
   // 1. Try Apple Silicon Vision OCR first if engine is 'apple-vision' or 'auto'
   if ((engine === 'apple-vision' || engine === 'auto') && !input.fetchImpl) {

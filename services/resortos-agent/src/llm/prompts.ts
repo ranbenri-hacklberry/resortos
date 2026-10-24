@@ -143,7 +143,8 @@ export function managerActionMenu(roomLabel: string): string {
     `3 - דווח אחזקה או חוסר\n` +
     `4 - שליחת קישור לאורח\n` +
     `5 - פרטי לקוח\n` +
-    `6 - פרטי רשת WiFi`;
+    `6 - פרטי רשת WiFi\n` +
+    `7 - התחל / סיים ניקיון`;
 }
 
 export function withManagerActions(body: string, roomLabel: string): string {

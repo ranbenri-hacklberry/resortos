@@ -76,6 +76,8 @@ import {
 import { normalizeOutgoingText } from './whatsapp/textSpacing.js';
 import { logConversation } from './conversationLog.js';
 import { isStaffOpsQuestion, STAFF_OPS_ONLY_REPLY } from './manager/opsQuestion.js';
+import { scanIdWithGrok } from './idValidation/grokIdScan.js';
+import { guestIdEnabled, hasGuestId, saveGuestIdScan, shouldAskForId, ID_REQUEST_TEXT, idReplyFor } from './idValidation/guestIdStore.js';
 import {
   groundById,
   groundByScan,
@@ -249,6 +251,15 @@ export function matchesCleaner(c: CleanerProfile, rawTarget?: string | null): bo
   const rawUser = String(rawTarget).split('@')[0].split(':')[0].replace(/\D/g, '');
   if (c.lid && rawUser && c.lid === rawUser) return true;
   return phonesMatch(c.phone, rawTarget);
+}
+
+export function isManagerRole(role?: string | null): boolean {
+  return role === 'MANAGER' || role === 'OPS_MANAGER' || role === 'PRIORITY';
+}
+
+/** A non-canceled booking on this phone means Chloe should answer as the guest, even when the same phone is a manager. */
+export function hasGuestBooking(bookings: Array<{ guest_phone?: string | null; deleted_at?: string | null; booking_status?: string | null }>, phone: string): boolean {
+  return bookings.some((booking) => phonesMatch(booking.guest_phone, phone) && !booking.deleted_at && booking.booking_status !== 'CANCELED');
 }
 
 /** Phone that WhatsApp attaches to an @lid sender (key.senderPn / remoteJidAlt / participantPn), digits only, or ''. */
@@ -575,6 +586,16 @@ export function createPipeline(deps: PipelineDeps) {
     });
   }
 
+  async function senderHasGuestStay(phone: string): Promise<boolean> {
+    if (!phone) return false;
+    try {
+      const bookings = (await d.resortos.listBookings?.()) || [];
+      return hasGuestBooking(bookings, phone);
+    } catch {
+      return false;
+    }
+  }
+
   /** Worker -> agent. */
   async function handleInbound(
     input: WAMessage | InboundEnvelope,
@@ -590,7 +611,9 @@ export function createPipeline(deps: PipelineDeps) {
       try { inboundText = String(d.extractText(msg) || ''); } catch { inboundText = ''; }
       const inPn = lidSenderPn(msg);
       const cleanerRow = jid ? d.cleaners().find((c) => matchesCleaner(c, jid) || matchesCleaner(c, phoneOf(jid)) || (inPn ? matchesCleaner(c, inPn) : false)) : undefined;
-      const route = !jid ? 'none' : !cleanerRow ? 'guest' : (cleanerRow.role === 'MANAGER' || cleanerRow.role === 'OPS_MANAGER') ? 'manager' : 'staff';
+      const routePhone = (jid?.endsWith('@lid') && inPn) ? inPn : (jid ? phoneOf(jid) : '');
+      let route = !jid ? 'none' : !cleanerRow ? 'guest' : (cleanerRow.role === 'MANAGER' || cleanerRow.role === 'OPS_MANAGER') ? 'manager' : 'staff';
+      if (isManagerRole(cleanerRow?.role) && await senderHasGuestStay(routePhone)) route = 'guest';
       const isAudioMsg = (() => { try { return d.isAudio(msg); } catch { return false; } })();
       logConversation({ direction: 'inbound', jid, text: inboundText || (isAudioMsg ? '[voice note]' : ''), route });
       currentRoute = { jid, route };
@@ -640,13 +663,22 @@ export function createPipeline(deps: PipelineDeps) {
     const guestPhone = bookingPhoneOverride.get(jid) || baseGuestPhone;
     if (jid.endsWith('@lid')) d.log.info({ jid, hasSenderPn: Boolean(senderPn), senderPnTail: senderPn ? senderPn.slice(-4) : null }, 'inbound @lid sender');
     // Staff on @lid without a stored LID (e.g. קוסטה, Ran 2026-10-21) are matched by the phone WhatsApp attaches.
-    const cleaner = d.cleaners().find((c) => matchesCleaner(c, jid) || matchesCleaner(c, senderPhone)) || (senderPn ? d.cleaners().find((c) => matchesCleaner(c, senderPn)) : undefined);
-    const isManager = cleaner?.role === 'MANAGER' || cleaner?.role === 'OPS_MANAGER' || cleaner?.role === 'PRIORITY';
+    let cleaner = d.cleaners().find((c) => matchesCleaner(c, jid) || matchesCleaner(c, senderPhone)) || (senderPn ? d.cleaners().find((c) => matchesCleaner(c, senderPn)) : undefined);
+    let isManager = isManagerRole(cleaner?.role);
+    const sessionKey = `${channelId}:${normalizePhoneTail(baseGuestPhone)}`;
+    let currentSession = sessionStates.get(sessionKey);
+    // A phone that is both a manager and a guest is answered as the guest.
+    if (isManager && await senderHasGuestStay(guestPhone)) {
+      cleaner = undefined;
+      isManager = false;
+      if (currentSession && currentSession.role !== 'GUEST') {
+        sessionStates.delete(sessionKey);
+        currentSession = undefined;
+      }
+    }
     // Guest priority for the background invoice name job (local vision model shares the GPU with guest replies).
     if (!cleaner) { try { (d.invoiceIntake as any)?.noteGuestActivity?.(); } catch { /* ignore */ } }
     const isWorker = Boolean(cleaner && !isManager);
-    const sessionKey = `${channelId}:${normalizePhoneTail(baseGuestPhone)}`;
-    const currentSession = sessionStates.get(sessionKey);
 
     let text = d.extractText(msg);
     // Ran 2026-10-22: a voice note (incl. forwarded) from Ran (admin) → reply to Ran only with its transcript.
@@ -1859,6 +1891,29 @@ export function createPipeline(deps: PipelineDeps) {
             sessionStates.set(sessionKey, { role: 'MANAGER', state: 'SELECT_STATUS', roomId: currentSession.roomId });
             await d.send(jid, managerStatusMenu(roomLabel));
             return { handled: true };
+          } else if (trimmed === '7' || trimmed === '7.' || /^(?:התחל(?:י)?|להתחיל|סיים|סיימתי)\s*(?:את\s*ה?)?ניקיון$/i.test(trimmed)) {
+            // Ran 2026-10-24: managers / ops managers can start cleaning from a room scan, then the same cleaner flow.
+            const units = (await d.resortos.listUnits?.()) || [];
+            const unit = units.find((u) => u.id === currentSession.roomId);
+            const rr = d.rooms().find((x) => x.id === currentSession.roomId);
+            const cleanLabel = rr?.name || rr?.letterCode || roomLabel;
+            if (unit?.operational_status === 'IN_PROGRESS') {
+              sessionStates.set(sessionKey, { role: 'CLEANER', state: 'AWAITING_STATUS', roomId: currentSession.roomId });
+              await d.send(jid, CLEANER_EXIT_MENU.he(cleanLabel));
+              return { handled: true, transcript };
+            }
+            sessionStates.delete(sessionKey);
+            if (d.resortos.startCleaning) {
+              await d.resortos.startCleaning({ unitId: currentSession.roomId, reportedBy: cleaningCredit(cleaner, 'מנהל') });
+            }
+            const lockboxCode = rr?.lockbox || '';
+            const reply = `נרשם שהתחלת לנקות את ${cleanLabel} ✅\n🔑 קוד כספת מפתח: ${lockboxCode || 'לא מוגדר'}\n\n📲 בסיום הניקיון, יש לסרוק את ה-QR שוב ולבחור 7 כדי לעדכן סיום ולבדוק כיבוי אורות ומזגנים.`;
+            await d.send(jid, reply);
+            return {
+              handled: true,
+              intent: { action: 'CLEANING_STARTED', room_id: currentSession.roomId, room_raw: roomLabel, issue_description_hebrew: null, acknowledgement_reply_cleaner_language: reply },
+              transcript,
+            };
           } else if (trimmed === '4' || trimmed === '4.' || /^שלח(?:י|ו)?\s*קישור|^קישור\s*לאורח|^שליחת\s*קישור/i.test(trimmed)) {
             await beginGuestLink(currentSession.roomId);
             return { handled: true, transcript };
@@ -2127,7 +2182,11 @@ export function createPipeline(deps: PipelineDeps) {
           await d.send(jid, askByName(cleaner?.name, missed));
           return { handled: true, transcript };
         }
-        return { handled: false, reason: 'no text', transcript };
+        // Guest ID photo without caption (Ran 2026-10-24): let it reach the identified-guest ID scan below.
+        if (!(!cleaner && guestIdEnabled() && (msg.message as any)?.imageMessage)) {
+          return { handled: false, reason: 'no text', transcript };
+        }
+        text = '';
       }
 
       const greet = cleaner ? greetingReply(text, cleaner.name) : null;
@@ -2659,6 +2718,33 @@ export function createPipeline(deps: PipelineDeps) {
             stayUrl,
             guestName: booking.guest_name,
           };
+
+          // Guest ID scan (Ran 2026-10-24): a guest photo of an ID → Grok JSON → system decision, stored per booking
+          // (decision + name only; never the image or number). Identified guest without ID → ask once in this conversation.
+          if (guestIdEnabled()) {
+            const gm: any = msg.message || {};
+            const isImg = Boolean(gm.imageMessage || gm.documentWithCaptionMessage?.message?.documentMessage?.mimetype?.startsWith?.('image/'));
+            if (isImg && d.downloadMedia) {
+              try {
+                const media = await d.downloadMedia(msg);
+                if (media?.buffer?.length && /^image\//.test(media.mimetype || 'image/jpeg')) {
+                  const r = await scanIdWithGrok(media.buffer, media.mimetype || 'image/jpeg', { bookingGuestName: booking.guest_name });
+                  if (r.extraction?.document_type !== 'not_an_id' || hasGuestId(booking.id, booking as any) === false) {
+                    if (r.extraction?.document_type !== 'not_an_id') saveGuestIdScan(booking.id, r);
+                    const reply = idReplyFor(r);
+                    d.log.info({ bookingId: booking.id, decision: r.decision, ok: r.ok }, 'guest id scan');
+                    void logGuestWhatsAppExchange(booking, '[תמונת תעודה]', reply);
+                    await d.send(jid, reply);
+                    return { handled: true, transcript, reason: 'guest_id_scan' };
+                  }
+                }
+              } catch (err) {
+                d.log.warn({ bookingId: booking.id, err: String((err as any)?.message || err).slice(0, 80) }, 'guest id scan failed');
+              }
+            } else if (!hasGuestId(booking.id, booking as any) && shouldAskForId(booking.id)) {
+              setTimeout(() => { void d.send(jid, ID_REQUEST_TEXT).catch(() => undefined); }, 1500).unref?.();
+            }
+          }
 
           // Late check-out (Ran 2026-10-22): never approve/deny, always SMS Ran. Follow-up "ב12:00 אפשרי?" counts too.
           {

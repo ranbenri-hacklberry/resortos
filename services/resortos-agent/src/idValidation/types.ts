@@ -55,6 +55,8 @@ export interface GuestIDVerificationResult {
   latency_ms: number;
   /** Raw textual response from model */
   raw_output?: string;
+  /** Grok engine: full system decision (accept / manual_review / reject) */
+  scan?: import('./grokIdScan.js').IdScanResult;
   /** CHLOE_ID_NAME_SUGGEST: suggested Hebrew names + confidence flag (unconfirmed, informational only) */
   name_suggestion?: import('./idNameSuggest.js').IdNameSuggestion;
 }
@@ -64,6 +66,8 @@ export interface IDOcrServiceOptions {
   modelName?: string;
   apiKey?: string;
   timeoutMs?: number;
-  engine?: 'apple-vision' | 'qwen' | 'auto';
+  engine?: 'apple-vision' | 'qwen' | 'auto' | 'grok';
+  /** Booking guest name for name matching (grok engine) */
+  bookingGuestName?: string;
 }
 
