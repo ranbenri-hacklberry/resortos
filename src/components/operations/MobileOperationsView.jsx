@@ -230,7 +230,7 @@ export default function MobileOperationsView({
         isReady,
         sameDayTurnover
       };
-    });
+    }).filter((room) => !(room.unit?.staff_occupancy === 'OCCUPIED' && !room.sameDayTurnover));
   }, [effectiveBookings, effectiveUnits, todayStr]);
 
   const arrivingCleanCount = arrivingRooms.filter((r) => r.isReady).length;
@@ -239,6 +239,9 @@ export default function MobileOperationsView({
   const cleaningRooms = useMemo(() => {
     return (effectiveUnits || []).filter((unit) => {
       const status = unit.operational_status;
+      // If the unit is already marked READY, it has been cleaned and is not waiting for cleaning
+      if (status === 'READY') return false;
+
       const isDirtyOrProgress = status === 'DIRTY' || status === 'IN_PROGRESS' || status === 'NEEDS_COMPLETIONS';
       const hasCheckoutToday = (effectiveBookings || []).some((b) => (
         b.unit_id === unit.id &&
@@ -256,8 +259,8 @@ export default function MobileOperationsView({
       ));
 
       if (isDirtyOrProgress) return true;
-      if (hasCheckoutToday && status !== 'READY') return true;
-      if (hasCheckinToday && status !== 'READY') return true;
+      if (hasCheckoutToday) return true;
+      if (hasCheckinToday) return true;
       return false;
     }).map((unit) => {
       const checkoutBooking = (effectiveBookings || []).find((b) => (
@@ -300,19 +303,29 @@ export default function MobileOperationsView({
   // 3. OCCUPIED ROOMS (חדרים מאוכלסים)
   const occupiedRooms = useMemo(() => {
     return (effectiveUnits || []).filter((unit) => {
-      if (unit.staff_occupancy === 'OCCUPIED') return true;
       const hasInHouse = (effectiveBookings || []).some((b) => (
         b.unit_id === unit.id &&
         !b.deleted_at &&
         b.booking_status !== 'CANCELED' &&
+        b.booking_status !== 'CHECKED_OUT' &&
         !isUnavailableHoldBooking(b) &&
         b.check_in_date <= todayStr &&
-        b.check_out_date > todayStr
+        b.check_out_date > todayStr &&
+        (b.check_in_date < todayStr || (unit.staff_occupancy === 'OCCUPIED' && !arrivingRooms.some((r) => r.id === unit.id)))
       ));
-      if (hasInHouse && unit.staff_occupancy !== 'VACANT') return true;
+      if (hasInHouse) return true;
+      if (unit.staff_occupancy === 'OCCUPIED' && unit.operational_status !== 'READY' && !arrivingRooms.some((r) => r.id === unit.id)) return true;
       return false;
     }).map((unit) => {
       const activeBooking = (effectiveBookings || []).find((b) => (
+        b.unit_id === unit.id &&
+        !b.deleted_at &&
+        b.booking_status !== 'CANCELED' &&
+        b.booking_status !== 'CHECKED_OUT' &&
+        !isUnavailableHoldBooking(b) &&
+        b.check_in_date <= todayStr &&
+        b.check_out_date > todayStr
+      )) || (effectiveBookings || []).find((b) => (
         b.unit_id === unit.id &&
         !b.deleted_at &&
         b.booking_status !== 'CANCELED' &&
@@ -326,13 +339,13 @@ export default function MobileOperationsView({
         id: unit.id,
         unitName: fieldUnitDisplayName(unit),
         booking: activeBooking,
-        guestName: activeBooking?.guest_name || 'אורח שוהה',
+        guestName: activeBooking?.guest_name || 'תפוס ידנית (ללא פרטי אורח)',
         phone: activeBooking?.guest_phone || activeBooking?.phone || '',
         checkoutDate: activeBooking?.check_out_date || '',
         lockbox: lockboxCodeForUnit(unit)
       };
     });
-  }, [effectiveUnits, effectiveBookings, todayStr]);
+  }, [effectiveUnits, effectiveBookings, arrivingRooms, todayStr]);
 
   // 4. VACANT ROOMS (חדרים פנויים ומוכנים)
   const vacantRooms = useMemo(() => {

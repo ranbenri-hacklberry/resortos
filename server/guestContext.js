@@ -73,6 +73,16 @@ async function studioUnits() {
   }
 }
 
+async function studioUnitOperations() {
+  try {
+    const rows = await studioGet('unit_operations?select=*');
+    return Array.isArray(rows) ? rows : [];
+  } catch (err) {
+    console.warn('[studioUnitOperations]', err?.message || err);
+    return [];
+  }
+}
+
 function deskPassHash(password) {
   const secret = String(process.env.CHECKOUT_MAILBOX_SECRET || '').trim();
   return createHmac('sha256', secret || 'desk').update(String(password || '')).digest('hex');
@@ -143,11 +153,12 @@ export async function publishGuestContext() {
   const mailboxUrl = String(process.env.CHECKOUT_MAILBOX_URL || 'https://resortos.app').replace(/\/$/, '');
   const secret = String(process.env.CHECKOUT_MAILBOX_SECRET || '244e82006f91f44db1452d2313b49487503eb65c4596b7a4a94d3ae683af6c5a').trim();
   if (!secret) throw new Error('CHECKOUT_MAILBOX_SECRET is not configured');
-  const [rows, units, agents, deskStaff] = await Promise.all([
+  const [rows, units, agents, deskStaff, unitOps] = await Promise.all([
     studioBookings(shiftIso(israelToday(), -2)).then((list) => list.map(compactStayRow)),
     studioUnits(),
     studioAgents(),
-    studioDeskStaff()
+    studioDeskStaff(),
+    studioUnitOperations()
   ]);
   const res = await fetch(`${mailboxUrl}/api/guest-context-sync`, {
     method: 'POST',
@@ -155,7 +166,7 @@ export async function publishGuestContext() {
       'content-type': 'application/json',
       'x-hotelos-mailbox': secret
     },
-    body: JSON.stringify({ rows, units, agents, deskStaff })
+    body: JSON.stringify({ rows, units, agents, deskStaff, unitOps })
   });
   if (!res.ok) {
     const body = await res.text();

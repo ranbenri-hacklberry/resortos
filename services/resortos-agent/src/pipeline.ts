@@ -75,6 +75,7 @@ import {
 } from './manager/guestLink.js';
 import { normalizeOutgoingText } from './whatsapp/textSpacing.js';
 import { logConversation } from './conversationLog.js';
+import { isGuestLeftMessage, GUEST_LEFT_THANKS } from './guest/keywords.js';
 import { isStaffOpsQuestion, STAFF_OPS_ONLY_REPLY } from './manager/opsQuestion.js';
 import { scanIdWithGrok } from './idValidation/grokIdScan.js';
 import { guestIdEnabled, hasGuestId, saveGuestIdScan, shouldAskForId, ID_REQUEST_TEXT, idReplyFor } from './idValidation/guestIdStore.js';
@@ -2743,6 +2744,26 @@ export function createPipeline(deps: PipelineDeps) {
               }
             } else if (!hasGuestId(booking.id, booking as any) && shouldAskForId(booking.id)) {
               setTimeout(() => { void d.send(jid, ID_REQUEST_TEXT).catch(() => undefined); }, 1500).unref?.();
+            }
+          }
+
+          // Guest left (Ran 2026-10-24): "יצאנו" on checkout day (or the day after) → thank + SMS Ran. No room/lock/payment changes.
+          {
+            const cout = String(booking.check_out_date || '').slice(0, 10);
+            const yest = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date(Date.now() - 86400000));
+            if (cout && (cout === today || cout === yest) && isGuestLeftMessage(text)) {
+              const lang = detectGuestLang(text || '');
+              const leftReply = GUEST_LEFT_THANKS[lang === 'en' || lang === 'ru' ? lang : 'he'];
+              void logGuestWhatsAppExchange(booking, text || '', leftReply);
+              if (d.notifyManagerSms) {
+                const sms = `🚪 אורח עדכן שיצא: ${booking.guest_name || ''} (${ctx.roomName || ''}), צ׳ק־אאוט ${cout}. הודעה: "${String(text || '').slice(0, 80)}"`;
+                void Promise.resolve(d.notifyManagerSms(sms)).then(
+                  () => d.log.info({ bookingId: booking.id, unitId: booking.unit_id }, 'guest-left manager SMS sent'),
+                  (err: unknown) => d.log.warn({ bookingId: booking.id, err: String((err as any)?.message || err) }, 'guest-left manager SMS failed'),
+                );
+              }
+              await d.send(jid, leftReply);
+              return { handled: true, transcript, reason: 'guest_left' };
             }
           }
 

@@ -8,6 +8,7 @@ import { Transcriber, transcribeVoiceNote, isAudioMessage, extractText } from '.
 import { OllamaClient } from './llm/client.js';
 import { ResortOSClient } from './integration/resortos.js';
 import { createPipeline } from './pipeline.js';
+import { logConversation } from './conversationLog.js';
 import { generateRoomQrPng } from './whatsapp/qrGenerator.js';
 import { resolveRoomByAlias } from './llm/client.js';
 import { gmailStatus } from './gmail/mailbox.js';
@@ -240,6 +241,7 @@ const server = createServer(async (req, res) => {
       if (!target) return send(res, 400, { error: 'phone or jid required' });
       const targetJid = canonicalJid(target);
       await router.sendText(channelId, targetJid, text);
+      logConversation({ direction: 'outbound', jid: targetJid, text, route: 'http_send' });
       if (body.booking_id) {
         void resortos.logGuestComm({
           bookingId: String(body.booking_id),

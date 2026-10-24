@@ -28,18 +28,25 @@ export async function onRequest(context) {
     const now = new Date().toISOString();
     const incoming = rows.map((row) => compactStayRow(row));
     let previousStays = [];
+    let previousUnitOps = [];
     try {
       const existing = await env.STAY_DB.prepare('SELECT payload FROM guest_context WHERE id = ?1').bind('all').first();
       const packed = existing?.payload ? JSON.parse(existing.payload) : null;
       previousStays = Array.isArray(packed?.stays) ? packed.stays : [];
+      previousUnitOps = Array.isArray(packed?.unitOps) ? packed.unitOps : [];
     } catch {
       previousStays = [];
+      previousUnitOps = [];
     }
+    const incomingUnitOps = Array.isArray(body.unitOps) ? body.unitOps : [];
+    const mergedUnitOps = incomingUnitOps.length > 0 ? incomingUnitOps : previousUnitOps;
+
     const payload = JSON.stringify({
       syncedAt: now,
       byTail: Object.fromEntries(groups),
       blocked: blockedRangesFromRows(rows),
       units: Array.isArray(body.units) ? body.units : [],
+      unitOps: mergedUnitOps,
       stays: mergeDeskAwareStays(incoming, previousStays),
       deskStaff: Array.isArray(body.deskStaff) ? body.deskStaff.filter((row) => row?.username && row?.pass) : []
     });

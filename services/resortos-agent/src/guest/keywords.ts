@@ -176,3 +176,18 @@ export const EXTENSION_RE = kw([
 export const PAYMENT_INTL_RE = kw(['payment', 'pay', 'paid', 'price', 'cost', 'balance', 'fee', 'invoice', 'receipt', 'how much',
   'оплат*', 'оплач*', 'заплатить', 'доплат*', 'остаток', 'сколько платить', 'долг', 'счёт', 'счет',
   '(?:ال)?دفع', 'ندفع', '(?:ال)?مبلغ', '(?:ال)?متبقي', '(?:ال)?حساب', '(?:ال)?فاتورة', 'كم علي', 'كم باقي']);
+
+/** Guest reports they already left (Ran 2026-10-24, Musical Courtyard 1+3 "יצאנו" got the generic fallback). */
+export const GUEST_LEFT_RE = /(?:כבר\s+)?(?:יצאנו|עזבנו)(?:\s+מה?חדר|\s+מהצימר|\s+מהיחידה)?|סיימנו\s+ויצאנו|השארנו\s+(?:את\s+ה)?מפתח|\bwe(?:'ve|\s+have)?\s+(?:already\s+)?(?:left|checked\s*out)\b|^\s*(?:just\s+)?checked\s*out\b|мы\s+(?:уже\s+)?(?:уехали|выехали)|^\s*(?:уже\s+)?выехали/i;
+const GUEST_LEFT_NEG_RE = /(?:עוד\s+)?לא\s+(?:כבר\s+)?(?:יצאנו|עזבנו)|עדיין\s+לא|\bnot\s+(?:yet\s+)?(?:left|checked)|haven'?t\s+(?:left|checked)|не\s+(?:уехали|выехали)|\?/i;
+/** True for "יצאנו" / "we left" / "мы уехали" — but not for negations or questions. */
+export function isGuestLeftMessage(text?: string | null): boolean {
+  const t = String(text || '').trim();
+  if (!t || t.length > 120) return false;
+  return GUEST_LEFT_RE.test(t) && !GUEST_LEFT_NEG_RE.test(t);
+}
+export const GUEST_LEFT_THANKS: Record<'he' | 'en' | 'ru', string> = {
+  he: 'תודה שעדכנתם! נסיעה טובה 🌿',
+  en: 'Thanks for letting us know! Have a safe trip 🌿',
+  ru: 'Спасибо, что сообщили! Счастливого пути 🌿',
+};
