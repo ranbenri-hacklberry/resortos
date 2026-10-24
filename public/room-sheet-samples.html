@@ -1,0 +1,2025 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>דפי דוגמה ל-11 המתחמים — ResortOS A4</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700;800;900&family=David+Libre:wght@500;700&family=Frank+Ruhl+Libre:wght@700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-sheet: #FDFBF7;
+      --ink-primary: #1C1917;
+      --ink-secondary: #44403C;
+      --ink-muted: #78716C;
+      --gold-primary: #C5A059;
+      --gold-deep: #9E7D3B;
+      --gold-light: #F7F1E5;
+      --gold-subtle: rgba(197, 160, 89, 0.12);
+      --border-fine: #E7DFCE;
+      --border-dark: #292524;
+      --alert-bg: #FEF2F2;
+      --alert-border: #FCA5A5;
+      --alert-text: #991B1B;
+      --shabbat-bg: #FFF7ED;
+      --shabbat-border: #EA580C;
+      --shabbat-text: #7C2D12;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      background: #EAE3D2;
+      color: var(--ink-primary);
+      font-family: 'Assistant', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      direction: rtl;
+    }
+
+    .nav-bar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: #FFFFFF;
+      padding: 12px 20px;
+      border-bottom: 1.5px solid #D6CEBE;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .nav-bar h2 { font-size: 16px; margin: 0; }
+    .nav-bar button {
+      background: #1C1917; color: #FFF; font-weight: 700; font-size: 13px;
+      padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer;
+    }
+
+    .sheet-wrapper {
+      padding: 20px 0 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 30px;
+    }
+
+    .sheet {
+      position: relative;
+      width: 210mm;
+      height: 297mm;
+      max-height: 297mm;
+      background: var(--bg-sheet);
+      color: var(--ink-primary);
+      padding: 8mm 9mm 6mm;
+      overflow: hidden;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .sheet-inner {
+      height: 100%;
+      border: 2px solid var(--ink-primary);
+      padding: 6mm 7.5mm 4.5mm;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+    }
+    .sheet-inner::before {
+      content: "";
+      position: absolute;
+      top: 2.2mm; left: 2.2mm; right: 2.2mm; bottom: 2.2mm;
+      border: 0.8px solid var(--gold-primary);
+      pointer-events: none;
+    }
+
+    .corner-ornament {
+      position: absolute;
+      width: 12mm; height: 12mm;
+      pointer-events: none;
+      border-color: var(--gold-primary);
+    }
+    .corner-tl { top: 3.5mm; right: 3.5mm; border-top: 2px solid var(--gold-primary); border-right: 2px solid var(--gold-primary); }
+    .corner-tr { top: 3.5mm; left: 3.5mm; border-top: 2px solid var(--gold-primary); border-left: 2px solid var(--gold-primary); }
+    .corner-bl { bottom: 3.5mm; right: 3.5mm; border-bottom: 2px solid var(--gold-primary); border-right: 2px solid var(--gold-primary); }
+    .corner-br { bottom: 3.5mm; left: 3.5mm; border-bottom: 2px solid var(--gold-primary); border-left: 2px solid var(--gold-primary); }
+
+    .shabbat-alert-banner {
+      background: var(--shabbat-bg);
+      border: 1.5px solid var(--shabbat-border);
+      border-radius: 8px;
+      padding: 6px 12px;
+      margin-bottom: 2.5mm;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--shabbat-text);
+      font-size: 11.5px;
+      line-height: 1.35;
+      box-shadow: 0 1px 4px rgba(234, 88, 12, 0.12);
+    }
+    .shabbat-alert-banner strong { color: #7C2D12; font-size: 12.5px; display: inline; }
+    .shabbat-alert-icon { font-size: 22px; flex-shrink: 0; }
+
+    .header { text-align: center; padding-bottom: 2.5mm; border-bottom: 1.5px solid var(--ink-primary); position: relative; }
+    .brand-crown {
+      font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase;
+      color: var(--gold-deep); font-weight: 800; margin-bottom: 2px;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .brand-crown::before, .brand-crown::after { content: "—"; color: var(--gold-primary); }
+    .welcome-title {
+      font-family: 'Frank Ruhl Libre', 'David Libre', serif;
+      font-size: 32px; font-weight: 900; color: var(--ink-primary);
+      letter-spacing: -0.02em; line-height: 1.1; margin: 1px 0;
+    }
+    .unit-hero-name {
+      font-size: 20px; font-weight: 800; color: var(--gold-deep);
+      margin-top: 1px; display: inline-block; padding: 2px 14px;
+      background: var(--gold-subtle); border-radius: 20px;
+      border: 1px solid rgba(197, 160, 89, 0.4);
+    }
+    .prop-location { font-size: 12px; color: var(--ink-muted); margin-top: 2px; font-weight: 600; }
+
+    .times-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3mm; margin: 2.5mm 0; text-align: center; }
+    .time-card { background: #FFFFFF; border: 1px solid var(--border-fine); border-radius: 6px; padding: 2.5mm 2mm; }
+    .time-label { font-size: 10.5px; font-weight: 700; color: var(--ink-muted); text-transform: uppercase; margin-bottom: 1px; }
+    .time-val { font-size: 20px; font-weight: 900; color: var(--ink-primary); line-height: 1.1; }
+    .time-val.saturday { font-size: 17px; color: var(--gold-deep); }
+
+    .access-grid { display: grid; grid-template-columns: 1fr 1.15fr 1.25fr; gap: 3mm; margin-bottom: 2.5mm; }
+    .access-card {
+      background: #FFFFFF; border: 1px solid var(--border-fine); border-top: 3px solid var(--gold-primary);
+      border-radius: 6px; padding: 2.5mm 3mm; display: flex; flex-direction: column; justify-content: space-between; min-height: 28mm;
+    }
+    .access-header { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; color: var(--ink-secondary); margin-bottom: 2px; }
+    .access-icon { font-size: 12.5px; }
+    .access-value {
+      font-family: ui-monospace, Menlo, monospace; font-size: 22px; font-weight: 900;
+      color: var(--ink-primary); direction: ltr; text-align: center; letter-spacing: 0.08em; line-height: 1.15; padding: 1px 0;
+    }
+    .access-value.is-text {
+      font-family: 'Assistant', sans-serif; font-size: 12px; font-weight: 700;
+      direction: rtl; letter-spacing: normal; line-height: 1.35; color: var(--ink-primary); text-align: center;
+    }
+    .access-sub { font-size: 9.5px; color: var(--ink-muted); text-align: center; line-height: 1.25; margin-top: 1px; }
+
+    .wifi-details { display: flex; flex-direction: column; gap: 2.5px; direction: ltr; text-align: left; }
+    .wifi-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 11px; border-bottom: 1px dotted #EAE2D2; padding-bottom: 1px; }
+    .wifi-row .w-label { font-size: 9.5px; color: var(--ink-muted); direction: rtl; }
+    .wifi-row .w-val { font-family: ui-monospace, Menlo, monospace; font-weight: 800; color: var(--ink-primary); font-size: 12px; }
+
+    .rules-section {
+      background: #FFFDF9; border: 1.5px solid var(--gold-primary); border-radius: 8px;
+      padding: 3mm 4.5mm 2.5mm; box-shadow: 0 2px 8px rgba(197, 160, 89, 0.08); margin-bottom: 2.5mm;
+    }
+    .rules-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(197, 160, 89, 0.35); padding-bottom: 2mm; margin-bottom: 2.5mm; }
+    .rules-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 900; color: var(--ink-primary); }
+    .rules-badge { font-size: 9.5px; font-weight: 800; padding: 1.5px 7px; border-radius: 4px; background: var(--alert-bg); border: 1px solid var(--alert-border); color: var(--alert-text); }
+    .rules-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2mm 5mm; }
+    .rule-item { display: flex; align-items: flex-start; gap: 6px; font-size: 10.2px; line-height: 1.35; color: var(--ink-secondary); }
+    .rule-icon { font-size: 13px; line-height: 1.1; flex-shrink: 0; margin-top: 1px; }
+    .rule-item strong { color: var(--ink-primary); font-weight: 800; }
+
+    .digital-hub {
+      background: var(--gold-light); border: 1.5px solid var(--gold-primary); border-radius: 8px;
+      padding: 3mm 4.5mm; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4.5mm; margin-bottom: 2.5mm;
+    }
+    .hub-content h3 { font-size: 13.5px; font-weight: 900; color: var(--ink-primary); margin-bottom: 2px; display: flex; align-items: center; gap: 6px; }
+    .hub-content p { font-size: 10.2px; line-height: 1.35; color: var(--ink-secondary); margin-bottom: 3px; }
+    .hub-highlights { display: flex; flex-wrap: wrap; gap: 3px 8px; font-size: 9.8px; font-weight: 700; color: var(--gold-deep); }
+    .hub-highlights span { background: rgba(197, 160, 89, 0.16); padding: 1px 6px; border-radius: 3px; }
+    .hub-qr-wrap { text-align: center; background: #FFFFFF; padding: 2.5mm; border: 1px solid var(--gold-primary); border-radius: 6px; }
+    .hub-qr { width: 25mm; height: 25mm; display: block; image-rendering: pixelated; }
+    .qr-caption { font-size: 8.5px; font-weight: 800; letter-spacing: 0.05em; color: var(--ink-primary); margin-top: 2px; }
+
+    .footer { border-top: 1.5px solid var(--ink-primary); padding-top: 2.5mm; display: flex; justify-content: space-between; align-items: center; gap: 4mm; }
+    .service-box { background: #FFFFFF; border: 1px solid var(--border-fine); border-radius: 6px; padding: 2mm 3.5mm; display: flex; flex-direction: column; gap: 1px; }
+    .s-label { font-size: 9.5px; font-weight: 700; color: var(--ink-muted); }
+    .s-phone { font-size: 14.5px; font-weight: 900; color: var(--gold-deep); direction: ltr; text-align: right; }
+    .checkout-instructions { font-size: 9.8px; color: var(--ink-muted); line-height: 1.35; text-align: left; direction: rtl; }
+    .checkout-instructions strong { color: var(--ink-primary); }
+    .checkout-instructions .customer-care { margin-top: 1px; font-size: 9.2px; color: var(--ink-secondary); }
+
+    @media print {
+      @page { size: A4 portrait; margin: 0; }
+      html, body { background: #FFF !important; margin: 0 !important; padding: 0 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      .nav-bar { display: none !important; }
+      .sheet-wrapper { padding: 0 !important; gap: 0 !important; }
+      .sheet { box-shadow: none !important; page-break-after: always !important; break-after: page !important; }
+      .sheet:last-of-type { page-break-after: auto !important; break-after: auto !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="nav-bar">
+    <h2>📋 דפי חדר לדוגמה — 11 מתחמי הנופש (נתונים פיקטיביים)</h2>
+    <button onclick="window.print()">🖨️ הדפסת 11 הדפים (A4)</button>
+  </div>
+  <div class="sheet-wrapper">
+    
+    <article class="sheet">
+      <div class="sheet-inner">
+        <div class="corner-ornament corner-tl"></div>
+        <div class="corner-ornament corner-tr"></div>
+        <div class="corner-ornament corner-bl"></div>
+        <div class="corner-ornament corner-br"></div>
+
+        
+
+        <header class="header">
+          <div class="brand-crown">MIALEES RESORT COLLECTION · קולקציית האירוח מיאליס</div>
+          <h1 class="welcome-title">ברוכים הבאים</h1>
+          <div>
+            <span class="unit-hero-name">בתי נורית 1</span>
+          </div>
+          <div class="prop-location">מושב רמות, רמת הגולן</div>
+          <div style="font-size: 11px; color: #9E7D3B; font-weight: 700; margin-top: 3px;">
+            אירוח לדוגמה: משפחת ישראלי (דוד ושרה) · זוג + 2 ילדים (תאריכים לדוגמה: 2026-11-12 עד 2026-11-14)
+          </div>
+        </header>
+
+        <div class="times-row">
+          <div class="time-card">
+            <div class="time-label">שעת כניסה (צ׳ק-אין)</div>
+            <div class="time-val">15:00</div>
+          </div>
+          <div class="time-card">
+            <div class="time-label">שעת יציאה (צ׳ק-אאוט)</div>
+            <div class="time-val">11:00</div>
+          </div>
+          <div class="time-card">
+            <div class="time-label">יציאה בשבת</div>
+            <div class="time-val saturday">15:00</div>
+          </div>
+        </div>
+
+        <div class="access-grid">
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">🔑</span>
+              <span>כספת מפתח</span>
+            </div>
+            <div class="access-value is-text">הקוד יימסר בהודעה</div>
+            <div class="access-sub">קוד כספת המפתח יישלח ביום ההגעה</div>
+          </div>
+
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">🚪</span>
+              <span>שער כניסה</span>
+            </div>
+            <div class="access-value">#2464</div>
+            <div class="access-sub">קוד שער מושב רמות</div>
+          </div>
+
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">📶</span>
+              <span>אינטרנט אלחוטי (Wi-Fi)</span>
+            </div>
+            <div class="wifi-details">
+              <div class="wifi-row">
+                <span class="w-label">רשת:</span>
+                <span class="w-val">MIALEES RESORT</span>
+              </div>
+              <div class="wifi-row">
+                <span class="w-label">סיסמה:</span>
+                <span class="w-val">MIAL2026</span>
+              </div>
+            </div>
+            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
+          </div>
+        </div>
+
+        <section class="rules-section">
+          <div class="rules-header">
+            <div class="rules-title">
+              <span>📋</span>
+              <span>כללי האירוח והשהייה במתחם — לתשומת לבכם ולמען חופשה נעימה</span>
+            </div>
+            <span class="rules-badge">תקנון המתחם</span>
+          </div>
+
+          <div class="rules-grid">
+            <div class="rule-item">
+              <span class="rule-icon">🚭</span>
+              <div>
+                <strong>איסור עישון מוחלט בחדר:</strong> העישון (כולל סיגריות, נרגילה ואידוי / Vape) מותר אך ורק במרפסות ובחצר הפתוחה. עישון בתוך היחידה אסור בהחלט ויגרור חיוב דמי ניקוי מיוחד ע״ס ₪500.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🔇</span>
+              <div>
+                <strong>שקט, שלווה ואיסור מסיבות:</strong> חל איסור על הכנסת מערכות הגברה, רמקולים ניידים (בוקסות), קריוקי ומסיבות. יש לשמור על שקט מוחלט בין 23:00 ל-07:00 ובין 14:00 ל-16:00.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🥩</span>
+              <div>
+                <strong>הדלקת אש ומנגל (BBQ):</strong> מותרת אך ורק בעמדות המנגל המוסדרות בחצר, ולעולם לא על גבי דק העץ או בתוך המבנה. אין להבעיר אש בשבת.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">👥</span>
+              <div>
+                <strong>אורחים ומבקרים:</strong> השהייה מיועדת אך ורק למספר האורחים הנקוב בהזמנה המאושרת. חל איסור על הכנסת אורחים נוספים או לינה ללא תיאום ואישור מראש.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🛁</span>
+              <div>
+                <strong>בטיחות בג׳קוזי ובריכה:</strong> חובה לוודא שגובה המים מכסה את כל פתחי הסילונים (הג׳טים) לפני הפעלת המתג למניעת שריפת מנוע. חל איסור על כלי זכוכית, שמנים או סבונים במים.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🐾</span>
+              <div>
+                <strong>בעלי חיים וחיות מחמד:</strong> כניסת חיות מחמד אסורה בהחלט, אלא אם תואמה ואושרה מראש ובכתב מול הנהלת הריזורט טרם ההגעה.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="digital-hub">
+          <div class="hub-content">
+            <h3><span>📱</span><span>דף האורח הדיגיטלי והמדריך המלא שלכם</span></h3>
+            <p>
+              סרקו את הקוד עם מצלמת הטלפון לפתיחת פורטל השהייה: ניווט מדויק, המלצות על מסעדות מקומיות וקצביות, מעיינות נסתרים, מדריכי הפעלה ליחידה, וצ׳ק-אאוט דיגיטלי בקליק.
+            </p>
+            <div class="hub-highlights">
+              <span>🍽️ מסעדות מומלצות</span>
+              <span>🌿 מעיינות ואטרקציות</span>
+              <span>📺 מדריך ג׳קוזי ו-TV</span>
+              <span>💬 וואטסאפ שירות מהיר</span>
+            </div>
+          </div>
+          <div class="hub-qr-wrap">
+            <img class="hub-qr" alt="QR Code" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAADwCAYAAAA+VemSAAAAAklEQVR4AewaftIAAAdoSURBVO3BUaod0W5F0WVxGiEE6n/DBEK9cPz7SGqbVFE5V84c49fvPwRgJROAtUwA1jIBWMsEYC0TgLVMANYyAVjro7/IcP2LqkdPZLhOqkffkuH6lurRt2S4/kXVoysmAGuZAKxlArCWCcBaJgBrmQCsZQKw1kcPVY9+qgzXXRmuk+rRSYbrJ6oenWS4TqpHb8lwnVSP7qoe/VQZrrtMANYyAVjLBGAtE4C1TADWMgFYywRgrY9eluF6S/XoX1Q9OslwnVSPfqIM10+V4XpL9egtJgBrmQCsZQKwlgnAWiYAa5kArPURbslwnVSPrmS4TjJcJ9WjuzJcJ9WjkwzXSfXoSvXoJMOF/x0TgLVMANYyAVjLBGAtE4C1TADWMgFY6yP8j6pHJxmuu6pHJxmun6p6dJLhwv8dE4C1TADWMgFYywRgLROAtUwA1jIBWOujl1WP/kXVo7syXCfVo62qR3dluL6lerSRCcBaJgBrmQCsZQKwlgnAWiYAa5kArPXRQxmuf1GG66R6dJLhulI9OslwnVSPTjJcV6pHJxmuk+rRSYbrSvXoWzJc/yITgLVMANYyAVjLBGAtE4C1TADW+vX7D+G/yXB9S/XoiQzXW6pHd2W4nqge4T+ZAKxlArCWCcBaJgBrmQCsZQKwlgnAWh/9RYbrpHr0U2W4rlSP/lXVo7dkuE6qR3dVj04yXHdVj57IcL2lenSXCcBaJgBrmQCsZQKwlgnAWiYAa5kArPXRyzJcd1WPTjJcJ9WjKxmuJ6pHJxmut2S4TqpHd2W4TqpHb8lwPVE9upLheqJ6dJLh+gYTgLVMANYyAVjLBGAtE4C1TADWMgFY66OHMlx3VY/elOG6Uj36lurRSYbriQzXXdWjkwzXXdWjJzJcb6kePVE9+gYTgLVMANYyAVjLBGAtE4C1TADW+vX7D70ow3WlevQtGa6T6tFPleE6qR79f5Thuqt6dJLhOqkefYMJwFomAGuZAKxlArCWCcBaJgBrmQCs9dFfZLieqB5dyXA9UT06yXBdqR49keHaKMN1Uj16S4brpHr0U1WP3pLhOqkeXTEBWMsEYC0TgLVMANYyAVjLBGAtE4C1fv3+Qw9kuN5SPTrJcJ1Uj65kuL6lenSS4TqpHm2U4dqqenRXhuuJ6tEVE4C1TADWMgFYywRgLROAtUwA1jIBWOujf1iG60r16IkM10n16CfKcD1RPbqrevQtGa6T6tFJhuuu6tFbTADWMgFYywRgLROAtUwA1jIBWOujxapHd2W4nqgenWS4rlSPTqpHW2W4rlSPTjJcJ9WjkwzXlerRSYbrpHp0kuG6K8N1Uj26YgKwlgnAWiYAa5kArGUCsJYJwFomAGt99BcZrpPq0VsyXCfVo5MM15Xq0UmG6y0ZrieqR3dVj57IcP1U1aMrGa6T6tFJhust1aO7TADWMgFYywRgLROAtUwA1jIBWMsEYK2PXpbhuqt69ET16EqG66R6dJLhekv16CTD9VNVj65kuN6U4borw3VSPTrJcF3JcD1RPbpiArCWCcBaJgBrmQCsZQKwlgnAWiYAa330UIbrpHr0lgzXT1U9upLhOslwnVSP7spwnVSPvqV69ET16K4M10mG66R6dFeG6y4TgLVMANYyAVjLBGAtE4C1TADW+uih6tFJhuuu6tET1aMrGa4nqkcnGa67qkcnGa6T6tGV6tFJhuukenRX9eiJDNe3VI/eUj26ywRgLROAtUwA1jIBWMsEYC0TgLVMANb66AfLcD2R4borw/UtGa6T6tFJhutK9eiJDNdJ9eiuDNdWGa63VI+umACsZQKwlgnAWiYAa5kArGUCsJYJwFof/UX16Inq0UYZrrdUj04yXG/JcD1RPfqW6tFbMlwnGa6T6tE3mACsZQKwlgnAWiYAa5kArGUCsJYJwFof/UWG619UPTqpHj2R4bqS4XpT9ehKhuukevSWDNebMlxXqkdvynBdqR69xQRgLROAtUwA1jIBWMsEYC0TgLU+eqh69FNluN6S4TqpHn1LhutK9egkw3VSPfqpqkdvqR7dleE6qR7dZQKwlgnAWiYAa5kArGUCsJYJwFomAGt99LIM11uqRxtluE6qRycZrrsyXCfVo58qw/UtGa6T6tFdGa6T6tEVE4C1TADWMgFYywRgLROAtUwA1jIBWOsj3FI9OslwXake/VQZrrdUj04yXE9Uj96S4TrJcF2pHp1kuO4yAVjLBGAtE4C1TADWMgFYywRgLROAtT7CLRmuk+rRlQzXE9WjuzJcb6oeXclwPVE9Oslw/UQZrpPq0V0mAGuZAKxlArCWCcBaJgBrmQCs9dHLqkf4T9WjN2W4rlSPTjJcJ9WjkwzXlerRt1SPnshw3VU9OslwnVSPrpgArGUCsJYJwFomAGuZAKxlArCWCcBaHz2U4foXZbhOqkcnGa4r1aMnMlxvqR6dZLhOqkcbZbi+pXp0lwnAWiYAa5kArGUCsJYJwFomAGuZAKz16/cfArCSCcBaJgBrmQCsZQKwlgnAWiYAa/0Xao8fy0tMtpcAAAAASUVORK5CYII=" />
+            <div class="qr-caption">סריקה במצלמה</div>
+          </div>
+        </div>
+
+        <footer class="footer">
+          <div class="service-box">
+            <div class="s-label">שירות בשטח וסיוע בצ׳ק-אין (מענה מהיר)</div>
+            <div class="s-phone">054-713-6676</div>
+          </div>
+
+          <div class="checkout-instructions">
+            <div><strong>הנחיות עזיבה:</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div class="customer-care">
+              שירות לקוחות ומשרד: <strong>050-950-6222</strong> (08:00–20:00) · לחיובים, חשבוניות או הארכת שהייה
+            </div>
+          </div>
+        </footer>
+      </div>
+    </article>
+    
+    <article class="sheet">
+      <div class="sheet-inner">
+        <div class="corner-ornament corner-tl"></div>
+        <div class="corner-ornament corner-tr"></div>
+        <div class="corner-ornament corner-bl"></div>
+        <div class="corner-ornament corner-br"></div>
+
+        
+
+        <header class="header">
+          <div class="brand-crown">MIALEES RESORT COLLECTION · קולקציית האירוח מיאליס</div>
+          <h1 class="welcome-title">ברוכים הבאים</h1>
+          <div>
+            <span class="unit-hero-name">טוסקנה · 1</span>
+          </div>
+          <div class="prop-location">מושב רמות, רמת הגולן</div>
+          <div style="font-size: 11px; color: #9E7D3B; font-weight: 700; margin-top: 3px;">
+            אירוח לדוגמה: רועי ושיר כהן · זוג (תאריכים לדוגמה: 2026-11-13 עד 2026-11-15)
+          </div>
+        </header>
+
+        <div class="times-row">
+          <div class="time-card">
+            <div class="time-label">שעת כניסה (צ׳ק-אין)</div>
+            <div class="time-val">15:00</div>
+          </div>
+          <div class="time-card">
+            <div class="time-label">שעת יציאה (צ׳ק-אאוט)</div>
+            <div class="time-val">11:00</div>
+          </div>
+          <div class="time-card">
+            <div class="time-label">יציאה בשבת</div>
+            <div class="time-val saturday">15:00</div>
+          </div>
+        </div>
+
+        <div class="access-grid">
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">🔑</span>
+              <span>כספת מפתח</span>
+            </div>
+            <div class="access-value is-text">הקוד יימסר בהודעה</div>
+            <div class="access-sub">קוד כספת המפתח יישלח ביום ההגעה</div>
+          </div>
+
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">🚪</span>
+              <span>שער כניסה</span>
+            </div>
+            <div class="access-value">#2464</div>
+            <div class="access-sub">קוד שער מושב רמות</div>
+          </div>
+
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">📶</span>
+              <span>אינטרנט אלחוטי (Wi-Fi)</span>
+            </div>
+            <div class="wifi-details">
+              <div class="wifi-row">
+                <span class="w-label">רשת:</span>
+                <span class="w-val">Toscana</span>
+              </div>
+              <div class="wifi-row">
+                <span class="w-label">סיסמה:</span>
+                <span class="w-val">12345678</span>
+              </div>
+            </div>
+            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
+          </div>
+        </div>
+
+        <section class="rules-section">
+          <div class="rules-header">
+            <div class="rules-title">
+              <span>📋</span>
+              <span>כללי האירוח והשהייה במתחם — לתשומת לבכם ולמען חופשה נעימה</span>
+            </div>
+            <span class="rules-badge">תקנון המתחם</span>
+          </div>
+
+          <div class="rules-grid">
+            <div class="rule-item">
+              <span class="rule-icon">🚭</span>
+              <div>
+                <strong>איסור עישון מוחלט בחדר:</strong> העישון (כולל סיגריות, נרגילה ואידוי / Vape) מותר אך ורק במרפסות ובחצר הפתוחה. עישון בתוך היחידה אסור בהחלט ויגרור חיוב דמי ניקוי מיוחד ע״ס ₪500.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🔇</span>
+              <div>
+                <strong>שקט, שלווה ואיסור מסיבות:</strong> חל איסור על הכנסת מערכות הגברה, רמקולים ניידים (בוקסות), קריוקי ומסיבות. יש לשמור על שקט מוחלט בין 23:00 ל-07:00 ובין 14:00 ל-16:00.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🥩</span>
+              <div>
+                <strong>הדלקת אש ומנגל (BBQ):</strong> מותרת אך ורק בעמדות המנגל המוסדרות בחצר, ולעולם לא על גבי דק העץ או בתוך המבנה. אין להבעיר אש בשבת.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">👥</span>
+              <div>
+                <strong>אורחים ומבקרים:</strong> השהייה מיועדת אך ורק למספר האורחים הנקוב בהזמנה המאושרת. חל איסור על הכנסת אורחים נוספים או לינה ללא תיאום ואישור מראש.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🛁</span>
+              <div>
+                <strong>בטיחות בג׳קוזי ובריכה:</strong> חובה לוודא שגובה המים מכסה את כל פתחי הסילונים (הג׳טים) לפני הפעלת המתג למניעת שריפת מנוע. חל איסור על כלי זכוכית, שמנים או סבונים במים.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🐾</span>
+              <div>
+                <strong>בעלי חיים וחיות מחמד:</strong> כניסת חיות מחמד אסורה בהחלט, אלא אם תואמה ואושרה מראש ובכתב מול הנהלת הריזורט טרם ההגעה.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="digital-hub">
+          <div class="hub-content">
+            <h3><span>📱</span><span>דף האורח הדיגיטלי והמדריך המלא שלכם</span></h3>
+            <p>
+              סרקו את הקוד עם מצלמת הטלפון לפתיחת פורטל השהייה: ניווט מדויק, המלצות על מסעדות מקומיות וקצביות, מעיינות נסתרים, מדריכי הפעלה ליחידה, וצ׳ק-אאוט דיגיטלי בקליק.
+            </p>
+            <div class="hub-highlights">
+              <span>🍽️ מסעדות מומלצות</span>
+              <span>🌿 מעיינות ואטרקציות</span>
+              <span>📺 מדריך ג׳קוזי ו-TV</span>
+              <span>💬 וואטסאפ שירות מהיר</span>
+            </div>
+          </div>
+          <div class="hub-qr-wrap">
+            <img class="hub-qr" alt="QR Code" src="data:image/png;base64,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" />
+            <div class="qr-caption">סריקה במצלמה</div>
+          </div>
+        </div>
+
+        <footer class="footer">
+          <div class="service-box">
+            <div class="s-label">שירות בשטח וסיוע בצ׳ק-אין (מענה מהיר)</div>
+            <div class="s-phone">054-713-6676</div>
+          </div>
+
+          <div class="checkout-instructions">
+            <div><strong>הנחיות עזיבה:</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div class="customer-care">
+              שירות לקוחות ומשרד: <strong>050-950-6222</strong> (08:00–20:00) · לחיובים, חשבוניות או הארכת שהייה
+            </div>
+          </div>
+        </footer>
+      </div>
+    </article>
+    
+    <article class="sheet">
+      <div class="sheet-inner">
+        <div class="corner-ornament corner-tl"></div>
+        <div class="corner-ornament corner-tr"></div>
+        <div class="corner-ornament corner-bl"></div>
+        <div class="corner-ornament corner-br"></div>
+
+        
+
+        <header class="header">
+          <div class="brand-crown">MIALEES RESORT COLLECTION · קולקציית האירוח מיאליס</div>
+          <h1 class="welcome-title">ברוכים הבאים</h1>
+          <div>
+            <span class="unit-hero-name">טאג' מאהל · בקתה 1 (E/25)</span>
+          </div>
+          <div class="prop-location">מושב רמות, רמת הגולן</div>
+          <div style="font-size: 11px; color: #9E7D3B; font-weight: 700; margin-top: 3px;">
+            אירוח לדוגמה: יונתן ומיכל לוי · זוג (תאריכים לדוגמה: 2026-11-20 עד 2026-11-22)
+          </div>
+        </header>
+
+        <div class="times-row">
+          <div class="time-card">
+            <div class="time-label">שעת כניסה (צ׳ק-אין)</div>
+            <div class="time-val">15:00</div>
+          </div>
+          <div class="time-card">
+            <div class="time-label">שעת יציאה (צ׳ק-אאוט)</div>
+            <div class="time-val">11:00</div>
+          </div>
+          <div class="time-card">
+            <div class="time-label">יציאה בשבת</div>
+            <div class="time-val saturday">15:00</div>
+          </div>
+        </div>
+
+        <div class="access-grid">
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">🔑</span>
+              <span>כספת מפתח</span>
+            </div>
+            <div class="access-value is-text">הקוד יימסר בהודעה</div>
+            <div class="access-sub">קוד כספת המפתח יישלח ביום ההגעה</div>
+          </div>
+
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">🚪</span>
+              <span>שער כניסה</span>
+            </div>
+            <div class="access-value">#2464</div>
+            <div class="access-sub">קוד שער מושב רמות</div>
+          </div>
+
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">📶</span>
+              <span>אינטרנט אלחוטי (Wi-Fi)</span>
+            </div>
+            <div class="wifi-details">
+              <div class="wifi-row">
+                <span class="w-label">רשת:</span>
+                <span class="w-val">LUTUS</span>
+              </div>
+              <div class="wifi-row">
+                <span class="w-label">סיסמה:</span>
+                <span class="w-val">12345678</span>
+              </div>
+            </div>
+            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
+          </div>
+        </div>
+
+        <section class="rules-section">
+          <div class="rules-header">
+            <div class="rules-title">
+              <span>📋</span>
+              <span>כללי האירוח והשהייה במתחם — לתשומת לבכם ולמען חופשה נעימה</span>
+            </div>
+            <span class="rules-badge">תקנון המתחם</span>
+          </div>
+
+          <div class="rules-grid">
+            <div class="rule-item">
+              <span class="rule-icon">🚭</span>
+              <div>
+                <strong>איסור עישון מוחלט בחדר:</strong> העישון (כולל סיגריות, נרגילה ואידוי / Vape) מותר אך ורק במרפסות ובחצר הפתוחה. עישון בתוך היחידה אסור בהחלט ויגרור חיוב דמי ניקוי מיוחד ע״ס ₪500.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🔇</span>
+              <div>
+                <strong>שקט, שלווה ואיסור מסיבות:</strong> חל איסור על הכנסת מערכות הגברה, רמקולים ניידים (בוקסות), קריוקי ומסיבות. יש לשמור על שקט מוחלט בין 23:00 ל-07:00 ובין 14:00 ל-16:00.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🥩</span>
+              <div>
+                <strong>הדלקת אש ומנגל (BBQ):</strong> מותרת אך ורק בעמדות המנגל המוסדרות בחצר, ולעולם לא על גבי דק העץ או בתוך המבנה. אין להבעיר אש בשבת.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">👥</span>
+              <div>
+                <strong>אורחים ומבקרים:</strong> השהייה מיועדת אך ורק למספר האורחים הנקוב בהזמנה המאושרת. חל איסור על הכנסת אורחים נוספים או לינה ללא תיאום ואישור מראש.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🛁</span>
+              <div>
+                <strong>בטיחות בג׳קוזי ובריכה:</strong> חובה לוודא שגובה המים מכסה את כל פתחי הסילונים (הג׳טים) לפני הפעלת המתג למניעת שריפת מנוע. חל איסור על כלי זכוכית, שמנים או סבונים במים.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🐾</span>
+              <div>
+                <strong>בעלי חיים וחיות מחמד:</strong> כניסת חיות מחמד אסורה בהחלט, אלא אם תואמה ואושרה מראש ובכתב מול הנהלת הריזורט טרם ההגעה.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="digital-hub">
+          <div class="hub-content">
+            <h3><span>📱</span><span>דף האורח הדיגיטלי והמדריך המלא שלכם</span></h3>
+            <p>
+              סרקו את הקוד עם מצלמת הטלפון לפתיחת פורטל השהייה: ניווט מדויק, המלצות על מסעדות מקומיות וקצביות, מעיינות נסתרים, מדריכי הפעלה ליחידה, וצ׳ק-אאוט דיגיטלי בקליק.
+            </p>
+            <div class="hub-highlights">
+              <span>🍽️ מסעדות מומלצות</span>
+              <span>🌿 מעיינות ואטרקציות</span>
+              <span>📺 מדריך ג׳קוזי ו-TV</span>
+              <span>💬 וואטסאפ שירות מהיר</span>
+            </div>
+          </div>
+          <div class="hub-qr-wrap">
+            <img class="hub-qr" alt="QR Code" src="data:image/png;base64,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" />
+            <div class="qr-caption">סריקה במצלמה</div>
+          </div>
+        </div>
+
+        <footer class="footer">
+          <div class="service-box">
+            <div class="s-label">שירות בשטח וסיוע בצ׳ק-אין (מענה מהיר)</div>
+            <div class="s-phone">054-713-6676</div>
+          </div>
+
+          <div class="checkout-instructions">
+            <div><strong>הנחיות עזיבה:</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div class="customer-care">
+              שירות לקוחות ומשרד: <strong>050-950-6222</strong> (08:00–20:00) · לחיובים, חשבוניות או הארכת שהייה
+            </div>
+          </div>
+        </footer>
+      </div>
+    </article>
+    
+    <article class="sheet">
+      <div class="sheet-inner">
+        <div class="corner-ornament corner-tl"></div>
+        <div class="corner-ornament corner-tr"></div>
+        <div class="corner-ornament corner-bl"></div>
+        <div class="corner-ornament corner-br"></div>
+
+        
+
+        <header class="header">
+          <div class="brand-crown">MIALEES RESORT COLLECTION · קולקציית האירוח מיאליס</div>
+          <h1 class="welcome-title">ברוכים הבאים</h1>
+          <div>
+            <span class="unit-hero-name">מול הנוף · בקתה 1</span>
+          </div>
+          <div class="prop-location">מושב רמות, רמת הגולן</div>
+          <div style="font-size: 11px; color: #9E7D3B; font-weight: 700; margin-top: 3px;">
+            אירוח לדוגמה: עומר ונועה פרידמן · זוג + 3 ילדים (תאריכים לדוגמה: 2026-11-19 עד 2026-11-21)
+          </div>
+        </header>
+
+        <div class="times-row">
+          <div class="time-card">
+            <div class="time-label">שעת כניסה (צ׳ק-אין)</div>
+            <div class="time-val">15:00</div>
+          </div>
+          <div class="time-card">
+            <div class="time-label">שעת יציאה (צ׳ק-אאוט)</div>
+            <div class="time-val">11:00</div>
+          </div>
+          <div class="time-card">
+            <div class="time-label">יציאה בשבת</div>
+            <div class="time-val saturday">15:00</div>
+          </div>
+        </div>
+
+        <div class="access-grid">
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">🔑</span>
+              <span>כספת מפתח</span>
+            </div>
+            <div class="access-value is-text">הקוד יימסר בהודעה</div>
+            <div class="access-sub">קוד כספת המפתח יישלח ביום ההגעה</div>
+          </div>
+
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">🚪</span>
+              <span>שער כניסה</span>
+            </div>
+            <div class="access-value">#2464</div>
+            <div class="access-sub">קוד שער מושב רמות</div>
+          </div>
+
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">📶</span>
+              <span>אינטרנט אלחוטי (Wi-Fi)</span>
+            </div>
+            <div class="wifi-details">
+              <div class="wifi-row">
+                <span class="w-label">רשת:</span>
+                <span class="w-val">Mol_hanof</span>
+              </div>
+              <div class="wifi-row">
+                <span class="w-label">סיסמה:</span>
+                <span class="w-val">12345678</span>
+              </div>
+            </div>
+            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
+          </div>
+        </div>
+
+        <section class="rules-section">
+          <div class="rules-header">
+            <div class="rules-title">
+              <span>📋</span>
+              <span>כללי האירוח והשהייה במתחם — לתשומת לבכם ולמען חופשה נעימה</span>
+            </div>
+            <span class="rules-badge">תקנון המתחם</span>
+          </div>
+
+          <div class="rules-grid">
+            <div class="rule-item">
+              <span class="rule-icon">🚭</span>
+              <div>
+                <strong>איסור עישון מוחלט בחדר:</strong> העישון (כולל סיגריות, נרגילה ואידוי / Vape) מותר אך ורק במרפסות ובחצר הפתוחה. עישון בתוך היחידה אסור בהחלט ויגרור חיוב דמי ניקוי מיוחד ע״ס ₪500.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🔇</span>
+              <div>
+                <strong>שקט, שלווה ואיסור מסיבות:</strong> חל איסור על הכנסת מערכות הגברה, רמקולים ניידים (בוקסות), קריוקי ומסיבות. יש לשמור על שקט מוחלט בין 23:00 ל-07:00 ובין 14:00 ל-16:00.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🥩</span>
+              <div>
+                <strong>הדלקת אש ומנגל (BBQ):</strong> מותרת אך ורק בעמדות המנגל המוסדרות בחצר, ולעולם לא על גבי דק העץ או בתוך המבנה. אין להבעיר אש בשבת.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">👥</span>
+              <div>
+                <strong>אורחים ומבקרים:</strong> השהייה מיועדת אך ורק למספר האורחים הנקוב בהזמנה המאושרת. חל איסור על הכנסת אורחים נוספים או לינה ללא תיאום ואישור מראש.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🛁</span>
+              <div>
+                <strong>בטיחות בג׳קוזי ובריכה:</strong> חובה לוודא שגובה המים מכסה את כל פתחי הסילונים (הג׳טים) לפני הפעלת המתג למניעת שריפת מנוע. חל איסור על כלי זכוכית, שמנים או סבונים במים.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🐾</span>
+              <div>
+                <strong>בעלי חיים וחיות מחמד:</strong> כניסת חיות מחמד אסורה בהחלט, אלא אם תואמה ואושרה מראש ובכתב מול הנהלת הריזורט טרם ההגעה.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="digital-hub">
+          <div class="hub-content">
+            <h3><span>📱</span><span>דף האורח הדיגיטלי והמדריך המלא שלכם</span></h3>
+            <p>
+              סרקו את הקוד עם מצלמת הטלפון לפתיחת פורטל השהייה: ניווט מדויק, המלצות על מסעדות מקומיות וקצביות, מעיינות נסתרים, מדריכי הפעלה ליחידה, וצ׳ק-אאוט דיגיטלי בקליק.
+            </p>
+            <div class="hub-highlights">
+              <span>🍽️ מסעדות מומלצות</span>
+              <span>🌿 מעיינות ואטרקציות</span>
+              <span>📺 מדריך ג׳קוזי ו-TV</span>
+              <span>💬 וואטסאפ שירות מהיר</span>
+            </div>
+          </div>
+          <div class="hub-qr-wrap">
+            <img class="hub-qr" alt="QR Code" src="data:image/png;base64,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" />
+            <div class="qr-caption">סריקה במצלמה</div>
+          </div>
+        </div>
+
+        <footer class="footer">
+          <div class="service-box">
+            <div class="s-label">שירות בשטח וסיוע בצ׳ק-אין (מענה מהיר)</div>
+            <div class="s-phone">054-713-6676</div>
+          </div>
+
+          <div class="checkout-instructions">
+            <div><strong>הנחיות עזיבה:</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div class="customer-care">
+              שירות לקוחות ומשרד: <strong>050-950-6222</strong> (08:00–20:00) · לחיובים, חשבוניות או הארכת שהייה
+            </div>
+          </div>
+        </footer>
+      </div>
+    </article>
+    
+    <article class="sheet">
+      <div class="sheet-inner">
+        <div class="corner-ornament corner-tl"></div>
+        <div class="corner-ornament corner-tr"></div>
+        <div class="corner-ornament corner-bl"></div>
+        <div class="corner-ornament corner-br"></div>
+
+        
+
+        <header class="header">
+          <div class="brand-crown">MIALEES RESORT COLLECTION · קולקציית האירוח מיאליס</div>
+          <h1 class="welcome-title">ברוכים הבאים</h1>
+          <div>
+            <span class="unit-hero-name">נופים בלבן · בקתה 1</span>
+          </div>
+          <div class="prop-location">מושב רמות, רמת הגולן</div>
+          <div style="font-size: 11px; color: #9E7D3B; font-weight: 700; margin-top: 3px;">
+            אירוח לדוגמה: איתי ומורן ברקוביץ׳ · זוג (תאריכים לדוגמה: 2026-11-26 עד 2026-11-28)
+          </div>
+        </header>
+
+        <div class="times-row">
+          <div class="time-card">
+            <div class="time-label">שעת כניסה (צ׳ק-אין)</div>
+            <div class="time-val">15:00</div>
+          </div>
+          <div class="time-card">
+            <div class="time-label">שעת יציאה (צ׳ק-אאוט)</div>
+            <div class="time-val">11:00</div>
+          </div>
+          <div class="time-card">
+            <div class="time-label">יציאה בשבת</div>
+            <div class="time-val saturday">15:00</div>
+          </div>
+        </div>
+
+        <div class="access-grid">
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">🔑</span>
+              <span>כספת מפתח</span>
+            </div>
+            <div class="access-value is-text">הקוד יימסר בהודעה</div>
+            <div class="access-sub">קוד כספת המפתח יישלח ביום ההגעה</div>
+          </div>
+
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">🚪</span>
+              <span>שער כניסה</span>
+            </div>
+            <div class="access-value">#2464</div>
+            <div class="access-sub">קוד שער מושב רמות</div>
+          </div>
+
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">📶</span>
+              <span>אינטרנט אלחוטי (Wi-Fi)</span>
+            </div>
+            <div class="wifi-details">
+              <div class="wifi-row">
+                <span class="w-label">רשת:</span>
+                <span class="w-val">TP-LINK_FA30</span>
+              </div>
+              <div class="wifi-row">
+                <span class="w-label">סיסמה:</span>
+                <span class="w-val">15107312</span>
+              </div>
+            </div>
+            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
+          </div>
+        </div>
+
+        <section class="rules-section">
+          <div class="rules-header">
+            <div class="rules-title">
+              <span>📋</span>
+              <span>כללי האירוח והשהייה במתחם — לתשומת לבכם ולמען חופשה נעימה</span>
+            </div>
+            <span class="rules-badge">תקנון המתחם</span>
+          </div>
+
+          <div class="rules-grid">
+            <div class="rule-item">
+              <span class="rule-icon">🚭</span>
+              <div>
+                <strong>איסור עישון מוחלט בחדר:</strong> העישון (כולל סיגריות, נרגילה ואידוי / Vape) מותר אך ורק במרפסות ובחצר הפתוחה. עישון בתוך היחידה אסור בהחלט ויגרור חיוב דמי ניקוי מיוחד ע״ס ₪500.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🔇</span>
+              <div>
+                <strong>שקט, שלווה ואיסור מסיבות:</strong> חל איסור על הכנסת מערכות הגברה, רמקולים ניידים (בוקסות), קריוקי ומסיבות. יש לשמור על שקט מוחלט בין 23:00 ל-07:00 ובין 14:00 ל-16:00.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🥩</span>
+              <div>
+                <strong>הדלקת אש ומנגל (BBQ):</strong> מותרת אך ורק בעמדות המנגל המוסדרות בחצר, ולעולם לא על גבי דק העץ או בתוך המבנה. אין להבעיר אש בשבת.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">👥</span>
+              <div>
+                <strong>אורחים ומבקרים:</strong> השהייה מיועדת אך ורק למספר האורחים הנקוב בהזמנה המאושרת. חל איסור על הכנסת אורחים נוספים או לינה ללא תיאום ואישור מראש.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🛁</span>
+              <div>
+                <strong>בטיחות בג׳קוזי ובריכה:</strong> חובה לוודא שגובה המים מכסה את כל פתחי הסילונים (הג׳טים) לפני הפעלת המתג למניעת שריפת מנוע. חל איסור על כלי זכוכית, שמנים או סבונים במים.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🐾</span>
+              <div>
+                <strong>בעלי חיים וחיות מחמד:</strong> כניסת חיות מחמד אסורה בהחלט, אלא אם תואמה ואושרה מראש ובכתב מול הנהלת הריזורט טרם ההגעה.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="digital-hub">
+          <div class="hub-content">
+            <h3><span>📱</span><span>דף האורח הדיגיטלי והמדריך המלא שלכם</span></h3>
+            <p>
+              סרקו את הקוד עם מצלמת הטלפון לפתיחת פורטל השהייה: ניווט מדויק, המלצות על מסעדות מקומיות וקצביות, מעיינות נסתרים, מדריכי הפעלה ליחידה, וצ׳ק-אאוט דיגיטלי בקליק.
+            </p>
+            <div class="hub-highlights">
+              <span>🍽️ מסעדות מומלצות</span>
+              <span>🌿 מעיינות ואטרקציות</span>
+              <span>📺 מדריך ג׳קוזי ו-TV</span>
+              <span>💬 וואטסאפ שירות מהיר</span>
+            </div>
+          </div>
+          <div class="hub-qr-wrap">
+            <img class="hub-qr" alt="QR Code" src="data:image/png;base64,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" />
+            <div class="qr-caption">סריקה במצלמה</div>
+          </div>
+        </div>
+
+        <footer class="footer">
+          <div class="service-box">
+            <div class="s-label">שירות בשטח וסיוע בצ׳ק-אין (מענה מהיר)</div>
+            <div class="s-phone">054-713-6676</div>
+          </div>
+
+          <div class="checkout-instructions">
+            <div><strong>הנחיות עזיבה:</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div class="customer-care">
+              שירות לקוחות ומשרד: <strong>050-950-6222</strong> (08:00–20:00) · לחיובים, חשבוניות או הארכת שהייה
+            </div>
+          </div>
+        </footer>
+      </div>
+    </article>
+    
+    <article class="sheet">
+      <div class="sheet-inner">
+        <div class="corner-ornament corner-tl"></div>
+        <div class="corner-ornament corner-tr"></div>
+        <div class="corner-ornament corner-bl"></div>
+        <div class="corner-ornament corner-br"></div>
+
+        
+
+        <header class="header">
+          <div class="brand-crown">MIALEES RESORT COLLECTION · קולקציית האירוח מיאליס</div>
+          <h1 class="welcome-title">ברוכים הבאים</h1>
+          <div>
+            <span class="unit-hero-name">חצר מוסיקלית · בקתה 1 (חליל)</span>
+          </div>
+          <div class="prop-location">מושב רמות, רמת הגולן</div>
+          <div style="font-size: 11px; color: #9E7D3B; font-weight: 700; margin-top: 3px;">
+            אירוח לדוגמה: דניאל וטליה שרון · זוג (תאריכים לדוגמה: 2026-11-27 עד 2026-11-29)
+          </div>
+        </header>
+
+        <div class="times-row">
+          <div class="time-card">
+            <div class="time-label">שעת כניסה (צ׳ק-אין)</div>
+            <div class="time-val">15:00</div>
+          </div>
+          <div class="time-card">
+            <div class="time-label">שעת יציאה (צ׳ק-אאוט)</div>
+            <div class="time-val">11:00</div>
+          </div>
+          <div class="time-card">
+            <div class="time-label">יציאה בשבת</div>
+            <div class="time-val saturday">15:00</div>
+          </div>
+        </div>
+
+        <div class="access-grid">
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">🔑</span>
+              <span>כספת מפתח</span>
+            </div>
+            <div class="access-value is-text">הקוד יימסר בהודעה</div>
+            <div class="access-sub">קוד כספת המפתח יישלח ביום ההגעה</div>
+          </div>
+
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">🚪</span>
+              <span>שער כניסה</span>
+            </div>
+            <div class="access-value">#2464</div>
+            <div class="access-sub">קוד שער מושב רמות</div>
+          </div>
+
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">📶</span>
+              <span>אינטרנט אלחוטי (Wi-Fi)</span>
+            </div>
+            <div class="wifi-details">
+              <div class="wifi-row">
+                <span class="w-label">רשת:</span>
+                <span class="w-val">Music yard</span>
+              </div>
+              <div class="wifi-row">
+                <span class="w-label">סיסמה:</span>
+                <span class="w-val">12345678</span>
+              </div>
+            </div>
+            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
+          </div>
+        </div>
+
+        <section class="rules-section">
+          <div class="rules-header">
+            <div class="rules-title">
+              <span>📋</span>
+              <span>כללי האירוח והשהייה במתחם — לתשומת לבכם ולמען חופשה נעימה</span>
+            </div>
+            <span class="rules-badge">תקנון המתחם</span>
+          </div>
+
+          <div class="rules-grid">
+            <div class="rule-item">
+              <span class="rule-icon">🚭</span>
+              <div>
+                <strong>איסור עישון מוחלט בחדר:</strong> העישון (כולל סיגריות, נרגילה ואידוי / Vape) מותר אך ורק במרפסות ובחצר הפתוחה. עישון בתוך היחידה אסור בהחלט ויגרור חיוב דמי ניקוי מיוחד ע״ס ₪500.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🔇</span>
+              <div>
+                <strong>שקט, שלווה ואיסור מסיבות:</strong> חל איסור על הכנסת מערכות הגברה, רמקולים ניידים (בוקסות), קריוקי ומסיבות. יש לשמור על שקט מוחלט בין 23:00 ל-07:00 ובין 14:00 ל-16:00.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🥩</span>
+              <div>
+                <strong>הדלקת אש ומנגל (BBQ):</strong> מותרת אך ורק בעמדות המנגל המוסדרות בחצר, ולעולם לא על גבי דק העץ או בתוך המבנה. אין להבעיר אש בשבת.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">👥</span>
+              <div>
+                <strong>אורחים ומבקרים:</strong> השהייה מיועדת אך ורק למספר האורחים הנקוב בהזמנה המאושרת. חל איסור על הכנסת אורחים נוספים או לינה ללא תיאום ואישור מראש.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🛁</span>
+              <div>
+                <strong>בטיחות בג׳קוזי ובריכה:</strong> חובה לוודא שגובה המים מכסה את כל פתחי הסילונים (הג׳טים) לפני הפעלת המתג למניעת שריפת מנוע. חל איסור על כלי זכוכית, שמנים או סבונים במים.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🐾</span>
+              <div>
+                <strong>בעלי חיים וחיות מחמד:</strong> כניסת חיות מחמד אסורה בהחלט, אלא אם תואמה ואושרה מראש ובכתב מול הנהלת הריזורט טרם ההגעה.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="digital-hub">
+          <div class="hub-content">
+            <h3><span>📱</span><span>דף האורח הדיגיטלי והמדריך המלא שלכם</span></h3>
+            <p>
+              סרקו את הקוד עם מצלמת הטלפון לפתיחת פורטל השהייה: ניווט מדויק, המלצות על מסעדות מקומיות וקצביות, מעיינות נסתרים, מדריכי הפעלה ליחידה, וצ׳ק-אאוט דיגיטלי בקליק.
+            </p>
+            <div class="hub-highlights">
+              <span>🍽️ מסעדות מומלצות</span>
+              <span>🌿 מעיינות ואטרקציות</span>
+              <span>📺 מדריך ג׳קוזי ו-TV</span>
+              <span>💬 וואטסאפ שירות מהיר</span>
+            </div>
+          </div>
+          <div class="hub-qr-wrap">
+            <img class="hub-qr" alt="QR Code" src="data:image/png;base64,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" />
+            <div class="qr-caption">סריקה במצלמה</div>
+          </div>
+        </div>
+
+        <footer class="footer">
+          <div class="service-box">
+            <div class="s-label">שירות בשטח וסיוע בצ׳ק-אין (מענה מהיר)</div>
+            <div class="s-phone">054-713-6676</div>
+          </div>
+
+          <div class="checkout-instructions">
+            <div><strong>הנחיות עזיבה:</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div class="customer-care">
+              שירות לקוחות ומשרד: <strong>050-950-6222</strong> (08:00–20:00) · לחיובים, חשבוניות או הארכת שהייה
+            </div>
+          </div>
+        </footer>
+      </div>
+    </article>
+    
+    <article class="sheet">
+      <div class="sheet-inner">
+        <div class="corner-ornament corner-tl"></div>
+        <div class="corner-ornament corner-tr"></div>
+        <div class="corner-ornament corner-bl"></div>
+        <div class="corner-ornament corner-br"></div>
+
+        
+
+        <header class="header">
+          <div class="brand-crown">MIALEES RESORT COLLECTION · קולקציית האירוח מיאליס</div>
+          <h1 class="welcome-title">ברוכים הבאים</h1>
+          <div>
+            <span class="unit-hero-name">בקתות מאיה · בקתה 1</span>
+          </div>
+          <div class="prop-location">מושב רמות, רמת הגולן</div>
+          <div style="font-size: 11px; color: #9E7D3B; font-weight: 700; margin-top: 3px;">
+            אירוח לדוגמה: גיא ומאיה אברהם · זוג + תינוק (תאריכים לדוגמה: 2026-12-03 עד 2026-12-05)
+          </div>
+        </header>
+
+        <div class="times-row">
+          <div class="time-card">
+            <div class="time-label">שעת כניסה (צ׳ק-אין)</div>
+            <div class="time-val">15:00</div>
+          </div>
+          <div class="time-card">
+            <div class="time-label">שעת יציאה (צ׳ק-אאוט)</div>
+            <div class="time-val">11:00</div>
+          </div>
+          <div class="time-card">
+            <div class="time-label">יציאה בשבת</div>
+            <div class="time-val saturday">15:00</div>
+          </div>
+        </div>
+
+        <div class="access-grid">
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">🔑</span>
+              <span>כספת מפתח</span>
+            </div>
+            <div class="access-value is-text">הקוד יימסר בהודעה</div>
+            <div class="access-sub">קוד כספת המפתח יישלח ביום ההגעה</div>
+          </div>
+
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">🚪</span>
+              <span>שער כניסה</span>
+            </div>
+            <div class="access-value">#2464</div>
+            <div class="access-sub">קוד שער מושב רמות</div>
+          </div>
+
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">📶</span>
+              <span>אינטרנט אלחוטי (Wi-Fi)</span>
+            </div>
+            <div class="wifi-details">
+              <div class="wifi-row">
+                <span class="w-label">רשת:</span>
+                <span class="w-val">maya</span>
+              </div>
+              <div class="wifi-row">
+                <span class="w-label">סיסמה:</span>
+                <span class="w-val">12345678</span>
+              </div>
+            </div>
+            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
+          </div>
+        </div>
+
+        <section class="rules-section">
+          <div class="rules-header">
+            <div class="rules-title">
+              <span>📋</span>
+              <span>כללי האירוח והשהייה במתחם — לתשומת לבכם ולמען חופשה נעימה</span>
+            </div>
+            <span class="rules-badge">תקנון המתחם</span>
+          </div>
+
+          <div class="rules-grid">
+            <div class="rule-item">
+              <span class="rule-icon">🚭</span>
+              <div>
+                <strong>איסור עישון מוחלט בחדר:</strong> העישון (כולל סיגריות, נרגילה ואידוי / Vape) מותר אך ורק במרפסות ובחצר הפתוחה. עישון בתוך היחידה אסור בהחלט ויגרור חיוב דמי ניקוי מיוחד ע״ס ₪500.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🔇</span>
+              <div>
+                <strong>שקט, שלווה ואיסור מסיבות:</strong> חל איסור על הכנסת מערכות הגברה, רמקולים ניידים (בוקסות), קריוקי ומסיבות. יש לשמור על שקט מוחלט בין 23:00 ל-07:00 ובין 14:00 ל-16:00.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🥩</span>
+              <div>
+                <strong>הדלקת אש ומנגל (BBQ):</strong> מותרת אך ורק בעמדות המנגל המוסדרות בחצר, ולעולם לא על גבי דק העץ או בתוך המבנה. אין להבעיר אש בשבת.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">👥</span>
+              <div>
+                <strong>אורחים ומבקרים:</strong> השהייה מיועדת אך ורק למספר האורחים הנקוב בהזמנה המאושרת. חל איסור על הכנסת אורחים נוספים או לינה ללא תיאום ואישור מראש.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🛁</span>
+              <div>
+                <strong>בטיחות בג׳קוזי ובריכה:</strong> חובה לוודא שגובה המים מכסה את כל פתחי הסילונים (הג׳טים) לפני הפעלת המתג למניעת שריפת מנוע. חל איסור על כלי זכוכית, שמנים או סבונים במים.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🐾</span>
+              <div>
+                <strong>בעלי חיים וחיות מחמד:</strong> כניסת חיות מחמד אסורה בהחלט, אלא אם תואמה ואושרה מראש ובכתב מול הנהלת הריזורט טרם ההגעה.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="digital-hub">
+          <div class="hub-content">
+            <h3><span>📱</span><span>דף האורח הדיגיטלי והמדריך המלא שלכם</span></h3>
+            <p>
+              סרקו את הקוד עם מצלמת הטלפון לפתיחת פורטל השהייה: ניווט מדויק, המלצות על מסעדות מקומיות וקצביות, מעיינות נסתרים, מדריכי הפעלה ליחידה, וצ׳ק-אאוט דיגיטלי בקליק.
+            </p>
+            <div class="hub-highlights">
+              <span>🍽️ מסעדות מומלצות</span>
+              <span>🌿 מעיינות ואטרקציות</span>
+              <span>📺 מדריך ג׳קוזי ו-TV</span>
+              <span>💬 וואטסאפ שירות מהיר</span>
+            </div>
+          </div>
+          <div class="hub-qr-wrap">
+            <img class="hub-qr" alt="QR Code" src="data:image/png;base64,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" />
+            <div class="qr-caption">סריקה במצלמה</div>
+          </div>
+        </div>
+
+        <footer class="footer">
+          <div class="service-box">
+            <div class="s-label">שירות בשטח וסיוע בצ׳ק-אין (מענה מהיר)</div>
+            <div class="s-phone">054-713-6676</div>
+          </div>
+
+          <div class="checkout-instructions">
+            <div><strong>הנחיות עזיבה:</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div class="customer-care">
+              שירות לקוחות ומשרד: <strong>050-950-6222</strong> (08:00–20:00) · לחיובים, חשבוניות או הארכת שהייה
+            </div>
+          </div>
+        </footer>
+      </div>
+    </article>
+    
+    <article class="sheet">
+      <div class="sheet-inner">
+        <div class="corner-ornament corner-tl"></div>
+        <div class="corner-ornament corner-tr"></div>
+        <div class="corner-ornament corner-bl"></div>
+        <div class="corner-ornament corner-br"></div>
+
+        
+
+        <header class="header">
+          <div class="brand-crown">MIALEES RESORT COLLECTION · קולקציית האירוח מיאליס</div>
+          <h1 class="welcome-title">ברוכים הבאים</h1>
+          <div>
+            <span class="unit-hero-name">סוויטה 1 (הירוקה)</span>
+          </div>
+          <div class="prop-location">מושב נאות גולן, דרום רמת הגולן</div>
+          <div style="font-size: 11px; color: #9E7D3B; font-weight: 700; margin-top: 3px;">
+            אירוח לדוגמה: מתן ושני אלון · זוג + ילד (תאריכים לדוגמה: 2026-12-04 עד 2026-12-06)
+          </div>
+        </header>
+
+        <div class="times-row">
+          <div class="time-card">
+            <div class="time-label">שעת כניסה (צ׳ק-אין)</div>
+            <div class="time-val">15:00</div>
+          </div>
+          <div class="time-card">
+            <div class="time-label">שעת יציאה (צ׳ק-אאוט)</div>
+            <div class="time-val">11:00</div>
+          </div>
+          <div class="time-card">
+            <div class="time-label">יציאה בשבת</div>
+            <div class="time-val saturday">15:00</div>
+          </div>
+        </div>
+
+        <div class="access-grid">
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">🔑</span>
+              <span>כספת מפתח</span>
+            </div>
+            <div class="access-value is-text">הקוד יימסר בהודעה</div>
+            <div class="access-sub">קוד כספת המפתח יישלח ביום ההגעה</div>
+          </div>
+
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">🚪</span>
+              <span>שער כניסה</span>
+            </div>
+            <div class="access-value is-text">השער נפתח רק למספרים שמורים.<br>בהגעה התקשרו לאדם: <strong style="direction:ltr; display:inline-block; font-size:15px; color:#1C1917; font-weight:900;">050-759-7944</strong></div>
+            <div class="access-sub">פתיחת שער המושב עם ההגעה</div>
+          </div>
+
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">📶</span>
+              <span>אינטרנט אלחוטי (Wi-Fi)</span>
+            </div>
+            <div class="wifi-details">
+              <div class="wifi-row">
+                <span class="w-label">רשת:</span>
+                <span class="w-val">CASAMIA</span>
+              </div>
+              <div class="wifi-row">
+                <span class="w-label">סיסמה:</span>
+                <span class="w-val">CASAMIA10</span>
+              </div>
+            </div>
+            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
+          </div>
+        </div>
+
+        <section class="rules-section">
+          <div class="rules-header">
+            <div class="rules-title">
+              <span>📋</span>
+              <span>כללי האירוח והשהייה במתחם — לתשומת לבכם ולמען חופשה נעימה</span>
+            </div>
+            <span class="rules-badge">תקנון המתחם</span>
+          </div>
+
+          <div class="rules-grid">
+            <div class="rule-item">
+              <span class="rule-icon">🚭</span>
+              <div>
+                <strong>איסור עישון מוחלט בחדר:</strong> העישון (כולל סיגריות, נרגילה ואידוי / Vape) מותר אך ורק במרפסות ובחצר הפתוחה. עישון בתוך היחידה אסור בהחלט ויגרור חיוב דמי ניקוי מיוחד ע״ס ₪500.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🔇</span>
+              <div>
+                <strong>שקט, שלווה ואיסור מסיבות:</strong> חל איסור על הכנסת מערכות הגברה, רמקולים ניידים (בוקסות), קריוקי ומסיבות. יש לשמור על שקט מוחלט בין 23:00 ל-07:00 ובין 14:00 ל-16:00.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🥩</span>
+              <div>
+                <strong>הדלקת אש ומנגל (BBQ):</strong> מותרת אך ורק בעמדות המנגל המוסדרות בחצר, ולעולם לא על גבי דק העץ או בתוך המבנה. אין להבעיר אש בשבת.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">👥</span>
+              <div>
+                <strong>אורחים ומבקרים:</strong> השהייה מיועדת אך ורק למספר האורחים הנקוב בהזמנה המאושרת. חל איסור על הכנסת אורחים נוספים או לינה ללא תיאום ואישור מראש.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🛁</span>
+              <div>
+                <strong>בטיחות בג׳קוזי ובריכה:</strong> חובה לוודא שגובה המים מכסה את כל פתחי הסילונים (הג׳טים) לפני הפעלת המתג למניעת שריפת מנוע. חל איסור על כלי זכוכית, שמנים או סבונים במים.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🐾</span>
+              <div>
+                <strong>בעלי חיים וחיות מחמד:</strong> כניסת חיות מחמד אסורה בהחלט, אלא אם תואמה ואושרה מראש ובכתב מול הנהלת הריזורט טרם ההגעה.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="digital-hub">
+          <div class="hub-content">
+            <h3><span>📱</span><span>דף האורח הדיגיטלי והמדריך המלא שלכם</span></h3>
+            <p>
+              סרקו את הקוד עם מצלמת הטלפון לפתיחת פורטל השהייה: ניווט מדויק, המלצות על מסעדות מקומיות וקצביות, מעיינות נסתרים, מדריכי הפעלה ליחידה, וצ׳ק-אאוט דיגיטלי בקליק.
+            </p>
+            <div class="hub-highlights">
+              <span>🍽️ מסעדות מומלצות</span>
+              <span>🌿 מעיינות ואטרקציות</span>
+              <span>📺 מדריך ג׳קוזי ו-TV</span>
+              <span>💬 וואטסאפ שירות מהיר</span>
+            </div>
+          </div>
+          <div class="hub-qr-wrap">
+            <img class="hub-qr" alt="QR Code" src="data:image/png;base64,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" />
+            <div class="qr-caption">סריקה במצלמה</div>
+          </div>
+        </div>
+
+        <footer class="footer">
+          <div class="service-box">
+            <div class="s-label">שירות בשטח וסיוע בצ׳ק-אין (מענה מהיר)</div>
+            <div class="s-phone">050-759-7944</div>
+          </div>
+
+          <div class="checkout-instructions">
+            <div><strong>הנחיות עזיבה:</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div class="customer-care">
+              שירות לקוחות ומשרד: <strong>050-950-6222</strong> (08:00–20:00) · לחיובים, חשבוניות או הארכת שהייה
+            </div>
+          </div>
+        </footer>
+      </div>
+    </article>
+    
+    <article class="sheet">
+      <div class="sheet-inner">
+        <div class="corner-ornament corner-tl"></div>
+        <div class="corner-ornament corner-tr"></div>
+        <div class="corner-ornament corner-bl"></div>
+        <div class="corner-ornament corner-br"></div>
+
+        
+
+        <header class="header">
+          <div class="brand-crown">MIALEES RESORT COLLECTION · קולקציית האירוח מיאליס</div>
+          <h1 class="welcome-title">ברוכים הבאים</h1>
+          <div>
+            <span class="unit-hero-name">כיפת שמיים כחול</span>
+          </div>
+          <div class="prop-location">מושב גבעת יואב, דרום רמת הגולן</div>
+          <div style="font-size: 11px; color: #9E7D3B; font-weight: 700; margin-top: 3px;">
+            אירוח לדוגמה: עידו ועמית רז · זוג (תאריכים לדוגמה: 2026-12-10 עד 2026-12-12)
+          </div>
+        </header>
+
+        <div class="times-row">
+          <div class="time-card">
+            <div class="time-label">שעת כניסה (צ׳ק-אין)</div>
+            <div class="time-val">15:00</div>
+          </div>
+          <div class="time-card">
+            <div class="time-label">שעת יציאה (צ׳ק-אאוט)</div>
+            <div class="time-val">11:00</div>
+          </div>
+          <div class="time-card">
+            <div class="time-label">יציאה בשבת</div>
+            <div class="time-val saturday">15:00</div>
+          </div>
+        </div>
+
+        <div class="access-grid">
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">🔑</span>
+              <span>כספת מפתח</span>
+            </div>
+            <div class="access-value is-text">הקוד יימסר בהודעה</div>
+            <div class="access-sub">קוד כספת המפתח יישלח ביום ההגעה</div>
+          </div>
+
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">🚪</span>
+              <span>שער כניסה</span>
+            </div>
+            <div class="access-value is-text">השער נפתח רק למספרים שמורים.<br>בהגעה התקשרו לאדם: <strong style="direction:ltr; display:inline-block; font-size:15px; color:#1C1917; font-weight:900;">050-759-7944</strong></div>
+            <div class="access-sub">פתיחת שער המושב עם ההגעה</div>
+          </div>
+
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">📶</span>
+              <span>אינטרנט אלחוטי (Wi-Fi)</span>
+            </div>
+            <div class="wifi-details">
+              <div class="wifi-row">
+                <span class="w-label">רשת:</span>
+                <span class="w-val">Kipat_Shamayim</span>
+              </div>
+              <div class="wifi-row">
+                <span class="w-label">סיסמה:</span>
+                <span class="w-val">12345678</span>
+              </div>
+            </div>
+            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
+          </div>
+        </div>
+
+        <section class="rules-section">
+          <div class="rules-header">
+            <div class="rules-title">
+              <span>📋</span>
+              <span>כללי האירוח והשהייה במתחם — לתשומת לבכם ולמען חופשה נעימה</span>
+            </div>
+            <span class="rules-badge">תקנון המתחם</span>
+          </div>
+
+          <div class="rules-grid">
+            <div class="rule-item">
+              <span class="rule-icon">🚭</span>
+              <div>
+                <strong>איסור עישון מוחלט בחדר:</strong> העישון (כולל סיגריות, נרגילה ואידוי / Vape) מותר אך ורק במרפסות ובחצר הפתוחה. עישון בתוך היחידה אסור בהחלט ויגרור חיוב דמי ניקוי מיוחד ע״ס ₪500.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🔇</span>
+              <div>
+                <strong>שקט, שלווה ואיסור מסיבות:</strong> חל איסור על הכנסת מערכות הגברה, רמקולים ניידים (בוקסות), קריוקי ומסיבות. יש לשמור על שקט מוחלט בין 23:00 ל-07:00 ובין 14:00 ל-16:00.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🥩</span>
+              <div>
+                <strong>הדלקת אש ומנגל (BBQ):</strong> מותרת אך ורק בעמדות המנגל המוסדרות בחצר, ולעולם לא על גבי דק העץ או בתוך המבנה. אין להבעיר אש בשבת.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">👥</span>
+              <div>
+                <strong>אורחים ומבקרים:</strong> השהייה מיועדת אך ורק למספר האורחים הנקוב בהזמנה המאושרת. חל איסור על הכנסת אורחים נוספים או לינה ללא תיאום ואישור מראש.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🛁</span>
+              <div>
+                <strong>בטיחות בג׳קוזי ובריכה:</strong> חובה לוודא שגובה המים מכסה את כל פתחי הסילונים (הג׳טים) לפני הפעלת המתג למניעת שריפת מנוע. חל איסור על כלי זכוכית, שמנים או סבונים במים.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🐾</span>
+              <div>
+                <strong>בעלי חיים וחיות מחמד:</strong> כניסת חיות מחמד אסורה בהחלט, אלא אם תואמה ואושרה מראש ובכתב מול הנהלת הריזורט טרם ההגעה.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="digital-hub">
+          <div class="hub-content">
+            <h3><span>📱</span><span>דף האורח הדיגיטלי והמדריך המלא שלכם</span></h3>
+            <p>
+              סרקו את הקוד עם מצלמת הטלפון לפתיחת פורטל השהייה: ניווט מדויק, המלצות על מסעדות מקומיות וקצביות, מעיינות נסתרים, מדריכי הפעלה ליחידה, וצ׳ק-אאוט דיגיטלי בקליק.
+            </p>
+            <div class="hub-highlights">
+              <span>🍽️ מסעדות מומלצות</span>
+              <span>🌿 מעיינות ואטרקציות</span>
+              <span>📺 מדריך ג׳קוזי ו-TV</span>
+              <span>💬 וואטסאפ שירות מהיר</span>
+            </div>
+          </div>
+          <div class="hub-qr-wrap">
+            <img class="hub-qr" alt="QR Code" src="data:image/png;base64,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" />
+            <div class="qr-caption">סריקה במצלמה</div>
+          </div>
+        </div>
+
+        <footer class="footer">
+          <div class="service-box">
+            <div class="s-label">שירות בשטח וסיוע בצ׳ק-אין (מענה מהיר)</div>
+            <div class="s-phone">050-759-7944</div>
+          </div>
+
+          <div class="checkout-instructions">
+            <div><strong>הנחיות עזיבה:</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div class="customer-care">
+              שירות לקוחות ומשרד: <strong>050-950-6222</strong> (08:00–20:00) · לחיובים, חשבוניות או הארכת שהייה
+            </div>
+          </div>
+        </footer>
+      </div>
+    </article>
+    
+    <article class="sheet">
+      <div class="sheet-inner">
+        <div class="corner-ornament corner-tl"></div>
+        <div class="corner-ornament corner-tr"></div>
+        <div class="corner-ornament corner-bl"></div>
+        <div class="corner-ornament corner-br"></div>
+
+        
+
+        <header class="header">
+          <div class="brand-crown">MIALEES RESORT COLLECTION · קולקציית האירוח מיאליס</div>
+          <h1 class="welcome-title">ברוכים הבאים</h1>
+          <div>
+            <span class="unit-hero-name">צימר בגבעה 1</span>
+          </div>
+          <div class="prop-location">מושב גבעת יואב, דרום רמת הגולן</div>
+          <div style="font-size: 11px; color: #9E7D3B; font-weight: 700; margin-top: 3px;">
+            אירוח לדוגמה: אסף ודנה גולן · זוג + 2 ילדים (תאריכים לדוגמה: 2026-12-11 עד 2026-12-13)
+          </div>
+        </header>
+
+        <div class="times-row">
+          <div class="time-card">
+            <div class="time-label">שעת כניסה (צ׳ק-אין)</div>
+            <div class="time-val">15:00</div>
+          </div>
+          <div class="time-card">
+            <div class="time-label">שעת יציאה (צ׳ק-אאוט)</div>
+            <div class="time-val">11:00</div>
+          </div>
+          <div class="time-card">
+            <div class="time-label">יציאה בשבת</div>
+            <div class="time-val saturday">15:00</div>
+          </div>
+        </div>
+
+        <div class="access-grid">
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">🔑</span>
+              <span>כספת מפתח</span>
+            </div>
+            <div class="access-value is-text">הקוד יימסר בהודעה</div>
+            <div class="access-sub">קוד כספת המפתח יישלח ביום ההגעה</div>
+          </div>
+
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">🚪</span>
+              <span>שער כניסה</span>
+            </div>
+            <div class="access-value is-text">השער נפתח רק למספרים שמורים.<br>בהגעה התקשרו לאדם: <strong style="direction:ltr; display:inline-block; font-size:15px; color:#1C1917; font-weight:900;">050-759-7944</strong></div>
+            <div class="access-sub">פתיחת שער המושב עם ההגעה</div>
+          </div>
+
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">📶</span>
+              <span>אינטרנט אלחוטי (Wi-Fi)</span>
+            </div>
+            <div class="wifi-details">
+              <div class="wifi-row">
+                <span class="w-label">רשת:</span>
+                <span class="w-val">Zimer_Giva</span>
+              </div>
+              <div class="wifi-row">
+                <span class="w-label">סיסמה:</span>
+                <span class="w-val">12345678</span>
+              </div>
+            </div>
+            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
+          </div>
+        </div>
+
+        <section class="rules-section">
+          <div class="rules-header">
+            <div class="rules-title">
+              <span>📋</span>
+              <span>כללי האירוח והשהייה במתחם — לתשומת לבכם ולמען חופשה נעימה</span>
+            </div>
+            <span class="rules-badge">תקנון המתחם</span>
+          </div>
+
+          <div class="rules-grid">
+            <div class="rule-item">
+              <span class="rule-icon">🚭</span>
+              <div>
+                <strong>איסור עישון מוחלט בחדר:</strong> העישון (כולל סיגריות, נרגילה ואידוי / Vape) מותר אך ורק במרפסות ובחצר הפתוחה. עישון בתוך היחידה אסור בהחלט ויגרור חיוב דמי ניקוי מיוחד ע״ס ₪500.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🔇</span>
+              <div>
+                <strong>שקט, שלווה ואיסור מסיבות:</strong> חל איסור על הכנסת מערכות הגברה, רמקולים ניידים (בוקסות), קריוקי ומסיבות. יש לשמור על שקט מוחלט בין 23:00 ל-07:00 ובין 14:00 ל-16:00.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🥩</span>
+              <div>
+                <strong>הדלקת אש ומנגל (BBQ):</strong> מותרת אך ורק בעמדות המנגל המוסדרות בחצר, ולעולם לא על גבי דק העץ או בתוך המבנה. אין להבעיר אש בשבת.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">👥</span>
+              <div>
+                <strong>אורחים ומבקרים:</strong> השהייה מיועדת אך ורק למספר האורחים הנקוב בהזמנה המאושרת. חל איסור על הכנסת אורחים נוספים או לינה ללא תיאום ואישור מראש.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🛁</span>
+              <div>
+                <strong>בטיחות בג׳קוזי ובריכה:</strong> חובה לוודא שגובה המים מכסה את כל פתחי הסילונים (הג׳טים) לפני הפעלת המתג למניעת שריפת מנוע. חל איסור על כלי זכוכית, שמנים או סבונים במים.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🐾</span>
+              <div>
+                <strong>בעלי חיים וחיות מחמד:</strong> כניסת חיות מחמד אסורה בהחלט, אלא אם תואמה ואושרה מראש ובכתב מול הנהלת הריזורט טרם ההגעה.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="digital-hub">
+          <div class="hub-content">
+            <h3><span>📱</span><span>דף האורח הדיגיטלי והמדריך המלא שלכם</span></h3>
+            <p>
+              סרקו את הקוד עם מצלמת הטלפון לפתיחת פורטל השהייה: ניווט מדויק, המלצות על מסעדות מקומיות וקצביות, מעיינות נסתרים, מדריכי הפעלה ליחידה, וצ׳ק-אאוט דיגיטלי בקליק.
+            </p>
+            <div class="hub-highlights">
+              <span>🍽️ מסעדות מומלצות</span>
+              <span>🌿 מעיינות ואטרקציות</span>
+              <span>📺 מדריך ג׳קוזי ו-TV</span>
+              <span>💬 וואטסאפ שירות מהיר</span>
+            </div>
+          </div>
+          <div class="hub-qr-wrap">
+            <img class="hub-qr" alt="QR Code" src="data:image/png;base64,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" />
+            <div class="qr-caption">סריקה במצלמה</div>
+          </div>
+        </div>
+
+        <footer class="footer">
+          <div class="service-box">
+            <div class="s-label">שירות בשטח וסיוע בצ׳ק-אין (מענה מהיר)</div>
+            <div class="s-phone">050-759-7944</div>
+          </div>
+
+          <div class="checkout-instructions">
+            <div><strong>הנחיות עזיבה:</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div class="customer-care">
+              שירות לקוחות ומשרד: <strong>050-950-6222</strong> (08:00–20:00) · לחיובים, חשבוניות או הארכת שהייה
+            </div>
+          </div>
+        </footer>
+      </div>
+    </article>
+    
+    <article class="sheet">
+      <div class="sheet-inner">
+        <div class="corner-ornament corner-tl"></div>
+        <div class="corner-ornament corner-tr"></div>
+        <div class="corner-ornament corner-bl"></div>
+        <div class="corner-ornament corner-br"></div>
+
+        
+        <div class="shabbat-alert-banner">
+          <span class="shabbat-alert-icon">🕯️</span>
+          <div class="shabbat-alert-content">
+            <strong>הודעת שבת חשובה — קאסה נובה (מושב דתי):</strong>
+            השער נסגר אוטומטית בכניסת שבת (<span>17:35</span>). בימי שישי חובה להגיע לפני שעה זו! אחרי השעה הזו לא ניתן להיכנס עם רכב למושב עד צאת שבת.
+          </div>
+        </div>
+        
+
+        <header class="header">
+          <div class="brand-crown">MIALEES RESORT COLLECTION · קולקציית האירוח מיאליס</div>
+          <h1 class="welcome-title">ברוכים הבאים</h1>
+          <div>
+            <span class="unit-hero-name">קאסה נובה · Aura</span>
+          </div>
+          <div class="prop-location">מושב נוב, דרום רמת הגולן</div>
+          <div style="font-size: 11px; color: #9E7D3B; font-weight: 700; margin-top: 3px;">
+            אירוח לדוגמה: בנימין ורבקה שוורץ · זוג שומרי שבת (תאריכים לדוגמה: 2026-12-18 עד 2026-12-20)
+          </div>
+        </header>
+
+        <div class="times-row">
+          <div class="time-card">
+            <div class="time-label">שעת כניסה (צ׳ק-אין)</div>
+            <div class="time-val">15:00</div>
+          </div>
+          <div class="time-card">
+            <div class="time-label">שעת יציאה (צ׳ק-אאוט)</div>
+            <div class="time-val">11:00</div>
+          </div>
+          <div class="time-card">
+            <div class="time-label">יציאה בשבת</div>
+            <div class="time-val saturday">צאת השבת</div>
+          </div>
+        </div>
+
+        <div class="access-grid">
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">🔑</span>
+              <span>כספת מפתח</span>
+            </div>
+            <div class="access-value is-text">הקוד יימסר בהודעה</div>
+            <div class="access-sub">קוד כספת המפתח יישלח ביום ההגעה</div>
+          </div>
+
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">🚪</span>
+              <span>שער כניסה (מושב דתי)</span>
+            </div>
+            <div class="access-value is-text">השער נסגר אוטומטית בכניסת שבת (17:35). בימי שישי הגיעו לפני שעה זו. אין כניסת רכב עד צאת שבת.</div>
+            <div class="access-sub">קאסה נובה במושב דתי שומר שבת</div>
+          </div>
+
+          <div class="access-card">
+            <div class="access-header">
+              <span class="access-icon">📶</span>
+              <span>אינטרנט אלחוטי (Wi-Fi)</span>
+            </div>
+            <div class="wifi-details">
+              <div class="wifi-row">
+                <span class="w-label">רשת:</span>
+                <span class="w-val">MIALEES</span>
+              </div>
+              <div class="wifi-row">
+                <span class="w-label">סיסמה:</span>
+                <span class="w-val">AD654321</span>
+              </div>
+            </div>
+            <div class="access-sub">חיבור חופשי לאורחי המתחם</div>
+          </div>
+        </div>
+
+        <section class="rules-section">
+          <div class="rules-header">
+            <div class="rules-title">
+              <span>📋</span>
+              <span>כללי האירוח והשהייה במתחם — לתשומת לבכם ולמען חופשה נעימה</span>
+            </div>
+            <span class="rules-badge">תקנון המתחם</span>
+          </div>
+
+          <div class="rules-grid">
+            <div class="rule-item">
+              <span class="rule-icon">🚭</span>
+              <div>
+                <strong>איסור עישון מוחלט בחדר:</strong> העישון (כולל סיגריות, נרגילה ואידוי / Vape) מותר אך ורק במרפסות ובחצר הפתוחה. עישון בתוך היחידה אסור בהחלט ויגרור חיוב דמי ניקוי מיוחד ע״ס ₪500.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🔇</span>
+              <div>
+                <strong>שקט, שלווה ואיסור מסיבות:</strong> חל איסור על הכנסת מערכות הגברה, רמקולים ניידים (בוקסות), קריוקי ומסיבות. יש לשמור על שקט מוחלט בין 23:00 ל-07:00 ובין 14:00 ל-16:00.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🥩</span>
+              <div>
+                <strong>הדלקת אש ומנגל (BBQ):</strong> מותרת אך ורק בעמדות המנגל המוסדרות בחצר, ולעולם לא על גבי דק העץ או בתוך המבנה. אין להבעיר אש בשבת.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">👥</span>
+              <div>
+                <strong>אורחים ומבקרים:</strong> השהייה מיועדת אך ורק למספר האורחים הנקוב בהזמנה המאושרת. חל איסור על הכנסת אורחים נוספים או לינה ללא תיאום ואישור מראש.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🛁</span>
+              <div>
+                <strong>בטיחות בג׳קוזי ובריכה:</strong> חובה לוודא שגובה המים מכסה את כל פתחי הסילונים (הג׳טים) לפני הפעלת המתג למניעת שריפת מנוע. חל איסור על כלי זכוכית, שמנים או סבונים במים.
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <span class="rule-icon">🐾</span>
+              <div>
+                <strong>בעלי חיים וחיות מחמד:</strong> כניסת חיות מחמד אסורה בהחלט, אלא אם תואמה ואושרה מראש ובכתב מול הנהלת הריזורט טרם ההגעה.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="digital-hub">
+          <div class="hub-content">
+            <h3><span>📱</span><span>דף האורח הדיגיטלי והמדריך המלא שלכם</span></h3>
+            <p>
+              סרקו את הקוד עם מצלמת הטלפון לפתיחת פורטל השהייה: ניווט מדויק, המלצות על מסעדות מקומיות וקצביות, מעיינות נסתרים, מדריכי הפעלה ליחידה, וצ׳ק-אאוט דיגיטלי בקליק.
+            </p>
+            <div class="hub-highlights">
+              <span>🍽️ מסעדות מומלצות</span>
+              <span>🌿 מעיינות ואטרקציות</span>
+              <span>📺 מדריך ג׳קוזי ו-TV</span>
+              <span>💬 וואטסאפ שירות מהיר</span>
+            </div>
+          </div>
+          <div class="hub-qr-wrap">
+            <img class="hub-qr" alt="QR Code" src="data:image/png;base64,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" />
+            <div class="qr-caption">סריקה במצלמה</div>
+          </div>
+        </div>
+
+        <footer class="footer">
+          <div class="service-box">
+            <div class="s-label">שירות בשטח וסיוע בצ׳ק-אין (מענה מהיר)</div>
+            <div class="s-phone">050-759-7944</div>
+          </div>
+
+          <div class="checkout-instructions">
+            <div><strong>הנחיות עזיבה:</strong> ביציאה מחזירים את המפתח לכספת ונועלים אותה. צ׳ק-אאוט עצמי בלחיצה אחת דרך הקישור בטלפון החל מ-08:00 בבוקר.</div>
+            <div class="customer-care">
+              שירות לקוחות ומשרד: <strong>050-950-6222</strong> (08:00–20:00) · לחיובים, חשבוניות או הארכת שהייה
+            </div>
+          </div>
+        </footer>
+      </div>
+    </article>
+    
+  </div>
+</body>
+</html>

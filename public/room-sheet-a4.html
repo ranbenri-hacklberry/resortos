@@ -22,6 +22,9 @@
       --alert-bg: #FEF2F2;
       --alert-border: #FCA5A5;
       --alert-text: #991B1B;
+      --shabbat-bg: #FFF7ED;
+      --shabbat-border: #EA580C;
+      --shabbat-text: #7C2D12;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -115,18 +118,21 @@
       position: relative;
       width: 210mm;
       height: 297mm;
+      max-height: 297mm;
       background: var(--bg-sheet);
       color: var(--ink-primary);
-      padding: 10mm;
+      padding: 8mm 9mm 6mm;
       overflow: hidden;
       box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
 
     /* Inner Frame & Double Border */
     .sheet-inner {
       height: 100%;
       border: 2px solid var(--ink-primary);
-      padding: 8mm 9mm 6mm;
+      padding: 6mm 7.5mm 4.5mm;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
@@ -135,10 +141,10 @@
     .sheet-inner::before {
       content: "";
       position: absolute;
-      top: 2.5mm;
-      left: 2.5mm;
-      right: 2.5mm;
-      bottom: 2.5mm;
+      top: 2.2mm;
+      left: 2.2mm;
+      right: 2.2mm;
+      bottom: 2.2mm;
       border: 0.8px solid var(--gold-primary);
       pointer-events: none;
     }
@@ -156,10 +162,35 @@
     .corner-bl { bottom: 3.5mm; right: 3.5mm; border-bottom: 2px solid var(--gold-primary); border-right: 2px solid var(--gold-primary); }
     .corner-br { bottom: 3.5mm; left: 3.5mm; border-bottom: 2px solid var(--gold-primary); border-left: 2px solid var(--gold-primary); }
 
+    /* ---- SHABBAT BANNER (CASA NOVA FRIDAY) ---- */
+    .shabbat-alert-banner {
+      background: var(--shabbat-bg);
+      border: 1.5px solid var(--shabbat-border);
+      border-radius: 8px;
+      padding: 6px 12px;
+      margin-bottom: 2.5mm;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--shabbat-text);
+      font-size: 11.5px;
+      line-height: 1.35;
+      box-shadow: 0 1px 4px rgba(234, 88, 12, 0.12);
+    }
+    .shabbat-alert-banner strong {
+      color: #7C2D12;
+      font-size: 12.5px;
+      display: inline;
+    }
+    .shabbat-alert-icon {
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+
     /* ---- HEADER ---- */
     .header {
       text-align: center;
-      padding-bottom: 3.5mm;
+      padding-bottom: 2.5mm;
       border-bottom: 1.5px solid var(--ink-primary);
       position: relative;
     }
@@ -182,12 +213,12 @@
     }
     .welcome-title {
       font-family: 'Frank Ruhl Libre', 'David Libre', serif;
-      font-size: 34px;
+      font-size: 32px;
       font-weight: 900;
       color: var(--ink-primary);
       letter-spacing: -0.02em;
       line-height: 1.1;
-      margin: 2px 0;
+      margin: 1px 0;
     }
     .unit-hero-name {
       font-size: 20px;
@@ -203,7 +234,7 @@
     .prop-location {
       font-size: 12px;
       color: var(--ink-muted);
-      margin-top: 3px;
+      margin-top: 2px;
       font-weight: 600;
     }
 
@@ -211,87 +242,100 @@
     .times-row {
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
-      gap: 4mm;
-      margin: 3.5mm 0;
+      gap: 3mm;
+      margin: 2.5mm 0;
       text-align: center;
     }
     .time-card {
       background: #FFFFFF;
       border: 1px solid var(--border-fine);
       border-radius: 6px;
-      padding: 3mm 2mm;
+      padding: 2.5mm 2mm;
       box-shadow: 0 1px 4px rgba(0,0,0,0.02);
     }
     .time-label {
-      font-size: 11px;
+      font-size: 10.5px;
       font-weight: 700;
       color: var(--ink-muted);
       text-transform: uppercase;
       letter-spacing: 0.04em;
-      margin-bottom: 2px;
+      margin-bottom: 1px;
     }
     .time-val {
-      font-size: 22px;
+      font-size: 20px;
       font-weight: 900;
       color: var(--ink-primary);
       line-height: 1.1;
       font-family: 'Assistant', sans-serif;
     }
     .time-val.saturday {
-      font-size: 18px;
+      font-size: 17px;
       color: var(--gold-deep);
     }
 
     /* ---- ACCESS & CODES GRID ---- */
     .access-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr 1.35fr;
-      gap: 3.5mm;
-      margin-bottom: 3.5mm;
+      grid-template-columns: 1fr 1.15fr 1.25fr;
+      gap: 3mm;
+      margin-bottom: 2.5mm;
     }
     .access-card {
       background: #FFFFFF;
       border: 1px solid var(--border-fine);
       border-top: 3px solid var(--gold-primary);
       border-radius: 6px;
-      padding: 3mm 3.5mm;
+      padding: 2.5mm 3mm;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
+      min-height: 28mm;
     }
     .access-header {
       display: flex;
       align-items: center;
       gap: 5px;
-      font-size: 11.5px;
+      font-size: 11px;
       font-weight: 700;
       color: var(--ink-secondary);
       margin-bottom: 2px;
     }
     .access-icon {
-      font-size: 13px;
+      font-size: 12.5px;
     }
     .access-value {
       font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-      font-size: 24px;
+      font-size: 22px;
       font-weight: 900;
       color: var(--ink-primary);
       direction: ltr;
       text-align: center;
       letter-spacing: 0.08em;
       line-height: 1.15;
-      padding: 2px 0;
+      padding: 1px 0;
+    }
+    .access-value.is-text {
+      font-family: 'Assistant', sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+      direction: rtl;
+      letter-spacing: normal;
+      line-height: 1.35;
+      color: var(--ink-primary);
+      text-align: center;
+      padding: 0;
     }
     .access-sub {
-      font-size: 10px;
+      font-size: 9.5px;
       color: var(--ink-muted);
       text-align: center;
       line-height: 1.25;
+      margin-top: 1px;
     }
     .wifi-details {
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      gap: 2.5px;
       direction: ltr;
       text-align: left;
     }
@@ -299,12 +343,12 @@
       display: flex;
       justify-content: space-between;
       align-items: baseline;
-      font-size: 11.5px;
+      font-size: 11px;
       border-bottom: 1px dotted #EAE2D2;
-      padding-bottom: 2px;
+      padding-bottom: 1px;
     }
     .wifi-row .w-label {
-      font-size: 10px;
+      font-size: 9.5px;
       color: var(--ink-muted);
       direction: rtl;
     }
@@ -312,60 +356,61 @@
       font-family: ui-monospace, Menlo, monospace;
       font-weight: 800;
       color: var(--ink-primary);
-      font-size: 13px;
+      font-size: 12px;
     }
 
-    /* ---- HOUSE RULES & REGULATIONS BOX (NEW!) ---- */
+    /* ---- HOUSE RULES & REGULATIONS BOX ---- */
     .rules-section {
       background: #FFFDF9;
       border: 1.5px solid var(--gold-primary);
       border-radius: 8px;
-      padding: 4mm 5mm 3.5mm;
+      padding: 3mm 4.5mm 2.5mm;
       box-shadow: 0 2px 8px rgba(197, 160, 89, 0.08);
-      margin-bottom: 3.5mm;
+      margin-bottom: 2.5mm;
     }
     .rules-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
       border-bottom: 1px solid rgba(197, 160, 89, 0.35);
-      padding-bottom: 2.5mm;
-      margin-bottom: 3mm;
+      padding-bottom: 2mm;
+      margin-bottom: 2.5mm;
     }
     .rules-title {
       display: flex;
       align-items: center;
-      gap: 7px;
-      font-size: 14px;
+      gap: 6px;
+      font-size: 13px;
       font-weight: 900;
       color: var(--ink-primary);
     }
     .rules-badge {
-      font-size: 10px;
+      font-size: 9.5px;
       font-weight: 800;
-      padding: 2px 8px;
+      padding: 1.5px 7px;
       border-radius: 4px;
       background: var(--alert-bg);
       border: 1px solid var(--alert-border);
       color: var(--alert-text);
-      letter-spacing: 0.02em;
+      letter-spacing: 0.04em;
     }
+
     .rules-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 2.8mm 5mm;
+      gap: 2mm 5mm;
     }
     .rule-item {
       display: flex;
       align-items: flex-start;
       gap: 6px;
-      font-size: 11px;
-      line-height: 1.38;
+      font-size: 10.2px;
+      line-height: 1.35;
       color: var(--ink-secondary);
     }
     .rule-icon {
-      font-size: 14px;
-      line-height: 1;
+      font-size: 13px;
+      line-height: 1.1;
       flex-shrink: 0;
       margin-top: 1px;
     }
@@ -376,19 +421,19 @@
 
     /* ---- DIGITAL GUEST HUB & QR ---- */
     .digital-hub {
-      background: #FFFFFF;
-      border: 1px solid var(--border-fine);
+      background: var(--gold-light);
+      border: 1.5px solid var(--gold-primary);
       border-radius: 8px;
-      padding: 3mm 4mm;
+      padding: 3mm 4.5mm;
       display: grid;
       grid-template-columns: 1fr auto;
-      gap: 4mm;
       align-items: center;
-      margin-bottom: 3.5mm;
+      gap: 4.5mm;
+      margin-bottom: 2.5mm;
     }
     .hub-content h3 {
       font-size: 13.5px;
-      font-weight: 800;
+      font-weight: 900;
       color: var(--ink-primary);
       margin-bottom: 2px;
       display: flex;
@@ -396,146 +441,145 @@
       gap: 6px;
     }
     .hub-content p {
-      font-size: 11px;
-      color: var(--ink-secondary);
+      font-size: 10.2px;
       line-height: 1.35;
-      margin-bottom: 4px;
+      color: var(--ink-secondary);
+      margin-bottom: 3px;
     }
     .hub-highlights {
       display: flex;
       flex-wrap: wrap;
-      gap: 4px 10px;
-      font-size: 10.5px;
+      gap: 3px 8px;
+      font-size: 9.8px;
       font-weight: 700;
       color: var(--gold-deep);
     }
     .hub-highlights span {
-      display: inline-flex;
-      align-items: center;
-      gap: 3px;
+      background: rgba(197, 160, 89, 0.16);
+      padding: 1px 6px;
+      border-radius: 3px;
     }
     .hub-qr-wrap {
       text-align: center;
-      padding: 2px 4px;
+      background: #FFFFFF;
+      padding: 2.5mm;
+      border: 1px solid var(--gold-primary);
+      border-radius: 6px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
     }
     .hub-qr {
-      width: 22mm;
-      height: 22mm;
+      width: 25mm;
+      height: 25mm;
       display: block;
-      margin: 0 auto;
-      border: 1px solid #D1C8B4;
-      border-radius: 4px;
-      padding: 1.5px;
-      background: #FFF;
+      image-rendering: pixelated;
     }
     .qr-caption {
-      font-size: 9px;
-      font-weight: 700;
-      color: var(--ink-muted);
+      font-size: 8.5px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      color: var(--ink-primary);
       margin-top: 2px;
+      text-transform: uppercase;
     }
 
     /* ---- FOOTER & SERVICE CONTACT ---- */
     .footer {
       border-top: 1.5px solid var(--ink-primary);
-      padding-top: 3mm;
-      display: grid;
-      grid-template-columns: 1.2fr 1fr;
-      gap: 4mm;
+      padding-top: 2.5mm;
+      display: flex;
+      justify-content: space-between;
       align-items: center;
+      gap: 4mm;
     }
     .service-box {
-      background: var(--gold-light);
-      border: 1px solid rgba(197, 160, 89, 0.4);
+      background: #FFFFFF;
+      border: 1px solid var(--border-fine);
       border-radius: 6px;
-      padding: 2.5mm 3.5mm;
+      padding: 2mm 3.5mm;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
     }
-    .service-box .s-label {
-      font-size: 10px;
-      font-weight: 800;
-      color: var(--gold-deep);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      margin-bottom: 1px;
+    .s-label {
+      font-size: 9.5px;
+      font-weight: 700;
+      color: var(--ink-muted);
     }
-    .service-box .s-phone {
-      font-size: 19px;
+    .s-phone {
+      font-size: 14.5px;
       font-weight: 900;
-      color: var(--ink-primary);
+      color: var(--gold-deep);
       direction: ltr;
       text-align: right;
-      letter-spacing: 0.03em;
-      font-family: 'Assistant', sans-serif;
+      letter-spacing: 0.04em;
     }
     .checkout-instructions {
-      font-size: 10.5px;
-      color: var(--ink-secondary);
+      font-size: 9.8px;
+      color: var(--ink-muted);
       line-height: 1.35;
       text-align: left;
       direction: rtl;
     }
     .checkout-instructions strong {
       color: var(--ink-primary);
-      font-weight: 800;
     }
-    .customer-care {
-      font-size: 9.5px;
-      color: var(--ink-muted);
-      margin-top: 2px;
-    }
-
-    /* ---- PRINT RULES (SINGLE A4 PAGE ENFORCED) ---- */
-    @page {
-      size: A4 portrait;
-      margin: 0;
+    .checkout-instructions .customer-care {
+      margin-top: 1px;
+      font-size: 9.2px;
+      color: var(--ink-secondary);
     }
 
+    /* ---- PRINT RULES (SINGLE A4 PER PAGE STRICT) ---- */
     @media print {
+      @page {
+        size: A4 portrait;
+        margin: 0;
+      }
       html, body {
         background: #FFFFFF !important;
         margin: 0 !important;
         padding: 0 !important;
-        width: 210mm !important;
-        height: 297mm !important;
-        overflow: hidden !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
-      .toolbar { display: none !important; }
+      .toolbar {
+        display: none !important;
+      }
       .sheet-wrapper {
         margin: 0 !important;
         padding: 0 !important;
-        page-break-after: avoid !important;
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
+        display: block !important;
       }
       .sheet {
         width: 210mm !important;
         height: 297mm !important;
+        max-height: 297mm !important;
         margin: 0 !important;
-        padding: 8mm !important;
         box-shadow: none !important;
-        background: #FFFDF9 !important;
         page-break-after: always !important;
+        break-after: page !important;
         page-break-inside: avoid !important;
         break-inside: avoid !important;
+        overflow: hidden !important;
       }
       .sheet:last-of-type {
-        page-break-after: avoid !important;
-      }
-      * {
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-        color-adjust: exact !important;
+        page-break-after: auto !important;
+        break-after: auto !important;
       }
     }
   </style>
 </head>
 <body>
 
-  <!-- ADMIN / STAFF TOOLBAR -->
-  <div class="toolbar">
+  <!-- TOP TOOLBAR -->
+  <div class="toolbar" id="toolbar">
     <div class="toolbar-group">
-      <label for="unit-select">בחר יחידה להדפסה:</label>
+      <label for="unit-select">בחר יחידה לתצוגה:</label>
       <select id="unit-select"></select>
+      <label style="margin-right: 14px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; font-weight: 700; color: #9A3412;">
+        <input type="checkbox" id="friday-toggle" style="cursor: pointer; width: 16px; height: 16px;">
+        <span>🕯️ תצוגת יום שישי (הודעת שבת לקאסה נובה)</span>
+      </label>
     </div>
     <div class="toolbar-group">
       <button type="button" class="btn btn-gold" onclick="window.print()">🖨️ הדפס דף זה (A4)</button>
@@ -557,12 +601,21 @@
         <div class="corner-ornament corner-bl"></div>
         <div class="corner-ornament corner-br"></div>
 
+        <!-- SHABBAT BANNER (FOR CASA NOVA ON FRIDAYS) -->
+        <div class="shabbat-alert-banner" id="shabbat-alert-banner" style="display: none;">
+          <span class="shabbat-alert-icon">🕯️</span>
+          <div class="shabbat-alert-content">
+            <strong>הודעת שבת חשובה — קאסה נובה (מושב דתי):</strong>
+            השער נסגר אוטומטית בכניסת שבת (<span id="shabbat-time-val">17:35</span>). בימי שישי חובה להגיע לפני שעה זו! אחרי השעה הזו לא ניתן להיכנס עם רכב למושב עד צאת שבת.
+          </div>
+        </div>
+
         <!-- HEADER -->
         <header class="header">
           <div class="brand-crown">MIALEES RESORT COLLECTION · קולקציית האירוח מיאליס</div>
           <h1 class="welcome-title">ברוכים הבאים</h1>
           <div>
-            <span class="unit-hero-name" id="hero-unit-name">טוסקנה · שאטו</span>
+            <span class="unit-hero-name" id="hero-unit-name">טוסקנה · 1</span>
           </div>
           <div class="prop-location" id="prop-location">מושב רמות, רמת הגולן</div>
         </header>
@@ -591,18 +644,18 @@
               <span class="access-icon">🔑</span>
               <span>כספת מפתח</span>
             </div>
-            <div class="access-value" id="lockbox-val">2730</div>
-            <div class="access-sub">קוד פתיחה ונעילת מפתח היחידה</div>
+            <div class="access-value" id="lockbox-val">2710</div>
+            <div class="access-sub" id="lockbox-sub">קוד פתיחה ונעילת מפתח היחידה</div>
           </div>
 
           <!-- Village Gate Code -->
           <div class="access-card" id="gate-card">
             <div class="access-header">
               <span class="access-icon">🚪</span>
-              <span>שער כניסה</span>
+              <span id="gate-header-text">שער כניסה</span>
             </div>
             <div class="access-value" id="gate-val">#2464</div>
-            <div class="access-sub" id="gate-sub">חיוג או הקשת קוד בשער</div>
+            <div class="access-sub" id="gate-sub">קוד שער מושב רמות</div>
           </div>
 
           <!-- Wi-Fi -->
@@ -625,7 +678,7 @@
           </div>
         </div>
 
-        <!-- HOUSE RULES & PROHIBITIONS (NEW) -->
+        <!-- HOUSE RULES & PROHIBITIONS -->
         <section class="rules-section">
           <div class="rules-header">
             <div class="rules-title">
@@ -685,7 +738,7 @@
           <div class="hub-content">
             <h3><span>📱</span><span>דף האורח הדיגיטלי והמדריך המלא שלכם</span></h3>
             <p>
-              סרקו את הקוד עם מצלמת הטלפון כדי לפתוח את פורטל השהייה: ניווט מדויק, המלצות על מסעדות מקומיות וקצביות, מעיינות נסתרים, מדריכי הפעלה ליחידה, וצ׳ק-אאוט דיגיטלי בקליק.
+              סרקו את הקוד עם מצלמת הטלפון לפתיחת פורטל השהייה: ניווט מדויק, המלצות על מסעדות מקומיות וקצביות, מעיינות נסתרים, מדריכי הפעלה ליחידה, וצ׳ק-אאוט דיגיטלי בקליק.
             </p>
             <div class="hub-highlights">
               <span>🍽️ מסעדות מומלצות</span>
@@ -695,7 +748,7 @@
             </div>
           </div>
           <div class="hub-qr-wrap">
-            <img id="hub-qr-img" class="hub-qr" alt="QR Code" src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https%3A%2F%2Fresortos.app%2Fguest&color=1C1917" />
+            <img id="hub-qr-img" class="hub-qr" alt="QR Code" src="" />
             <div class="qr-caption">סריקה במצלמה</div>
           </div>
         </div>
@@ -719,15 +772,15 @@
   </div>
 
   <script>
+    const SHABBAT_ENTRY_TIME = '17:35';
     const UNITS = [
   {
     "id": "k671",
     "property": "בתי נורית",
     "cabin": "בתי נורית 1",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2310",
-    "gate": "#2464",
     "ssid": "MIALEES RESORT",
     "pass": "MIAL2026",
     "qr": "data:image/png;base64,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"
@@ -737,9 +790,8 @@
     "property": "בתי נורית",
     "cabin": "בתי נורית 2",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2320",
-    "gate": "#2464",
     "ssid": "MIALEES RESORT",
     "pass": "MIAL2026",
     "qr": "data:image/png;base64,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"
@@ -749,9 +801,8 @@
     "property": "בתי נורית",
     "cabin": "בתי נורית 3",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2330",
-    "gate": "#2464",
     "ssid": "MIALEES RESORT",
     "pass": "MIAL2026",
     "qr": "data:image/png;base64,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"
@@ -761,9 +812,8 @@
     "property": "בתי נורית",
     "cabin": "בתי נורית 4",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2340",
-    "gate": "#2464",
     "ssid": "MIALEES RESORT",
     "pass": "MIAL2026",
     "qr": "data:image/png;base64,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"
@@ -773,9 +823,8 @@
     "property": "בתי נורית",
     "cabin": "בתי נורית 5",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2350",
-    "gate": "#2464",
     "ssid": "MIALEES RESORT",
     "pass": "MIAL2026",
     "qr": "data:image/png;base64,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"
@@ -785,9 +834,8 @@
     "property": "בתי נורית",
     "cabin": "בתי נורית 6",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2360",
-    "gate": "#2464",
     "ssid": "MIALEES RESORT",
     "pass": "MIAL2026",
     "qr": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAADwCAYAAAA+VemSAAAAAklEQVR4AewaftIAAAfWSURBVO3BUaocUa5FwW1RgxACzX9gAqFZ+Pn/dR5DJtl15V4Rv37/IQArmQCsZQKwlgnAWiYAa5kArGUCsJYJwFof/UWG619UPXoiw3VSPborw/WW6tFJhuukenRXhuukevREhutfVD26YgKwlgnAWiYAa5kArGUCsJYJwFomAGt99FD16KfKcN2V4Xoiw3WlenRSPXoiw3Ulw/VEhustGa6T6tFd1aOfKsN1lwnAWiYAa5kArGUCsJYJwFomAGuZAKz10csyXG+pHr2levRTZbjuqh59S4brpHr0LRmut1SP3mICsJYJwFomAGuZAKxlArCWCcBaH+EVGa4r1aNvyXCdVI+eyHDhv8cEYC0TgLVMANYyAVjLBGAtE4C1TADW+gj/UYbrierRlQzXE9WjkwzXXRmuk+oRfg4TgLVMANYyAVjLBGAtE4C1TADWMgFY66OXVY82qh6dZLhOMlxvyXCdVI/ekuF6S4brpHr0lurRRiYAa5kArGUCsJYJwFomAGuZAKxlArDWRw9luP5FGa6T6tFJhutK9egkw3VSPTrJcF2pHp1kuE6qRycZrivVo5MM11syXP8iE4C1TADWMgFYywRgLROAtUwA1vroL6pH/4uqRycZrm/JcH1Lhuunqh79rzEBWMsEYC0TgLVMANYyAVjLBGAtE4C1PvqLDNdJ9egkw3WlenSS4TqpHp1kuK5Uj95UPbqS4XqienSS4bqS4XpT9ehKhuunynCdVI/uynCdVI/uMgFYywRgLROAtUwA1jIBWMsEYC0TgLV+/f5DL8pwXakefUuG64nq0UmG60r16CTDdVI9Oslw3VU9Oslw3VU9elOG60r16IkM10n16K4M10n16IoJwFomAGuZAKxlArCWCcBaJgBrmQCs9dFfZLhOqkd3ZbhOqkdPZLj+RRmuk+rRXRmub8lwnVSP7spwnVSPTqpHJxmubzABWMsEYC0TgLVMANYyAVjLBGCtX7//0JdkuN5UPbqS4TqpHp1kuE6qR1cyXE9Uj+7KcJ1Uj04yXG+pHp1kuO6qHp1kuE6qR3dluE6qR3eZAKxlArCWCcBaJgBrmQCsZQKwlgnAWh/9RYbrierRW6pHJxmuK9WjkwzXSfVoo+rRm6pHG1WPTjJcJ9WjuzJcJ9WjKyYAa5kArGUCsJYJwFomAGuZAKxlArDWRw9Vj+6qHp1kuE4yXCfVo7uqRycZrruqR09kuE6qR1cyXCfVoycyXFeqRycZrpPq0UmG6yeqHp1kuO4yAVjLBGAtE4C1TADWMgFYywRgLROAtX79/kMvynBdqR49keHaqHr0pgzXlerRT5Xh+pbq0UmG66R6dCXD9UT16IoJwFomAGuZAKxlArCWCcBaJgBrffRFGa6T6tET1aMrGa4nqkcnGa4rGa6T6tFJhutbMlwn1aMrGa6T6tFJhuukenQlw/VTVY/uMgFYywRgLROAtUwA1jIBWMsEYC0TgLU+eijDdVI9ekv16CTDdaV69ESG66R69Jbq0UmG60qG600ZrivVozdluDbKcJ1Uj66YAKxlArCWCcBaJgBrmQCsZQKwlgnAWh89VD06yXBdqR6dZLhOqkcn1aO7MlxPZLiuVI++pXp0kuE6qR6dZLjuynC9pXr0pgzXlerRSYbrLhOAtUwA1jIBWMsEYC0TgLVMANYyAVjr1+8/dJDhOqkefUuG667q0RMZrpPq0V0ZrieqR2/JcJ1Uj96S4TqpHl3JcD1RPborw/VE9eiKCcBaJgBrmQCsZQKwlgnAWiYAa330F9WjkwzXSfXoSobrierRXRmuk+rRWzJcT1SP7spwvSnDdVf16KR6dJLhulI9eiLDdVI9uqt6dJcJwFomAGuZAKxlArCWCcBaJgBrmQCs9dFfZLhOqkdvqR49keF6S/XoJMN1pXr0U1WPTjJcJ9WjuzJcb8lwPVE9uqt69BYTgLVMANYyAVjLBGAtE4C1TADWMgFY69fvP4T/J8P1RPXoSobrTdWjt2S4vqV69JYM10n16CTD9Zbq0RUTgLVMANYyAVjLBGAtE4C1TADWMgFY66O/yHD9i6pHJ9WjkwzXt1SPTjJcV6pHJxmuk+rRXRmuN2W4rlSPnshwnVSPrmS43mICsJYJwFomAGuZAKxlArCWCcBaHz1UPfqpMlxvqR69pXp0kuG6K8P1RIbrrurRSYbrierRT1Q9eosJwFomAGuZAKxlArCWCcBaJgBrmQCs9dHLMlxvqR69JcP1LRmuk+rRSYbrSvXoiQzXSfXoLRmub6kevSXDdVI9umICsJYJwFomAGuZAKxlArCWCcBaJgBrfYT/qHp0kuE6qR7dleE6yXC9JcN1Uj26K8P1RPXorgzXmzJc32ACsJYJwFomAGuZAKxlArCWCcBaJgBrfYT/KMO1VfXorurRSYbrpHp0V/XoJMN1Uj16S4brpHp0V4brLhOAtUwA1jIBWMsEYC0TgLVMANb66GXVo42qRycZrrsyXCfVo7dkuE6qR9+S4fqpqkd3ZbhOqkd3mQCsZQKwlgnAWiYAa5kArGUCsJYJwFofPZTh+hdluE6qR9+S4XpLhust1aOTDNdbqkcnGa6TDNdJ9eiuDNdJ9eiKCcBaJgBrmQCsZQKwlgnAWiYAa5kArPXr9x8CsJIJwFomAGuZAKxlArCWCcBaJgBr/R9aMlSEIO5PcgAAAABJRU5ErkJggg=="
@@ -797,9 +845,8 @@
     "property": "בתי נורית",
     "cabin": "בתי נורית 7",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2370",
-    "gate": "#2464",
     "ssid": "MIALEES RESORT",
     "pass": "MIAL2026",
     "qr": "data:image/png;base64,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"
@@ -809,9 +856,8 @@
     "property": "בתי נורית",
     "cabin": "בתי נורית 8",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2380",
-    "gate": "#2464",
     "ssid": "MIALEES RESORT",
     "pass": "MIAL2026",
     "qr": "data:image/png;base64,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"
@@ -819,11 +865,10 @@
   {
     "id": "k687",
     "property": "בקתות טוסקנה",
-    "cabin": "טוסקנה · פירנצה 1",
+    "cabin": "טוסקנה · 1",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2710",
-    "gate": "#2464",
     "ssid": "Toscana",
     "pass": "12345678",
     "qr": "data:image/png;base64,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"
@@ -831,11 +876,10 @@
   {
     "id": "k688",
     "property": "בקתות טוסקנה",
-    "cabin": "טוסקנה · פירנצה 2",
+    "cabin": "טוסקנה · 2",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2720",
-    "gate": "#2464",
     "ssid": "Toscana",
     "pass": "12345678",
     "qr": "data:image/png;base64,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"
@@ -845,9 +889,8 @@
     "property": "בקתות טוסקנה",
     "cabin": "טוסקנה · שאטו",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2730",
-    "gate": "#2464",
     "ssid": "Toscana",
     "pass": "12345678",
     "qr": "data:image/png;base64,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"
@@ -855,11 +898,11 @@
   {
     "id": "k808",
     "property": "טאג' מאהל",
-    "cabin": "טאג' מאהל · בקתה 1",
+    "complexTag": "E/25",
+    "cabin": "טאג' מאהל · בקתה 1 (E/25)",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2510",
-    "gate": "#2464",
     "ssid": "LUTUS",
     "pass": "12345678",
     "qr": "data:image/png;base64,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"
@@ -867,11 +910,11 @@
   {
     "id": "k809",
     "property": "טאג' מאהל",
-    "cabin": "טאג' מאהל · בקתה 2",
+    "complexTag": "E/25",
+    "cabin": "טאג' מאהל · בקתה 2 (E/25)",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2520",
-    "gate": "#2464",
     "ssid": "LUTUS",
     "pass": "12345678",
     "qr": "data:image/png;base64,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"
@@ -879,11 +922,11 @@
   {
     "id": "k810",
     "property": "טאג' מאהל",
-    "cabin": "טאג' מאהל · בקתה 3",
+    "complexTag": "E/25",
+    "cabin": "טאג' מאהל · בקתה 3 (E/25)",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2530",
-    "gate": "#2464",
     "ssid": "LUTUS",
     "pass": "12345678",
     "qr": "data:image/png;base64,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"
@@ -891,11 +934,11 @@
   {
     "id": "k811",
     "property": "טאג' מאהל",
-    "cabin": "טאג' מאהל · בקתה 4",
+    "complexTag": "E/25",
+    "cabin": "טאג' מאהל · בקתה 4 (E/25)",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2540",
-    "gate": "#2464",
     "ssid": "LUTUS",
     "pass": "12345678",
     "qr": "data:image/png;base64,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"
@@ -905,9 +948,8 @@
     "property": "מול הנוף",
     "cabin": "מול הנוף · בקתה 1",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2910",
-    "gate": "#2464",
     "ssid": "Mol_hanof",
     "pass": "12345678",
     "qr": "data:image/png;base64,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"
@@ -917,9 +959,8 @@
     "property": "מול הנוף",
     "cabin": "מול הנוף · בקתה 2",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2920",
-    "gate": "#2464",
     "ssid": "Mol_hanof",
     "pass": "12345678",
     "qr": "data:image/png;base64,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"
@@ -929,9 +970,8 @@
     "property": "מול הנוף",
     "cabin": "מול הנוף · בקתה 3",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2930",
-    "gate": "#2464",
     "ssid": "Mol_hanof",
     "pass": "12345678",
     "qr": "data:image/png;base64,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"
@@ -941,9 +981,8 @@
     "property": "מול הנוף",
     "cabin": "מול הנוף · בקתה 4",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2940",
-    "gate": "#2464",
     "ssid": "Mol_hanof",
     "pass": "12345678",
     "qr": "data:image/png;base64,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"
@@ -953,9 +992,8 @@
     "property": "מול הנוף",
     "cabin": "מול הנוף · בקתה 5",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2950",
-    "gate": "#2464",
     "ssid": "Mol_hanof",
     "pass": "12345678",
     "qr": "data:image/png;base64,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"
@@ -965,9 +1003,8 @@
     "property": "נופים בלבן",
     "cabin": "נופים בלבן · בקתה 1",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2810",
-    "gate": "#2464",
     "ssid": "TP-LINK_FA30",
     "pass": "15107312",
     "qr": "data:image/png;base64,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"
@@ -977,9 +1014,8 @@
     "property": "נופים בלבן",
     "cabin": "נופים בלבן · בקתה 2",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
-    "lockbox": "2810",
-    "gate": "#2464",
+    "zone": "ramot",
+    "lockbox": "2820",
     "ssid": "TP-LINK_FA30",
     "pass": "15107312",
     "qr": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAADwCAYAAAA+VemSAAAAAklEQVR4AewaftIAAAdxSURBVO3BUYodUa5FwW1xByEEmv/ABEKzcPu3afIYMl++KpVXxK/ffwjASiYAa5kArGUCsJYJwFomAGuZAKxlArDWR3+R4fqJqkdPZLjuqh6dZLieqB5dyXCdVI/ekuF6onp0kuH6iapHV0wA1jIBWMsEYC0TgLVMANYyAVjLBGCtjx6qHn1XGa63VI/eUj06yXCdZLi+o+rRSYbrLdWj7yrDdZcJwFomAGuZAKxlArCWCcBaJgBrmQCs9dHLMlxvqR69JcN1Uj26K8N1Uj16onp0V4brpHp0V4bru8pwvaV69BYTgLVMANYyAVjLBGAtE4C1TADW+givyHBdqR6dZLhOqkcnGa4r1aOT6tFJhuukenSleoT/WyYAa5kArGUCsJYJwFomAGuZAKxlArDWR7glw/WW6tET1aO3VI9OMlxvqR7hv5kArGUCsJYJwFomAGuZAKxlArCWCcBaH72sevQvqh79i6pHd2W4vkr1aCMTgLVMANYyAVjLBGAtE4C1TADWMgFY66OHMlz/ourRSYbrSvXoJMN1Uj06yXBdqR6dZLhOqkcnGa4r1aOvkuH6iUwA1jIBWMsEYC0TgLVMANYyAVjro7+oHuF/ZbjeUj3aqnp0JcP1purRv8YEYC0TgLVMANYyAVjLBGAtE4C1TADW+vX7Dx1kuE6qRycZru+oevREhuurVI++SobrpHp0JcN1Uj16IsP1HVWP3mICsJYJwFomAGuZAKxlArCWCcBaJgBrffSy6tFPVD16S4brJMP1lurRSfXoX1Q9ekuG66R6dMUEYC0TgLVMANYyAVjLBGAtE4C1TADW+ugvqkcnGa63VI9OMlx3VY/elOH6iTJcd1WPnshwnVSPrmS4TqpHX6V6dJcJwFomAGuZAKxlArCWCcBaJgBrffSy6tGVDNebqkd3ZbhOqkdvqR6dZLhOqkdXMlxPVI++qwzXWzJcJ9WjKxmuk+rRXSYAa5kArGUCsJYJwFomAGuZAKxlArDWR3+R4XpL9ehNGa67qkffVfXoJMN1V4brierRXRmuk+rRd5XhulI9eosJwFomAGuZAKxlArCWCcBaJgBrmQCs9dFD1aO7Mlwn1aMnqkdvyXCdVI+uZLhOMlwn1aOT6tGVDNdJ9egtGa43ZbjeUj16S4brpHp0xQRgLROAtUwA1jIBWMsEYC0TgLVMANb69fsPHWS4nqge3ZXhOqkenWS47qoePZHhuqt69JYM1xPVo40yXCfVo5MM113Vo7eYAKxlArCWCcBaJgBrmQCsZQKw1q/ff+iBDNdbqkcnGa6T6tFdGa6T6tFdGa4nqkcnGa4r1aM3ZbiuVI+eyHCdVI/uynCdVI/uynCdVI/uMgFYywRgLROAtUwA1jIBWMsEYC0TgLU+eqh6dJLh+ioZrivVozdluO6qHj1RPXpLhustGa6T6tFdGa6T6tFJhuuu6tFbTADWMgFYywRgLROAtUwA1jIBWMsEYK2P/iLDdVI9OqkefZXq0V3Vo5MM11fJcN1VPTrJcD1RPbqS4Xoiw/WWDNdJ9egkw3VXhuukenTFBGAtE4C1TADWMgFYywRgLROAtUwA1vroZRmuK9WjN2W47qoenVSP7spwnWS43pLh+irVo5MM10n16CTDtVH16C4TgLVMANYyAVjLBGAtE4C1TADW+uhl1aMrGa4nqkdvyXCdVI9OMlx3VY9OMlwn1aMrGa4nqkdvqR5tVT26kuE6qR7dZQKwlgnAWiYAa5kArGUCsJYJwFomAGt99IWqR09kuN5SPTrJcL0lw3VSPTrJcF2pHp1kuE4yXCfVo7syXFtluO7KcJ1Uj66YAKxlArCWCcBaJgBrmQCsZQKwlgnAWr9+/yH8jwzXSfXoJMN1pXp0kuE6qR79RBmuk+rRWzJc31X16IoJwFomAGuZAKxlArCWCcBaJgBrmQCs9dFfZLh+ourRSfXoJ8pwnVSP3pLhelOG60r16KtUj95iArCWCcBaJgBrmQCsZQKwlgnAWh89VD36rjJcd2W4TqpHb6kePZHhuivDdVI9+q6qR2+pHn1HJgBrmQCsZQKwlgnAWiYAa5kArGUCsNZHL8twvaV69FUyXCfVoysZrieqRyfVoysZricyXCfVoyvVo5MM10mG67vKcN1VPbrLBGAtE4C1TADWMgFYywRgLROAtUwA1voIt1SPTjJcV6pHJxmuJzJcV6pHJxmuJzJcV6pHT1SPvkqG6y0ZrpPq0RUTgLVMANYyAVjLBGAtE4C1TADWMgFY6yP8v8twnVSP3pLhelP16EqG600Zro2qR3eZAKxlArCWCcBaJgBrmQCsZQKw1kcvqx5tVD36KhmuJ6pHVzJcJ9WjJzJcV6pHJxmukwzXSfXoLRmuk+rRlQzXW0wA1jIBWMsEYC0TgLVMANYyAVjLBGCtX7//0EGG6yeqHp1kuL5K9egkw3VX9eiJDNdJ9eirZLiuVI9OMlxvqR69xQRgLROAtUwA1jIBWMsEYC0TgLVMANb69fsPAVjJBGAtE4C1TADWMgFYywRgLROAtf4D/ok2WLXKaW8AAAAASUVORK5CYII="
@@ -989,9 +1025,8 @@
     "property": "החצר המוסיקלית",
     "cabin": "חצר מוסיקלית · בקתה 1 (חליל)",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2610",
-    "gate": "#2464",
     "ssid": "Music yard",
     "pass": "12345678",
     "qr": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAADwCAYAAAA+VemSAAAAAklEQVR4AewaftIAAAdUSURBVO3BUWolWw5FwW1xByEEmv/ABEKzcNdv0+R5kNmJrXor4uv7DwFYyQRgLROAtUwA1jIBWMsEYC0TgLVMANb66B9kuP5G1aMnMlwn1aO3ZLhOqkdXMlwn1aO3ZLieqB6dZLj+RtWjKyYAa5kArGUCsJYJwFomAGuZAKxlArDWRw9Vj36rDNdbqkdvyXA9keH6japHJxmut1SPfqsM110mAGuZAKxlArCWCcBaJgBrmQCsZQKw1kcvy3C9pXr0lgzXW6pHb6oe/UYZrt8qw/WW6tFbTADWMgFYywRgLROAtUwA1jIBWOsj3FI9OslwXclwnVSPnshw/ZTq0ZXqEf6/TADWMgFYywRgLROAtUwA1jIBWMsEYK2P8Irq0V0ZrpPq0Un16KdkuN5SPcJ/MwFYywRgLROAtUwA1jIBWMsEYC0TgLU+eln16G+U4TqpHl3JcP2tqkd3Zbh+SvVoIxOAtUwA1jIBWMsEYC0TgLVMANYyAVjro4cyXP9G1aOTDNeV6tFJhuuJDNeV6tFJhuukenSS4bpSPfopGa6/kQnAWiYAa5kArGUCsJYJwFomAGt99A+qR/hfGa67Mlwn1aOtqkdXMlxvqh7925gArGUCsJYJwFomAGuZAKxlArCWCcBaX99/6CDDdVI9Oslw/UbVozdluK5Uj04yXCfVo5+S4TqpHl3JcJ1Uj57IcP1G1aO3mACsZQKwlgnAWiYAa5kArGUCsJYJwFofPZThOqkebZThOqkenVSP3pLhekv16KR69G9UPXpLhuukenTFBGAtE4C1TADWMgFYywRgLROAtUwA1vr6/kNLZbjeUj06yXCdVI/ekuF6S/XoJMN1V/XoiQzXSfXoSobrpHq0kQnAWiYAa5kArGUCsJYJwFomAGt99LIM15Xq0ZuqR1cyXE9Uj96S4XqienQlw/VE9ei3ynC9JcN1Uj26kuE6qR7dZQKwlgnAWiYAa5kArGUCsJYJwFomAGt9ff+hBzJcJ9WjuzJcJ9WjkwzXW6pHJxmuu6pHT2S4fkr16K4M10n16KdkuO6qHr3FBGAtE4C1TADWMgFYywRgLROAtUwA1vr6/kMvynD9lOrRlQzXE9WjjTJcJ9Wjt2S4nqgenWS43lI9ekuG66R6dMUEYC0TgLVMANYyAVjLBGAtE4C1TADW+vr+Q0tluO6qHp1kuE6qRycZrivVo5+S4XqierRRhuukenSS4bqrevQWE4C1TADWMgFYywRgLROAtUwA1vr6/kMHGa6T6tFGGa6T6tFPyXCdVI9OMlxXqkdvynBdqR49keE6qR7dleE6qR7dleE6qR7dZQKwlgnAWiYAa5kArGUCsJYJwFomAGt99A+qR09kuO6qHj2R4dqoevRE9egtGa63ZLhOqkd3ZbhOqkcnGa67qkdvMQFYywRgLROAtUwA1jIBWMsEYC0TgLW+vv/QQYbrLdWj3yrDdVI9Oslw/UbVo5MM1xPVoysZrq2qRycZrivVo5MM10n16IoJwFomAGuZAKxlArCWCcBaJgBrmQCs9dFD1aO3ZLhOqkcnGa4r1aMnMlwbZbh+SvXoJMN1Uj06yXBtVD26ywRgLROAtUwA1jIBWMsEYC0TgLU+elmG60r16E3VoysZrjdVj65kuN5UPbqS4XqievSW6tFW1aMrGa6T6tFdJgBrmQCsZQKwlgnAWiYAa5kArGUCsNZHL6seXclwnVSPTjJcb6kePZHhuqt69ESG60r16CTDdZLhOqke3ZXh2irDdVeG66R6dMUEYC0TgLVMANYyAVjLBGAtE4C1TADW+vr+Q/gfGa4nqkd3ZbhOqkd/owzXSfXoLRmu36p6dMUEYC0TgLVMANYyAVjLBGAtE4C1TADW+ugfZLj+RtWjk+rRSYbrJMN1pXp0Uj16S4brpHr0lgzXmzJcV6pHP6V69BYTgLVMANYyAVjLBGAtE4C1TADW+uih6tFvleG6K8N1Uj06yXBdyXCdVI+eyHDdleE6qR79VtWjt1SPfiMTgLVMANYyAVjLBGAtE4C1TADWMgFY66OXZbjeUj36KRmuk+rRXRmuk+rRSfXoSobriQzXSfXoSvXoJMN1kuH6rTJcd1WP7jIBWMsEYC0TgLVMANYyAVjLBGAtE4C1PsJfJ8N1pXp0kuF6IsN1pXr0RPXop2S43pLhOqkeXTEBWMsEYC0TgLVMANYyAVjLBGAtE4C1PsIt1aOTDNdbMlx3ZbjeVD26kuF6U4Zro+rRXSYAa5kArGUCsJYJwFomAGuZAKz10cuqRxtVj56oHl3JcJ1Uj57IcN1VPXoiw3WlenSS4TrJcJ1Uj96S4TqpHl3JcL3FBGAtE4C1TADWMgFYywRgLROAtUwA1vrooQzX3yjDdVI9OslwXakenWS4TqpHd1WPnshwnVSP7qoePZHhulI9OslwPZHhulI9eosJwFomAGuZAKxlArCWCcBaJgBrmQCs9fX9hwCsZAKwlgnAWiYAa5kArGUCsJYJwFr/AdxaKWwNxBBjAAAAAElFTkSuQmCC"
@@ -1001,9 +1036,8 @@
     "property": "החצר המוסיקלית",
     "cabin": "חצר מוסיקלית · בקתה 2 (מיתר)",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
-    "lockbox": "2610",
-    "gate": "#2464",
+    "zone": "ramot",
+    "lockbox": "2620",
     "ssid": "Music yard",
     "pass": "12345678",
     "qr": "data:image/png;base64,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"
@@ -1013,9 +1047,8 @@
     "property": "החצר המוסיקלית",
     "cabin": "חצר מוסיקלית · בקתה 3 (פעמון)",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
-    "lockbox": "2610",
-    "gate": "#2464",
+    "zone": "ramot",
+    "lockbox": "2630",
     "ssid": "Music yard",
     "pass": "12345678",
     "qr": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAADwCAYAAAA+VemSAAAAAklEQVR4AewaftIAAAd2SURBVO3BUYod2Q5FwW1xByEEmv/ABEKz8PN/dx7TmS+pUrEifv3+QwBWMgFYywRgLROAtUwA1jIBWMsEYC0TgLU++osM109UPTrJcG1VPbqS4TqpHr0lw/VE9egkw/UTVY+umACsZQKwlgnAWiYAa5kArGUCsJYJwFofPVQ9+q4yXG+pHp1kuK5Uj04yXG+pHj2R4bqrevRVqkffVYbrLhOAtUwA1jIBWMsEYC0TgLVMANYyAVjro5dluN5SPXpL9egtGa4nqkdfpXp0kuG6K8N1Uj16S4brLdWjt5gArGUCsJYJwFomAGuZAKxlArDWR/hXGa63VI9OMlxPZLi+SvXoruoR/hsTgLVMANYyAVjLBGAtE4C1TADWMgFY6yP8q+rRSYbrrgzXSfXoq1SPTjJcd2W4TqpH+G9MANYyAVjLBGAtE4C1TADWMgFYywRgrY9eVj36iapHJxmuK9WjJzJcJ9WjKxmukwzXSfXoJMN1V4brpHr0lurRRiYAa5kArGUCsJYJwFomAGuZAKxlArDWRw9luH6iDNdJ9egtGa6T6tFJhutK9egkw/WW6tFJhustGa6fyARgLROAtUwA1jIBWMsEYC0TgLV+/f5D+IcM10n16K4M10n16C0Zru+qeoT/xgRgLROAtUwA1jIBWMsEYC0TgLVMANb66C8yXCfVo5MM113Vo5MM11uqRycZrpPq0ZXq0RMZrpPq0XdUPXpThutK9eiJDNdJ9ehKhuuJ6tEVE4C1TADWMgFYywRgLROAtUwA1jIBWOujhzJcJ9WjuzJcJ9Wjt2S43pLhOqkePZHhuqt69JYM10n16C0ZrieqR3dVj04yXHeZAKxlArCWCcBaJgBrmQCsZQKwlgnAWh/9RfXoiQzXXdWjkwzXd5Xh+irVo++oenSS4TqpHp1Uj+7KcD2R4bqrenSXCcBaJgBrmQCsZQKwlgnAWiYAa/36/YcOMlxPVI+uZLjeVD26kuE6qR49keF6S/XoLRmuk+rRSYbrrurRWzJcT1SP3pLhOqkeXTEBWMsEYC0TgLVMANYyAVjLBGAtE4C1PvpC1aOTDNdJ9egkw3WlenSS4XqienRXhuuJDNdbMlwn1aO7Mlwn1aO7qkdPZLjuqh6dVI/uMgFYywRgLROAtUwA1jIBWMsEYC0TgLV+/f5DL8pwXakefVcZrpPq0UmG60r16CTDdVI9OslwXakePZHhekv16CTDdVf16E0ZrrdUj66YAKxlArCWCcBaJgBrmQCsZQKwlgnAWh+9rHp0JcP1VapHb6oeXclwPZHhOqkevaV6dJLh+o4yXE9Uj74jE4C1TADWMgFYywRgLROAtUwA1vroLzJcJ9WjkwzXXdWj7yrDdVI9ekv16CTDdaV69FWqR2+qHt2V4XqienQlw3VSPbrLBGAtE4C1TADWMgFYywRgLROAtUwA1vroL6pHJxmuu6pHb8pwXakenVSPnshwXakefZUM10n16Inq0U+U4TqpHn0FE4C1TADWMgFYywRgLROAtUwA1jIBWOujh6pHJxmuKxmuN1WPvqMM1xPVo6+S4bqrenSS4TqpHt2V4TqpHp1kuE4yXF/BBGAtE4C1TADWMgFYywRgLROAtUwA1vroLzJcJ9Wju6pHJxmuJzJcd1WPTjJcd1WPnshwvSXD9UT16KtkuO7KcJ1Uj04yXFeqR28xAVjLBGAtE4C1TADWMgFYywRgrY/+onr0RPXorurRSYbrpHp0JcP1RPVoo+rRSYbriQzXlerRExmuu6pHP5EJwFomAGuZAKxlArCWCcBaJgBrmQCs9ev3H3ogw/WW6tETGa4r1aM3Zbjuqh6dZLjeUj06yXDhv6kevcUEYC0TgLVMANYyAVjLBGAtE4C1TADW+vX7D+EfMlwn1SP8f2W4TqpHb8lwfVfVoysmAGuZAKxlArCWCcBaJgBrmQCsZQKw1kd/keH6iapHT2S4vkr16CTDdaV69ESG67vKcF2pHr2penQlw3VSPbrLBGAtE4C1TADWMgFYywRgLROAtT56qHr0XWW43lI9OslwXakenWS4TjJcX6V6dJLhulI9OslwPVE92ijDdVI9umICsJYJwFomAGuZAKxlArCWCcBaJgBrffSyDNdbqkdvqR69JcN1Uj16S4brTdWjt2S4vkr16CTDdVf16C4TgLVMANYyAVjLBGAtE4C1TADWMgFY6yP8qwzXV8lwPVE9ekv16C3Vo5MM10n16EqG64kM10n16K4M10n16IoJwFomAGuZAKxlArCWCcBaJgBrmQCs9RHWqR6dZLiuVI+eyHDdVT06yXB9lerRExmuK9Wjt5gArGUCsJYJwFomAGuZAKxlArDWRy+rHm1UPTrJcJ1Uj65kuL5KhuukenRSPTrJcH1H1aMnMlwn1aMrGa6T6tFdJgBrmQCsZQKwlgnAWiYAa5kArGUCsNZHD2W4fqIM10n16K7q0UmG6yTDhX/KcN1VPdrIBGAtE4C1TADWMgFYywRgLROAtUwA1vr1+w8BWMkEYC0TgLVMANYyAVjLBGAtE4C1/gdaiDan7o5+gwAAAABJRU5ErkJggg=="
@@ -1025,9 +1058,8 @@
     "property": "בקתות מאיה",
     "cabin": "בקתות מאיה · בקתה 1",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2410",
-    "gate": "#2464",
     "ssid": "maya",
     "pass": "12345678",
     "qr": "data:image/png;base64,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"
@@ -1037,9 +1069,8 @@
     "property": "בקתות מאיה",
     "cabin": "בקתות מאיה · בקתה 2",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2420",
-    "gate": "#2464",
     "ssid": "maya",
     "pass": "12345678",
     "qr": "data:image/png;base64,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"
@@ -1049,21 +1080,30 @@
     "property": "בקתות מאיה",
     "cabin": "בקתות מאיה · בקתה 3",
     "loc": "מושב רמות, רמת הגולן",
-    "ramot": true,
+    "zone": "ramot",
     "lockbox": "2430",
-    "gate": "#2464",
     "ssid": "maya",
     "pass": "12345678",
     "qr": "data:image/png;base64,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"
   },
   {
+    "id": "mialis-villa",
+    "property": "מיאליס ריזורט",
+    "cabin": "וילה מיאליס ריזורט",
+    "loc": "מושב נאות גולן, דרום רמת הגולן",
+    "zone": "neot-golan",
+    "lockbox": "3050",
+    "ssid": "CASAMIA",
+    "pass": "CASAMIA10",
+    "qr": "data:image/png;base64,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"
+  },
+  {
     "id": "suite-1",
     "property": "מיאליס ריזורט",
     "cabin": "סוויטה 1 (הירוקה)",
-    "loc": "גבעת יואב, דרום רמת הגולן",
-    "ramot": false,
-    "lockbox": "1010",
-    "gate": "חיוג לשער",
+    "loc": "מושב נאות גולן, דרום רמת הגולן",
+    "zone": "neot-golan",
+    "lockbox": "הקוד יימסר בהודעה",
     "ssid": "CASAMIA",
     "pass": "CASAMIA10",
     "qr": "data:image/png;base64,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"
@@ -1072,34 +1112,20 @@
     "id": "suite-2",
     "property": "מיאליס ריזורט",
     "cabin": "סוויטה 2 (הורודה)",
-    "loc": "גבעת יואב, דרום רמת הגולן",
-    "ramot": false,
-    "lockbox": "2020",
-    "gate": "חיוג לשער",
+    "loc": "מושב נאות גולן, דרום רמת הגולן",
+    "zone": "neot-golan",
+    "lockbox": "הקוד יימסר בהודעה",
     "ssid": "CASAMIA",
     "pass": "CASAMIA10",
     "qr": "data:image/png;base64,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"
   },
   {
-    "id": "mialis-villa",
-    "property": "מיאליס ריזורט",
-    "cabin": "וילה מיאליס ריזורט",
-    "loc": "גבעת יואב, דרום רמת הגולן",
-    "ramot": false,
-    "lockbox": "0000",
-    "gate": "חיוג לשער",
-    "ssid": "CASAMIA",
-    "pass": "CASAMIA10",
-    "qr": "data:image/png;base64,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"
-  },
-  {
     "id": "dome-blue",
     "property": "כיפת שמיים",
     "cabin": "כיפת שמיים כחול",
-    "loc": "גבעת יואב, דרום רמת הגולן",
-    "ramot": false,
-    "lockbox": "3010",
-    "gate": "חיוג לשער",
+    "loc": "מושב גבעת יואב, דרום רמת הגולן",
+    "zone": "givat-yoav",
+    "lockbox": "הקוד יימסר בהודעה",
     "ssid": "Kipat_Shamayim",
     "pass": "12345678",
     "qr": "data:image/png;base64,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"
@@ -1108,10 +1134,9 @@
     "id": "dome-green",
     "property": "כיפת שמיים",
     "cabin": "כיפת שמיים ירוק",
-    "loc": "גבעת יואב, דרום רמת הגולן",
-    "ramot": false,
-    "lockbox": "3020",
-    "gate": "חיוג לשער",
+    "loc": "מושב גבעת יואב, דרום רמת הגולן",
+    "zone": "givat-yoav",
+    "lockbox": "הקוד יימסר בהודעה",
     "ssid": "Kipat_Shamayim",
     "pass": "12345678",
     "qr": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAADwCAYAAAA+VemSAAAAAklEQVR4AewaftIAAAc/SURBVO3BUaobUQ5F0RPhQQiB5j8wgdAs0vltmrqBche2XvZav37/IQArmQCsZQKwlgnAWiYAa5kArGUCsJYJwFov/UWG6yeqHr0jw3VSPbqS4TqpHp1kuE6qR98ow/WO6tFJhusnqh5dMQFYywRgLROAtUwA1jIBWMsEYC0TgLVeelP16FtluJ5SPbqrenSS4TqpHp1kuJ5SPbqrenSS4XpK9ehbZbjuMgFYywRgLROAtUwA1jIBWMsEYC0TgLVeeliG6ynVo6dkuN5RPbqS4TqpHv1EGa5vleF6SvXoKSYAa5kArGUCsJYJwFomAGuZAKz1Em6pHp1kuK5Uj04yXJ9SPTrJcJ1Uj65Uj/D/ZQKwlgnAWiYAa5kArGUCsJYJwFomAGu9hHWqR0/JcJ1Uj04yXE+pHuG/mQCsZQKwlgnAWiYAa5kArGUCsJYJwFovPax69C+qHt1VPTrJcH2r6tFdGa5PqR5tZAKwlgnAWiYAa5kArGUCsJYJwFomAGu99KYMF/5XhutK9egkw3VSPTrJcF2pHp1kuN6R4bpSPfqUDNdPZAKwlgnAWiYAa5kArGUCsJYJwFov/UX1CD9HhutJ1aMrGa4nVY/+NSYAa5kArGUCsJYJwFomAGuZAKxlArDWS3+R4TqpHp1kuL5R9eikenSS4XpK9egkw3VX9egdGa6T6tFd1aN3ZLi+UfXoKSYAa5kArGUCsJYJwFomAGuZAKxlArDWS39RPTrJcD2lenSS4TqpHl3JcJ1Uj06qR59SPTrJcN2V4TqpHv2LqkdPyXCdVI+umACsZQKwlgnAWiYAa5kArGUCsJYJwFq/fv+hN2S4TqpHd2W4tqoe3ZXhekf16EqG61OqR+/IcJ1Uj65kuE6qRxuZAKxlArCWCcBaJgBrmQCsZQKw1kt/keE6qR7dleF6UvXorgzXp1SPnlI9OslwnVSPvlWG6ykZrpPq0ZUM10n16C4TgLVMANYyAVjLBGAtE4C1TADWMgFY66WHZbiuVI+elOF6SvXoJMP1japHJ9WjkwzXSfXorgzXSfXoW2W4rlSPnmICsJYJwFomAGuZAKxlArCWCcBaJgBrvfSmDNdJ9eiuDNdJ9eikevQp1aMrGa6T6tGnZLhOqkd3ZbielOF6SvXoKRmuk+rRFROAtUwA1jIBWMsEYC0TgLVMANYyAVjrpTdVj75Vhuuu6tFJhuuu6tFJhuukenSS4bqrevSU6tGTqkdXMlwn1aOTDNdd1aOT6tFdJgBrmQCsZQKwlgnAWiYAa5kArPXSB2W4nlQ9uivD9Y7q0UYZrpPq0UmG60r16B0ZrpPq0ZXq0UmG66R6dFeG66R6dJcJwFomAGuZAKxlArCWCcBaJgBrmQCs9ev3H3pDhuukevQpGa6nVI9OMlwbVY9OMlx3VY9OMlwn1aO7Mlwn1aOTDNdd1aOnmACsZQKwlgnAWiYAa5kArGUCsJYJwFq/fv+hgwzXU6pHJxmud1SP7spwnVSP7spwvaN69JQM1zuqR1cyXFtVj04yXFeqRycZrpPq0RUTgLVMANYyAVjLBGAtE4C1TADWMgFY66U3VY9OMlx3VY9OMlwnGa4r1aMnZbg+JcP1japHJxmuk+rRSYZro+rRXSYAa5kArGUCsJYJwFomAGuZAKz10sOqR59SPbqS4XpHhuukevQTVY+eUj3aqnp0JcN1Uj26ywRgLROAtUwA1jIBWMsEYC0TgLVMANZ66YMyXO+oHp1kuL5RhuukenSS4bqrenSS4TrJcJ1Uj+7KcG2V4borw3VSPbpiArCWCcBaJgBrmQCsZQKwlgnAWiYAa730F9Wjp1SPnlQ9uivDdVI9+lbVo7uqR9+qevSUDNdJhusbmQCsZQKwlgnAWiYAa5kArGUCsJYJwFov/UWG6yeqHp1Uj55SPTrJcL0jw3VX9egpGa4nZbiuVI8+pXr0FBOAtUwA1jIBWMsEYC0TgLVMANZ66U3Vo2+V4borw3VSPTrJcF2pHp1Uj56S4TrJcJ1Uj75V9egp1aO7MlzvqB5dMQFYywRgLROAtUwA1jIBWMsEYC0TgLVeeliG6ynVo40yXCfVo2+V4TqpHl2pHp1kuE4yXN8qw/UJJgBrmQCsZQKwlgnAWiYAa5kArGUCsNZLuCXD9SkZrpPq0ZXq0UmG6x0ZrivVo3dUjz4lw/WNTADWMgFYywRgLROAtUwA1jIBWMsEYK2X8HUyXCfVo5MM16dUj65kuJ6U4dqoenSXCcBaJgBrmQCsZQKwlgnAWiYAa730sOrRRtWjT8lwfUr16B0ZrivVo5MM10mG66R69JQM10n16EqG6ykmAGuZAKxlArCWCcBaJgBrmQCsZQKw1q/ff+ggw/UTVY9OMlwn1aN/UYbrpHr0KRmuK9WjkwzXU6pHTzEBWMsEYC0TgLVMANYyAVjLBGAtE4C1fv3+QwBWMgFYywRgLROAtUwA1jIBWMsEYK3/AM55JDZgqdFTAAAAAElFTkSuQmCC"
@@ -1120,10 +1145,9 @@
     "id": "dome-red",
     "property": "כיפת שמיים",
     "cabin": "כיפת שמיים אדום",
-    "loc": "גבעת יואב, דרום רמת הגולן",
-    "ramot": false,
-    "lockbox": "3030",
-    "gate": "חיוג לשער",
+    "loc": "מושב גבעת יואב, דרום רמת הגולן",
+    "zone": "givat-yoav",
+    "lockbox": "הקוד יימסר בהודעה",
     "ssid": "Kipat_Shamayim",
     "pass": "12345678",
     "qr": "data:image/png;base64,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"
@@ -1132,10 +1156,9 @@
     "id": "hill-1",
     "property": "צימר בגבעה",
     "cabin": "צימר בגבעה 1",
-    "loc": "גבעת יואב, דרום רמת הגולן",
-    "ramot": false,
-    "lockbox": "4010",
-    "gate": "חיוג לשער",
+    "loc": "מושב גבעת יואב, דרום רמת הגולן",
+    "zone": "givat-yoav",
+    "lockbox": "3041",
     "ssid": "Zimer_Giva",
     "pass": "12345678",
     "qr": "data:image/png;base64,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"
@@ -1144,10 +1167,9 @@
     "id": "hill-2",
     "property": "צימר בגבעה",
     "cabin": "צימר בגבעה 2",
-    "loc": "גבעת יואב, דרום רמת הגולן",
-    "ramot": false,
-    "lockbox": "4020",
-    "gate": "חיוג לשער",
+    "loc": "מושב גבעת יואב, דרום רמת הגולן",
+    "zone": "givat-yoav",
+    "lockbox": "3042",
     "ssid": "Zimer_Giva",
     "pass": "12345678",
     "qr": "data:image/png;base64,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"
@@ -1156,10 +1178,9 @@
     "id": "hill-3",
     "property": "צימר בגבעה",
     "cabin": "צימר בגבעה 3",
-    "loc": "גבעת יואב, דרום רמת הגולן",
-    "ramot": false,
-    "lockbox": "4030",
-    "gate": "חיוג לשער",
+    "loc": "מושב גבעת יואב, דרום רמת הגולן",
+    "zone": "givat-yoav",
+    "lockbox": "3043",
     "ssid": "Zimer_Giva",
     "pass": "12345678",
     "qr": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAADwCAYAAAA+VemSAAAAAklEQVR4AewaftIAAAesSURBVO3BUaod0W5F0WVxGiEE6n/DBEK9cPwb8mqbVFE5V84c49fvPwRgJROAtUwA1jIBWMsEYC0TgLVMANYyAVjro7/IcP2LqkdPZLhOqkdXMlwn1aOTDNe3VI/uynCdVI+eyHD9i6pHV0wA1jIBWMsEYC0TgLVMANYyAVjLBGCtjx6qHv1UGa67MlxPZLg2qh6dZLjekuE6qR7dVT36qTJcd5kArGUCsJYJwFomAGuZAKxlArCWCcBaH70sw/WW6tFbqkcnGa6T6tGVDNcT1aNvqR7dleE6qR59S4brLdWjt5gArGUCsJYJwFomAGuZAKxlArDWR/hxMlwn1aOfKsOF/zsmAGuZAKxlArCWCcBaJgBrmQCsZQKw1kf4jzJc/6IM10n1CHuYAKxlArCWCcBaJgBrmQCsZQKwlgnAWh+9rHq0UfXoLdWjrTJcb8lwnVSP3lI92sgEYC0TgLVMANYyAVjLBGAtE4C1TADW+uihDNe/KMN1Uj06yXBdqR6dZLhOqkcnGa4r1aOTDNdJ9egkw3WlenSS4XpLhutfZAKwlgnAWiYAa5kArGUCsJYJwFq/fv8h/K9luN5SPTrJcG1UPTrJcJ1Uj/DfmQCsZQKwlgnAWiYAa5kArGUCsJYJwFof/UWG66R6dJLhulI9OslwnVSPTjJcV6pH31I9eqJ6dJLh+pbq0ZUM10+V4TqpHt2V4TqpHt1lArCWCcBaJgBrmQCsZQKwlgnAWiYAa/36/YdelOG6q3r0lgzXSfXoiQzXlerRSYbrpHr0lgzXW6pHb8pwXakePZHhOqke3ZXhOqkeXTEBWMsEYC0TgLVMANYyAVjLBGAtE4C1Pnoow3VSPfqWDNdbMlzfkuE6qR7dVT06yXC9JcN1Uj26K8N1Uj06qR6dZLi+wQRgLROAtUwA1jIBWMsEYC0TgLU+eqh6dJLhulI9OslwPVE9ekv16CTD9Zbq0V0ZrpPq0VsyXCfVo5MM113Vo5MM10n16KR6dCXDdVI9ussEYC0TgLVMANYyAVjLBGAtE4C1TADW+ugfluG6Uj06yXA9UT26kuE6qR59S4brierRRtWjkwzXSfXorgzXSfXoignAWiYAa5kArGUCsJYJwFomAGuZAKz10V9kuJ6oHt1VPTrJcJ1Uj36i6tETGa6T6tGV6tFJhuuJDNeV6tFJhuukenSS4fqJqkcnGa67TADWMgFYywRgLROAtUwA1jIBWMsEYK2P/qJ6dJLhuivDdVI9eiLDdaV6dFI9eiLDdVf16KR6dJLhulI9eqJ69C0ZrrsyXCfVo7dkuN5iArCWCcBaJgBrmQCsZQKwlgnAWh89VD16S4brierRXRmut1SPTjJcb8lwnVSPTjJcJ9WjKxmuk+rRSYbrpHp0JcP1U1WP7jIBWMsEYC0TgLVMANYyAVjLBGAtE4C1PvqLDNe3VI+eyHD9RBmuJ6pHJxmuuzJcT2S4rlSP3pTh2ijDdVI9umICsJYJwFomAGuZAKxlArCWCcBaJgBrffQX1aOTDNdJ9ehKhuuJDNdJ9egtGa67qkffUj06yXCdVI9OMlx3ZbjeUj16U4brSvXoJMN1lwnAWiYAa5kArGUCsJYJwFomAGuZAKz16/cfOshwnVSPTjJcV6pHb8pwXakenWS4nqge3ZXheqJ69JYM10n16C0ZrpPq0ZUM1xPVo7syXE9Uj66YAKxlArCWCcBaJgBrmQCsZQKw1q/ff+iBDNdbqkdvyXCdVI9OMlx3VY++JcP1U1WPnshwXakePZHhOqkeXclwnVSP7jIBWMsEYC0TgLVMANYyAVjLBGAtE4C1PvqLDNdJ9eiuDNcTGa67qkf4n6pHJxmuk+rRXRmut2S4nqge3VU9eosJwFomAGuZAKxlArCWCcBaJgBrmQCs9ev3H8L/kOH6lurRSYbrpHr0lgzXt1SP3pLhOqkenWS43lI9umICsJYJwFomAGuZAKxlArCWCcBaJgBrffQXGa5/UfXopHp0kuF6S4brpHp0kuG6Uj06yXCdVI/uynC9KcN1pXr0RIbrpHp0JcP1FhOAtUwA1jIBWMsEYC0TgLVMANb66KHq0U+V4XpL9egkw3VX9egkw3VXhuuJDNdd1aOTDNcT1aP/b0wA1jIBWMsEYC0TgLVMANYyAVjLBGCtj16W4XpL9egtGa6T6tFJ9eiuDNdJ9egkw3WlevREhuukevSWDNe3VI9+IhOAtUwA1jIBWMsEYC0TgLVMANYyAVjrI/xH1aOTDNdd1aOT6tFJhustGa6T6tFdGa4nqkd3ZbjelOH6BhOAtUwA1jIBWMsEYC0TgLVMANYyAVjrI/xHGa6T6tFJhuuuDNdJ9egt1aOTDNdJ9eiu6tFJhuukevSWDNdJ9eiuDNddJgBrmQCsZQKwlgnAWiYAa5kArPXRy6pHG1WPnqgevSXDdVI9upLhOqkefUuG66eqHt2V4TqpHt1lArCWCcBaJgBrmQCsZQKwlgnAWiYAa330UIbrX5Th+pbq0RMZrrsyXG+pHp1kuN5SPTrJcJ1kuE6qR3dluE6qR1dMANYyAVjLBGAtE4C1TADWMgFYywRgrV+//xCAlUwA1jIBWMsEYC0TgLVMANYyAVjrvwB21kGXifnxVgAAAABJRU5ErkJggg=="
@@ -1168,10 +1189,9 @@
     "id": "hill-4",
     "property": "צימר בגבעה",
     "cabin": "צימר בגבעה 4",
-    "loc": "גבעת יואב, דרום רמת הגולן",
-    "ramot": false,
-    "lockbox": "4040",
-    "gate": "חיוג לשער",
+    "loc": "מושב גבעת יואב, דרום רמת הגולן",
+    "zone": "givat-yoav",
+    "lockbox": "3044",
     "ssid": "Zimer_Giva",
     "pass": "12345678",
     "qr": "data:image/png;base64,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"
@@ -1181,9 +1201,8 @@
     "property": "קאסה נובה",
     "cabin": "קאסה נובה · Aura",
     "loc": "מושב נוב, דרום רמת הגולן",
-    "ramot": false,
-    "lockbox": "8260",
-    "gate": "חיוג לשער",
+    "zone": "casa-nova",
+    "lockbox": "הקוד יימסר בהודעה",
     "ssid": "MIALEES",
     "pass": "AD654321",
     "qr": "data:image/png;base64,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"
@@ -1193,9 +1212,8 @@
     "property": "קאסה נובה",
     "cabin": "קאסה נובה · Bloom",
     "loc": "מושב נוב, דרום רמת הגולן",
-    "ramot": false,
-    "lockbox": "8270",
-    "gate": "חיוג לשער",
+    "zone": "casa-nova",
+    "lockbox": "הקוד יימסר בהודעה",
     "ssid": "MIALEES",
     "pass": "AD654321",
     "qr": "data:image/png;base64,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"
@@ -1204,44 +1222,101 @@
 
     const select = document.getElementById('unit-select');
     const counter = document.getElementById('unit-counter');
+    const fridayToggle = document.getElementById('friday-toggle');
 
-    UNITS.forEach((unit, idx) => {
+    // Auto-detect Friday
+    if (new Date().getDay() === 5) {
+      fridayToggle.checked = true;
+    }
+
+    // Populate dropdown with pure Hebrew names — NO Kinorot internal codes (k687 etc.)
+    UNITS.forEach((unit) => {
       const option = document.createElement('option');
       option.value = unit.id;
-      option.textContent = `${unit.property} — ${unit.cabin}`;
+      option.textContent = unit.property + ' — ' + unit.cabin;
       select.appendChild(option);
     });
 
+    function applyUnitToSheet(sheetElement, unit, isFriday) {
+      // Unit title and location
+      sheetElement.querySelector('#hero-unit-name').textContent = unit.cabin;
+      sheetElement.querySelector('#prop-location').textContent = unit.loc;
+
+      // Shabbat exit time
+      sheetElement.querySelector('#saturday-val').textContent = (unit.zone === 'casa-nova') ? 'צאת השבת' : '15:00';
+
+      // Service phone: Ramot -> 054-713-6676 (Daniel), Other (Neot Golan, Givat Yoav, Nov) -> 050-759-7944 (Adam)
+      sheetElement.querySelector('#service-phone').textContent = (unit.zone === 'ramot') ? '054-713-6676' : '050-759-7944';
+
+      // Lockbox logic (Rule 1):
+      // Exact code from room sheet, never copied, if no code write 'הקוד יימסר בהודעה', no 0000.
+      const lockboxValEl = sheetElement.querySelector('#lockbox-val');
+      const lockboxSubEl = sheetElement.querySelector('#lockbox-sub');
+      const lockbox = String(unit.lockbox || '').trim();
+      const isPlainCode = /^\d{4}$/.test(lockbox);
+
+      if (isPlainCode) {
+        lockboxValEl.className = 'access-value';
+        lockboxValEl.textContent = lockbox;
+        lockboxSubEl.textContent = 'קוד פתיחה ונעילת מפתח היחידה';
+      } else {
+        lockboxValEl.className = 'access-value is-text';
+        lockboxValEl.textContent = 'הקוד יימסר בהודעה';
+        lockboxSubEl.textContent = 'קוד כספת המפתח יישלח ביום ההגעה';
+      }
+
+      // Gate logic (Rule 3):
+      const gateValEl = sheetElement.querySelector('#gate-val');
+      const gateSubEl = sheetElement.querySelector('#gate-sub');
+      const gateHeaderEl = sheetElement.querySelector('#gate-header-text');
+
+      if (unit.zone === 'neot-golan' || unit.zone === 'givat-yoav') {
+        gateHeaderEl.textContent = 'שער כניסה';
+        gateValEl.className = 'access-value is-text';
+        gateValEl.innerHTML = 'השער נפתח רק למספרים שמורים.<br>בהגעה התקשרו לאדם: <strong style="direction:ltr; display:inline-block; font-size:15px; color:#1C1917; font-weight:900;">050-759-7944</strong>';
+        gateSubEl.textContent = 'פתיחת שער המושב עם ההגעה';
+      } else if (unit.zone === 'casa-nova') {
+        gateHeaderEl.textContent = 'שער כניסה (מושב דתי)';
+        gateValEl.className = 'access-value is-text';
+        gateValEl.innerHTML = 'השער נסגר אוטומטית בכניסת שבת (' + SHABBAT_ENTRY_TIME + '). בימי שישי הגיעו לפני שעה זו. אין כניסת רכב עד צאת שבת.';
+        gateSubEl.textContent = 'קאסה נובה במושב דתי שומר שבת';
+      } else {
+        // Ramot
+        gateHeaderEl.textContent = 'שער כניסה';
+        gateValEl.className = 'access-value';
+        gateValEl.textContent = '#2464';
+        gateSubEl.textContent = 'קוד שער מושב רמות';
+      }
+
+      // Wi-Fi (Rule 2)
+      sheetElement.querySelector('#wifi-ssid').textContent = unit.ssid || 'רשת זמינה במקום';
+      sheetElement.querySelector('#wifi-pass').textContent = unit.pass || 'ללא סיסמה';
+
+      // QR Code
+      const qrImg = sheetElement.querySelector('#hub-qr-img');
+      qrImg.setAttribute('src', unit.qr);
+      qrImg.src = unit.qr;
+
+      // Casa Nova Shabbat Notice on Fridays (Rule 4)
+      const shabbatBanner = sheetElement.querySelector('#shabbat-alert-banner');
+      if (shabbatBanner) {
+        if (unit.zone === 'casa-nova' && isFriday) {
+          shabbatBanner.style.display = 'flex';
+          const timeEl = shabbatBanner.querySelector('#shabbat-time-val');
+          if (timeEl) timeEl.textContent = SHABBAT_ENTRY_TIME;
+        } else {
+          shabbatBanner.style.display = 'none';
+        }
+      }
+    }
+
     function renderUnit(unit) {
       if (!unit) return;
-
-      document.getElementById('hero-unit-name').textContent = unit.cabin;
-      document.getElementById('prop-location').textContent = unit.loc;
-      document.getElementById('saturday-val').textContent = unit.property === 'קאסה נובה' ? 'צאת השבת' : '15:00';
-      document.getElementById('service-phone').textContent = unit.ramot ? '054-713-6676' : '050-759-7944';
-
-      // Lockbox
-      const lockboxVal = document.getElementById('lockbox-val');
-      lockboxVal.textContent = unit.lockbox || 'ללא כספת';
-
-      // Gate
-      const gateVal = document.getElementById('gate-val');
-      const gateSub = document.getElementById('gate-sub');
-      gateVal.textContent = unit.gate || '#2464';
-      gateSub.textContent = unit.ramot ? 'קוד שער מושב רמות' : 'חיוג מהטלפון לפתיחת השער';
-
-      // Wi-Fi
-      document.getElementById('wifi-ssid').textContent = unit.ssid || 'רשת זמינה במקום';
-      document.getElementById('wifi-pass').textContent = unit.pass || 'ללא סיסמה';
-
-      // QR Link to specific guest portal / unit
-      const guestUrl = `https://resortos.app/guest?unit=${encodeURIComponent(unit.id)}`;
-      const qrImg = document.getElementById('hub-qr-img');
-      qrImg.src = unit.qr;
-      qrImg.setAttribute('src', unit.qr);
+      const sheet = document.getElementById('sheet');
+      applyUnitToSheet(sheet, unit, fridayToggle.checked);
 
       const currIdx = UNITS.findIndex(u => u.id === unit.id);
-      counter.textContent = `יחידה ${currIdx + 1} מתוך ${UNITS.length}`;
+      counter.textContent = 'יחידה ' + (currIdx + 1) + ' מתוך ' + UNITS.length;
     }
 
     select.addEventListener('change', () => {
@@ -1249,45 +1324,34 @@
       renderUnit(selected);
     });
 
+    fridayToggle.addEventListener('change', () => {
+      const selected = UNITS.find(u => u.id === select.value);
+      renderUnit(selected);
+    });
+
     // Initial render
     renderUnit(UNITS[0]);
 
-    // Batch Print Function
+    // Batch Print Function (All 41 Units, strictly single page per unit)
     function printAllUnits() {
       const wrapper = document.getElementById('sheet-wrapper');
       const originalContent = wrapper.innerHTML;
       const baseSheetTemplate = document.getElementById('sheet').outerHTML;
+      const isFriday = fridayToggle.checked;
 
       let allSheetsHtml = '';
       UNITS.forEach((unit) => {
-        // Build sheet clone
         const div = document.createElement('div');
         div.innerHTML = baseSheetTemplate;
         const sheet = div.firstElementChild;
-
-        // Populate clone
-        sheet.querySelector('#hero-unit-name').textContent = unit.cabin;
-        sheet.querySelector('#prop-location').textContent = unit.loc;
-        sheet.querySelector('#saturday-val').textContent = unit.property === 'קאסה נובה' ? 'צאת השבת' : '15:00';
-        sheet.querySelector('#service-phone').textContent = unit.ramot ? '054-713-6676' : '050-759-7944';
-        sheet.querySelector('#lockbox-val').textContent = unit.lockbox || 'ללא כספת';
-        sheet.querySelector('#gate-val').textContent = unit.gate || '#2464';
-        sheet.querySelector('#gate-sub').textContent = unit.ramot ? 'קוד שער מושב רמות' : 'חיוג מהטלפון לפתיחת השער';
-        sheet.querySelector('#wifi-ssid').textContent = unit.ssid || 'רשת זמינה במקום';
-        sheet.querySelector('#wifi-pass').textContent = unit.pass || 'ללא סיסמה';
-
-        const guestUrl = `https://resortos.app/guest?unit=${encodeURIComponent(unit.id)}`;
-        const qrImg = sheet.querySelector('#hub-qr-img');
-        qrImg.src = unit.qr;
-        qrImg.setAttribute('src', unit.qr);
-
+        applyUnitToSheet(sheet, unit, isFriday);
         allSheetsHtml += sheet.outerHTML;
       });
 
       wrapper.innerHTML = allSheetsHtml;
       window.print();
 
-      // Restore single sheet
+      // Restore single sheet view
       setTimeout(() => {
         wrapper.innerHTML = originalContent;
         renderUnit(UNITS.find(u => u.id === select.value));
