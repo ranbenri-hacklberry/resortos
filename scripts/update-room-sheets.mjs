@@ -923,7 +923,7 @@ function buildHtml(units) {
       if (unit.zone === 'neot-golan' || unit.zone === 'givat-yoav') {
         gateHeaderEl.textContent = 'שער כניסה';
         gateValEl.className = 'access-value is-text';
-        gateValEl.innerHTML = 'השער נפתח רק למספרים שמורים.<br>בהגעה התקשרו לאדם: <strong style="direction:ltr; display:inline-block; font-size:15px; color:#1C1917; font-weight:900;">050-759-7944</strong>';
+        gateValEl.innerHTML = 'השער נפתח רק למספרים שמורים.<br>בהגעה התקשרו לאדם: <strong style="direction:ltr; display:inline-block; font-size:15px; color:#1C1917; font-weight:900;">054-338-7383</strong>';
         gateSubEl.textContent = 'פתיחת שער המושב עם ההגעה';
       } else if (unit.zone === 'casa-nova') {
         gateHeaderEl.textContent = 'שער כניסה (מושב דתי)';
@@ -1057,7 +1057,7 @@ function buildSamplesHtml(complexes, units) {
 
     if (unit.zone === 'neot-golan' || unit.zone === 'givat-yoav') {
       gateValClass = 'access-value is-text';
-      gateValHtml = 'השער נפתח רק למספרים שמורים.<br>בהגעה התקשרו לאדם: <strong style="direction:ltr; display:inline-block; font-size:15px; color:#1C1917; font-weight:900;">050-759-7944</strong>';
+      gateValHtml = 'השער נפתח רק למספרים שמורים.<br>בהגעה התקשרו לאדם: <strong style="direction:ltr; display:inline-block; font-size:15px; color:#1C1917; font-weight:900;">054-338-7383</strong>';
       gateSub = 'פתיחת שער המושב עם ההגעה';
     } else if (unit.zone === 'casa-nova') {
       gateHeader = 'שער כניסה (מושב דתי)';
@@ -1067,7 +1067,6 @@ function buildSamplesHtml(complexes, units) {
     }
 
     const saturdayVal = (unit.zone === 'casa-nova') ? 'צאת השבת' : '15:00';
-    const phone = (unit.zone === 'ramot') ? '054-713-6676' : '050-759-7944';
 
     sheetsHtml += `
     <article class="sheet">
