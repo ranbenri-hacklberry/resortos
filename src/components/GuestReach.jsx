@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MessageSquare, Phone } from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 import { stayAction } from '../lib/guestCheckoutApi';
 import { guestHostWhatsAppHref } from '../lib/stayProperty';
 
@@ -70,7 +70,7 @@ export default function GuestReach({ token, unitId, cabin, guestName, dates, the
             opacity: callState === 'sending' ? 0.7 : 1
           }}
         >
-          <Phone size={14} /> {callState === 'sent' ? t('INSTAY_CALL_SENT') : callState === 'error' ? t('INSTAY_CALL_FAIL') : t('INSTAY_CALL_ME')}
+          {callState === 'sent' ? t('INSTAY_CALL_SENT') : callState === 'error' ? t('INSTAY_CALL_FAIL') : t('INSTAY_CALL_ME')}
         </button>
       </div>
     </div>
