@@ -28,10 +28,10 @@ const RAW_UNITS = [
   { id: 'k689', property: 'בקתות טוסקנה', cabin: 'טוסקנה · שאטו', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2730', ssid: 'Toscana', pass: '12345678' },
 
   // 3. טאג' מאהל (מושב רמות) — תווית מתחם: E/25
-  { id: 'k808', property: "טאג' מאהל", complexTag: 'E/25', cabin: "טאג' מאהל · בקתה 1 (E/25)", loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2510', ssid: 'LUTUS', pass: '12345678' },
-  { id: 'k809', property: "טאג' מאהל", complexTag: 'E/25', cabin: "טאג' מאהל · בקתה 2 (E/25)", loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2520', ssid: 'LUTUS', pass: '12345678' },
-  { id: 'k810', property: "טאג' מאהל", complexTag: 'E/25', cabin: "טאג' מאהל · בקתה 3 (E/25)", loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2530', ssid: 'LUTUS', pass: '12345678' },
-  { id: 'k811', property: "טאג' מאהל", complexTag: 'E/25', cabin: "טאג' מאהל · בקתה 4 (E/25)", loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2540', ssid: 'LUTUS', pass: '12345678' },
+  { id: 'k808', property: "טאג' מאהל", complexTag: 'E/25', cabin: "טאג' מאהל · בקתה 1 (E/25)", loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2510', ssid: 'lotus', pass: '12345678' },
+  { id: 'k809', property: "טאג' מאהל", complexTag: 'E/25', cabin: "טאג' מאהל · בקתה 2 (E/25)", loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2520', ssid: 'lotus', pass: '12345678' },
+  { id: 'k810', property: "טאג' מאהל", complexTag: 'E/25', cabin: "טאג' מאהל · בקתה 3 (E/25)", loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2530', ssid: 'lotus', pass: '12345678' },
+  { id: 'k811', property: "טאג' מאהל", complexTag: 'E/25', cabin: "טאג' מאהל · בקתה 4 (E/25)", loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2540', ssid: 'lotus', pass: '12345678' },
 
   // 4. מול הנוף (מושב רמות)
   { id: 'k680', property: 'מול הנוף', cabin: 'מול הנוף · בקתה 1', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2910', ssid: 'Mol_hanof', pass: '12345678' },

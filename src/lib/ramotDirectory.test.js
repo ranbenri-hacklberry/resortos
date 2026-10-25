@@ -29,6 +29,6 @@ describe('ramot directory', () => {
     expect(all.complexes.find((row) => row.id === 'toscana').units.map((unit) => unit.name)).toEqual([
       'טוסקנה · 1', 'טוסקנה · 2', 'טוסקנה · 3'
     ]);
-    expect(taj.complexes[0].wifi[0].ssid).toBe('LUTUS');
+    expect(taj.complexes[0].wifi[0].ssid).toBe('lotus');
   });
 });

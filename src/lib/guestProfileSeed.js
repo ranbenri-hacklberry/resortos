@@ -55,7 +55,7 @@ export const PROPERTY_SEED = {
   }),
   taj: property('taj', "טאג' מאהל", 'מושב רמות', 'ramot', 11, {
     content: { nav: { query: "טאג' מאהל מושב רמות" } },
-    access: { gate: RAMOT_GATE, wifi: [{ ssid: 'LUTUS', password: '12345678' }] }
+    access: { gate: RAMOT_GATE, wifi: [{ ssid: 'lotus', password: '12345678' }] }
   }),
   mool: property('mool', 'מול הנוף', 'מושב רמות', 'ramot', 12, {
     content: { nav: { query: 'מול הנוף ברמות', waze: 'https://waze.com/ul/hsvc6gtk3v' } },
