@@ -41,8 +41,8 @@ const RAW_UNITS = [
   { id: 'k684', property: 'מול הנוף', cabin: 'מול הנוף · בקתה 5', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2950', ssid: 'Mol_hanof', pass: '12345678' },
 
   // 5. נופים בלבן (מושב רמות)
-  { id: 'k685', property: 'נופים בלבן', cabin: 'נופים בלבן · בקתה 1', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2810', ssid: 'TP-LINK_FA30', pass: '15107312' },
-  { id: 'k686', property: 'נופים בלבן', cabin: 'נופים בלבן · בקתה 2', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2820', ssid: 'TP-LINK_FA30', pass: '15107312' },
+  { id: 'k685', property: 'נופים בלבן', cabin: 'נופים בלבן · בקתה 1', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2810', ssid: 'TP-Link_FA30_5G', pass: '15107312' },
+  { id: 'k686', property: 'נופים בלבן', cabin: 'נופים בלבן · בקתה 2', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2820', ssid: 'TP-Link_FA30_5G', pass: '15107312' },
 
   // 6. החצר המוסיקלית (מושב רמות)
   { id: 'k690', property: 'החצר המוסיקלית', cabin: 'חצר מוסיקלית · בקתה 1 (חליל)', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2610', ssid: 'Music yard', pass: '12345678' },

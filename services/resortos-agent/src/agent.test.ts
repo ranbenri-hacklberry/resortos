@@ -1336,7 +1336,7 @@ describe('guest knowledge & digital stay Q&A', () => {
     expect(res.handled).toBe(true);
     expect(deps.sent).toHaveLength(1);
     const reply = deps.sent[0][1];
-    expect(reply).toContain('TP-LINK_FA30');
+    expect(reply).toContain('TP-Link_FA30_5G');
     expect(reply).toContain('15107312');
     expect(reply).toContain('https://resortos.app/stay/token-dan-123');
   });
@@ -2763,7 +2763,7 @@ describe('S03 alert + S05 fault priority and word-boundary keywords', () => {
     expect(answerGuestQuestion('זה דחוף', ctx)).toBeNull();
     expect(answerGuestQuestion('המיטות מתאימות? אנחנו מתאימים', ctx)).toBeNull();
     // real keywords with Hebrew prefixes still match
-    expect(answerGuestQuestion('מה הסיסמה לווייפי?', ctx)).toContain('TP-LINK_FA30');
+    expect(answerGuestQuestion('מה הסיסמה לווייפי?', ctx)).toContain('TP-Link_FA30_5G');
     expect(answerGuestQuestion('יש חוף קרוב?', ctx)).toContain('חופי כנרת');
     expect((await placeMenuFor('איפה יש סופר?'))?.text).toContain('איפה קונים');
     expect((await placeMenuFor('בא לנו יין טוב'))?.text).toContain('אטרקציות');
@@ -2835,7 +2835,7 @@ describe('S08: broader fault intent, groceries need shopping words', () => {
     }
     const { answerGuestQuestion } = await import('./guest/guestKnowledge.js');
     const ctx = { booking: { id: 'x' } as any, unitId: 'k685', roomName: 'נופים בלבן 1', room: nofim };
-    expect(answerGuestQuestion('האינטרנט לא עובד', ctx)).toContain('TP-LINK_FA30');
+    expect(answerGuestQuestion('האינטרנט לא עובד', ctx)).toContain('TP-Link_FA30_5G');
     expect(answerGuestQuestion('הכספת לא נפתחת', ctx)).toContain('2810');
   });
 });

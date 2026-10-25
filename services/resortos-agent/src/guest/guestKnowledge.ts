@@ -255,7 +255,7 @@ export const PROPERTY_WIFI: Record<string, WifiInfo> = {
   // Taj Mahal (k808..k811)
   taj: { ssid: 'lotus', password: '12345678' },
   // Nofim Belavan (k685, k686)
-  nofim: { ssid: 'TP-LINK_FA30', password: '15107312' },
+  nofim: { ssid: 'TP-Link_FA30_5G', password: '15107312' },
   // Mool Hanof (k680..k684)
   mool: { ssid: 'Mol_hanof', password: '12345678' },
   // Batei Nurit (k671..k679)

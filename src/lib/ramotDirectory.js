@@ -84,7 +84,7 @@ const COMPLEXES = [
     name: 'נופים בלבן',
     query: 'נופים בלבן מושב רמות',
     waze: 'https://waze.com/ul?q=Nofim+Belavan+Ramot&navigate=yes',
-    wifi: [{ ssid: 'TP-LINK_FA30', password: '15107312' }],
+    wifi: [{ ssid: 'TP-Link_FA30_5G', password: '15107312' }],
     units: [
       { id: 'k685', name: 'נופים בלבן · בקתה 1' },
       { id: 'k686', name: 'נופים בלבן · בקתה 2', wifi: [] }

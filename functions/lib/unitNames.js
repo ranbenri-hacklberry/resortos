@@ -75,7 +75,7 @@ export const CATALOG_WIFI = {
   taj: [{ ssid: 'lotus', password: '12345678' }],
   nurit: [{ ssid: 'MIALEES RESORT', password: 'Mial2026' }],
   mool: [{ ssid: 'Mol_hanof', password: '12345678' }],
-  nofim: [{ ssid: 'TP-LINK_FA30', password: '15107312' }],
+  nofim: [{ ssid: 'TP-Link_FA30_5G', password: '15107312' }],
   toscana: [{ ssid: 'Toscana', password: '12345678' }],
   musical: [{ ssid: 'Music yard', password: '12345678' }],
   maya: [{ ssid: 'Maya', password: '12345678' }],

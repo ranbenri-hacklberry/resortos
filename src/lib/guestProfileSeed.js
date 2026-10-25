@@ -63,7 +63,7 @@ export const PROPERTY_SEED = {
   }),
   nofim: property('nofim', 'נופים בלבן', 'מושב רמות', 'ramot', 13, {
     content: { nav: { query: 'נופים בלבן מושב רמות' } },
-    access: { gate: RAMOT_GATE, wifi: [{ ssid: 'TP-LINK_FA30', password: '15107312' }] }
+    access: { gate: RAMOT_GATE, wifi: [{ ssid: 'TP-Link_FA30_5G', password: '15107312' }] }
   }),
   toscana: property('toscana', 'בקתות טוסקנה', 'מושב רמות', 'ramot', 14, {
     content: { nav: { query: 'בקתות טוסקנה מושב רמות', waze: 'https://waze.com/ul/hsvc6gsux5' } },
