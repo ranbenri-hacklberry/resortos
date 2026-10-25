@@ -737,8 +737,8 @@ function buildCabinPortalBooking(unitId, today = israelTodayIso()) {
   const prop = UNIT_PROPERTY[unitId] || '';
   const wifiList = (UNIT_WIFI[unitId] && UNIT_WIFI[unitId].length)
     ? UNIT_WIFI[unitId]
-    : (CATALOG_WIFI[prop] || [{ ssid: 'Mialees Resort', password: 'mialees2024' }]);
-  const wifi = wifiList[0] || { ssid: 'Mialees Resort', password: 'mialees2024' };
+    : (CATALOG_WIFI[prop] || []);
+  const wifi = wifiList[0] || null;
   const lockbox = CATALOG_LOCKBOX[unitId] || '';
   return {
     id: `cabin_${unitId}`,
@@ -757,8 +757,8 @@ function buildCabinPortalBooking(unitId, today = israelTodayIso()) {
     stay: {
       cabin_ready: true,
       guest_checked_in_at: new Date().toISOString(),
-      wifi_ssid: wifi.ssid,
-      wifi_password: wifi.password,
+      wifi_ssid: wifi?.ssid || null,
+      wifi_password: wifi?.password || null,
       wifi_networks: wifiList,
       lockbox_code: lockbox,
       door_pin: lockbox,

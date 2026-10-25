@@ -60,15 +60,15 @@ const RAW_UNITS = [
   { id: 'suite-2', property: 'מיאליס ריזורט', cabin: 'סוויטה 2 (הורודה)', loc: 'מושב נאות גולן, דרום רמת הגולן', zone: 'neot-golan', lockbox: 'הקוד יימסר בהודעה', ssid: 'CASAMIA', pass: 'CASAMIA10' },
 
   // 9. כיפת שמיים (מושב גבעת יואב)
-  { id: 'dome-blue', property: 'כיפת שמיים', cabin: 'כיפת שמיים כחול', loc: 'מושב גבעת יואב, דרום רמת הגולן', zone: 'givat-yoav', lockbox: 'הקוד יימסר בהודעה', ssid: 'Kipat_Shamayim', pass: '12345678' },
-  { id: 'dome-green', property: 'כיפת שמיים', cabin: 'כיפת שמיים ירוק', loc: 'מושב גבעת יואב, דרום רמת הגולן', zone: 'givat-yoav', lockbox: 'הקוד יימסר בהודעה', ssid: 'Kipat_Shamayim', pass: '12345678' },
-  { id: 'dome-red', property: 'כיפת שמיים', cabin: 'כיפת שמיים אדום', loc: 'מושב גבעת יואב, דרום רמת הגולן', zone: 'givat-yoav', lockbox: 'הקוד יימסר בהודעה', ssid: 'Kipat_Shamayim', pass: '12345678' },
+  { id: 'dome-blue', property: 'כיפת שמיים', cabin: 'כיפת שמיים כחול', loc: 'מושב גבעת יואב, דרום רמת הגולן', zone: 'givat-yoav', lockbox: 'הקוד יימסר בהודעה', ssid: null, pass: null },
+  { id: 'dome-green', property: 'כיפת שמיים', cabin: 'כיפת שמיים ירוק', loc: 'מושב גבעת יואב, דרום רמת הגולן', zone: 'givat-yoav', lockbox: 'הקוד יימסר בהודעה', ssid: null, pass: null },
+  { id: 'dome-red', property: 'כיפת שמיים', cabin: 'כיפת שמיים אדום', loc: 'מושב גבעת יואב, דרום רמת הגולן', zone: 'givat-yoav', lockbox: 'הקוד יימסר בהודעה', ssid: null, pass: null },
 
   // 10. צימר בגבעה (מושב גבעת יואב)
-  { id: 'hill-1', property: 'צימר בגבעה', cabin: 'צימר בגבעה 1', loc: 'מושב גבעת יואב, דרום רמת הגולן', zone: 'givat-yoav', lockbox: '3041', ssid: 'Zimer_Giva', pass: '12345678' },
-  { id: 'hill-2', property: 'צימר בגבעה', cabin: 'צימר בגבעה 2', loc: 'מושב גבעת יואב, דרום רמת הגולן', zone: 'givat-yoav', lockbox: '3042', ssid: 'Zimer_Giva', pass: '12345678' },
-  { id: 'hill-3', property: 'צימר בגבעה', cabin: 'צימר בגבעה 3', loc: 'מושב גבעת יואב, דרום רמת הגולן', zone: 'givat-yoav', lockbox: '3043', ssid: 'Zimer_Giva', pass: '12345678' },
-  { id: 'hill-4', property: 'צימר בגבעה', cabin: 'צימר בגבעה 4', loc: 'מושב גבעת יואב, דרום רמת הגולן', zone: 'givat-yoav', lockbox: '3044', ssid: 'Zimer_Giva', pass: '12345678' },
+  { id: 'hill-1', property: 'צימר בגבעה', cabin: 'צימר בגבעה 1', loc: 'מושב גבעת יואב, דרום רמת הגולן', zone: 'givat-yoav', lockbox: '3041', ssid: null, pass: null },
+  { id: 'hill-2', property: 'צימר בגבעה', cabin: 'צימר בגבעה 2', loc: 'מושב גבעת יואב, דרום רמת הגולן', zone: 'givat-yoav', lockbox: '3042', ssid: null, pass: null },
+  { id: 'hill-3', property: 'צימר בגבעה', cabin: 'צימר בגבעה 3', loc: 'מושב גבעת יואב, דרום רמת הגולן', zone: 'givat-yoav', lockbox: '3043', ssid: null, pass: null },
+  { id: 'hill-4', property: 'צימר בגבעה', cabin: 'צימר בגבעה 4', loc: 'מושב גבעת יואב, דרום רמת הגולן', zone: 'givat-yoav', lockbox: '3044', ssid: null, pass: null },
 
   // 11. קאסה נובה (מושב נוב)
   { id: 'k826', property: 'קאסה נובה', cabin: 'קאסה נובה · Aura', loc: 'מושב נוב, דרום רמת הגולן', zone: 'casa-nova', lockbox: 'הקוד יימסר בהודעה', ssid: 'MIALEES', pass: 'AD654321' },
@@ -85,13 +85,17 @@ for (const unit of RAW_UNITS) {
     color: { dark: '#1c1917', light: '#ffffff' }
   });
 
-  const wifiPayload = `WIFI:T:WPA;S:${unit.ssid};P:${unit.pass};;`;
-  unit.wifiQr = await QRCode.toDataURL(wifiPayload, {
-    errorCorrectionLevel: 'M',
-    margin: 1,
-    width: 160,
-    color: { dark: '#1c1917', light: '#ffffff' }
-  });
+  if (unit.ssid && unit.pass) {
+    const wifiPayload = `WIFI:T:WPA;S:${unit.ssid};P:${unit.pass};;`;
+    unit.wifiQr = await QRCode.toDataURL(wifiPayload, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      width: 160,
+      color: { dark: '#1c1917', light: '#ffffff' }
+    });
+  } else {
+    unit.wifiQr = null;
+  }
 }
 
 function buildHtml(units) {
@@ -823,7 +827,7 @@ function buildHtml(units) {
               <span class="access-icon">📶</span>
               <span>אינטרנט אלחוטי (Wi-Fi)</span>
             </div>
-            <div class="wifi-body">
+            <div class="wifi-body" id="wifi-body">
               <div class="wifi-details">
                 <div class="wifi-row">
                   <span class="w-label">רשת:</span>
@@ -839,7 +843,10 @@ function buildHtml(units) {
                 <div class="wifi-qr-sub">סריקה לחיבור</div>
               </div>
             </div>
-            <div class="access-sub">סרקו במצלמה לחיבור מיידי לרשת</div>
+            <div class="access-value is-text" id="wifi-none-val" style="display: none; padding: 1.5mm 0; color: var(--ink-secondary);">
+              אין חיבור אינטרנט כרגע
+            </div>
+            <div class="access-sub" id="wifi-sub">סרקו במצלמה לחיבור מיידי לרשת</div>
           </div>
         </div>
 
@@ -1015,12 +1022,24 @@ function buildHtml(units) {
       }
 
       // Wi-Fi (Rule 2)
-      sheetElement.querySelector('#wifi-ssid').textContent = unit.ssid || 'רשת זמינה במקום';
-      sheetElement.querySelector('#wifi-pass').textContent = unit.pass || 'ללא סיסמה';
-      const wifiQrImg = sheetElement.querySelector('#wifi-qr-img');
-      if (wifiQrImg && unit.wifiQr) {
-        wifiQrImg.setAttribute('src', unit.wifiQr);
-        wifiQrImg.src = unit.wifiQr;
+      const wifiBodyEl = sheetElement.querySelector('#wifi-body');
+      const wifiNoneEl = sheetElement.querySelector('#wifi-none-val');
+      const wifiSubEl = sheetElement.querySelector('#wifi-sub');
+      if (unit.ssid && unit.wifiQr) {
+        if (wifiBodyEl) wifiBodyEl.style.display = 'flex';
+        if (wifiNoneEl) wifiNoneEl.style.display = 'none';
+        sheetElement.querySelector('#wifi-ssid').textContent = unit.ssid;
+        sheetElement.querySelector('#wifi-pass').textContent = unit.pass || 'ללא סיסמה';
+        const wifiQrImg = sheetElement.querySelector('#wifi-qr-img');
+        if (wifiQrImg) {
+          wifiQrImg.setAttribute('src', unit.wifiQr);
+          wifiQrImg.src = unit.wifiQr;
+        }
+        if (wifiSubEl) wifiSubEl.textContent = 'סרקו במצלמה לחיבור מיידי לרשת';
+      } else {
+        if (wifiBodyEl) wifiBodyEl.style.display = 'none';
+        if (wifiNoneEl) wifiNoneEl.style.display = 'block';
+        if (wifiSubEl) wifiSubEl.textContent = 'במתחם זה אין רשת אלחוטית (Wi-Fi)';
       }
 
       // Guest Hub QR Code
@@ -1256,6 +1275,7 @@ function buildSamplesHtml(complexes, units) {
               <span class="access-icon">📶</span>
               <span>אינטרנט אלחוטי (Wi-Fi)</span>
             </div>
+            ${unit.ssid && unit.wifiQr ? `
             <div class="wifi-body">
               <div class="wifi-details">
                 <div class="wifi-row">
@@ -1273,6 +1293,12 @@ function buildSamplesHtml(complexes, units) {
               </div>
             </div>
             <div class="access-sub">סרקו במצלמה לחיבור מיידי לרשת</div>
+            ` : `
+            <div class="access-value is-text" style="padding: 1.5mm 0; color: var(--ink-secondary);">
+              אין חיבור אינטרנט כרגע
+            </div>
+            <div class="access-sub">במתחם זה אין רשת אלחוטית (Wi-Fi)</div>
+            `}
           </div>
         </div>
 

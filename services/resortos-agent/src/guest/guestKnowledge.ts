@@ -270,10 +270,6 @@ export const PROPERTY_WIFI: Record<string, WifiInfo> = {
   mialis: { ssid: 'CASAMIA', password: 'CASAMIA10' },
   // Casa Nova (Nov)
   'casa-nova': { ssid: 'MIALEES', password: 'AD654321' },
-  // Zimer BaGiva (Givat Yoav)
-  hill: { ssid: 'Zimer_Giva', password: '12345678' },
-  // Kipat Hashamayim (Givat Yoav)
-  kipat: { ssid: 'Kipat_Shamayim', password: '12345678' },
   // Main office / demo room (pilot-office). Confirmed by Ran 2026-10-19; matches guestProfileSeed.js UNIT_OVERRIDES.
   office: { ssid: 'ResortOS_5G', password: '0506102416' },
 };
@@ -674,6 +670,11 @@ function answerInfoKind(kind: InfoKind, q: string, question: string, ctx: GuestC
     case 'wifi': {
       // No booking matched: ask for the booking phone. Matched but unit has no known Wi-Fi: null → existing fallback.
       if (!ctx.unitId) return lang === 'he' ? WIFI_NEED_BOOKING_REPLY : T.wifiNeedBooking(lang);
+      const prop = UNIT_TO_PROPERTY[ctx.unitId];
+      if (prop === 'hill' || prop === 'kipat') {
+        if (lang !== 'he') return 'Currently there is no Wi-Fi / internet connection at this complex.';
+        return `📶 במתחם ${ctx.roomName} (גבעת יואב) אין חיבור לאינטרנט / Wi-Fi כרגע.`;
+      }
       const wifi = getWifiForUnit(ctx.unitId);
       if (!wifi) return null;
       if (lang !== 'he') return T.wifi(lang, ctx.roomName, wifi.ssid, wifi.password, ctx.stayUrl);

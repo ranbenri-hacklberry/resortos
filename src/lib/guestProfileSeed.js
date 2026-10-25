@@ -39,11 +39,11 @@ function property(id, name, village, cluster, sort_order, extra = {}) {
 export const PROPERTY_SEED = {
   hill: property('hill', 'צימר בגבעה', 'גבעת יואב', 'givat', 1, {
     content: { nav: { query: 'צימר בגבעה גבעת יואב', placeId: 'ChIJ19h0kHsRHBURwfbIlIF6slA' } },
-    access: { gate: DIAL_GATE, wifi: [{ ssid: 'Zimer_Giva', password: '12345678' }] }
+    access: { gate: DIAL_GATE, wifi: [] }
   }),
   kipat: property('kipat', 'כיפת שמיים', 'גבעת יואב', 'givat', 2, {
     content: { nav: { query: 'כיפת השמיים גבעת יואב', placeId: 'ChIJowoxPLsRHBURo64q7zHS1pk' } },
-    access: { gate: DIAL_GATE, wifi: [{ ssid: 'Kipat_Shamayim', password: '12345678' }] }
+    access: { gate: DIAL_GATE, wifi: [] }
   }),
   mialis: property('mialis', 'מיאליס ריזורט', 'גבעת יואב', 'givat', 3, {
     content: { nav: { query: 'מיאליס ריזורט גבעת יואב' } },
