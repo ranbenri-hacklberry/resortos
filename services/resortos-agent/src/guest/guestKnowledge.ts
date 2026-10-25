@@ -270,6 +270,10 @@ export const PROPERTY_WIFI: Record<string, WifiInfo> = {
   mialis: { ssid: 'CASAMIA', password: 'CASAMIA10' },
   // Casa Nova (Nov)
   'casa-nova': { ssid: 'MIALEES', password: 'AD654321' },
+  // Zimer BaGiva (Givat Yoav)
+  hill: { ssid: 'Zimer_Giva', password: '12345678' },
+  // Kipat Hashamayim (Givat Yoav)
+  kipat: { ssid: 'Kipat_Shamayim', password: '12345678' },
   // Main office / demo room (pilot-office). Confirmed by Ran 2026-10-19; matches guestProfileSeed.js UNIT_OVERRIDES.
   office: { ssid: 'ResortOS_5G', password: '0506102416' },
 };
@@ -284,6 +288,8 @@ export const UNIT_TO_PROPERTY: Record<string, string> = {
   k693: 'maya', k694: 'maya', k695: 'maya',
   'mialis-villa': 'mialis', 'suite-1': 'mialis', 'suite-2': 'mialis',
   'k826': 'casa-nova', 'k827': 'casa-nova',
+  'hill-1': 'hill', 'hill-2': 'hill', 'hill-3': 'hill', 'hill-4': 'hill',
+  'dome-blue': 'kipat', 'dome-green': 'kipat', 'dome-red': 'kipat',
   'pilot-office': 'office',
 };
 

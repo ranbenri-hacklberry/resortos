@@ -80,7 +80,9 @@ export const CATALOG_WIFI = {
   musical: [{ ssid: 'Music yard', password: '12345678' }],
   maya: [{ ssid: 'Maya', password: '12345678' }],
   mialis: [{ ssid: 'CASAMIA', password: 'CASAMIA10' }],
-  'casa-nova': [{ ssid: 'MIALEES', password: 'AD654321' }]
+  'casa-nova': [{ ssid: 'MIALEES', password: 'AD654321' }],
+  hill: [{ ssid: 'Zimer_Giva', password: '12345678' }],
+  kipat: [{ ssid: 'Kipat_Shamayim', password: '12345678' }]
 };
 
 export const RAMOT_GATE_CODE = '#2464';
