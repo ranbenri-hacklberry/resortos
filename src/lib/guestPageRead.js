@@ -1,3 +1,4 @@
+import { readFileSync } from 'fs';
 import { isFullyPaid } from './bookingPaid.js';
 import { LATE_FREE_DAY } from './cabinAccess.js';
 import { guestStayUrl } from './guestStayUrl.js';
@@ -13,7 +14,18 @@ import {
 } from '../../functions/lib/unitNames.js';
 
 /** Same Hebrew label as i18n INSTAY_CALL_ME, the in-stay call button. */
-export const GUEST_CALL_BUTTON = '📞 חזרו אליי';
+function hebrewCallButton() {
+  try {
+    const source = readFileSync(new URL('../i18n.js', import.meta.url), 'utf8');
+    const match = source.match(/"INSTAY_CALL_ME":\s*"([^"]+)"/);
+    if (match) return match[1];
+  } catch {
+    // The label is only needed when the MCP server can read the guest i18n file.
+  }
+  return '📞 חזרו אליי';
+}
+
+export const GUEST_CALL_BUTTON = hebrewCallButton();
 
 const PROPERTY_NAMES = {
   hill: 'צימר בגבעה',

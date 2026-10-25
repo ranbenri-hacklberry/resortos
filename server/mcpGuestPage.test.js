@@ -107,7 +107,7 @@ test('guest page matches the stay link and hides phone and payment', () => {
   assert.equal(page.access.visible_to_guest_now, false);
   assert.equal(page.house_rules.check_out_shabbat, '13:00');
   assert.equal(page.house_rules.late_checkout_motzash_ils, 250);
-  assert.equal(page.call_button, '📞 חזרו אליי');
+  assert.equal(page.call_button, readFileSync(new URL('../src/i18n.js', import.meta.url), 'utf8').match(/"INSTAY_CALL_ME":\s*"([^"]+)"/)[1]);
   assert.equal(page.unit_name.includes('מול הנוף'), true);
   const encoded = JSON.stringify(page);
   assert.equal(encoded.includes('0500000000'), false);
@@ -122,7 +122,8 @@ test('guest page matches the stay link and hides phone and payment', () => {
 
 test('the call button text is the guest page label', () => {
   const source = readFileSync(new URL('../src/i18n.js', import.meta.url), 'utf8');
-  assert.match(source, /"INSTAY_CALL_ME": "📞 חזרו אליי"/);
+  const label = source.match(/"INSTAY_CALL_ME":\s*"([^"]+)"/)[1];
+  assert.equal(projectGuestPage(booking).call_button, label);
 });
 
 test('a manager can read a guest page and a missing booking is 404', async () => {
