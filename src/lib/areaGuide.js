@@ -113,6 +113,7 @@ const DRIVE = {
   shop_bnei_yehuda_super: { ramot: 17, givat: 2 },
   shop_alon_haon: { ramot: 15, givat: 12 },
   shop_givat_gas: { ramot: 15, givat: 0 },
+  shop_super_hagolan: { ramot: 0, givat: 15 },
   attr_abukayak: { ramot: 20, givat: 25 },
   attr_hamat_gader: { ramot: 45, givat: 35 },
   attr_eingev_port: { ramot: 12, givat: 15 },
@@ -123,7 +124,8 @@ const DRIVE = {
   attr_ein_tana: { ramot: 15, givat: 0 },
   attr_terra_nova: { ramot: 12, givat: 5 },
   attr_jeeps: { ramot: 'pickup', givat: 'pickup' },
-  attr_shulchan: { ramot: 12, givat: 5 }
+  attr_shulchan: { ramot: 12, givat: 5 },
+  attr_lavender_farm: { ramot: 12, givat: 5 }
 };
 
 function formatDrive(mins, cluster) {
@@ -559,6 +561,18 @@ export const SHOPS = [
     photo: pic('places/supermarket-gallery-ramot-super.jpg')
   },
   {
+    id: 'shop_super_hagolan',
+    title: 'סופר הגולן · רמות',
+    kind: 'סופרמרקט, פארם ומצרכים',
+    dist: 'בתוך המושב',
+    hours: 'א׳–ה׳ 07:30–20:00 · ו׳ 07:30–16:00',
+    desc: 'סופרמרקט מקומי במושב רמות להצטיידות במצרכים, פחמים, מוצרי חלב ומוצרים בסיסיים לבקתה.',
+    mapsUrl: 'https://maps.app.goo.gl/4Mc2WVDtfj16Xp4TA',
+    wazeUrl: waze('סופר הגולן מושב רמות'),
+    tone: 'shop',
+    photo: pic('places/super-ramot-shopo-super.jpg')
+  },
+  {
     id: 'shop_marinado',
     title: 'קצביית מרינדו · עין גב',
     kind: 'בשר, יין ומעדני משק',
@@ -795,6 +809,19 @@ export const ATTRACTIONS = [
     wazeUrl: waze('שולחן האוכל כנף'),
     tone: 'wine',
     photo: pic('places/shulchan-haochel-kanaf-breakfast.jpg')
+  },
+  {
+    id: 'attr_lavender_farm',
+    title: 'חוות הלבנדר (עזיזו) · כנף',
+    kind: 'שדות לבנדר, מרכז מבקרים וחנות בוטיק',
+    dist: "כ־12 דק' · כנף",
+    hours: 'א׳–ש׳ 09:00–16:00 · מומלץ לוודא שעות פריחה',
+    desc: 'חוות לבנדר קסומה בכנף מול הכנרת. שדות פורחים, מוצרי טיפוח טבעיים, בית קפה וגלידת לבנדר.',
+    phone: '050-587-1515',
+    mapsUrl: 'https://share.google/95RXsGCk4fAsnlvfd',
+    wazeUrl: waze('חוות הלבנדר עזיזו כנף'),
+    tone: 'view',
+    photo: pic('places/terra-nova-winery-kanaf-wine.jpg')
   }
 ];
 
