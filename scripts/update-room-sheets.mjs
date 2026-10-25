@@ -920,8 +920,10 @@ function buildHtml(units) {
             </div>
           </div>
           <div class="hub-qr-wrap">
-            <img id="hub-qr-img" class="hub-qr" alt="QR Code" src="" />
-            <div class="qr-caption">סריקה במצלמה</div>
+            <a id="hub-qr-link" href="https://resortos.app/guest?unit=k687" target="_blank" style="text-decoration: none; color: inherit; display: block;">
+              <img id="hub-qr-img" class="hub-qr" alt="QR Code" src="" />
+              <div class="qr-caption">סריקה במצלמה</div>
+            </a>
           </div>
         </div>
 
@@ -1044,8 +1046,16 @@ function buildHtml(units) {
 
       // Guest Hub QR Code
       const qrImg = sheetElement.querySelector('#hub-qr-img');
-      qrImg.setAttribute('src', unit.qr);
-      qrImg.src = unit.qr;
+      const qrLink = sheetElement.querySelector('#hub-qr-link');
+      const guestUrl = 'https://resortos.app/guest?unit=' + encodeURIComponent(unit.id);
+      if (qrImg) {
+        qrImg.setAttribute('src', unit.qr);
+        qrImg.src = unit.qr;
+      }
+      if (qrLink) {
+        qrLink.setAttribute('href', guestUrl);
+        qrLink.href = guestUrl;
+      }
 
       // Casa Nova Shabbat Notice on Fridays (Rule 4)
       const shabbatBanner = sheetElement.querySelector('#shabbat-alert-banner');
@@ -1379,8 +1389,10 @@ function buildSamplesHtml(complexes, units) {
             </div>
           </div>
           <div class="hub-qr-wrap">
-            <img class="hub-qr" alt="QR Code" src="${unit.qr}" />
-            <div class="qr-caption">סריקה במצלמה</div>
+            <a href="https://resortos.app/guest?unit=${encodeURIComponent(unit.id)}" target="_blank" style="text-decoration: none; color: inherit; display: block;">
+              <img class="hub-qr" alt="QR Code" src="${unit.qr}" />
+              <div class="qr-caption">סריקה במצלמה</div>
+            </a>
           </div>
         </div>
 
