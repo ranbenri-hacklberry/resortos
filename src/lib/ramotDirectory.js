@@ -40,7 +40,7 @@ const COMPLEXES = [
     name: 'בתי נורית',
     query: 'בתי נורית מושב רמות',
     waze: 'https://waze.com/ul/hsvc6gs4p2',
-    wifi: [{ ssid: 'MIALEES RESORT', password: 'MIAL2026' }],
+    wifi: [{ ssid: 'MIALEES RESORT', password: 'Mial2026' }],
     units: [
       { id: 'k671', name: 'בתי נורית 1' },
       { id: 'k673', name: 'בתי נורית 2' },

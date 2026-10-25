@@ -576,7 +576,7 @@ function GuestAppScreen({ screen, t }) {
           <div className="ga-card">
             <div className="ga-line muted"><Wifi size={13} /> {s.wifi}</div>
             <strong>MIALEES RESORT</strong>
-            <code>MIAL2026</code>
+            <code>Mial2026</code>
           </div>
           <div className="ga-card">
             <div className="ga-line muted"><KeyRound size={13} /> {s.gate}</div>

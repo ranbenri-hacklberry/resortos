@@ -13,14 +13,14 @@ const shabbatTime = getShabbatEntryTime();
 // 41 Units categorized strictly according to requirements
 const RAW_UNITS = [
   // 1. בתי נורית (מושב רמות)
-  { id: 'k671', property: 'בתי נורית', cabin: 'בתי נורית 1', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2310', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
-  { id: 'k673', property: 'בתי נורית', cabin: 'בתי נורית 2', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2320', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
-  { id: 'k674', property: 'בתי נורית', cabin: 'בתי נורית 3', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2330', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
-  { id: 'k675', property: 'בתי נורית', cabin: 'בתי נורית 4', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2340', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
-  { id: 'k676', property: 'בתי נורית', cabin: 'בתי נורית 5', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2350', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
-  { id: 'k677', property: 'בתי נורית', cabin: 'בתי נורית 6', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2360', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
-  { id: 'k678', property: 'בתי נורית', cabin: 'בתי נורית 7', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2370', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
-  { id: 'k679', property: 'בתי נורית', cabin: 'בתי נורית 8', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2380', ssid: 'MIALEES RESORT', pass: 'MIAL2026' },
+  { id: 'k671', property: 'בתי נורית', cabin: 'בתי נורית 1', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2310', ssid: 'MIALEES RESORT', pass: 'Mial2026' },
+  { id: 'k673', property: 'בתי נורית', cabin: 'בתי נורית 2', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2320', ssid: 'MIALEES RESORT', pass: 'Mial2026' },
+  { id: 'k674', property: 'בתי נורית', cabin: 'בתי נורית 3', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2330', ssid: 'MIALEES RESORT', pass: 'Mial2026' },
+  { id: 'k675', property: 'בתי נורית', cabin: 'בתי נורית 4', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2340', ssid: 'MIALEES RESORT', pass: 'Mial2026' },
+  { id: 'k676', property: 'בתי נורית', cabin: 'בתי נורית 5', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2350', ssid: 'MIALEES RESORT', pass: 'Mial2026' },
+  { id: 'k677', property: 'בתי נורית', cabin: 'בתי נורית 6', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2360', ssid: 'MIALEES RESORT', pass: 'Mial2026' },
+  { id: 'k678', property: 'בתי נורית', cabin: 'בתי נורית 7', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2370', ssid: 'MIALEES RESORT', pass: 'Mial2026' },
+  { id: 'k679', property: 'בתי נורית', cabin: 'בתי נורית 8', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2380', ssid: 'MIALEES RESORT', pass: 'Mial2026' },
 
   // 2. בקתות טוסקנה (מושב רמות)
   { id: 'k687', property: 'בקתות טוסקנה', cabin: 'טוסקנה · 1', loc: 'מושב רמות, רמת הגולן', zone: 'ramot', lockbox: '2710', ssid: 'Toscana', pass: '12345678' },

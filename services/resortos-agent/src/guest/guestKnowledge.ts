@@ -259,7 +259,7 @@ export const PROPERTY_WIFI: Record<string, WifiInfo> = {
   // Mool Hanof (k680..k684)
   mool: { ssid: 'Mol_hanof', password: '12345678' },
   // Batei Nurit (k671..k679)
-  nurit: { ssid: 'MIALEES RESORT', password: 'MIAL2026' },
+  nurit: { ssid: 'MIALEES RESORT', password: 'Mial2026' },
   // Toscana (k687..k689)
   toscana: { ssid: 'Toscana', password: '12345678' },
   // Musical Courtyard (k690..k692)

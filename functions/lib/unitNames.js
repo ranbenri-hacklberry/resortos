@@ -73,7 +73,7 @@ export const UNIT_WIFI = {
 
 export const CATALOG_WIFI = {
   taj: [{ ssid: 'LUTUS', password: '12345678' }],
-  nurit: [{ ssid: 'MIALEES RESORT', password: 'MIAL2026' }],
+  nurit: [{ ssid: 'MIALEES RESORT', password: 'Mial2026' }],
   mool: [{ ssid: 'Mol_hanof', password: '12345678' }],
   nofim: [{ ssid: 'TP-LINK_FA30', password: '15107312' }],
   toscana: [{ ssid: 'Toscana', password: '12345678' }],

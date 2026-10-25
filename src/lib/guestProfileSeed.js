@@ -51,7 +51,7 @@ export const PROPERTY_SEED = {
   }),
   nurit: property('nurit', 'בתי נורית', 'מושב רמות', 'ramot', 10, {
     content: { nav: { query: 'בתי נורית מושב רמות', waze: 'https://waze.com/ul/hsvc6gs4p2' } },
-    access: { gate: RAMOT_GATE, wifi: [{ ssid: 'MIALEES RESORT', password: 'MIAL2026' }] }
+    access: { gate: RAMOT_GATE, wifi: [{ ssid: 'MIALEES RESORT', password: 'Mial2026' }] }
   }),
   taj: property('taj', "טאג' מאהל", 'מושב רמות', 'ramot', 11, {
     content: { nav: { query: "טאג' מאהל מושב רמות" } },

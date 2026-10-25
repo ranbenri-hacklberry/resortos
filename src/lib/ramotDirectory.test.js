@@ -8,7 +8,7 @@ describe('ramot directory', () => {
       'nurit', 'taj', 'mool', 'nofim', 'toscana', 'musical', 'maya'
     ]);
     expect(list.every((row) => row.wazeUrl && row.mapsUrl.includes('google.com'))).toBe(true);
-    expect(JSON.stringify(list)).not.toMatch(/2310|MIAL2026|4696/);
+    expect(JSON.stringify(list)).not.toMatch(/2310|Mial2026|MIAL2026|4696/);
   });
 
   it('accepts the three staff pins and returns lockbox plus wifi', () => {
