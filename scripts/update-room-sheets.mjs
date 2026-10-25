@@ -339,15 +339,15 @@ function buildHtml(units) {
     .times-row {
       display: grid;
       grid-template-columns: 1fr 1fr 1.35fr;
-      gap: 3mm;
-      margin: 2.2mm 0;
+      gap: 2.5mm;
+      margin: 1.6mm 0;
       text-align: center;
     }
     .time-card {
       background: #FFFFFF;
       border: 1px solid var(--border-fine);
       border-radius: 6px;
-      padding: 2.2mm 2mm;
+      padding: 1.5mm 2mm;
       box-shadow: 0 1px 4px rgba(0,0,0,0.02);
       display: flex;
       flex-direction: column;
@@ -355,29 +355,29 @@ function buildHtml(units) {
       align-items: center;
     }
     .time-label {
-      font-size: 11.5px;
+      font-size: 11px;
       font-weight: 800;
       color: var(--ink-muted);
       text-transform: uppercase;
       letter-spacing: 0.04em;
-      margin-bottom: 1px;
+      margin-bottom: 0px;
     }
     .time-val {
-      font-size: 24px;
+      font-size: 21px;
       font-weight: 900;
       color: var(--ink-primary);
       line-height: 1.1;
       font-family: 'Assistant', sans-serif;
     }
     .time-val.saturday {
-      font-size: 20px;
+      font-size: 18px;
       color: var(--gold-deep);
     }
     .time-sub.saturday-sub {
-      font-size: 10px;
+      font-size: 9.5px;
       font-weight: 800;
       color: #9A3412;
-      margin-top: 1.5px;
+      margin-top: 0.5px;
       line-height: 1.2;
     }
 
@@ -385,76 +385,77 @@ function buildHtml(units) {
     .access-grid {
       display: grid;
       grid-template-columns: 1fr 1.12fr 1.48fr;
-      gap: 3mm;
-      margin-bottom: 2.2mm;
+      gap: 2.5mm;
+      margin-bottom: 1.6mm;
     }
     .access-card {
       background: #FFFFFF;
       border: 1px solid var(--border-fine);
       border-top: 3px solid var(--gold-primary);
       border-radius: 6px;
-      padding: 2.5mm 3mm;
+      padding: 1.8mm 2.8mm;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      min-height: 29mm;
+      min-height: 23mm;
     }
     .access-header {
       display: flex;
       align-items: center;
       gap: 5px;
-      font-size: 13px;
+      font-size: 12.5px;
       font-weight: 900;
       color: var(--ink-primary);
-      margin-bottom: 2px;
+      margin-bottom: 1px;
     }
     .access-icon {
       font-size: 14px;
     }
     .access-value {
       font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-      font-size: 26px;
+      font-size: 22px;
       font-weight: 900;
       color: var(--ink-primary);
       direction: ltr;
       text-align: center;
       letter-spacing: 0.08em;
-      line-height: 1.15;
-      padding: 1px 0;
+      line-height: 1.1;
+      padding: 0;
     }
     .access-value.is-text {
       font-family: 'Assistant', sans-serif;
-      font-size: 13px;
+      font-size: 12.5px;
       font-weight: 800;
       direction: rtl;
       letter-spacing: normal;
-      line-height: 1.35;
+      line-height: 1.3;
       color: var(--ink-primary);
       text-align: center;
       padding: 0;
     }
     .access-sub {
-      font-size: 10.5px;
+      font-size: 10px;
       font-weight: 700;
       color: var(--ink-muted);
       text-align: center;
-      line-height: 1.25;
-      margin-top: 1px;
+      line-height: 1.2;
+      margin-top: 0.5px;
     }
     .wifi-body {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 2.5mm;
-      padding: 0.5mm 0;
+      gap: 2mm;
+      padding: 0.2mm 0;
+      direction: rtl;
     }
     .wifi-details {
       flex: 1;
       display: flex;
       flex-direction: column;
-      gap: 2.5px;
-      direction: ltr;
-      text-align: left;
+      gap: 2px;
+      direction: rtl;
+      text-align: right;
     }
     .wifi-row {
       display: flex;
@@ -463,41 +464,45 @@ function buildHtml(units) {
       font-size: 11.5px;
       border-bottom: 1px dotted #DCD3C0;
       padding-bottom: 1px;
+      direction: rtl;
     }
     .wifi-row .w-label {
-      font-size: 11px;
+      font-size: 11.5px;
       font-weight: 800;
       color: var(--ink-secondary);
       direction: rtl;
+      text-align: right;
     }
     .wifi-row .w-val {
       font-family: ui-monospace, Menlo, monospace;
       font-weight: 900;
       color: #000;
-      font-size: 14px;
+      font-size: 13.5px;
+      direction: ltr;
+      text-align: left;
     }
     .wifi-qr-wrap {
       flex-shrink: 0;
       background: #FFFFFF;
       border: 1px solid var(--gold-primary);
       border-radius: 5px;
-      padding: 1.2mm;
+      padding: 0.8mm;
       text-align: center;
       display: flex;
       flex-direction: column;
       align-items: center;
     }
     .wifi-qr {
-      width: 15.5mm;
-      height: 15.5mm;
+      width: 14mm;
+      height: 14mm;
       display: block;
       image-rendering: pixelated;
     }
     .wifi-qr-sub {
-      font-size: 8px;
+      font-size: 7.5px;
       font-weight: 800;
       color: var(--gold-deep);
-      margin-top: 1px;
+      margin-top: 0.5px;
       white-space: nowrap;
     }
 
@@ -508,26 +513,26 @@ function buildHtml(units) {
       border-radius: 8px;
       padding: 2.8mm 4.5mm 2.2mm;
       box-shadow: 0 2px 8px rgba(197, 160, 89, 0.08);
-      margin-bottom: 2.2mm;
+      margin-bottom: 2mm;
     }
     .rules-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
       border-bottom: 1px solid rgba(197, 160, 89, 0.35);
-      padding-bottom: 1.8mm;
-      margin-bottom: 2.2mm;
+      padding-bottom: 1.6mm;
+      margin-bottom: 1.8mm;
     }
     .rules-title {
       display: flex;
       align-items: center;
       gap: 6px;
-      font-size: 14.5px;
+      font-size: 15px;
       font-weight: 900;
       color: var(--ink-primary);
     }
     .rules-badge {
-      font-size: 10.5px;
+      font-size: 11px;
       font-weight: 900;
       padding: 1.5px 8px;
       border-radius: 4px;
@@ -546,12 +551,12 @@ function buildHtml(units) {
       display: flex;
       align-items: flex-start;
       gap: 6px;
-      font-size: 11.2px;
-      line-height: 1.38;
+      font-size: 12px;
+      line-height: 1.4;
       color: var(--ink-primary);
     }
     .rule-icon {
-      font-size: 14.5px;
+      font-size: 15px;
       line-height: 1.1;
       flex-shrink: 0;
       margin-top: 1px;
@@ -705,8 +710,8 @@ function buildHtml(units) {
       }
       .sheet {
         width: 210mm !important;
-        height: 297mm !important;
-        max-height: 297mm !important;
+        height: 296.5mm !important;
+        max-height: 296.5mm !important;
         margin: 0 !important;
         box-shadow: none !important;
         page-break-after: always !important;
@@ -715,9 +720,9 @@ function buildHtml(units) {
         break-inside: avoid !important;
         overflow: hidden !important;
       }
-      .sheet:last-of-type {
-        page-break-after: auto !important;
-        break-after: auto !important;
+      .sheet:last-of-type, .sheet:last-child {
+        page-break-after: avoid !important;
+        break-after: avoid !important;
       }
     }
   </style>
@@ -916,8 +921,8 @@ function buildHtml(units) {
         <!-- FOOTER & SERVICE CONTACT -->
         <footer class="footer">
           <div class="service-box">
-            <div class="s-label">📞 שירות בשטח וסיוע לאורחים</div>
-            <div class="s-phone" id="service-phone">050-950-6222</div>
+            <div class="s-label">📞 לכל פנייה, שירות וסיוע לאורחים</div>
+            <div class="s-phone" id="service-phone">051-526-2612</div>
             <div class="s-hours">השירות פעיל עד השעה 21:00 בערב · ניתן להשאיר הודעות אחרי 21:00 ונתייחס אליהן על הבוקר</div>
           </div>
 
@@ -966,8 +971,8 @@ function buildHtml(units) {
         if (satSubEl) satSubEl.textContent = 'יציאה במוצ״ש במידה וסוכמה בעת ההזמנה';
       }
 
-      // Field service phone is 050-950-6222
-      sheetElement.querySelector('#service-phone').textContent = '050-950-6222';
+      // Service phone is 051-526-2612
+      sheetElement.querySelector('#service-phone').textContent = '051-526-2612';
 
       // Lockbox logic (Rule 1):
       // Exact code from room sheet, never copied, if no code write 'הקוד יימסר בהודעה', no 0000.
@@ -1102,13 +1107,22 @@ function buildHtml(units) {
       });
 
       wrapper.innerHTML = allSheetsHtml;
-      window.print();
 
-      // Restore single sheet view
-      setTimeout(() => {
+      let cleanedUp = false;
+      const cleanup = () => {
+        if (cleanedUp) return;
+        cleanedUp = true;
+        window.removeEventListener('afterprint', cleanup);
         wrapper.innerHTML = originalContent;
         renderUnit(UNITS.find(u => u.id === select.value));
-      }, 1000);
+      };
+
+      window.addEventListener('afterprint', cleanup);
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          window.print();
+        }, 150);
+      });
     }
   </script>
 </body>
@@ -1346,8 +1360,8 @@ function buildSamplesHtml(complexes, units) {
 
         <footer class="footer">
           <div class="service-box">
-            <div class="s-label">📞 שירות בשטח וסיוע לאורחים</div>
-            <div class="s-phone">050-950-6222</div>
+            <div class="s-label">📞 לכל פנייה, שירות וסיוע לאורחים</div>
+            <div class="s-phone">051-526-2612</div>
             <div class="s-hours">השירות פעיל עד השעה 21:00 בערב · ניתן להשאיר הודעות אחרי 21:00 ונתייחס אליהן על הבוקר</div>
           </div>
 
@@ -1504,52 +1518,52 @@ function buildSamplesHtml(complexes, units) {
     }
     .prop-location { font-size: 13px; color: var(--ink-secondary); margin-top: 2px; font-weight: 700; }
 
-    .times-row { display: grid; grid-template-columns: 1fr 1fr 1.35fr; gap: 3mm; margin: 2.2mm 0; text-align: center; }
+    .times-row { display: grid; grid-template-columns: 1fr 1fr 1.35fr; gap: 2.5mm; margin: 1.6mm 0; text-align: center; }
     .time-card {
-      background: #FFFFFF; border: 1px solid var(--border-fine); border-radius: 6px; padding: 2.2mm 2mm;
+      background: #FFFFFF; border: 1px solid var(--border-fine); border-radius: 6px; padding: 1.5mm 2mm;
       box-shadow: 0 1px 4px rgba(0,0,0,0.02); display: flex; flex-direction: column; justify-content: center; align-items: center;
     }
-    .time-label { font-size: 11.5px; font-weight: 800; color: var(--ink-muted); text-transform: uppercase; margin-bottom: 1px; }
-    .time-val { font-size: 24px; font-weight: 900; color: var(--ink-primary); line-height: 1.1; }
-    .time-val.saturday { font-size: 20px; color: var(--gold-deep); }
-    .time-sub.saturday-sub { font-size: 10px; font-weight: 800; color: #9A3412; margin-top: 1.5px; line-height: 1.2; }
+    .time-label { font-size: 11px; font-weight: 800; color: var(--ink-muted); text-transform: uppercase; margin-bottom: 0px; }
+    .time-val { font-size: 21px; font-weight: 900; color: var(--ink-primary); line-height: 1.1; font-family: 'Assistant', sans-serif; }
+    .time-val.saturday { font-size: 18px; color: var(--gold-deep); }
+    .time-sub.saturday-sub { font-size: 9.5px; font-weight: 800; color: #9A3412; margin-top: 0.5px; line-height: 1.2; }
 
-    .access-grid { display: grid; grid-template-columns: 1fr 1.12fr 1.48fr; gap: 3mm; margin-bottom: 2.2mm; }
+    .access-grid { display: grid; grid-template-columns: 1fr 1.12fr 1.48fr; gap: 2.5mm; margin-bottom: 1.6mm; }
     .access-card {
       background: #FFFFFF; border: 1px solid var(--border-fine); border-top: 3px solid var(--gold-primary);
-      border-radius: 6px; padding: 2.5mm 3mm; display: flex; flex-direction: column; justify-content: space-between; min-height: 29mm;
+      border-radius: 6px; padding: 1.8mm 2.8mm; display: flex; flex-direction: column; justify-content: space-between; min-height: 23mm;
     }
-    .access-header { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 900; color: var(--ink-primary); margin-bottom: 2px; }
+    .access-header { display: flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 900; color: var(--ink-primary); margin-bottom: 1px; }
     .access-icon { font-size: 14px; }
     .access-value {
-      font-family: ui-monospace, Menlo, monospace; font-size: 26px; font-weight: 900;
-      color: var(--ink-primary); direction: ltr; text-align: center; letter-spacing: 0.08em; line-height: 1.15; padding: 1px 0;
+      font-family: ui-monospace, Menlo, monospace; font-size: 22px; font-weight: 900;
+      color: var(--ink-primary); direction: ltr; text-align: center; letter-spacing: 0.08em; line-height: 1.1; padding: 0;
     }
     .access-value.is-text {
-      font-family: 'Assistant', sans-serif; font-size: 13px; font-weight: 800;
-      direction: rtl; letter-spacing: normal; line-height: 1.35; color: var(--ink-primary); text-align: center;
+      font-family: 'Assistant', sans-serif; font-size: 12.5px; font-weight: 800;
+      direction: rtl; letter-spacing: normal; line-height: 1.3; color: var(--ink-primary); text-align: center; padding: 0;
     }
-    .access-sub { font-size: 10.5px; font-weight: 700; color: var(--ink-muted); text-align: center; line-height: 1.25; margin-top: 1px; }
+    .access-sub { font-size: 10px; font-weight: 700; color: var(--ink-muted); text-align: center; line-height: 1.2; margin-top: 0.5px; }
 
-    .wifi-body { display: flex; align-items: center; justify-content: space-between; gap: 2.5mm; padding: 0.5mm 0; }
-    .wifi-details { flex: 1; display: flex; flex-direction: column; gap: 2.5px; direction: ltr; text-align: left; }
-    .wifi-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 11.5px; border-bottom: 1px dotted #DCD3C0; padding-bottom: 1px; }
-    .wifi-row .w-label { font-size: 11px; font-weight: 800; color: var(--ink-secondary); direction: rtl; }
-    .wifi-row .w-val { font-family: ui-monospace, Menlo, monospace; font-weight: 900; color: #000; font-size: 14px; }
-    .wifi-qr-wrap { flex-shrink: 0; background: #FFFFFF; border: 1px solid var(--gold-primary); border-radius: 5px; padding: 1.2mm; text-align: center; display: flex; flex-direction: column; align-items: center; }
-    .wifi-qr { width: 15.5mm; height: 15.5mm; display: block; image-rendering: pixelated; }
-    .wifi-qr-sub { font-size: 8px; font-weight: 800; color: var(--gold-deep); margin-top: 1px; white-space: nowrap; }
+    .wifi-body { display: flex; align-items: center; justify-content: space-between; gap: 2mm; padding: 0.2mm 0; direction: rtl; }
+    .wifi-details { flex: 1; display: flex; flex-direction: column; gap: 2px; direction: rtl; text-align: right; }
+    .wifi-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 11.5px; border-bottom: 1px dotted #DCD3C0; padding-bottom: 1px; direction: rtl; }
+    .wifi-row .w-label { font-size: 11.5px; font-weight: 800; color: var(--ink-secondary); direction: rtl; text-align: right; }
+    .wifi-row .w-val { font-family: ui-monospace, Menlo, monospace; font-weight: 900; color: #000; font-size: 13.5px; direction: ltr; text-align: left; }
+    .wifi-qr-wrap { flex-shrink: 0; background: #FFFFFF; border: 1px solid var(--gold-primary); border-radius: 5px; padding: 0.8mm; text-align: center; display: flex; flex-direction: column; align-items: center; }
+    .wifi-qr { width: 14mm; height: 14mm; display: block; image-rendering: pixelated; }
+    .wifi-qr-sub { font-size: 7.5px; font-weight: 800; color: var(--gold-deep); margin-top: 0.5px; white-space: nowrap; }
 
     .rules-section {
       background: #FFFDF9; border: 1.5px solid var(--gold-primary); border-radius: 8px;
-      padding: 2.8mm 4.5mm 2.2mm; box-shadow: 0 2px 8px rgba(197, 160, 89, 0.08); margin-bottom: 2.2mm;
+      padding: 2.8mm 4.5mm 2.2mm; box-shadow: 0 2px 8px rgba(197, 160, 89, 0.08); margin-bottom: 2mm;
     }
-    .rules-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(197, 160, 89, 0.35); padding-bottom: 1.8mm; margin-bottom: 2.2mm; }
-    .rules-title { display: flex; align-items: center; gap: 6px; font-size: 14.5px; font-weight: 900; color: var(--ink-primary); }
-    .rules-badge { font-size: 10.5px; font-weight: 900; padding: 1.5px 8px; border-radius: 4px; background: var(--alert-bg); border: 1px solid var(--alert-border); color: var(--alert-text); letter-spacing: 0.03em; }
+    .rules-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(197, 160, 89, 0.35); padding-bottom: 1.6mm; margin-bottom: 1.8mm; }
+    .rules-title { display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 900; color: var(--ink-primary); }
+    .rules-badge { font-size: 11px; font-weight: 900; padding: 1.5px 8px; border-radius: 4px; background: var(--alert-bg); border: 1px solid var(--alert-border); color: var(--alert-text); letter-spacing: 0.03em; }
     .rules-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2mm 5mm; }
-    .rule-item { display: flex; align-items: flex-start; gap: 6px; font-size: 11.2px; line-height: 1.38; color: var(--ink-primary); }
-    .rule-icon { font-size: 14.5px; line-height: 1.1; flex-shrink: 0; margin-top: 1px; }
+    .rule-item { display: flex; align-items: flex-start; gap: 6px; font-size: 12px; line-height: 1.4; color: var(--ink-primary); }
+    .rule-icon { font-size: 15px; line-height: 1.1; flex-shrink: 0; margin-top: 1px; }
     .rule-item strong { color: #000000; font-weight: 900; }
 
     .digital-hub {
@@ -1576,9 +1590,9 @@ function buildSamplesHtml(complexes, units) {
       @page { size: A4 portrait; margin: 0; }
       html, body { background: #FFF !important; margin: 0 !important; padding: 0 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
       .nav-bar { display: none !important; }
-      .sheet-wrapper { padding: 0 !important; gap: 0 !important; }
-      .sheet { box-shadow: none !important; page-break-after: always !important; break-after: page !important; }
-      .sheet:last-of-type { page-break-after: auto !important; break-after: auto !important; }
+      .sheet-wrapper { padding: 0 !important; gap: 0 !important; margin: 0 !important; display: block !important; }
+      .sheet { width: 210mm !important; height: 296.5mm !important; max-height: 296.5mm !important; margin: 0 !important; box-shadow: none !important; page-break-after: always !important; break-after: page !important; page-break-inside: avoid !important; break-inside: avoid !important; overflow: hidden !important; }
+      .sheet:last-of-type, .sheet:last-child { page-break-after: avoid !important; break-after: avoid !important; }
     }
   </style>
 </head>
