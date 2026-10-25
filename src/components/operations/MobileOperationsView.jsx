@@ -19,13 +19,15 @@ import {
   ShieldCheck, 
   Camera,
   Star,
-  RefreshCw
+  RefreshCw,
+  Lock
 } from 'lucide-react';
 import { NorthStarIcon } from '../mialees/MialeesBrandAssets';
 import { fieldUnitDisplayName, stripLegendPlotNumber } from '../../lib/fieldUnitCatalog';
 import { lockboxCodeForUnit } from '../../lib/guestProfileSeed';
 import { israelToday } from '../../lib/cabinAccess';
-import { isUnavailableHoldBooking } from '../../lib/unavailableHold';
+import { isUnavailableHoldBooking, coveringUnavailableHold, unavailableHoldLabel } from '../../lib/unavailableHold';
+import { isBookingEligible, isRetiredUnitId, unitUsage } from '../../lib/units';
 import { completionsFromUnit, toggleCompletion, addCompletion } from '../../lib/roomCompletions';
 import { db } from '../../lib/resortos-db';
 const SHOPPING_STORAGE_KEY = 'hotelos-procurement-shopping-v1';
@@ -109,7 +111,8 @@ export default function MobileOperationsView({
   const [sectionsOpen, setSectionsOpen] = useState({
     arriving: true,
     cleaning: false,
-    occupied: false,
+    occupied: true,
+    held: false,
     vacant: false,
     maintenance: false,
     supplies: false
@@ -204,6 +207,7 @@ export default function MobileOperationsView({
     return arrivals.map((booking) => {
       const unit = (effectiveUnits || []).find((u) => u.id === booking.unit_id);
       const isReady = unit?.operational_status === 'READY';
+      const isOccupied = unit?.staff_occupancy === 'OCCUPIED';
       const lockbox = lockboxCodeForUnit(unit);
       const sameDayTurnover = (effectiveBookings || []).some((b) => (
         b.unit_id === booking.unit_id &&
@@ -228,9 +232,10 @@ export default function MobileOperationsView({
         lockbox,
         status: unit?.operational_status || (sameDayTurnover ? 'DIRTY' : 'READY'),
         isReady,
+        isOccupied,
         sameDayTurnover
       };
-    }).filter((room) => !(room.unit?.staff_occupancy === 'OCCUPIED' && !room.sameDayTurnover));
+    });
   }, [effectiveBookings, effectiveUnits, todayStr]);
 
   const arrivingCleanCount = arrivingRooms.filter((r) => r.isReady).length;
@@ -300,9 +305,12 @@ export default function MobileOperationsView({
     return cleaningRooms.filter((r) => r.isSameDayTurnover);
   }, [cleaningRooms]);
 
-  // 3. OCCUPIED ROOMS (חדרים מאוכלסים)
+  // 3. OCCUPIED ROOMS (חדרים מאוכלסים - מסונכרן מלא עם פריוריטי והדאטה)
   const occupiedRooms = useMemo(() => {
     return (effectiveUnits || []).filter((unit) => {
+      // 1. Explicitly marked OCCUPIED in database / Priority
+      if (unit.staff_occupancy === 'OCCUPIED') return true;
+      // 2. Active in-house reservation covering today
       const hasInHouse = (effectiveBookings || []).some((b) => (
         b.unit_id === unit.id &&
         !b.deleted_at &&
@@ -310,12 +318,9 @@ export default function MobileOperationsView({
         b.booking_status !== 'CHECKED_OUT' &&
         !isUnavailableHoldBooking(b) &&
         b.check_in_date <= todayStr &&
-        b.check_out_date > todayStr &&
-        (b.check_in_date < todayStr || (unit.staff_occupancy === 'OCCUPIED' && !arrivingRooms.some((r) => r.id === unit.id)))
+        b.check_out_date > todayStr
       ));
-      if (hasInHouse) return true;
-      if (unit.staff_occupancy === 'OCCUPIED' && unit.operational_status !== 'READY' && !arrivingRooms.some((r) => r.id === unit.id)) return true;
-      return false;
+      return hasInHouse;
     }).map((unit) => {
       const activeBooking = (effectiveBookings || []).find((b) => (
         b.unit_id === unit.id &&
@@ -334,27 +339,61 @@ export default function MobileOperationsView({
         b.check_out_date >= todayStr
       ));
 
+      const hold = coveringUnavailableHold(effectiveBookings, unit.id, todayStr);
+      const holdLabel = hold ? (unavailableHoldLabel(hold.guest_name) || unavailableHoldLabel(hold.special_requests) || 'לא זמין') : '';
+
       return {
         unit,
         id: unit.id,
         unitName: fieldUnitDisplayName(unit),
         booking: activeBooking,
-        guestName: activeBooking?.guest_name || 'תפוס ידנית (ללא פרטי אורח)',
+        guestName: activeBooking?.guest_name || holdLabel || (unit.custom_reason ? `תפוס: ${unit.custom_reason}` : 'תפוס ידנית (ללא פרטי אורח)'),
         phone: activeBooking?.guest_phone || activeBooking?.phone || '',
         checkoutDate: activeBooking?.check_out_date || '',
-        lockbox: lockboxCodeForUnit(unit)
+        lockbox: lockboxCodeForUnit(unit),
+        status: unit.operational_status || 'READY'
       };
     });
-  }, [effectiveUnits, effectiveBookings, arrivingRooms, todayStr]);
+  }, [effectiveUnits, effectiveBookings, todayStr]);
 
-  // 4. VACANT ROOMS (חדרים פנויים ומוכנים)
+  // 4. HELD / UNAVAILABLE ROOMS (חדרים חסומים ולא זמינים - מתחם סגור, מגורי צוות, שיפוצים)
+  const heldRooms = useMemo(() => {
+    return (effectiveUnits || []).filter((unit) => {
+      if (occupiedRooms.some((r) => r.id === unit.id)) return false;
+      const hold = coveringUnavailableHold(effectiveBookings, unit.id, todayStr);
+      if (hold) return true;
+      const reason = String(unit.custom_reason || '');
+      if (/מתחם סגור|לא זמין|מושבת|שיפוץ|בריכה לא תקינה|סגור/.test(reason)) return true;
+      if (!isBookingEligible(unit) && !isRetiredUnitId(unit.id)) return true;
+      return false;
+    }).map((unit) => {
+      const hold = coveringUnavailableHold(effectiveBookings, unit.id, todayStr);
+      const reason = String(unit.custom_reason || '');
+      const label = hold
+        ? (unavailableHoldLabel(hold.guest_name) || unavailableHoldLabel(hold.special_requests) || 'לא זמין')
+        : (reason || (unitUsage(unit) === 'STAFF_ACCOMMODATION' ? 'מגורי צוות' : 'חסום / לא זמין'));
+      return {
+        unit,
+        id: unit.id,
+        unitName: fieldUnitDisplayName(unit),
+        label,
+        lockbox: lockboxCodeForUnit(unit),
+        status: unit.operational_status || 'READY'
+      };
+    });
+  }, [effectiveUnits, effectiveBookings, occupiedRooms, todayStr]);
+
+  // 5. VACANT ROOMS (חדרים פנויים ומוכנים לאכלוס מיידי בלבד)
   const vacantRooms = useMemo(() => {
     return (effectiveUnits || []).filter((unit) => {
+      if (isRetiredUnitId(unit.id)) return false;
+      if (!isBookingEligible(unit)) return false;
       const isArriving = arrivingRooms.some((r) => r.id === unit.id);
       const isOccupied = occupiedRooms.some((r) => r.id === unit.id);
       const isCleaning = cleaningRooms.some((r) => r.id === unit.id);
+      const isHeld = heldRooms.some((r) => r.id === unit.id);
       const isMaintenance = unit.operational_status === 'MAINTENANCE_ALERT' || unit.operational_domain === 'MAINTENANCE';
-      return !isArriving && !isOccupied && !isCleaning && !isMaintenance;
+      return !isArriving && !isOccupied && !isCleaning && !isHeld && !isMaintenance;
     }).map((unit) => ({
       unit,
       id: unit.id,
@@ -362,7 +401,7 @@ export default function MobileOperationsView({
       lockbox: lockboxCodeForUnit(unit),
       status: unit.operational_status || 'READY'
     }));
-  }, [effectiveUnits, arrivingRooms, occupiedRooms, cleaningRooms]);
+  }, [effectiveUnits, arrivingRooms, occupiedRooms, cleaningRooms, heldRooms]);
 
   // 5. MAINTENANCE & REPAIRS (תקלות ותיקונים - מסונכרן עם קלואי)
   const maintenanceTickets = useMemo(() => {
@@ -988,26 +1027,43 @@ export default function MobileOperationsView({
                         )}
                       </div>
 
-                      <div
-                        style={{
-                          fontSize: '0.72rem',
-                          fontWeight: 800,
-                          padding: '0.15rem 0.5rem',
-                          borderRadius: brand.radius,
-                          border: isClean
-                            ? `1px solid ${brand.readyBorder}`
-                            : (room.status === 'IN_PROGRESS' ? '1px solid #F59E0B' : '1px solid #EF4444'),
-                          background: isClean
-                            ? brand.readyBg
-                            : (room.status === 'IN_PROGRESS'
-                              ? (isDark ? 'rgba(245, 158, 11, 0.18)' : '#FEF3C7')
-                              : (isDark ? 'rgba(239, 68, 68, 0.18)' : '#FEE2E2')),
-                          color: isClean
-                            ? brand.readyText
-                            : (room.status === 'IN_PROGRESS' ? '#D97706' : '#DC2626')
-                        }}
-                      >
-                        {isClean ? '✓ מוכן לאורח' : (room.status === 'IN_PROGRESS' ? `בנקיון${room.staff ? ` | ${room.staff}` : ''}` : 'לניקוי')}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                        {room.isOccupied && (
+                          <span
+                            style={{
+                              fontSize: '0.68rem',
+                              fontWeight: 800,
+                              padding: '0.12rem 0.45rem',
+                              borderRadius: brand.radius,
+                              border: '1px solid rgba(139, 92, 246, 0.4)',
+                              background: 'rgba(139, 92, 246, 0.12)',
+                              color: isDark ? '#DDD6FE' : '#6D28D9'
+                            }}
+                          >
+                            מאוכלס
+                          </span>
+                        )}
+                        <div
+                          style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 800,
+                            padding: '0.15rem 0.5rem',
+                            borderRadius: brand.radius,
+                            border: isClean
+                              ? `1px solid ${brand.readyBorder}`
+                              : (room.status === 'IN_PROGRESS' ? '1px solid #F59E0B' : '1px solid #EF4444'),
+                            background: isClean
+                              ? brand.readyBg
+                              : (room.status === 'IN_PROGRESS'
+                                ? (isDark ? 'rgba(245, 158, 11, 0.18)' : '#FEF3C7')
+                                : (isDark ? 'rgba(239, 68, 68, 0.18)' : '#FEE2E2')),
+                            color: isClean
+                              ? brand.readyText
+                              : (room.status === 'IN_PROGRESS' ? '#D97706' : '#DC2626')
+                          }}
+                        >
+                          {isClean ? '✓ מוכן לאורח' : (room.status === 'IN_PROGRESS' ? `בנקיון${room.staff ? ` | ${room.staff}` : ''}` : 'לניקוי')}
+                        </div>
                       </div>
 
                     </div>
@@ -1722,6 +1778,137 @@ export default function MobileOperationsView({
           </div>
         )}
       </section>
+
+      {/* חדרים חסומים / לא זמינים (Held / Blocked) */}
+      {heldRooms.length > 0 && (
+        <section
+          id="sec-held"
+          style={{
+            border: `1px solid ${brand.cardBorder}`,
+            borderRadius: brand.radius,
+            background: brand.cardBg,
+            boxShadow: brand.cardShadow,
+            overflow: 'hidden'
+          }}
+        >
+          <header
+            onClick={() => toggleSection('held')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '1rem 1.1rem',
+              minHeight: '68px',
+              background: isDark
+                ? (sectionsOpen.held ? 'rgba(100, 116, 139, 0.16)' : 'rgba(100, 116, 139, 0.08)')
+                : (sectionsOpen.held ? 'rgba(100, 116, 139, 0.12)' : 'rgba(100, 116, 139, 0.05)'),
+              cursor: 'pointer',
+              borderBottom: sectionsOpen.held ? `1px solid ${brand.border}` : 'none',
+              transition: 'background 0.2s ease'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  minWidth: '42px',
+                  borderRadius: brand.radiusMd,
+                  background: isDark ? 'rgba(148, 163, 184, 0.15)' : 'rgba(100, 116, 139, 0.12)',
+                  border: `1px solid ${isDark ? 'rgba(148, 163, 184, 0.3)' : 'rgba(100, 116, 139, 0.25)'}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <Lock size={22} color={isDark ? '#94A3B8' : '#64748B'} />
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '1rem', fontWeight: 900, color: brand.text }}>
+                    חסומים / לא זמינים
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '0.74rem',
+                      fontWeight: 800,
+                      padding: '0.15rem 0.6rem',
+                      borderRadius: brand.radiusPill,
+                      border: '1px solid rgba(148, 163, 184, 0.4)',
+                      background: 'rgba(148, 163, 184, 0.12)',
+                      color: isDark ? '#CBD5E1' : '#475569'
+                    }}
+                  >
+                    ({heldRooms.length} חסומים)
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.74rem', color: brand.textMuted, marginTop: '2px', fontWeight: 700 }}>
+                  יחידות סגורות, שיפוצים או מגורי צוות
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+              <span
+                style={{
+                  fontSize: '1rem',
+                  fontWeight: 900,
+                  color: isDark ? '#94A3B8' : '#64748B',
+                  fontVariantNumeric: 'tabular-nums'
+                }}
+              >
+                {heldRooms.length}
+              </span>
+              <div
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: brand.radiusMd,
+                  background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                {sectionsOpen.held ? <ChevronUp size={18} color={brand.textMuted} /> : <ChevronDown size={18} color={brand.textMuted} />}
+              </div>
+            </div>
+          </header>
+
+          {sectionsOpen.held && (
+            <div style={{ padding: '0.65rem', display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '0.5rem' }}>
+                {heldRooms.map((room) => (
+                  <div
+                    key={room.id}
+                    style={{
+                      border: `1px solid ${isDark ? 'rgba(148, 163, 184, 0.25)' : 'rgba(100, 116, 139, 0.2)'}`,
+                      borderRadius: brand.radius,
+                      padding: '0.6rem 0.65rem',
+                      background: isDark ? 'rgba(30, 41, 59, 0.4)' : '#F1F5F9',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.2rem'
+                    }}
+                  >
+                    <div style={{ fontSize: '0.86rem', fontWeight: 900, color: brand.text }}>
+                      {room.unitName}
+                    </div>
+                    {room.lockbox && (
+                      <div style={{ fontSize: '0.72rem', fontWeight: 900, color: brand.gold }}>
+                        כספת {room.lockbox}
+                      </div>
+                    )}
+                    <div style={{ fontSize: '0.72rem', color: isDark ? '#94A3B8' : '#64748B', fontWeight: 800, marginTop: '2px' }}>
+                      🔒 {room.label}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* 5. רשימת תקלות ותיקונים (Maintenance & Repairs - Synced with Chloe) */}
       <section
