@@ -53,14 +53,71 @@ export async function loadUnits(user) {
   return visibleOpsRows(user, Array.isArray(rows) ? rows : [], 'id');
 }
 
-export async function loadBookings(user) {
-  const rows = await rest(
-    `hotelos_bookings?select=id,unit_id,guest_name,check_in_date,check_out_date,adults_count,children_count,booking_status,payment_status,payment_mode,total_price_agorot,deposit_agorot,clearing_payments,channel_source,special_requests,deleted_at,cash_receipt_at&tenant_id=eq.${tenant(user)}&deleted_at=is.null&order=check_in_date.desc&limit=2000`
-  );
-  const list = Array.isArray(rows) ? rows : [];
+const BOOKING_PAGE_SIZE = 1000;
+const BOOKING_COLUMNS = 'id,unit_id,guest_name,check_in_date,check_out_date,adults_count,children_count,booking_status,payment_status,payment_mode,total_price_agorot,deposit_agorot,clearing_payments,channel_source,special_requests,deleted_at,cash_receipt_at';
+
+export async function collectPages(fetchPage, { pageSize = BOOKING_PAGE_SIZE, maxRows = pageSize * 100 } = {}) {
+  const rows = [];
+  let offset = 0;
+  while (rows.length < maxRows) {
+    const page = await fetchPage(offset, pageSize);
+    const list = Array.isArray(page) ? page : [];
+    const room = maxRows - rows.length;
+    rows.push(...list.slice(0, room));
+    if (list.length < pageSize) return { rows, truncated: false };
+    if (rows.length >= maxRows) return { rows, truncated: true };
+    offset += list.length;
+  }
+  return { rows, truncated: true };
+}
+
+function dateParam(value) {
+  const text = String(value || '');
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
+}
+
+function bookingPath(user, query, offset) {
+  const parts = [
+    `select=${BOOKING_COLUMNS}`,
+    `tenant_id=eq.${tenant(user)}`,
+    'deleted_at=is.null',
+    'order=check_in_date.desc,id.desc',
+    `limit=${BOOKING_PAGE_SIZE}`,
+    `offset=${offset}`
+  ];
+  if (query.from) parts.push(`check_in_date=gte.${query.from}`);
+  if (query.to) parts.push(`check_in_date=lte.${query.to}`);
+  if (query.unit_id) parts.push(`unit_id=eq.${encodeURIComponent(query.unit_id)}`);
+  else if (query.unit_ids?.length) {
+    parts.push(`unit_id=in.(${query.unit_ids.map((id) => encodeURIComponent(id)).join(',')})`);
+  }
+  return `hotelos_bookings?${parts.join('&')}`;
+}
+
+export async function loadBookings(user, query = {}) {
+  const from = dateParam(query.from);
+  const to = dateParam(query.to);
+  const unitId = String(query.unit_id || '').trim();
+  let unitIds = null;
+  if (query.property_id) {
+    const catalog = await loadCatalog(user);
+    const ids = catalog.filter((row) => row.property_id === query.property_id).map((row) => row.id);
+    if (unitId) {
+      if (!ids.includes(unitId)) return { rows: [], truncated: false };
+    } else {
+      unitIds = ids;
+      if (!unitIds.length) return { rows: [], truncated: false };
+    }
+  }
+  const collected = await collectPages((offset) => rest(bookingPath(user, {
+    from,
+    to,
+    unit_id: unitId,
+    unit_ids: unitIds
+  }, offset)));
   return {
-    rows: list.filter((row) => unitAllowed(user, row.unit_id)),
-    truncated: list.length >= 2000
+    rows: collected.rows.filter((row) => unitAllowed(user, row.unit_id)),
+    truncated: collected.truncated
   };
 }
 

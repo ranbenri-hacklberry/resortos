@@ -171,7 +171,7 @@ export function createMcpHandler(deps) {
       return { ...stamp, ...pageOf(rows, args) };
     }
     if (name === 'resortos_bookings') {
-      const loaded = await deps.loadBookings(user);
+      const loaded = await deps.loadBookings(user, bookingQuery(args));
       const rows = (await filterBookings(deps, user, loaded.rows, args)).map(projectBooking);
       return { ...stamp, ...pageOf(rows, args), source_complete: !loaded.truncated, scope: 'operational_fields' };
     }
@@ -197,7 +197,7 @@ export function createMcpHandler(deps) {
       return { ...stamp, library: 'priority_docs', ...pageOf(docs.map((doc) => projectDocument(doc)), { limit: 40 }) };
     }
     if (name === 'resortos_booking_money') {
-      const loaded = await deps.loadBookings(user);
+      const loaded = await deps.loadBookings(user, bookingQuery(args));
       const rows = (await filterBookings(deps, user, loaded.rows, args)).map(projectBookingMoney);
       return {
         ...stamp,
@@ -213,7 +213,7 @@ export function createMcpHandler(deps) {
       return { ...stamp, ...pageOf(rows.map(projectExpense), args), currency: 'ILS', source_unit: 'shekel', vat: 'expense.vat when present' };
     }
     if (name === 'resortos_finance_summary') {
-      const loaded = await deps.loadBookings(user);
+      const loaded = await deps.loadBookings(user, bookingQuery(args));
       const catalog = await deps.loadCatalog(user);
       const propertyOf = new Map(catalog.map((row) => [row.id, row.property_id || '']));
       const summary = financeSummary(loaded.rows, {
@@ -518,6 +518,15 @@ function filterProperty(rows, propertyId) {
   const id = String(propertyId || '');
   if (!id) return rows;
   return rows.filter((row) => row.property_id === id);
+}
+
+function bookingQuery(args = {}) {
+  return {
+    from: parseDate(args.from, 'from'),
+    to: parseDate(args.to, 'to'),
+    property_id: String(args.property_id || ''),
+    unit_id: String(args.unit_id || '')
+  };
 }
 
 async function filterBookings(deps, user, rows, args) {

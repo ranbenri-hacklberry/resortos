@@ -34,7 +34,7 @@ function managerToken(handlerOauth) {
   }));
 }
 
-function harness() {
+function harness(extra = {}) {
   const calls = [];
   const oauth = createOauthService({
     store: createMemoryOauthStore(),
@@ -66,7 +66,7 @@ function harness() {
     now: () => new Date('2026-10-23T06:00:00Z'),
     loadCatalog: async () => [{ id: 'k680', name: 'מול הנוף 1', property_id: 'mool', base_price_agorot: 120000 }],
     loadUnits: async () => [{ id: 'k680', name: 'מול הנוף 1', operational_status: 'READY' }],
-    loadBookings: async () => bookings,
+    loadBookings: extra.loadBookings || (async () => bookings),
     loadWorkLog: async () => [],
     loadProcedures: async () => [{ id: 'sop1', domain: 'ניקיון', title: 'יציאה', steps: ['מיטות'] }],
     loadDocuments: async () => [{ id: 'doc1', title: 'נוהל', html: '<p>שלום</p>', updatedAt: '2026-10-01' }],
@@ -140,6 +140,44 @@ test('manager can list tools, read money, and refresh once', async () => {
   assert.deepEqual(calls, ['refresh']);
   const blocked = await call(handler, { jsonrpc: '2.0', id: 6, method: 'tools/call', params: { name: 'resortos_send_sms', arguments: {} } }, issued.access_token);
   assert.equal(blocked.json.error.message, 'UNKNOWN_TOOL');
+});
+
+test('booking tools pass the date window into the loader', async () => {
+  const seen = [];
+  const { handler, oauth } = harness({
+    loadBookings: async (_user, query) => {
+      seen.push(query);
+      return { rows: [], truncated: query.to === '2026-01-01' };
+    }
+  });
+  const issued = await managerToken(oauth);
+  const args = { from: '2026-02-01', to: '2026-02-28', property_id: 'kinorot', unit_id: 'k811' };
+  const bookings = await call(handler, {
+    jsonrpc: '2.0', id: 2, method: 'tools/call',
+    params: { name: 'resortos_bookings', arguments: args }
+  }, issued.access_token);
+  const money = await call(handler, {
+    jsonrpc: '2.0', id: 3, method: 'tools/call',
+    params: { name: 'resortos_booking_money', arguments: args }
+  }, issued.access_token);
+  const summary = await call(handler, {
+    jsonrpc: '2.0', id: 4, method: 'tools/call',
+    params: { name: 'resortos_finance_summary', arguments: { from: '2026-08-30', to: '2026-10-24', property_id: 'kinorot' } }
+  }, issued.access_token);
+  const stopped = await call(handler, {
+    jsonrpc: '2.0', id: 5, method: 'tools/call',
+    params: { name: 'resortos_bookings', arguments: { to: '2026-01-01' } }
+  }, issued.access_token);
+  assert.deepEqual(seen, [
+    { from: '2026-02-01', to: '2026-02-28', property_id: 'kinorot', unit_id: 'k811' },
+    { from: '2026-02-01', to: '2026-02-28', property_id: 'kinorot', unit_id: 'k811' },
+    { from: '2026-08-30', to: '2026-10-24', property_id: 'kinorot', unit_id: '' },
+    { from: '', to: '2026-01-01', property_id: '', unit_id: '' }
+  ]);
+  assert.equal(bookings.json.result.structuredContent.source_complete, true);
+  assert.equal(money.json.result.structuredContent.source_complete, true);
+  assert.equal(summary.json.result.structuredContent.complete, true);
+  assert.equal(stopped.json.result.structuredContent.source_complete, false);
 });
 
 test('discovery document advertises the owner scope', async () => {
