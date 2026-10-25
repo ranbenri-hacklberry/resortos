@@ -845,7 +845,7 @@ function buildHtml(units) {
               <span>📋</span>
               <span>כללי האירוח והשהייה במתחם — לתשומת לבכם ולמען חופשה נעימה</span>
             </div>
-            <span class="rules-badge">תקנון המתחם</span>
+            <span class="rules-badge" id="rules-badge-el">תקנון המתחם</span>
           </div>
 
           <div class="rules-grid">
@@ -863,9 +863,9 @@ function buildHtml(units) {
               </div>
             </div>
 
-            <div class="rule-item">
-              <span class="rule-icon">🥩</span>
-              <div>
+            <div class="rule-item" id="rule-cooking-item">
+              <span class="rule-icon" id="rule-cooking-icon">🥩</span>
+              <div id="rule-cooking-text">
                 <strong>הדלקת אש ומנגל (BBQ):</strong> מותרת אך ורק בעמדות המנגל המוסדרות בחצר, ולעולם לא על גבי דק העץ או בתוך המבנה. אין להבעיר אש בשבת.
               </div>
             </div>
@@ -880,7 +880,7 @@ function buildHtml(units) {
             <div class="rule-item">
               <span class="rule-icon">🛁</span>
               <div>
-                <strong>בטיחות בג׳קוזי ובריכה:</strong> חובה לוודא שגובה המים מכסה את כל פתחי הסילונים (הג׳טים) לפני הפעלת המתג למניעת שריפת מנוע. חל איסור על כלי זכוכית, שמנים או סבונים במים.
+                <strong>בטיחות בג׳קוזי ובריכה:</strong> חובה לוודא שגובה המים מכסה את פתחי הסילונים (הג׳טים) לפני הפעלת המתג למניעת שריפת מנוע. חל איסור מוחלט על הדלקת נרות סביב הג׳קוזי, כלי זכוכית, שמנים או סבונים במים.
               </div>
             </div>
 
@@ -1032,6 +1032,33 @@ function buildHtml(units) {
           if (timeEl) timeEl.textContent = SHABBAT_ENTRY_TIME;
         } else {
           shabbatBanner.style.display = 'none';
+        }
+      }
+
+      // Maya Cabins specific cooking prohibition (Rule 5)
+      const cookingIconEl = sheetElement.querySelector('#rule-cooking-icon');
+      const cookingTextEl = sheetElement.querySelector('#rule-cooking-text');
+      const rulesBadgeEl = sheetElement.querySelector('#rules-badge-el');
+      const isMaya = unit.property === 'בקתות מאיה' || ['k693', 'k694', 'k695'].includes(unit.id);
+      if (cookingTextEl) {
+        if (isMaya) {
+          if (cookingIconEl) cookingIconEl.textContent = '🍳';
+          cookingTextEl.innerHTML = '<strong>איסור בישול בבקתה ומנגל:</strong> <strong style="color:#991B1B;">חל איסור מוחלט על בישול או טיגון בתוך הבקתות!</strong> מנגל והכנת מזון מותרים אך ורק בעמדת החצר המוסדרת (לא על הדק). אין להבעיר אש בשבת.';
+          if (rulesBadgeEl) {
+            rulesBadgeEl.textContent = 'בקתות ללא בישול · תקנון המתחם';
+            rulesBadgeEl.style.background = '#FEF2F2';
+            rulesBadgeEl.style.borderColor = '#FCA5A5';
+            rulesBadgeEl.style.color = '#991B1B';
+          }
+        } else {
+          if (cookingIconEl) cookingIconEl.textContent = '🥩';
+          cookingTextEl.innerHTML = '<strong>הדלקת אש ומנגל (BBQ):</strong> מותרת אך ורק בעמדות המנגל המוסדרות בחצר, ולעולם לא על גבי דק העץ או בתוך המבנה. אין להבעיר אש בשבת.';
+          if (rulesBadgeEl) {
+            rulesBadgeEl.textContent = 'תקנון המתחם';
+            rulesBadgeEl.style.background = 'var(--alert-bg)';
+            rulesBadgeEl.style.borderColor = 'var(--alert-border)';
+            rulesBadgeEl.style.color = 'var(--alert-text)';
+          }
         }
       }
     }
@@ -1241,7 +1268,9 @@ function buildSamplesHtml(complexes, units) {
               <span>📋</span>
               <span>כללי האירוח והשהייה במתחם — לתשומת לבכם ולמען חופשה נעימה</span>
             </div>
-            <span class="rules-badge">תקנון המתחם</span>
+            ${comp.name === 'בקתות מאיה' || unit.property === 'בקתות מאיה'
+              ? '<span class="rules-badge" style="background:#FEF2F2; border-color:#FCA5A5; color:#991B1B;">בקתות ללא בישול · תקנון המתחם</span>'
+              : '<span class="rules-badge">תקנון המתחם</span>'}
           </div>
 
           <div class="rules-grid">
@@ -1259,12 +1288,19 @@ function buildSamplesHtml(complexes, units) {
               </div>
             </div>
 
+            ${comp.name === 'בקתות מאיה' || unit.property === 'בקתות מאיה' ? `
+            <div class="rule-item">
+              <span class="rule-icon">🍳</span>
+              <div>
+                <strong>איסור בישול בבקתה ומנגל:</strong> <strong style="color:#991B1B;">חל איסור מוחלט על בישול או טיגון בתוך הבקתות!</strong> מנגל והכנת מזון מותרים אך ורק בעמדת החצר המוסדרת (לא על הדק). אין להבעיר אש בשבת.
+              </div>
+            </div>` : `
             <div class="rule-item">
               <span class="rule-icon">🥩</span>
               <div>
                 <strong>הדלקת אש ומנגל (BBQ):</strong> מותרת אך ורק בעמדות המנגל המוסדרות בחצר, ולעולם לא על גבי דק העץ או בתוך המבנה. אין להבעיר אש בשבת.
               </div>
-            </div>
+            </div>`}
 
             <div class="rule-item">
               <span class="rule-icon">👥</span>
@@ -1276,7 +1312,7 @@ function buildSamplesHtml(complexes, units) {
             <div class="rule-item">
               <span class="rule-icon">🛁</span>
               <div>
-                <strong>בטיחות בג׳קוזי ובריכה:</strong> חובה לוודא שגובה המים מכסה את כל פתחי הסילונים (הג׳טים) לפני הפעלת המתג למניעת שריפת מנוע. חל איסור על כלי זכוכית, שמנים או סבונים במים.
+                <strong>בטיחות בג׳קוזי ובריכה:</strong> חובה לוודא שגובה המים מכסה את פתחי הסילונים (הג׳טים) לפני הפעלת המתג למניעת שריפת מנוע. חל איסור מוחלט על הדלקת נרות סביב הג׳קוזי, כלי זכוכית, שמנים או סבונים במים.
               </div>
             </div>
 
