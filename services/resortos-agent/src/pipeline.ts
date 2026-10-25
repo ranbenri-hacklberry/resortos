@@ -244,6 +244,15 @@ export function matchesCleaner(c: CleanerProfile, rawTarget?: string | null): bo
   return phonesMatch(c.phone, rawTarget);
 }
 
+export function isManagerRole(role?: string | null): boolean {
+  return role === 'MANAGER' || role === 'OPS_MANAGER' || role === 'PRIORITY';
+}
+
+/** A non-canceled booking on this phone means Chloe should answer as the guest, even when the same phone is a manager. */
+export function hasGuestBooking(bookings: Array<{ guest_phone?: string | null; deleted_at?: string | null; booking_status?: string | null }>, phone: string): boolean {
+  return bookings.some((booking) => phonesMatch(booking.guest_phone, phone) && !booking.deleted_at && booking.booking_status !== 'CANCELED');
+}
+
 /** Phone that WhatsApp attaches to an @lid sender (key.senderPn / remoteJidAlt / participantPn), digits only, or ''. */
 export function lidSenderPn(msg: any): string {
   const k: any = msg?.key || {};
@@ -531,6 +540,16 @@ export function createPipeline(deps: PipelineDeps) {
     });
   }
 
+  async function senderHasGuestStay(phone: string): Promise<boolean> {
+    if (!phone) return false;
+    try {
+      const bookings = (await d.resortos.listBookings?.()) || [];
+      return hasGuestBooking(bookings, phone);
+    } catch {
+      return false;
+    }
+  }
+
   /** Worker -> agent. */
   async function handleInbound(
     input: WAMessage | InboundEnvelope,
@@ -546,7 +565,9 @@ export function createPipeline(deps: PipelineDeps) {
       try { inboundText = String(d.extractText(msg) || ''); } catch { inboundText = ''; }
       const inPn = lidSenderPn(msg);
       const cleanerRow = jid ? d.cleaners().find((c) => matchesCleaner(c, jid) || matchesCleaner(c, phoneOf(jid)) || (inPn ? matchesCleaner(c, inPn) : false)) : undefined;
-      const route = !jid ? 'none' : !cleanerRow ? 'guest' : (cleanerRow.role === 'MANAGER' || cleanerRow.role === 'OPS_MANAGER') ? 'manager' : 'staff';
+      const routePhone = (jid?.endsWith('@lid') && inPn) ? inPn : (jid ? phoneOf(jid) : '');
+      let route = !jid ? 'none' : !cleanerRow ? 'guest' : (cleanerRow.role === 'MANAGER' || cleanerRow.role === 'OPS_MANAGER') ? 'manager' : 'staff';
+      if (isManagerRole(cleanerRow?.role) && await senderHasGuestStay(routePhone)) route = 'guest';
       const isAudioMsg = (() => { try { return d.isAudio(msg); } catch { return false; } })();
       logConversation({ direction: 'inbound', jid, text: inboundText || (isAudioMsg ? '[voice note]' : ''), route });
       currentRoute = { jid, route };
@@ -566,13 +587,22 @@ export function createPipeline(deps: PipelineDeps) {
     const guestPhone = bookingPhoneOverride.get(jid) || baseGuestPhone;
     if (jid.endsWith('@lid')) d.log.info({ jid, hasSenderPn: Boolean(senderPn), senderPnTail: senderPn ? senderPn.slice(-4) : null }, 'inbound @lid sender');
     // Staff on @lid without a stored LID (e.g. קוסטה, Ran 2026-10-21) are matched by the phone WhatsApp attaches.
-    const cleaner = d.cleaners().find((c) => matchesCleaner(c, jid) || matchesCleaner(c, senderPhone)) || (senderPn ? d.cleaners().find((c) => matchesCleaner(c, senderPn)) : undefined);
-    const isManager = cleaner?.role === 'MANAGER' || cleaner?.role === 'OPS_MANAGER' || cleaner?.role === 'PRIORITY';
+    let cleaner = d.cleaners().find((c) => matchesCleaner(c, jid) || matchesCleaner(c, senderPhone)) || (senderPn ? d.cleaners().find((c) => matchesCleaner(c, senderPn)) : undefined);
+    let isManager = isManagerRole(cleaner?.role);
+    const sessionKey = `${channelId}:${normalizePhoneTail(baseGuestPhone)}`;
+    let currentSession = sessionStates.get(sessionKey);
+    // A phone that is both a manager and a guest is answered as the guest.
+    if (isManager && await senderHasGuestStay(guestPhone)) {
+      cleaner = undefined;
+      isManager = false;
+      if (currentSession && currentSession.role !== 'GUEST') {
+        sessionStates.delete(sessionKey);
+        currentSession = undefined;
+      }
+    }
     // Guest priority for the background invoice name job (local vision model shares the GPU with guest replies).
     if (!cleaner) { try { (d.invoiceIntake as any)?.noteGuestActivity?.(); } catch { /* ignore */ } }
     const isWorker = Boolean(cleaner && !isManager);
-    const sessionKey = `${channelId}:${normalizePhoneTail(baseGuestPhone)}`;
-    const currentSession = sessionStates.get(sessionKey);
 
     let text = d.extractText(msg);
     // Guest was asked once for the booking phone: retry the lookup with a typed number; anything else falls through (name+dates as before).
@@ -2139,7 +2169,7 @@ export function createPipeline(deps: PipelineDeps) {
       // 4. Scan or direct room query detection:
       // Examples: "START_B1", "START B1", "הגעתי ל-B1", "צ'ק אין B1", or manager typing "B1"
       let rawRoomCode: string | null = null;
-      const qrScanMatch = text.match(/(?:^|[\s,.:!])START[_\s]+([a-zA-Z0-9_\-\u0590-\u05FF]+)\s*$/i);
+      const qrScanMatch = text.match(/(?:^|[\s,.:!(])START[_\s]+([a-zA-Z0-9_\-\u0590-\u05FF]+)/i);
       const arrivalMatch = text.match(/(?:^|[\s,.:!])(?:שלום[, ]*|היי[, ]*|hi[, ]*|hello[, ]*)?(?:הגעתי|הגענו|צ['׳]?ק[- ]?אין|כניסה|arrived|check[- ]?in)\s+(?:ל|אל\s+|at\s+|to\s+)?(?:חדר|בקתה|סוויטה|cabin|room|suite\s+)?([a-zA-Z0-9_\-\u0590-\u05FF]+)\s*$/i);
       const managerQueryMatch = isManager ? text.match(/^\s*(?:סטטוס|מצב|כרטיס|מידע)?\s*([a-zA-Z0-9_\-\u0590-\u05FF]{1,10})\s*$/i) : null;
 

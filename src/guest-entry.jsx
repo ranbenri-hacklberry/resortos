@@ -5,12 +5,16 @@ import './i18n';
 import DemoCheckoutBoot from './components/DemoCheckoutBoot.jsx';
 import GuestCheckout from './components/GuestCheckout.jsx';
 import GuestStayPreview from './components/GuestStayPreview.jsx';
+import GuestWhatsappBridge from './components/GuestWhatsappBridge.jsx';
 import { applyGuestTheme, readGuestTheme } from './lib/guestTheme';
 import { isGuestDemoPath, isGuestFormDemoPath, resolveStayToken } from './lib/stayToken';
 
 const isFormDemo = isGuestFormDemoPath();
 const isStayDemo = !isFormDemo && isGuestDemoPath();
 const token = isStayDemo || isFormDemo ? '' : resolveStayToken();
+const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+const unitParam = urlParams.get('unit');
+const isRoomQrScan = Boolean(unitParam && !token && !isStayDemo && !isFormDemo);
 
 if (isStayDemo || isFormDemo) {
   const url = new URL(window.location.href);
@@ -36,6 +40,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <DemoCheckoutBoot theme={theme} />
     ) : isStayDemo ? (
       <GuestStayPreview theme={theme} />
+    ) : isRoomQrScan ? (
+      <GuestWhatsappBridge unitId={unitParam} />
     ) : (
       <GuestCheckout token={token} theme={theme} />
     )}
