@@ -3,7 +3,20 @@ import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import path from 'path';
 import { israelToday } from '../src/lib/cabinAccess.js';
-import { bookingsWindowQuery, contentRangeTotal, isEligibleBooking, isScanComplete, planContacts, toE164, writesFor } from './googleContactsPlan.js';
+import {
+  AUTO_SYNC_FIRST_DELAY_MS,
+  AUTO_SYNC_INTERVAL_MS,
+  bookingsWindowQuery,
+  contentRangeTotal,
+  createSyncLock,
+  googleContactsAutoSyncEnabled,
+  isEligibleBooking,
+  isScanComplete,
+  nextBackoffMs,
+  planContacts,
+  toE164,
+  writesFor
+} from './googleContactsPlan.js';
 
 const SCOPE = 'https://www.googleapis.com/auth/contacts https://www.googleapis.com/auth/userinfo.email';
 const MARK = 'resortos';
@@ -294,7 +307,11 @@ async function applyWrite(bearer, action) {
     const current = await googleFetch(`https://people.googleapis.com/v1/${action.google_resource_name}?personFields=metadata`, {
       headers: { Authorization: `Bearer ${bearer}` }
     });
-    if (!current.ok) throw new Error('GOOGLE_READ_FAILED');
+    if (!current.ok) {
+      const error = new Error('GOOGLE_READ_FAILED');
+      error.status = current.status;
+      throw error;
+    }
     body.etag = (await current.json()).etag;
   }
   const response = await googleFetch(url, {
@@ -303,7 +320,11 @@ async function applyWrite(bearer, action) {
     body: JSON.stringify(body)
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error('GOOGLE_WRITE_FAILED');
+  if (!response.ok) {
+    const error = new Error('GOOGLE_WRITE_FAILED');
+    error.status = response.status;
+    throw error;
+  }
   await saveMapping({
     phone_e164: action.phone_e164,
     google_resource_name: data.resourceName || action.google_resource_name,
@@ -408,14 +429,26 @@ async function readGooglePhones(bearer, phones) {
   return found.filter((row) => !row.missing);
 }
 
+function recordRun({ created = 0, updated = 0, skipped = 0, failed = 0 } = {}) {
+  const at = new Date().toISOString();
+  console.log(`[google-contacts] ${at} created=${created} updated=${updated} skipped=${skipped} failed=${failed}`);
+  return { at, created, updated, skipped, failed };
+}
+
+export const googleContactsSyncLock = createSyncLock();
+
 export async function runGoogleContactsSync(user, { live = false } = {}) {
   const state = await loadState();
   let loaded;
   try {
     loaded = await loadBookings(user);
   } catch {
-    await saveState({ last_error: 'BOOKINGS_UNAVAILABLE' }).catch(() => {});
-    return { ok: false, error: 'BOOKINGS_UNAVAILABLE', deletions_allowed: false, dry_run: true };
+    const lastRun = recordRun({ failed: 1 });
+    await saveState({
+      last_error: 'BOOKINGS_UNAVAILABLE',
+      last_dry_run: { ...(state.last_dry_run || {}), last_run: lastRun }
+    }).catch(() => {});
+    return { ok: false, error: 'BOOKINGS_UNAVAILABLE', deletions_allowed: false, dry_run: true, last_run: lastRun };
   }
   const mappings = await loadMappings();
   const token = readGoogleToken();
@@ -464,28 +497,40 @@ export async function runGoogleContactsSync(user, { live = false } = {}) {
     });
   }
   const summary = publicPlan(plan);
-  await saveState({
-    last_dry_run: summary,
+  const skipped = plan.counts.unchanged + plan.counts.skip;
+  const basePatch = {
     last_error: connected && !googleRead ? 'GOOGLE_READ_FAILED' : null,
     pending_count: plan.counts.create + plan.counts.update,
     failed_count: plan.counts.conflict,
     managed_count: mappings.filter((row) => row.managed).length
-  });
+  };
   const liveEnabled = Boolean(state.live_enabled);
-  if (!live || !liveEnabled) {
-    return { ok: true, dry_run: true, live_enabled: liveEnabled, ...summary };
+  const writes = live && liveEnabled ? writesFor(plan, { liveEnabled, connected }) : [];
+  if (!writes.length) {
+    const lastRun = recordRun({ created: 0, updated: 0, skipped, failed: plan.counts.conflict });
+    await saveState({ ...basePatch, last_dry_run: { ...summary, last_run: lastRun } });
+    return {
+      ok: true,
+      dry_run: !live || !liveEnabled,
+      written: 0,
+      live_enabled: liveEnabled,
+      last_run: lastRun,
+      ...summary
+    };
   }
-  const writes = writesFor(plan, { liveEnabled, connected });
-  if (!writes.length) return { ok: true, dry_run: false, written: 0, live_enabled: true, ...summary };
   const bearer = await accessToken(token);
-  let written = 0;
+  let created = 0;
+  let updated = 0;
   let failed = 0;
+  let retryStatus = 0;
   for (const action of writes) {
     try {
       await applyWrite(bearer, action);
-      written += 1;
-    } catch {
+      if (action.action === 'create') created += 1;
+      else if (action.action === 'update') updated += 1;
+    } catch (err) {
       failed += 1;
+      if (err.status === 429 || Number(err.status) >= 500) retryStatus = err.status;
       if (action.phone_e164) {
         await saveMapping({
           phone_e164: action.phone_e164,
@@ -498,12 +543,15 @@ export async function runGoogleContactsSync(user, { live = false } = {}) {
       }
     }
   }
+  const lastRun = recordRun({ created, updated, skipped, failed: plan.counts.conflict + failed });
   await saveState({
+    ...basePatch,
+    last_dry_run: { ...summary, last_run: lastRun },
     last_success_at: failed ? undefined : new Date().toISOString(),
     last_error: failed ? 'GOOGLE_WRITE_FAILED' : null,
     failed_count: plan.counts.conflict + failed
   });
-  return { ok: failed === 0, dry_run: false, written, failed, live_enabled: true, ...summary };
+  return { ok: failed === 0, dry_run: false, written: created + updated, created, updated, failed, retryStatus, live_enabled: true, last_run: lastRun, ...summary };
 }
 
 export async function setGoogleContactsLive(enabled) {
@@ -548,4 +596,140 @@ export async function readContactName(e164) {
   const token = readGoogleToken();
   const bearer = await accessToken(token);
   return (await readGooglePhones(bearer, [e164])).map((row) => ({ display_name: row.display_name, managed: row.managed }));
+}
+
+async function googleContactsAutoReady() {
+  if (!googleConfigured() || !readGoogleToken()?.refresh_token) return false;
+  try {
+    return Boolean((await loadState()).live_enabled);
+  } catch {
+    return false;
+  }
+}
+
+async function loadSyncUser() {
+  const rows = await rest(
+    'GET',
+    'employees?select=id,username,role,is_active,business_id&role=eq.MANAGER&is_active=eq.true&order=username.asc&limit=20'
+  );
+  const list = Array.isArray(rows) ? rows : [];
+  const owner = list.find((row) => String(row.username || '').toLowerCase() === 'rani') || list[0];
+  const tenant = String(owner?.business_id || '').trim();
+  if (!tenant) return null;
+  return {
+    id: owner.id,
+    username: owner.username,
+    role: 'MANAGER',
+    is_active: true,
+    tenant_id: tenant,
+    business_id: tenant
+  };
+}
+
+function googleBackoff(status) {
+  const code = Number(status) || 0;
+  return code === 429 || code >= 500;
+}
+
+export function startGoogleContactsAutoSync({
+  enabled = () => googleContactsAutoSyncEnabled(),
+  ready = googleContactsAutoReady,
+  loadUser = loadSyncUser,
+  run = (user) => runGoogleContactsSync(user, { live: true }),
+  lock = googleContactsSyncLock,
+  schedule = setTimeout,
+  every = setInterval,
+  clearLater = (id) => {
+    clearTimeout(id);
+    clearInterval(id);
+  },
+  intervalMs = AUTO_SYNC_INTERVAL_MS,
+  firstDelayMs = AUTO_SYNC_FIRST_DELAY_MS,
+  now = () => Date.now(),
+  log = console.warn
+} = {}) {
+  if (!enabled()) return { stop() {}, tick: async () => 'disabled' };
+  let stopped = false;
+  let backoffUntil = 0;
+  let backoffMs = 0;
+  let intervalId = null;
+  async function tick() {
+    if (stopped || now() < backoffUntil) return 'wait';
+    if (!lock.tryEnter()) return 'busy';
+    try {
+      if (!(await ready())) return 'idle';
+      const user = await loadUser();
+      if (!user) return 'idle';
+      const result = await run(user);
+      if (googleBackoff(result?.retryStatus)) {
+        backoffMs = nextBackoffMs(backoffMs, result.retryStatus);
+        backoffUntil = now() + backoffMs;
+        return 'backoff';
+      }
+      backoffMs = 0;
+      backoffUntil = 0;
+      return 'ran';
+    } catch (err) {
+      if (googleBackoff(err.status)) {
+        backoffMs = nextBackoffMs(backoffMs, err.status);
+        backoffUntil = now() + backoffMs;
+      }
+      log('[google-contacts]', err.status || '', err.message || 'AUTO_SYNC_FAILED');
+      return 'error';
+    } finally {
+      lock.leave();
+    }
+  }
+  const starter = schedule(() => {
+    tick();
+    intervalId = every(tick, intervalMs);
+  }, firstDelayMs);
+  return {
+    tick,
+    stop() {
+      stopped = true;
+      clearLater(starter);
+      if (intervalId != null) clearLater(intervalId);
+    }
+  };
+}
+
+export function createPhoneScheduler({
+  delayMs = 30 * 1000,
+  sync = syncSinglePhone,
+  lock = googleContactsSyncLock,
+  setTimer = setTimeout,
+  clearTimer = clearTimeout
+} = {}) {
+  const timers = new Map();
+  return {
+    schedule(user, rawPhone) {
+      const e164 = toE164(rawPhone);
+      if (!e164 || !user) return { scheduled: false };
+      const existing = timers.get(e164);
+      if (existing) clearTimer(existing);
+      const timer = setTimer(async () => {
+        timers.delete(e164);
+        if (!lock.tryEnter()) return;
+        try {
+          await sync(user, e164);
+        } catch (err) {
+          console.warn('[google-contacts]', err.status || '', err.message || 'PHONE_SYNC_FAILED');
+        } finally {
+          lock.leave();
+        }
+      }, delayMs);
+      timers.set(e164, timer);
+      return { scheduled: true, delayMs };
+    },
+    pending() {
+      return timers.size;
+    }
+  };
+}
+
+export const phoneScheduler = createPhoneScheduler();
+
+export function schedulePhoneSync(user, rawPhone) {
+  return phoneScheduler.schedule(user, rawPhone);
 }
