@@ -36,7 +36,8 @@ export function createOtpGate({
         throw err;
       }
       const user = await findManager(normalized);
-      if (!user?.id || String(user.role || '').toUpperCase() !== 'MANAGER' || user.is_active === false) {
+      const role = String(user?.role || '').toUpperCase();
+      if (!user?.id || (role !== 'MANAGER' && role !== 'PRIORITY') || user.is_active === false) {
         return { accepted: true };
       }
       const code = nextCode();
@@ -48,7 +49,7 @@ export function createOtpGate({
           id: String(user.id),
           username: String(user.username || ''),
           display_name: String(user.display_name || user.name || user.username || ''),
-          role: 'MANAGER',
+          role,
           tenant_id: String(user.tenant_id || user.business_id || ''),
           allowed_units: Array.isArray(user.allowed_units) ? user.allowed_units : [],
           is_active: true

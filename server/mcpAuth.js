@@ -122,7 +122,7 @@ export function createOauthService({ store, now = () => new Date(), verifyStaff,
         err.status = 400;
         throw err;
       }
-      if (!user?.id || String(user.role || '').toUpperCase() !== 'MANAGER' || user.is_active === false) {
+      if (!user?.id || !['MANAGER', 'PRIORITY'].includes(String(user.role || '').toUpperCase()) || user.is_active === false) {
         const err = new Error('FORBIDDEN');
         err.status = 403;
         throw err;
@@ -188,7 +188,7 @@ export function createOauthService({ store, now = () => new Date(), verifyStaff,
       const row = store.access.get(sha256(accessToken || ''));
       if (!row || row.expires_at <= now().getTime()) return null;
       if (resource && row.resource && row.resource !== resource) return null;
-      if (String(row.user?.role || '').toUpperCase() !== 'MANAGER') return null;
+      if (!['MANAGER', 'PRIORITY'].includes(String(row.user?.role || '').toUpperCase())) return null;
       return row.user;
     },
     revoke(accessToken) {
@@ -215,7 +215,7 @@ function publicUser(user) {
     id: String(user.id),
     username: String(user.username || ''),
     display_name: String(user.display_name || user.name || user.username || ''),
-    role: 'MANAGER',
+    role: String(user.role || '').toUpperCase() === 'PRIORITY' ? 'PRIORITY' : 'MANAGER',
     tenant_id: String(user.tenant_id || user.business_id || ''),
     allowed_units: Array.isArray(user.allowed_units) ? user.allowed_units : [],
     is_active: true

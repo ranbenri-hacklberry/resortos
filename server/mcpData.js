@@ -174,20 +174,42 @@ export async function findManagerByPhone(phone) {
   const needle = toMicropayPhone(phone);
   if (!needle || needle === '0548076123') return null;
   const rows = await rest(
-    'employees?select=id,username,name,role,is_active,phone,whatsapp_phone,business_id,allowed_units&role=eq.MANAGER&is_active=eq.true&limit=50'
+    'employees?select=id,username,name,role,is_active,phone,whatsapp_phone,business_id,allowed_units&role=in.(MANAGER,PRIORITY)&is_active=eq.true&limit=50'
   );
   const list = Array.isArray(rows) ? rows : [];
   const match = list.find((row) => toMicropayPhone(row.phone) === needle || toMicropayPhone(row.whatsapp_phone) === needle);
-  if (!match) return null;
+  const role = String(match?.role || '').toUpperCase();
+  if (!match || (role !== 'MANAGER' && role !== 'PRIORITY')) return null;
   return {
     id: match.id,
     username: match.username,
     display_name: match.name || match.username,
-    role: 'MANAGER',
+    role,
     tenant_id: match.business_id,
     allowed_units: match.allowed_units || [],
     is_active: match.is_active !== false
   };
+}
+
+export async function loadGuestBookings(user, query = {}) {
+  const parts = [
+    'select=id,unit_id,guest_name,check_in_date,check_out_date,booking_status,checkout_token,special_requests,stay,payment_status,payment_mode,total_price_agorot,deposit_agorot,clearing_payments,deleted_at',
+    `tenant_id=eq.${tenant(user)}`,
+    'deleted_at=is.null',
+    'order=check_in_date.desc,id.desc',
+    'limit=1000'
+  ];
+  if (query.booking_id) parts.push(`id=eq.${encodeURIComponent(query.booking_id)}`);
+  if (query.unit_id) parts.push(`unit_id=eq.${encodeURIComponent(query.unit_id)}`);
+  if (query.on) {
+    parts.push(`check_in_date=lte.${query.on}`);
+    parts.push(`check_out_date=gt.${query.on}`);
+  }
+  if (query.from) parts.push(`check_in_date=gte.${query.from}`);
+  if (query.to) parts.push(`check_in_date=lte.${query.to}`);
+  const rows = await rest(`hotelos_bookings?${parts.join('&')}`);
+  const list = Array.isArray(rows) ? rows : [];
+  return list.filter((row) => unitAllowed(user, row.unit_id));
 }
 
 export async function sendManagerOtp(phone, code) {
@@ -212,6 +234,7 @@ export function productionDeps() {
     loadCatalog,
     loadUnits,
     loadBookings,
+    loadGuestBookings,
     loadWorkLog,
     loadProcedures,
     loadDocuments,

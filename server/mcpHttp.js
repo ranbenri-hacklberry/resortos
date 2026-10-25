@@ -1,6 +1,7 @@
 import { createFileOauthStore, createOauthService } from './mcpAuth.js';
 import { createOtpGate } from './mcpOtp.js';
 import {
+  canReadGuestPage,
   fetchedAt,
   financeSummary,
   isManager,
@@ -16,6 +17,7 @@ import {
   projectUnit
 } from './mcpRead.js';
 import { productionDeps } from './mcpData.js';
+import { GUEST_PRINT_ABSENT, projectGuestPage, projectGuestPageSummary } from '../src/lib/guestPageRead.js';
 
 const REFRESH_GAP_MS = 5 * 60 * 1000;
 const PROTOCOL = '2025-03-26';
@@ -55,7 +57,29 @@ const TOOLS = [
     },
     additionalProperties: false
   }, true, true),
-  tool('resortos_finance_refresh', 'מבקש מ-Open Finance למשוך שוב בנקים וכרטיסים אל ResortOS. לא מזיז כסף ולא שולח סיסמה.', { type: 'object', additionalProperties: false }, false, true)
+  tool('resortos_finance_refresh', 'מבקש מ-Open Finance למשוך שוב בנקים וכרטיסים אל ResortOS. לא מזיז כסף ולא שולח סיסמה.', { type: 'object', additionalProperties: false }, false, true),
+  tool('resortos_guest_page', 'דף האורח כפי שהאורח רואה אותו, כולל קודים וקישור. בלי טלפון, בלי תשלום ובלי תעודת זהות. קריאה בלבד.', {
+    type: 'object',
+    properties: {
+      booking_id: { type: 'string' },
+      unit_id: { type: 'string' },
+      date: { type: 'string' },
+      from: { type: 'string' },
+      to: { type: 'string' }
+    },
+    additionalProperties: false
+  }, true),
+  tool('resortos_guest_page_print', 'גרסת ההדפסה של דף האורח, אם קיימת. קריאה בלבד.', {
+    type: 'object',
+    properties: {
+      booking_id: { type: 'string' },
+      unit_id: { type: 'string' },
+      date: { type: 'string' },
+      from: { type: 'string' },
+      to: { type: 'string' }
+    },
+    additionalProperties: false
+  }, true)
 ];
 
 function tool(name, description, inputSchema, readOnly, openWorld = false) {
@@ -157,6 +181,13 @@ export function createMcpHandler(deps) {
   const refreshedAt = new Map();
 
   async function callTool(user, name, args) {
+    const guestTool = name === 'resortos_guest_page' || name === 'resortos_guest_page_print';
+    if (!isManager(user) && !guestTool) {
+      const denied = new Error('FORBIDDEN');
+      denied.status = 403;
+      denied.expose = true;
+      throw denied;
+    }
     const now = deps.now ? deps.now() : new Date();
     const stamp = fetchedAt(now);
     if (name === 'resortos_profile') {
@@ -284,6 +315,36 @@ export function createMcpHandler(deps) {
           last_fetched_at: row.lastFetchedAt || null
         }))
       };
+    }
+    if (name === 'resortos_guest_page' || name === 'resortos_guest_page_print') {
+      if (!canReadGuestPage(user)) {
+        const denied = new Error('FORBIDDEN');
+        denied.status = 403;
+        denied.expose = true;
+        throw denied;
+      }
+      const loaded = await guestPageQuery(deps, user, args);
+      const bookingId = loaded.mode === 'list' ? `list:${loaded.rows.length}` : (loaded.rows[0]?.id || '');
+      console.log(`[mcp] tool=${name} user=${user.username || user.id} booking_id=${bookingId}`);
+      if (loaded.mode === 'one' && !loaded.rows.length) {
+        const missing = new Error('NOT_FOUND');
+        missing.status = 404;
+        missing.expose = true;
+        throw missing;
+      }
+      if (name === 'resortos_guest_page_print') {
+        return {
+          ...stamp,
+          ...GUEST_PRINT_ABSENT,
+          ...(loaded.mode === 'list'
+            ? { items: loaded.rows.map(projectGuestPageSummary) }
+            : projectGuestPageSummary(loaded.rows[0]))
+        };
+      }
+      if (loaded.mode === 'list') {
+        return { ...stamp, items: loaded.rows.map(projectGuestPageSummary), print_url: null };
+      }
+      return { ...stamp, ...projectGuestPage(loaded.rows[0]) };
     }
     const err = new Error('UNKNOWN_TOOL');
     err.status = 404;
@@ -422,10 +483,16 @@ export function createMcpHandler(deps) {
       const body = await readBody(req);
       if (user && deps.loadStaff) {
         const fresh = await deps.loadStaff(user.id);
-        if (!isManager(fresh)) user = null;
-        else if (Array.isArray(fresh.allowed_units)) user = { ...user, allowed_units: fresh.allowed_units };
+        if (!canReadGuestPage(fresh)) {
+          const denied = new Error('FORBIDDEN');
+          denied.status = 403;
+          denied.expose = true;
+          throw denied;
+        }
+        user = { ...user, role: fresh.role || user.role, username: fresh.username || user.username };
+        if (Array.isArray(fresh.allowed_units)) user = { ...user, allowed_units: fresh.allowed_units };
       }
-      if (!user || !isManager(user)) {
+      if (!user || !canReadGuestPage(user)) {
         send(res, 401, rpcError(body?.id ?? null, 32001, 'UNAUTHORIZED'), { 'WWW-Authenticate': challenge(origin) });
         return true;
       }
@@ -443,7 +510,10 @@ export function createMcpHandler(deps) {
           };
         }
         if (body.method === 'ping') return {};
-        if (body.method === 'tools/list') return { tools: TOOLS.map(publicTool) };
+        if (body.method === 'tools/list') {
+          const tools = isManager(user) ? TOOLS : TOOLS.filter((item) => item.name.startsWith('resortos_guest_page'));
+          return { tools: tools.map(publicTool) };
+        }
         if (body.method === 'tools/call') {
           const name = String(body.params?.name || '');
           if (!TOOLS.some((item) => item.name === name)) {
@@ -506,8 +576,37 @@ async function rpcResult(body, run) {
   try {
     return { jsonrpc: '2.0', id: body.id ?? null, result: await run() };
   } catch (err) {
+    if (err.expose) throw err;
     return rpcError(body.id ?? null, -32000, Number(err.status) >= 500 ? 'MCP_FAILED' : (err.message || 'MCP_FAILED'));
   }
+}
+
+async function guestPageQuery(deps, user, args) {
+  const bookingId = String(args.booking_id || '').trim();
+  const unitId = String(args.unit_id || '').trim();
+  const on = parseDate(args.date, 'date');
+  const from = parseDate(args.from, 'from');
+  const to = parseDate(args.to, 'to');
+  if (!deps.loadGuestBookings) {
+    const err = new Error('GUEST_PAGE_UNAVAILABLE');
+    err.status = 503;
+    throw err;
+  }
+  if (bookingId) return { mode: 'one', rows: await deps.loadGuestBookings(user, { booking_id: bookingId }) };
+  if (unitId || on) {
+    if (!unitId || !on) {
+      const err = new Error('BAD_REQUEST');
+      err.status = 400;
+      err.expose = true;
+      throw err;
+    }
+    return { mode: 'one', rows: await deps.loadGuestBookings(user, { unit_id: unitId, on }) };
+  }
+  if (from || to) return { mode: 'list', rows: await deps.loadGuestBookings(user, { from, to }) };
+  const err = new Error('BAD_REQUEST');
+  err.status = 400;
+  err.expose = true;
+  throw err;
 }
 
 function rpcError(id, code, message) {

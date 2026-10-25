@@ -35,6 +35,12 @@ export function isManager(user) {
   return String(user?.role || '').toUpperCase() === 'MANAGER' && user?.is_active !== false && Boolean(user?.id);
 }
 
+/** Guest-page reads: every manager, and the Priority user. Not the operations manager. */
+export function canReadGuestPage(user) {
+  const role = String(user?.role || '').toUpperCase();
+  return Boolean(user?.id) && user?.is_active !== false && (role === 'MANAGER' || role === 'PRIORITY');
+}
+
 export function parseDate(value, name) {
   const text = String(value || '').trim();
   if (!text) return '';

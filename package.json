@@ -30,7 +30,7 @@
     "sync:kinorot": "node server/syncKinorotCalendar.js",
     "sync:banks": "node server/syncBanks.js",
     "sync:hyp": "node server/syncHyp.js",
-    "test": "vitest run && node --test functions/lib/hypPay.test.js functions/lib/guestContext.test.js functions/lib/demoCheckout.test.js functions/lib/edgeAgentStore.test.js functions/lib/idPhoto.test.js server/agentConnections.test.js server/mcpRead.test.js server/mcpAuth.test.js server/mcpOtp.test.js server/mcpHttp.test.js server/googleContactsPlan.test.js server/googleContactsAuto.test.js server/routerStatus.test.js server/assetBeacons.test.js server/roomCheckoutLog.test.js",
+    "test": "vitest run && node --test functions/lib/hypPay.test.js functions/lib/guestContext.test.js functions/lib/demoCheckout.test.js functions/lib/edgeAgentStore.test.js functions/lib/idPhoto.test.js server/agentConnections.test.js server/mcpRead.test.js server/mcpAuth.test.js server/mcpOtp.test.js server/mcpHttp.test.js server/mcpGuestPage.test.js server/googleContactsPlan.test.js server/googleContactsAuto.test.js server/routerStatus.test.js server/assetBeacons.test.js server/roomCheckoutLog.test.js",
     "test:hyp": "node --test functions/lib/hypPay.test.js"
   },
   "dependencies": {
