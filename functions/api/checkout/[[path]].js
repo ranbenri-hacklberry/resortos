@@ -769,13 +769,18 @@ function buildCabinPortalBooking(unitId, today = israelTodayIso()) {
   };
 }
 
+function isHoldBlock(name, notes) {
+  const text = `${name || ''} ${notes || ''}`;
+  return /סגור|תפוס|שיפוצ|חסום|לא למכיר|לא להשכר|לא זמין|לא פנוי|לא נקי|מקולקל|תחזוק|מגורי צוות/i.test(text);
+}
+
 async function findActiveBookingForUnit(env, unitId) {
   if (!unitId) return null;
   const today = israelTodayIso();
   if (env.STAY_DB) {
     try {
       await ensureGuestBookingTable(env);
-      const row = await env.STAY_DB.prepare(
+      const rows = await env.STAY_DB.prepare(
         `SELECT booking_json FROM guest_bookings 
          WHERE json_extract(booking_json, '$.unit_id') = ?1 
            AND json_extract(booking_json, '$.check_in_date') <= ?2 
@@ -785,10 +790,12 @@ async function findActiveBookingForUnit(env, unitId) {
            (json_extract(booking_json, '$.booking_status') = 'CHECKED_IN') DESC,
            (json_extract(booking_json, '$.check_in_date') = ?2) DESC,
            json_extract(booking_json, '$.check_in_date') DESC
-         LIMIT 1`
-      ).bind(unitId, today).first();
-      if (row?.booking_json) {
+         LIMIT 5`
+      ).bind(unitId, today).all();
+      for (const row of (rows?.results || [])) {
+        if (!row?.booking_json) continue;
         const parsed = JSON.parse(row.booking_json);
+        if (isHoldBlock(parsed.guest_name, parsed.special_requests)) continue;
         const overlay = await readStayOverlay(env, parsed.checkout_token);
         if (overlay) parsed.stay = mergeStay(parsed.stay, overlay);
         return parsed;
@@ -805,12 +812,13 @@ async function findActiveBookingForUnit(env, unitId) {
       s.unit_id === unitId &&
       s.check_in_date <= today &&
       s.check_out_date >= today &&
-      s.booking_status !== 'CANCELED'
+      s.booking_status !== 'CANCELED' &&
+      !isHoldBlock(s.guest_name, s.special_requests)
     ));
     if (active?.checkout_token) {
       const full = await readBooking(env, active.checkout_token);
-      if (full) return full;
-      return active;
+      if (full && !isHoldBlock(full.guest_name, full.special_requests)) return full;
+      if (!isHoldBlock(active.guest_name, active.special_requests)) return active;
     }
   } catch (err) {
     console.warn('[findActiveBookingForUnit replica error]', err);
