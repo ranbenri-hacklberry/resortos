@@ -36,6 +36,7 @@ import {
   sniffIdPhoto,
   stripIdPhoto
 } from '../../lib/idPhoto.js';
+import { scanGuestId } from '../../lib/idScan.js';
 import { allCabinsPaid, applyPaySplitView, resolveStayUnitId } from '../../lib/paySplit.js';
 import { verifyStaffPin } from '../../lib/staffPin.js';
 import { normalizeBalancePreference } from '../../lib/balancePref.js';
@@ -688,7 +689,7 @@ async function readIdPhotoUpload(request) {
   return new Uint8Array(await file.arrayBuffer());
 }
 
-export async function saveGuestIdPhoto(env, token, row, bytes) {
+export async function saveGuestIdPhoto(env, token, row, bytes, waitUntil) {
   const mime = sniffIdPhoto(bytes);
   if (!mime) return { error: 'BAD_IMAGE', status: 400 };
   const key = idPhotoKeyBytes(env?.ID_PHOTO_KEY);
@@ -709,7 +710,22 @@ export async function saveGuestIdPhoto(env, token, row, bytes) {
     updated_at: receivedAt
   };
   await persistGuestRow(env, token, stored);
+  // Ran 2026-10-24: scan with Grok in the background; store only decision + name + reasons on the stay.
+  const scanJob = runGuestIdScan(env, token, bytes, mime, row?.guest_name, receivedAt);
+  if (typeof waitUntil === 'function') waitUntil(scanJob); else await scanJob;
   return { ok: true, received_at: receivedAt };
+}
+
+export async function runGuestIdScan(env, token, bytes, mime, guestName, receivedAt, scan = scanGuestId) {
+  try {
+    const summary = await scan(env, bytes, mime, guestName);
+    const fresh = (await readBooking(env, token)) || null;
+    if (!fresh || fresh.stay?.id_photo_received_at !== receivedAt) return summary; // newer upload wins
+    await persistGuestRow(env, token, { ...fresh, stay: stripIdPhoto({ ...(fresh.stay || {}), id_scan: summary }), updated_at: new Date().toISOString() });
+    return summary;
+  } catch {
+    return null;
+  }
 }
 
 export async function loadGuestIdPhoto(env, token) {
@@ -1107,7 +1123,7 @@ async function handleCheckout(context) {
     }
     if (method !== 'POST') return json({ error: 'METHOD' }, 405);
     const bytes = await readIdPhotoUpload(request);
-    const saved = await saveGuestIdPhoto(env, token, row, bytes || new Uint8Array());
+    const saved = await saveGuestIdPhoto(env, token, row, bytes || new Uint8Array(), context.waitUntil?.bind(context));
     if (saved.error) return json({ error: saved.error }, saved.status);
     return json({ ok: true, received_at: saved.received_at });
   }
@@ -1521,6 +1537,7 @@ async function handleCheckout(context) {
     const keepStatus = row.booking_status === 'CHECKED_IN' || row.booking_status === 'CHECKED_OUT'
       ? row.booking_status
       : (hypAlreadyPaid(row) || hypDepositPaid(row) ? 'CONFIRMED' : row.booking_status);
+    const payMode = pref === 'CASH' ? 'CASH_TRUST' : (body.payment_mode || row.payment_mode || 'CREDIT_DEPOSIT');
     const stored = {
       ...row,
       guest_name: guestName,
@@ -1529,6 +1546,7 @@ async function handleCheckout(context) {
       booking_status: keepStatus,
       payment_status: row.payment_status || 'UNPAID',
       balance_payment_preference: pref,
+      payment_mode: payMode,
       expires_at: stayExpiresAt({ ...row, booking_status: keepStatus === 'PENDING' ? 'CONFIRMED' : keepStatus }),
       stay: {
         ...(row.stay || { cabin_ready: false, folio: [], checkout_time: '11:00' }),
