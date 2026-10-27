@@ -11,7 +11,8 @@ import {
   FileText,
   Banknote,
   Building2,
-  UploadCloud,
+  Receipt,
+  Ticket,
   X,
   AlertCircle
 } from 'lucide-react';
@@ -106,6 +107,7 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [paying, setPaying] = useState(false);
   const [balancePref, setBalancePref] = useState('CREDIT_CARD'); // credit card first
+  const [voucherCode, setVoucherCode] = useState('');
   const [agreed, setAgreed] = useState(false);
   const [freshBooking, setFreshBooking] = useState(null);
   const [payFrame, setPayFrame] = useState('');
@@ -119,7 +121,7 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
   const stayReady =
     isSubmitted ||
     paidReturn ||
-    (Boolean(activeBooking?.stay?.id_photo_received_at || activeBooking?.stay?.id_scan) && Boolean(activeBooking?.balance_payment_preference || activeBooking?.payment_mode === 'CASH_TRUST'));
+    guestShouldSeeStayPortal(activeBooking);
 
   useEffect(() => {
     if (previewBooking || !token || typeof window === 'undefined') return;
@@ -163,13 +165,22 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
     setGuestEmail((current) => current || activeBooking.guest_email || '');
     setSpecialRequests((current) => current || activeBooking.special_requests || '');
     if (activeBooking.special_requests) setShowRequests(true);
-    if (activeBooking.balance_payment_preference) {
+    if (activeBooking.stay?.payment_choice) {
+      setBalancePref(activeBooking.stay.payment_choice);
+    } else if (activeBooking.payment_mode === 'VOUCHER') {
+      setBalancePref('VOUCHER');
+    } else if (activeBooking.payment_mode === 'ALREADY_PAID') {
+      setBalancePref('ALREADY_PAID');
+    } else if (activeBooking.balance_payment_preference) {
       setBalancePref(activeBooking.balance_payment_preference);
     } else if (activeBooking.payment_mode === 'CASH_TRUST') {
       setBalancePref('CASH');
     }
+    if (activeBooking.stay?.voucher_code) {
+      setVoucherCode(activeBooking.stay.voucher_code);
+    }
     if (activeBooking.stay?.id_photo_received_at) setIdSaved(true);
-  }, [activeBooking?.checkout_token, activeBooking?.guest_name, activeBooking?.guest_email, activeBooking?.special_requests, activeBooking?.stay?.id_photo_received_at, activeBooking?.balance_payment_preference, activeBooking?.payment_mode]);
+  }, [activeBooking?.checkout_token, activeBooking?.guest_name, activeBooking?.guest_email, activeBooking?.special_requests, activeBooking?.stay?.id_photo_received_at, activeBooking?.balance_payment_preference, activeBooking?.payment_mode, activeBooking?.stay?.payment_choice, activeBooking?.stay?.voucher_code]);
 
   const shell = (children, center = null) => (
     <div
@@ -330,13 +341,32 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
     if (paying) return;
     setPaying(true);
     try {
+      const mode = balancePref === 'CASH'
+        ? 'CASH_TRUST'
+        : balancePref === 'VOUCHER'
+          ? 'VOUCHER'
+          : balancePref === 'ALREADY_PAID'
+            ? 'ALREADY_PAID'
+            : 'CREDIT_DEPOSIT';
+
+      const safePref = (balancePref === 'ALREADY_PAID' || balancePref === 'VOUCHER')
+        ? 'CREDIT_CARD'
+        : balancePref;
+
+      const fullRequests = [
+        specialRequests,
+        voucherCode ? `שובר: ${voucherCode}` : ''
+      ].filter(Boolean).join('\n');
+
       const next = await confirmGuestCheckout(token, {
         guest_name: guestName || usableGuestName(activeBooking?.guest_name) || 'נטשה',
         guest_email: guestEmail,
-        special_requests: specialRequests,
+        special_requests: fullRequests,
         pay: false,
-        balance_payment_preference: balancePref,
-        payment_mode: balancePref === 'CASH' ? 'CASH_TRUST' : 'CREDIT_DEPOSIT'
+        balance_payment_preference: safePref,
+        payment_mode: mode,
+        payment_choice: balancePref,
+        voucher_code: voucherCode || ''
       });
       if (next) setFreshBooking(next);
       setIsSubmitted(true);
@@ -1079,6 +1109,92 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
                       {t('GUEST_PAY_BANK_DESC')}
                     </p>
                   </div>
+                </div>
+
+                {/* 4. Already Paid */}
+                <div
+                  onClick={() => setBalancePref('ALREADY_PAID')}
+                  style={{
+                    background: balancePref === 'ALREADY_PAID' ? themeStyles.accentSoft : themeStyles.inputBg,
+                    border: `2px solid ${balancePref === 'ALREADY_PAID' ? themeStyles.accent : themeStyles.inputBorder}`,
+                    borderRadius: 14,
+                    padding: '1rem 1.1rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 12,
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <div style={{ color: themeStyles.accent, marginTop: 2 }}>
+                    <Receipt size={26} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 900, fontSize: '0.96rem', color: themeStyles.textPrimary }}>
+                      {t('GUEST_PAY_ALREADY_PAID_TITLE')}
+                    </div>
+                    <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: themeStyles.textMuted, lineHeight: 1.4 }}>
+                      {t('GUEST_PAY_ALREADY_PAID_DESC')}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 5. Vouchers / Coupons */}
+                <div
+                  onClick={() => setBalancePref('VOUCHER')}
+                  style={{
+                    background: balancePref === 'VOUCHER' ? themeStyles.accentSoft : themeStyles.inputBg,
+                    border: `2px solid ${balancePref === 'VOUCHER' ? themeStyles.accent : themeStyles.inputBorder}`,
+                    borderRadius: 14,
+                    padding: '1rem 1.1rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 10,
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                    <div style={{ color: themeStyles.accent, marginTop: 2 }}>
+                      <Ticket size={26} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 900, fontSize: '0.96rem', color: themeStyles.textPrimary }}>
+                        {t('GUEST_PAY_VOUCHER_TITLE')}
+                      </div>
+                      <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: themeStyles.textMuted, lineHeight: 1.4 }}>
+                        {t('GUEST_PAY_VOUCHER_DESC')}
+                      </p>
+                    </div>
+                  </div>
+                  {balancePref === 'VOUCHER' && (
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ marginTop: 2, paddingTop: 8, borderTop: `1px dashed ${themeStyles.inputBorder}` }}
+                    >
+                      <label style={{ fontSize: '0.74rem', fontWeight: 700, color: themeStyles.textMuted }}>
+                        {t('GUEST_PAY_VOUCHER_INPUT_LABEL')}
+                      </label>
+                      <input
+                        type="text"
+                        value={voucherCode}
+                        onChange={(e) => setVoucherCode(e.target.value)}
+                        placeholder={t('GUEST_PAY_VOUCHER_INPUT_PH')}
+                        style={{
+                          width: '100%',
+                          padding: '0.55rem 0.75rem',
+                          borderRadius: 9,
+                          background: themeStyles.cardBg || '#FFFFFF',
+                          border: `1px solid ${themeStyles.inputBorder}`,
+                          color: themeStyles.textPrimary,
+                          fontSize: '0.88rem',
+                          fontWeight: 700,
+                          marginTop: 4,
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
               </>

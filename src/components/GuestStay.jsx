@@ -158,7 +158,9 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
     today <= booking.check_out_date
   );
   const mergedStay = { ...booking, stay, booking_status: liveStatus };
-  const paidForCheckin = isPaidForGuestCheckin(mergedStay);
+  const totalPriceIls = Math.round((booking.total_price_agorot || 0) / 100);
+  const isPaid = isPaidForGuestCheckin(mergedStay);
+  const paidForCheckin = isPaid;
   const bankWaiting = Boolean(stay?.payment_proof)
     && (stay?.payment_choice === 'BANK_TRANSFER' || booking.payment_status === 'PENDING_BANK')
     && !guestCheckedIn;
@@ -385,11 +387,11 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-      {justConfirmed || (Boolean(stay?.id_photo_received_at || stay?.id_scan) && !paidForCheckin) ? (
+      {justConfirmed || Boolean(stay?.id_photo_received_at || stay?.id_scan) ? (
         <div
           style={{
-            background: themeStyles.accentSoft,
-            border: `1px solid ${themeStyles.accent}`,
+            background: isPaid ? '#10B98115' : themeStyles.accentSoft,
+            border: `1px solid ${isPaid ? '#10B98166' : themeStyles.accent}`,
             borderRadius: 14,
             padding: '1rem 1.15rem',
             display: 'flex',
@@ -397,14 +399,14 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
             gap: 10
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 900, color: themeStyles.accent, fontSize: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 900, color: isPaid ? '#059669' : themeStyles.accent, fontSize: '1rem' }}>
             <span>✓</span>
-            <span>{t('GUEST_ID_RECEIVED_TITLE')}</span>
+            <span>{isPaid ? t('GUEST_PAID_CONFIRMED_TITLE') : t('GUEST_ID_RECEIVED_TITLE')}</span>
           </div>
           <p style={{ margin: 0, color: themeStyles.textMuted, fontSize: '0.86rem', lineHeight: 1.55, fontWeight: 600 }}>
-            {t('GUEST_ID_RECEIVED_BODY')}
+            {isPaid ? t('GUEST_PAID_CONFIRMED_BODY') : t('GUEST_ID_RECEIVED_BODY')}
           </p>
-          <div style={{ marginTop: 4, paddingTop: 8, borderTop: `1px dashed ${themeStyles.accent}44` }}>
+          <div style={{ marginTop: 4, paddingTop: 8, borderTop: `1px dashed ${isPaid ? '#10B98144' : `${themeStyles.accent}44`}` }}>
             <GuestReach
               token={booking.checkout_token}
               unitId={booking.unit_id}
@@ -556,6 +558,56 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
             {t('GUEST_COUNTDOWN', { time: countdown })}
           </div>
         ) : null}
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginTop: 12,
+            paddingTop: 10,
+            borderTop: `1px solid ${themeStyles.inputBorder}`
+          }}
+        >
+          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: themeStyles.textMuted }}>
+            {t('GUEST_PAYMENT_STATUS_LABEL')}
+          </span>
+          {isPaid ? (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                color: '#059669',
+                fontWeight: 900,
+                fontSize: '0.84rem',
+                background: '#10B98118',
+                border: '1px solid #10B98144',
+                padding: '3px 10px',
+                borderRadius: 8
+              }}
+            >
+              ✓ {t('GUEST_PAYMENT_STATUS_PAID')} (₪{totalPriceIls.toLocaleString()})
+            </span>
+          ) : (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                color: '#D97706',
+                fontWeight: 900,
+                fontSize: '0.84rem',
+                background: '#F59E0B18',
+                border: '1px solid #F59E0B44',
+                padding: '3px 10px',
+                borderRadius: 8
+              }}
+            >
+              ⏳ {t('GUEST_PAYMENT_STATUS_PENDING')} (₪{totalPriceIls.toLocaleString()})
+            </span>
+          )}
+        </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 14 }}>
           {wazeUrl(booking.unit_id) || googleMapsUrl(booking.unit_id) ? (

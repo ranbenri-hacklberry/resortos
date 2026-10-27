@@ -377,8 +377,13 @@ export async function confirmGuestCheckout(req, res) {
   const guestName = String(req.body?.guest_name || '').trim();
   const guestEmail = String(req.body?.guest_email || '').trim();
   const specialRequests = String(req.body?.special_requests || '').trim();
-  const balancePref = req.body?.balance_payment_preference || 'CREDIT_CARD';
-  const paymentMode = balancePref === 'CASH' ? 'CASH_TRUST' : (req.body?.payment_mode || 'CREDIT_DEPOSIT');
+  const rawPref = req.body?.balance_payment_preference || 'CREDIT_CARD';
+  const balancePref = ['CREDIT_CARD', 'BANK_TRANSFER', 'CASH'].includes(rawPref) ? rawPref : 'CREDIT_CARD';
+  const paymentChoice = req.body?.payment_choice || rawPref;
+  const paymentMode = paymentChoice === 'CASH'
+    ? 'CASH_TRUST'
+    : (req.body?.payment_mode || (paymentChoice === 'VOUCHER' ? 'VOUCHER' : paymentChoice === 'ALREADY_PAID' ? 'ALREADY_PAID' : 'CREDIT_DEPOSIT'));
+  const voucherCode = String(req.body?.voucher_code || '').trim();
 
   if (!guestName) {
     return res.status(400).json({ error: 'MISSING_GUEST_FIELDS' });
@@ -401,7 +406,10 @@ export async function confirmGuestCheckout(req, res) {
     if (row) {
       const stayMerged = {
         ...(row.stay || {}),
-        balance_payment_preference: balancePref
+        balance_payment_preference: balancePref,
+        payment_choice: paymentChoice,
+        checkout_completed_at: new Date().toISOString(),
+        ...(voucherCode ? { voucher_code: voucherCode } : {})
       };
       const updated = {
         ...row,

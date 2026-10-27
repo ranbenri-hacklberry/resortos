@@ -74,7 +74,7 @@ export function guestShouldSeeStayPortal(booking) {
   if (booking.is_cabin_portal) return true;
   const status = booking.booking_status;
   if (status === 'CHECKED_IN' || status === 'CHECKED_OUT') return true;
-  if (booking.stay?.id_photo_received_at || booking.stay?.id_scan) return true;
+  if ((booking.stay?.id_photo_received_at || booking.stay?.id_scan) && (booking.stay?.payment_choice || booking.stay?.checkout_completed_at || booking.payment_status === 'PAID')) return true;
   return false;
 }
 

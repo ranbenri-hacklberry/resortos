@@ -1534,10 +1534,14 @@ async function handleCheckout(context) {
       body.balance_payment_preference,
       row.balance_payment_preference || row.stay?.balance_payment_preference || 'CREDIT_CARD'
     );
+    const paymentChoice = body.payment_choice || body.balance_payment_preference || pref;
+    const payMode = paymentChoice === 'CASH'
+      ? 'CASH_TRUST'
+      : (body.payment_mode || (paymentChoice === 'VOUCHER' ? 'VOUCHER' : paymentChoice === 'ALREADY_PAID' ? 'ALREADY_PAID' : 'CREDIT_DEPOSIT'));
+    const voucherCode = String(body.voucher_code || '').trim();
     const keepStatus = row.booking_status === 'CHECKED_IN' || row.booking_status === 'CHECKED_OUT'
       ? row.booking_status
       : (hypAlreadyPaid(row) || hypDepositPaid(row) ? 'CONFIRMED' : row.booking_status);
-    const payMode = pref === 'CASH' ? 'CASH_TRUST' : (body.payment_mode || row.payment_mode || 'CREDIT_DEPOSIT');
     const stored = {
       ...row,
       guest_name: guestName,
@@ -1550,7 +1554,10 @@ async function handleCheckout(context) {
       expires_at: stayExpiresAt({ ...row, booking_status: keepStatus === 'PENDING' ? 'CONFIRMED' : keepStatus }),
       stay: {
         ...(row.stay || { cabin_ready: false, folio: [], checkout_time: '11:00' }),
-        balance_payment_preference: pref
+        balance_payment_preference: pref,
+        payment_choice: paymentChoice,
+        checkout_completed_at: new Date().toISOString(),
+        ...(voucherCode ? { voucher_code: voucherCode } : {})
       },
       updated_at: new Date().toISOString()
     };
