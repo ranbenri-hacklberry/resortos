@@ -13,6 +13,7 @@ import argparse
 import json
 import sys
 import os
+import re
 import time
 
 USE_VOCAB = os.environ.get("STT_HE_VOCAB", "1") != "0"  # set STT_HE_VOCAB=0 to roll back
@@ -25,7 +26,7 @@ HE_PROMPT = (
     "מיאליס, וילה מיאליס, סוויטה ורודה, סוויטה ירוקה, קאסה נובה, אורה, בלום, "
     "צימר בגבעה, כיפת שמים, כחול, אדום, ירוק, גבעת יואב, רמות, מול הנוף, "
     "נופים בלבן, טוסקנה, החצר המוסיקלית, טאג׳ מאהל, מאיה, בתי נורית. "
-    "A1 A2 A3 B1 B2 C1 C2 C3 C4 D1 D2 D3."
+    "A1 A2 A3 B1 B2 C1 C2 C3 C4 D1 D2 D3. סוויטה ירוקה A3, אורה B1."
 )
 
 # Post-correction for frequent mishearings (applied to Hebrew output only).
@@ -37,9 +38,22 @@ HE_FIXES = [
 ]
 
 
+HE_REGEX_FIXES = [
+    # E3 -> A3 only in suite context (E3 is a valid Taj Mahal room code elsewhere).
+    (re.compile(r"((?:סוויטה|ירוקה)[ ,]*)E3\b"), r"\1A3"),
+    (re.compile(r"קאסה נובה האורה"), "קאסה נובה אורה"),
+    (re.compile(r"האורה(\s*)B1\b"), r"אורה\1B1"),
+    (re.compile(r"והכחול זה"), "הכחול זה"),
+    # "30,41" -> "3041": Whisper inserts a thousands comma; never merges "C1, C2" or longer runs.
+    (re.compile(r"(?<![\d,])(\d{2}),(\d{2})(?![\d,])"), r"\1\2"),
+]
+
+
 def fix_he(text: str) -> str:
     for a, b in HE_FIXES:
         text = text.replace(a, b)
+    for rx, b in HE_REGEX_FIXES:
+        text = rx.sub(b, text)
     return text
 
 
