@@ -509,7 +509,15 @@ export function createPipeline(deps: PipelineDeps) {
   const lastCheckoutAsk = new Map<string, number>();
   const wrongQrAlerted = new Set<string>();
   const rawSessionStates = new Map<string, SessionState>();
+  /** When the current session state began (same state re-set keeps its start). Used to rank call-desk alerts vs open menus. */
+  const sessionStartedAt = new Map<string, number>();
+  const stampSession = (k: string, val: SessionState) => {
+    const prev = rawSessionStates.get(k);
+    if (!prev || prev.state !== val.state || !sessionStartedAt.has(k)) sessionStartedAt.set(k, Date.now());
+  };
   const sessionStates = {
+    startedAt: (key: string): number | undefined =>
+      sessionStartedAt.get(key) ?? (key.startsWith('resortos:') ? sessionStartedAt.get(key.replace('resortos:', '')) : undefined),
     get: (key: string): SessionState | undefined => {
       if (key.startsWith('resortos:')) {
         return rawSessionStates.get(key) ?? rawSessionStates.get(key.replace('resortos:', ''));
@@ -517,15 +525,19 @@ export function createPipeline(deps: PipelineDeps) {
       return rawSessionStates.get(key);
     },
     set: (key: string, val: SessionState) => {
+      stampSession(key, val);
       rawSessionStates.set(key, val);
       if (key.startsWith('resortos:')) {
+        stampSession(key.replace('resortos:', ''), val);
         rawSessionStates.set(key.replace('resortos:', ''), val);
       }
     },
     delete: (key: string) => {
       rawSessionStates.delete(key);
+      sessionStartedAt.delete(key);
       if (key.startsWith('resortos:')) {
         rawSessionStates.delete(key.replace('resortos:', ''));
+        sessionStartedAt.delete(key.replace('resortos:', ''));
       }
       return true;
     },
@@ -892,7 +904,14 @@ export function createPipeline(deps: PipelineDeps) {
           return { handled: true };
         }
       }
-      const deskReply = await consultCallDesk(senderPhone, text.trim());
+      // A bare digit while a manager menu/session is open belongs to that session unless the call alert is newer
+      // (Ran 2026-10-28: "2" for pay-link phone was taken by a 19h-old call alert). since_ms lets the desk decide.
+      const bareDigit = /^\s*\d{1,2}\s*[.)]?\s*$/.test(text);
+      const menuShownAt = roomMenuShownAt.get(normalizePhoneTail(senderPhone)) || 0;
+      const sessionSince = currentSession ? (sessionStates.startedAt(sessionKey) || Date.now()) : 0;
+      const roomMenuSince = Date.now() - menuShownAt < ROOM_MENU_TTL_MS ? menuShownAt : 0;
+      const sinceMs = bareDigit ? Math.max(sessionSince, roomMenuSince) : 0;
+      const deskReply = await consultCallDesk(senderPhone, text.trim(), sinceMs);
       if (deskReply) {
         await d.send(jid, deskReply);
         return { handled: true };

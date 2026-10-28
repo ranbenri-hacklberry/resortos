@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { existsSync, rmSync } from 'node:fs';
 import { createPipeline, type PipelineDeps } from '../pipeline.js';
+import { consultCallDesk } from '../calls/deskReply.js';
+
+// Controllable call desk for this file (default: no open call → null, like src/test/setup.ts).
+vi.mock('../calls/deskReply.js', () => ({ consultCallDesk: vi.fn(async () => null) }));
 import type { CleanerProfile, RoomEntry } from '../config.js';
 import {
   amountFromReply, balanceDueAgorot, buildCreateUrl, createHypPayLinkClient, parseCreateResponse,
@@ -192,5 +196,50 @@ describe('manager flow: scan → 8 → edit amount/phone → confirm', () => {
     await say(p, who.phone, 'כן');
     expect(payLink.create).not.toHaveBeenCalled();
     expect(sent.join('\n')).not.toContain('קישור תשלום');
+  });
+});
+
+describe('call desk vs open pay-link session (Ran 2026-10-28)', () => {
+  /** Fake office desk mirroring server/callMe.js: a bare digit is taken only if the alert is newer than since_ms. */
+  function deskWithAlertAt(alertAtMs: number) {
+    const desk = vi.mocked(consultCallDesk);
+    desk.mockReset();
+    desk.mockImplementation(async (_phone: string, text: string, sinceMs = 0) => {
+      if (!/^\d$/.test(text.trim())) return null;
+      return sinceMs && alertAtMs < sinceMs ? null : 'העברתי את השיחה לצוות.';
+    });
+    return desk;
+  }
+  it('old open call alert + pay-link pending → "2" asks for the phone, no transfer', async () => {
+    const desk = deskWithAlertAt(Date.now() - 19 * 3600_000);
+    const who = { phone: '972500000006', name: 'מנהל', role: 'MANAGER', language: 'he' } as any;
+    const { deps, sent, payLink } = makeDeps(who);
+    const p = createPipeline(deps);
+    await say(p, who.phone, 'START_D1');
+    await say(p, who.phone, '8');
+    await say(p, who.phone, '2');
+    expect(sent.at(-1)).toContain('מספר הנייד החדש');
+    expect(sent.join('\n')).not.toContain('העברתי את השיחה');
+    expect(desk.mock.calls.at(-1)?.[2]).toBeGreaterThan(0);
+    expect(payLink.create).not.toHaveBeenCalled();
+  });
+  it('a call alert newer than the session still takes the digit', async () => {
+    deskWithAlertAt(Date.now() + 60_000);
+    const who = { phone: '972500000007', name: 'מנהל', role: 'MANAGER', language: 'he' } as any;
+    const { deps, sent } = makeDeps(who);
+    const p = createPipeline(deps);
+    await say(p, who.phone, 'START_D1');
+    await say(p, who.phone, '8');
+    await say(p, who.phone, '2');
+    expect(sent.at(-1)).toContain('העברתי את השיחה');
+  });
+  it('free text is sent to the desk without a since time', async () => {
+    const desk = deskWithAlertAt(Date.now() - 19 * 3600_000);
+    const who = { phone: '972500000008', name: 'מנהל', role: 'MANAGER', language: 'he' } as any;
+    const { deps } = makeDeps(who);
+    const p = createPipeline(deps);
+    await say(p, who.phone, 'שלום');
+    for (const c of desk.mock.calls) expect(c[2] || 0).toBe(0);
+    desk.mockReset(); desk.mockImplementation(async () => null);
   });
 });
