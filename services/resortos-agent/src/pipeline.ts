@@ -752,7 +752,7 @@ export function createPipeline(deps: PipelineDeps) {
       const isAudioMsg = (() => { try { return d.isAudio(msg); } catch { return false; } })();
       logConversation({ direction: 'inbound', jid, text: inboundText || (isAudioMsg ? '[voice note]' : ''), route });
       currentRoute = { jid, route };
-      const scope = isManagerRole(cleanerRow?.role) && route !== 'guest' && cleanerRow?.allowedUnits?.length ? cleanerRow.allowedUnits : null;
+      const scope = cleanerRow && route !== 'guest' && cleanerRow.allowedUnits?.length ? cleanerRow.allowedUnits : null;
       const result = await scopeStorage.run({ units: scope }, () => handleInboundInner(msg, channelId));
       if (route === 'guest' && jid && !msg.key.fromMe && channelId === 'resortos' && result.reason !== 'late_checkout') void forwardGuestToBarak(jid, inPn, inboundText || (isAudioMsg ? '[הודעה קולית]' : ''));
       logConversation({ direction: 'result', jid, route, handled: result.handled, reason: (result as any).reason, text: (result as any).transcript?.text });
@@ -823,7 +823,7 @@ export function createPipeline(deps: PipelineDeps) {
     // Ran 2026-10-28: a room outside the manager's allowed units is refused politely.
     {
       const units = scopeStorage.getStore()?.units;
-      if (units && isManager && jid && text?.trim() && !msg.key.fromMe) {
+      if (units && cleaner && jid && text?.trim() && !msg.key.fromMe) {
         const outside = resolveRoomByAlias(text, allRooms());
         if (outside && !units.includes(outside) && !resolveRoomByAlias(text, d.rooms())) {
           const name = allRooms().find((r) => r.id === outside)?.name || outside;
@@ -3404,6 +3404,11 @@ ${result.paymentURL}`);
       if (!phone) throw Object.assign(new Error('cleaner_phone required'), { status: 400 });
       const cleaner = d.cleaners().find((c) => matchesCleaner(c, phone));
       if (!cleaner) throw Object.assign(new Error('unknown cleaner'), { status: 404 });
+      // Ran 2026-10-28: never dispatch a room outside the worker's allowed units.
+      const dispatchRoom = body.room_id || (body.message_he ? resolveRoomByAlias(body.message_he, d.rooms()) : null);
+      if (cleaner.allowedUnits?.length && dispatchRoom && !cleaner.allowedUnits.includes(dispatchRoom)) {
+        throw Object.assign(new Error('room outside worker allowed_units'), { status: 409 });
+      }
 
       if ((body.action === 'ROOM_EXIT' || body.type === 'ROOM_EXIT') && body.room_id) {
         return triggerRoomExit({ cleanerPhone: phone, roomId: body.room_id, channelId });
