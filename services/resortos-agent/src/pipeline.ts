@@ -44,6 +44,7 @@ import {
   textHasStatusWord,
   type StatusChange,
 } from './manager/statusConfirm.js';
+import { cashInvoiceAllowed, cashInvoiceAskText, cashInvoiceConfig, cashInvoiceKey, cashInvoiceResultText, createCashInvoiceClient, validEmail as cashValidEmail, type CashInvoiceClient } from './manager/cashInvoice.js';
 import { cashConfirmText, cashShekelLabel, paymentStatusChoice, paymentStatusLabel, paymentStatusQuestion, proposeCashCollection } from './manager/cashCollection.js';
 import { holdConfirmText, holdDoneText, holdProgressText, proposesNightHold } from './manager/nightHold.js';
 import { fileAudit, handleManagerRoomHold } from './manager/roomHold.js';
@@ -134,6 +135,7 @@ export type ManagerSessionState =
   | { role: 'MANAGER'; state: 'AWAITING_STATUS_CONFIRM'; roomId: string; change: StatusChange; sourceText?: string }
   | { role: 'MANAGER'; state: 'AWAITING_CASH_CONFIRM'; roomId: string; shekels: number; sourceText?: string }
   | { role: 'MANAGER'; state: 'AWAITING_PAYMENT_STATUS'; roomId: string }
+  | { role: 'MANAGER'; state: 'AWAITING_CASH_INVOICE'; roomId: string; bookingId: string; guestName: string; email?: string; amountAgorot: number; key: string }
   | { role: 'MANAGER'; state: 'AWAITING_HOLD_CONFIRM'; roomId: string }
   | { role: 'MANAGER'; state: 'AWAITING_PLACE'; placeIds: string[]; roomId?: string }
   | { role: 'MANAGER'; state: 'AWAITING_ISSUE_KIND'; roomId: string }
@@ -157,6 +159,8 @@ export type SessionState = CleanerSessionState | ManagerSessionState | GuestSess
 export interface PipelineDeps {
   /** Ran 2026-10-28: HYP Pay payment-link client (tests inject a mock; default reads env, dry-run unless enabled). */
   payLink?: PayLinkClient;
+  /** Ran 2026-10-28: cash-collection invoice via HYP soft/Cash (flag + booking allowlist; tests inject a mock). */
+  cashInvoice?: CashInvoiceClient;
   /** Manager inventory (stock questions + confirmed transfers) via the ResortOS bridge. Optional. */
   inventory?: InventoryClient;
   /** Supplier-invoice intake (manager photos → draft → "אשר חשבונית"). Optional. */
@@ -1060,7 +1064,7 @@ export function createPipeline(deps: PipelineDeps) {
       const client = d.payLink || createHypPayLinkClient();
       const createdBy = cleaner?.name || 'מנהל';
       const result = await client.create(draft);
-      recordPayLink({ ...draft, createdBy, result: { ...result } });
+      recordPayLink({ ...draft, createdBy, createdByJid: jid, result: { ...result } });
       stayAction(draft.roomId);
       if (result.ok && result.dryRun) {
         await d.send(jid, `🧪 מצב בדיקה: לא נוצר קישור ולא נשלח סמס.
@@ -1208,6 +1212,21 @@ ${result.paymentURL}`);
           } else {
             recorded = true;
             const who = result.guest_name ? ` עבור ${result.guest_name}` : '';
+            const invGuest = cashInvoiceConfig().enabled ? await guestOnRoom(roomId).catch(() => undefined) : undefined;
+            if (invGuest?.id && cashInvoiceAllowed(String(invGuest.id))) {
+              const email = String((invGuest as any).guest_email || (invGuest as any).email || '').trim();
+              const amountAgorot = Math.round(shekels * 100);
+              sessionStates.set(sessionKey, {
+                role: 'MANAGER', state: 'AWAITING_CASH_INVOICE', roomId,
+                bookingId: String(invGuest.id), guestName: String(invGuest.guest_name || result.guest_name || ''),
+                ...(cashValidEmail(email) ? { email } : {}),
+                amountAgorot,
+                key: cashInvoiceKey(String(invGuest.id), amountAgorot, `${Date.now()}`),
+              });
+              rememberRoom(sessionKey, roomId);
+              await say(`✅ נרשמה גביית מזומן ${cashShekelLabel(shekels)}${who} בחדר *${roomLabel}*.\n\n${cashInvoiceAskText(roomLabel, cashValidEmail(email))}`);
+              return;
+            }
             await say(`✅ נרשמה גביית מזומן ${cashShekelLabel(shekels)}${who} בחדר *${roomLabel}*.\n\n${askByName(by, paymentStatusQuestion())}`);
           }
         }
@@ -1890,6 +1909,32 @@ ${result.paymentURL}`);
             return { handled: true, transcript };
           }
           await d.send(jid, askByName(cleaner?.name, paymentStatusQuestion()));
+          return { handled: true, transcript };
+        }
+
+        if (currentSession.state === 'AWAITING_CASH_INVOICE') {
+          const roomLabel = formatRoomDisplay(currentSession.roomId, d.rooms());
+          const toStatus = async (prefix: string) => {
+            sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_PAYMENT_STATUS', roomId: currentSession.roomId });
+            await d.send(jid, `${prefix}\n\n${askByName(cleaner?.name, paymentStatusQuestion())}`);
+          };
+          const typedEmail = trimmed.match(/[^\s@]+@[^\s@]+\.[^\s@]+/)?.[0];
+          const answer = typedEmail ? 'yes' : confirmAnswer(trimmed);
+          if (answer === 'no') { await toStatus(`לא הפקתי חשבונית על *${roomLabel}*.`); return { handled: true, transcript }; }
+          if (answer !== 'yes') { await d.send(jid, cashInvoiceAskText(roomLabel, !!currentSession.email)); return { handled: true, transcript }; }
+          const client = d.cashInvoice || createCashInvoiceClient();
+          let r;
+          try {
+            r = await client.issue({
+              key: currentSession.key, bookingId: currentSession.bookingId, roomLabel,
+              guestName: currentSession.guestName, amountAgorot: currentSession.amountAgorot,
+              email: typedEmail || currentSession.email, createdBy: cleaner?.name || 'מנהל',
+            });
+          } catch (err) {
+            d.log.error({ err: String(err) }, 'cash invoice failed');
+            r = { status: 'review' as const };
+          }
+          await toStatus(cashInvoiceResultText(roomLabel, r));
           return { handled: true, transcript };
         }
 

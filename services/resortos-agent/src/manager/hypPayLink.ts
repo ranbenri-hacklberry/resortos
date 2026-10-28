@@ -120,7 +120,7 @@ export function payLinkStorePath(env: NodeJS.ProcessEnv = process.env): string {
 }
 
 /** Append-only local record per booking/phone (no credentials). */
-export function recordPayLink(entry: PayLinkDraft & { createdBy: string; result: PayLinkResult }, path = payLinkStorePath()): void {
+export function recordPayLink(entry: PayLinkDraft & { createdBy: string; createdByJid?: string; result: PayLinkResult }, path = payLinkStorePath()): void {
   try {
     if (!existsSync(dirname(path))) mkdirSync(dirname(path), { recursive: true });
     appendFileSync(path, `${JSON.stringify({ at: new Date().toISOString(), ...entry })}\n`);

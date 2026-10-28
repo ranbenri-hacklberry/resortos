@@ -1,3 +1,4 @@
+import { startPayLinkWatch } from './manager/payLinkWatch.js';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import pino from 'pino';
 import { sendManagerSms } from './integration/managerSms.js';
@@ -75,6 +76,9 @@ const pipeline = createPipeline({
 
 // Central inbound ingress:
 // ChannelRouter already handles deduplication, human-takeover detection, and FIFO chat queues.
+// Ran 2026-10-28: paid payment-link watcher (off unless HYP_PAYLINK_WATCH_ENABLED=true; manager-only notice).
+startPayLinkWatch({ notifyManager: async (jid, text) => { await router.sendText('resortos', jid, text, { isBot: true }); } });
+
 router.on('inbound', async (envelope) => {
   try {
     await refreshStaff();
