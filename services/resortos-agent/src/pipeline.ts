@@ -75,7 +75,9 @@ import {
 } from './manager/guestLink.js';
 import { normalizeOutgoingText } from './whatsapp/textSpacing.js';
 import { logConversation } from './conversationLog.js';
-import { isGuestLeftMessage, GUEST_LEFT_THANKS } from './guest/keywords.js';
+import { TV_RE } from './guest/keywords.js';
+import { tvStepsForUnit, CALL_OFFER } from './guest/guestKnowledge.js';
+import { isGuestLeftMessage, GUEST_LEFT_THANKS, stripQrTokens, isIntroMessage, isGuideLinkRequest, isFoundItMessage, isProblemReport } from './guest/keywords.js';
 import { isStaffOpsQuestion, STAFF_OPS_ONLY_REPLY } from './manager/opsQuestion.js';
 import { scanIdWithGrok } from './idValidation/grokIdScan.js';
 import { guestIdEnabled, hasGuestId, saveGuestIdScan, shouldAskForId, ID_REQUEST_TEXT, idReplyFor } from './idValidation/guestIdStore.js';
@@ -251,7 +253,13 @@ export function matchesCleaner(c: CleanerProfile, rawTarget?: string | null): bo
   if (!rawTarget) return false;
   const rawUser = String(rawTarget).split('@')[0].split(':')[0].replace(/\D/g, '');
   if (c.lid && rawUser && c.lid === rawUser) return true;
-  return phonesMatch(c.phone, rawTarget);
+  if (phonesMatch(c.phone, rawTarget)) return true;
+  // Chloe bug 5 (2026-10-28): a known staff @lid (KNOWN_STAFF_LIDS) is staff even without a stored lid / senderPn.
+  if (String(rawTarget).endsWith('@lid')) {
+    const staffPhone = resolveStaffPhone(String(rawTarget));
+    if (staffPhone && staffPhone !== rawUser) return phonesMatch(c.phone, staffPhone);
+  }
+  return false;
 }
 
 export function isManagerRole(role?: string | null): boolean {
@@ -259,8 +267,15 @@ export function isManagerRole(role?: string | null): boolean {
 }
 
 /** A non-canceled booking on this phone means Chloe should answer as the guest, even when the same phone is a manager. */
-export function hasGuestBooking(bookings: Array<{ guest_phone?: string | null; deleted_at?: string | null; booking_status?: string | null }>, phone: string): boolean {
-  return bookings.some((booking) => phonesMatch(booking.guest_phone, phone) && !booking.deleted_at && booking.booking_status !== 'CANCELED');
+export function hasGuestBooking(bookings: Array<{ guest_phone?: string | null; deleted_at?: string | null; booking_status?: string | null; unit_id?: string | null; guest_name?: string | null }>, phone: string, rooms: RoomEntry[] = []): boolean {
+  return bookings.some((booking) => phonesMatch(booking.guest_phone, phone) && !booking.deleted_at && booking.booking_status !== 'CANCELED' && !isStaffHousingBooking(booking, rooms));
+}
+
+/** Chloe bug 5 (2026-10-28): staff-housing "bookings" (e.g. בתי נורית 7/8, "מגורי צוות") never make a staff phone a guest. */
+export function isStaffHousingBooking(b: { unit_id?: string | null; guest_name?: string | null }, rooms: RoomEntry[] = []): boolean {
+  if (/מגורי\s*צוות/u.test(String(b.guest_name || ''))) return true;
+  const room = rooms.find((r) => r.id === b.unit_id) || (b.unit_id ? ({ id: b.unit_id } as RoomEntry) : null);
+  return isStaffRoom(room);
 }
 
 /** Phone that WhatsApp attaches to an @lid sender (key.senderPn / remoteJidAlt / participantPn), digits only, or ''. */
@@ -281,6 +296,28 @@ const CLARIFY: Record<Lang, string> = {
   ar: 'عذراً، ما فهمت عليك. ممكن تعيد الرسالة؟',
   he: 'לא הבנתי. אפשר לשלוח שוב?',
 };
+
+const GUEST_LEFT_PROBLEM_REPLY: Record<'he' | 'en' | 'ru', string> = {
+  he: 'תודה שעדכנתם, ומצטערים על אי הנוחות 🙏 העברנו את זה לצוות כדי שיבדקו. נסיעה טובה 🌿',
+  en: 'Thanks for letting us know, and sorry for the trouble 🙏 We passed it to the team to check. Have a safe trip 🌿',
+  ru: 'Спасибо, что сообщили, и простите за неудобство 🙏 Мы передали это команде. Счастливого пути 🌿',
+};
+
+/** Chloe bug 6 (2026-10-28): backend failure → one graceful holding reply, never a repeated "didn't understand". */
+const MEDIA_ACK: Record<Lang, string> = {
+  th: 'ได้รับรูปแล้วค่ะ 🙏 ช่วยพิมพ์บอกสั้นๆ ได้ไหมคะว่าให้ช่วยอะไร',
+  ar: 'وصلتنا الصورة 🙏 ممكن تكتب لنا باختصار كيف نقدر نساعد؟',
+  he: 'קיבלנו 🙏 אפשר לכתוב במילים במה נוכל לעזור?',
+};
+const BACKEND_HOLD: Record<Lang, string> = {
+  th: 'รอสักครู่นะคะ กำลังตรวจสอบและจะตอบกลับค่ะ',
+  ar: 'لحظة، أتحقق وأعود إليك بالجواب.',
+  he: 'רגע, בודקת ומחזירה תשובה 🙏',
+};
+export function isBackendError(e: unknown): boolean {
+  const m = String((e as any)?.message || e || '');
+  return /ResortOS|HTTP\s*\d{3}|fetch failed|ECONN|ETIMEDOUT|ENOTFOUND|AbortError|timeout/i.test(m);
+}
 
 export function firstName(full?: string | null): string {
   return String(full || '').trim().split(/\s+/)[0]?.replace(/[,.!:]+$/g, '') || '';
@@ -497,6 +534,53 @@ export function createPipeline(deps: PipelineDeps) {
       d.log.warn({ err: String((err as any)?.message || err) }, 'handoff SMS failed');
     }
   }
+  // ---- Chloe bugs 2026-10-28 helpers ----
+  const problemFlagged = new Map<string, number>();
+  const backendHoldSent = new Map<string, number>();
+  const mediaAckSent = new Map<string, number>();
+  /** Staff flag for a guest-reported problem (SMS to the manager line, once per booking per 30 min). Never touches locks/bookings. */
+  function flagGuestProblem(booking: BookingRow, roomName: string | undefined, text: string, when: string): void {
+    const key = String(booking.id || booking.unit_id || '');
+    const now = Date.now();
+    if (now - (problemFlagged.get(key) || 0) < 30 * 60 * 1000) return;
+    problemFlagged.set(key, now);
+    if (!d.notifyManagerSms) return;
+    const sms = `⚠️ אורח דיווח על תקלה (${when}): ${booking.guest_name || 'אורח'} · ${roomName || booking.unit_id || ''}\n"${String(text).replace(/\s+/g, ' ').slice(0, 120)}"\nנא לבדוק / לשלוח תחזוקה.`;
+    void Promise.resolve(d.notifyManagerSms(sms)).then(
+      () => d.log.info({ bookingId: booking.id }, 'guest problem flagged to staff'),
+      (err: unknown) => d.log.warn({ bookingId: booking.id, err: String((err as any)?.message || err) }, 'guest problem flag failed'),
+    );
+  }
+  /** After check-out date, or a "we left" message → never ask for ID "to complete check-in". */
+  function guestDeparted(booking: BookingRow, text?: string | null): boolean {
+    const cout = String(booking.check_out_date || '').slice(0, 10);
+    const st = String(booking.booking_status || '').toUpperCase();
+    return (cout !== '' && getIsraelToday() > cout) || st === 'CHECKED_OUT' || isGuestLeftMessage(text) || isProblemReport(text) || isFoundItMessage(text);
+  }
+  function guestNonQuestionReply(text: string | null | undefined, booking: BookingRow, ctx: GuestContext, stayUrl?: string): string | null {
+    const name = firstName(booking.guest_name);
+    const hi = name ? `${name}, ` : '';
+    const link = stayUrl ? `\n📱 ${stayUrl}` : '';
+    if (isGuideLinkRequest(text)) {
+      return stayUrl
+        ? `${hi}בשמחה! זה הקישור לדף האורח הדיגיטלי של ${ctx.roomName} (WiFi, הוראות, אטרקציות וצ'ק-אאוט):${link}`
+        : `${hi}הדף הדיגיטלי עוד לא זמין להזמנה הזו — העברתי לצוות ונשלח לכם אותו בהקדם 🙏`;
+    }
+    if (isIntroMessage(text)) {
+      return `${hi}שלום ותודה שפניתם! 🌿 זיהיתי את ההזמנה שלכם ב${ctx.roomName}.` +
+        (stayUrl ? `\nכל המידע על השהות נמצא בדף האורח שלכם:${link}` : '') +
+        `\nאפשר לכתוב לי כאן כל שאלה.`;
+    }
+    if (isFoundItMessage(text)) return `${hi}מעולה, שמחים שהסתדר! 🌿 אם צריך עוד משהו, אנחנו כאן.`;
+    // "איך מדליקים את המסך/הטלוויזיה" — a how-to, not a fault: unit steps when configured, else the stay page.
+    if (TV_RE.test(stripQrTokens(text)) && /איך|כיצד|how/iu.test(String(text || '')) && !isProblemReport(text)) {
+      const steps = tvStepsForUnit(booking.unit_id || undefined);
+      return steps
+        ? `${hi}כך מפעילים את הטלוויזיה ב${ctx.roomName}:\n` + steps.map((st, i) => `${i + 1}. ${st}`).join('\n') + `\n\nאם זה לא מסתדר — ${CALL_OFFER}`
+        : `${hi}הוראות הפעלת הטלוויזיה ב${ctx.roomName} נמצאות בדף האורח שלכם${stayUrl ? ':' + link : '.'}\nאם זה לא מסתדר — ${CALL_OFFER}`;
+    }
+    return null;
+  }
   function activeToday(b: BookingRow, today: string): boolean {
     return !b.deleted_at && b.booking_status !== 'CANCELED' && today >= (b.check_in_date || '') && today <= (b.check_out_date || '');
   }
@@ -591,7 +675,7 @@ export function createPipeline(deps: PipelineDeps) {
     if (!phone) return false;
     try {
       const bookings = (await d.resortos.listBookings?.()) || [];
-      return hasGuestBooking(bookings, phone);
+      return hasGuestBooking(bookings, phone, d.rooms());
     } catch {
       return false;
     }
@@ -2185,6 +2269,17 @@ export function createPipeline(deps: PipelineDeps) {
         }
         // Guest ID photo without caption (Ran 2026-10-24): let it reach the identified-guest ID scan below.
         if (!(!cleaner && guestIdEnabled() && (msg.message as any)?.imageMessage)) {
+          // Chloe bug 4 (2026-10-28): a guest photo/document/location/sticker without text is acknowledged once, not dropped.
+          const mm: any = msg.message || {};
+          const isMedia = Boolean(mm.imageMessage || mm.documentMessage || mm.documentWithCaptionMessage || mm.videoMessage || mm.locationMessage || mm.stickerMessage);
+          if (!cleaner && isMedia && jid && !msg.key.fromMe) {
+            const now = Date.now();
+            if (now - (mediaAckSent.get(jid) || 0) > 10 * 60 * 1000) {
+              mediaAckSent.set(jid, now);
+              await d.send(jid, MEDIA_ACK[lang] || MEDIA_ACK.he);
+            }
+            return { handled: true, reason: 'media_no_text', transcript };
+          }
           return { handled: false, reason: 'no text', transcript };
         }
         text = '';
@@ -2479,8 +2574,11 @@ export function createPipeline(deps: PipelineDeps) {
             wrongQrAlerted.add(wrongKey);
             const scanned = r?.name || r?.letterCode || resolvedId;
             const alert = `🔑 סריקת QR לא תואמת: ${otherBooking.guest_name || 'אורח'} סרק/ה את ${scanned}, שאינה היחידה שבהזמנה. נא לעזור לאורח.`;
-            for (const m of alertRecipients(d.cleaners())) {
-              await d.send(`${m.phone}@s.whatsapp.net`, alert).catch(() => {});
+            // Chloe bug 3 (2026-10-28): one alert per scan — to the first alert manager only, not a broadcast to every manager.
+            const primary = alertRecipients(d.cleaners())[0];
+            if (primary && alertMemory.shouldAlert(`wrongqr|${guestPhone}|${resolvedId}`)) {
+              alertMemory.remember(normalizePhoneTail(primary.phone), alert);
+              await d.send(`${primary.phone}@s.whatsapp.net`, alert).catch(() => {});
             }
           }
           return { handled: true, transcript };
@@ -2742,7 +2840,7 @@ export function createPipeline(deps: PipelineDeps) {
               } catch (err) {
                 d.log.warn({ bookingId: booking.id, err: String((err as any)?.message || err).slice(0, 80) }, 'guest id scan failed');
               }
-            } else if (!hasGuestId(booking.id, booking as any) && shouldAskForId(booking.id)) {
+            } else if (!guestDeparted(booking, text) && !hasGuestId(booking.id, booking as any) && shouldAskForId(booking.id)) {
               setTimeout(() => { void d.send(jid, ID_REQUEST_TEXT).catch(() => undefined); }, 1500).unref?.();
             }
           }
@@ -2753,7 +2851,11 @@ export function createPipeline(deps: PipelineDeps) {
             const yest = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date(Date.now() - 86400000));
             if (cout && (cout === today || cout === yest) && isGuestLeftMessage(text)) {
               const lang = detectGuestLang(text || '');
-              const leftReply = GUEST_LEFT_THANKS[lang === 'en' || lang === 'ru' ? lang : 'he'];
+              const leftProblem = isProblemReport(text);
+              const leftReply = leftProblem
+                ? GUEST_LEFT_PROBLEM_REPLY[lang === 'en' || lang === 'ru' ? lang : 'he']
+                : GUEST_LEFT_THANKS[lang === 'en' || lang === 'ru' ? lang : 'he'];
+              if (leftProblem) flagGuestProblem(booking, ctx.roomName, text || '', 'אחרי עזיבה');
               void logGuestWhatsAppExchange(booking, text || '', leftReply);
               if (d.notifyManagerSms) {
                 const sms = `🚪 אורח עדכן שיצא: ${booking.guest_name || ''} (${ctx.roomName || ''}), צ׳ק־אאוט ${cout}. הודעה: "${String(text || '').slice(0, 80)}"`;
@@ -2796,6 +2898,19 @@ export function createPipeline(deps: PipelineDeps) {
             void logGuestWhatsAppExchange(booking, text, STAFF_OPS_ONLY_REPLY);
             await d.send(jid, STAFF_OPS_ONLY_REPLY);
             return { handled: true, transcript };
+          }
+
+          // Chloe bug 7 (2026-10-28): any problem report also flags staff (reply still comes from the fault/complaint flow).
+          if (isProblemReport(text)) flagGuestProblem(booking, ctx.roomName, text || '', 'במהלך השהות');
+
+          // Chloe bug 1 (2026-10-28): pre-filled intro / guide-link request / "found it" are not questions.
+          {
+            const shortReply = guestNonQuestionReply(text, booking, ctx, stayUrl);
+            if (shortReply) {
+              void logGuestWhatsAppExchange(booking, text || '', shortReply);
+              await d.send(jid, shortReply);
+              return { handled: true, transcript, reason: 'guest_non_question' };
+            }
           }
 
           const greet = greetingReply(text, booking.guest_name);
@@ -3034,6 +3149,20 @@ export function createPipeline(deps: PipelineDeps) {
       return { handled: apiOk, intent, transcript, reason: apiOk ? undefined : 'resortos error' };
     } catch (e) {
       d.log.error({ err: String(e) }, 'inbound processing failed');
+      if (isBackendError(e)) {
+        // Chloe bug 6 (2026-10-28): one holding reply per sender per 10 min + one internal alert (handoff throttle).
+        const now = Date.now();
+        if (now - (backendHoldSent.get(jid) || 0) > 10 * 60 * 1000) {
+          backendHoldSent.set(jid, now);
+          await d.send(jid, BACKEND_HOLD[lang] || BACKEND_HOLD.he).catch(() => {});
+        }
+        await handoffToRan('backend-error', {
+          sender: cleaner?.name || displayPhone(guestPhone) || 'אורח',
+          text: String(text || '').slice(0, 120),
+          why: 'שגיאת שרת ResortOS — קלואי לא ענתה, צריך לחזור לפונה',
+        }).catch(() => {});
+        return { handled: false, reason: String(e), transcript };
+      }
       await d.send(jid, askByName(cleaner?.name, CLARIFY[lang])).catch(() => {});
       return { handled: false, reason: String(e), transcript };
     }

@@ -56,7 +56,7 @@ export const NATURE_RE = kw(['מעיין', 'מעיינות', 'מעין', 'שמו
 export const ATTRACTIONS_RE = kw(['אטרקצי*', 'קייק*', 'קיאק*', 'רפטינג', "ג['׳]יפ*", 'ספא', 'חמת גדר', 'מה לעשות', 'פעילות', 'פעילויות', 'יקב*', 'יין', 'יינות', 'attractions?', 'kayak*', 'activities']);
 
 // ---- Fault reports (S05): take priority over amenity FAQs / place menus ----
-export const TV_RE = kw(['טלוויזי*', 'טלויזי*', 'tv', 'שלט', 'ממיר', 'netflix']);
+export const TV_RE = kw(['טלוויזי*', 'טלויזי*', 'tv', 'שלט', 'ממיר', 'netflix', 'מסך*', 'screen']);
 /** Explicit problem words: a fault on their own. */
 export const FAULT_RE = kw([
   'לא נדלק*', 'לא דולק*', 'לא עובד*', 'לא מגיב*', 'לא מתחבר*', 'לא נפתח*', 'הפסיק(?:ה|ו)? לעבוד',
@@ -191,3 +191,36 @@ export const GUEST_LEFT_THANKS: Record<'he' | 'en' | 'ru', string> = {
   en: 'Thanks for letting us know! Have a safe trip 🌿',
   ru: 'Спасибо, что сообщили! Счастливого пути 🌿',
 };
+
+
+// ---- Chloe bugs 2026-10-28 (log review 26–28/10) ----
+/** QR deep-link tokens (START_F1) appended to pre-filled WhatsApp texts. */
+export function stripQrTokens(text?: string | null): string {
+  return String(text || '').replace(/\bSTART_[A-Z]\d{1,2}\b/gi, '').replace(/\s+/g, ' ').trim();
+}
+/** Pre-filled self-introduction from the stay page: "שלום, כאן X לגבי ההזמנה ב..." — not a question. */
+export function isIntroMessage(text?: string | null): boolean {
+  const t = stripQrTokens(text);
+  if (!t || t.length > 160 || /\?/.test(t)) return false;
+  return /^(?:שלום|היי|הי|אהלן)?[\s,!.]*כאן\s+.{1,40}?\s+(?:לגבי|בנוגע\s+ל)\s*ה?הזמנה/u.test(t)
+    || /^(?:hi|hello)?[\s,!.]*this\s+is\s+.{1,40}?\s+(?:about|regarding)\s+(?:the|my|our)\s+booking/i.test(t);
+}
+/** "Send me the digital guide / stay page link". */
+export function isGuideLinkRequest(text?: string | null): boolean {
+  const t = stripQrTokens(text);
+  if (!t || t.length > 200) return false;
+  return /מדריך\s*(?:ה)?דיגיטלי|(?:ה)?קישור\s+ל(?:מדריך|דף)|דף\s*(?:ה)?(?:אורח|שהות)|לינק\s+ל(?:מדריך|דף)|(?:digital\s+)?guide\s+link|stay\s+(?:page|link)/iu.test(t);
+}
+/** "OK we found it" / "never mind" — a closing message, not a question. */
+export function isFoundItMessage(text?: string | null): boolean {
+  const t = stripQrTokens(text);
+  if (!t || t.length > 80 || /\?/.test(t)) return false;
+  return /(?:^|\s)(?:מצאנו|מצאתי|הסתדרנו|הסתדרתי|זה\s+בסדר\s+עכשיו|לא\s+צריך\s+כבר|עזבו\s+זה)(?:\s|$|[.!,])|\bfound\s+it\b|\bnever\s*mind\b|\ball\s+good\b/iu.test(t);
+}
+/** A guest reporting something that did not work (needs a staff flag), e.g. "לא הצלחנו לפתוח את הכספת". */
+export function isProblemReport(text?: string | null): boolean {
+  const t = stripQrTokens(text);
+  if (!t) return false;
+  if (/לא\s+(?:היו?\s+)?(?:בעיות|בעיה)/u.test(t)) return false;
+  return /לא\s+(?:הצלחנו|הצלחתי|מצליח(?:ים|ה)?|עובד(?:ת|ים|ות)?|נפתח(?:ה|ת)?|נדלק(?:ת|ים)?|נסגר(?:ת)?)|תקלה|תקוע(?:ה)?|נתקע(?:ה|נו)?|שבור(?:ה)?|נשבר(?:ה)?|דולף|דליפה|אין\s+(?:מים|חשמל|מים\s+חמים)|\bbroken\b|not\s+working|couldn'?t\s+open|can'?t\s+open|doesn'?t\s+work/iu.test(t);
+}
