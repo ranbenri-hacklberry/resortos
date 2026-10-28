@@ -24,6 +24,8 @@ export interface CleanerProfile {
   lid?: string;
   /** Never receives automatic Chloe alerts/broadcasts (Ran 2026-10-21: אדם). Commands they start still work. */
   noAlerts?: boolean;
+  /** Ran 2026-10-28: units this user sees (ResortOS employees.allowed_units). Missing/empty = everything. */
+  allowedUnits?: string[];
 }
 
 export type RoomUsage = 'GUEST_ACCOMMODATION' | 'STAFF_ACCOMMODATION' | 'OFFICE' | 'STORAGE' | 'SERVICE_AREA';

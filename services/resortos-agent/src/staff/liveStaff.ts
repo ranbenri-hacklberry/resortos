@@ -7,6 +7,7 @@ export interface LiveStaff {
   role: string;
   phones: string[];
   crew_lead_name?: string;
+  allowed_units?: string[];
 }
 
 const BRIDGE = (process.env.HOTELOS_BRIDGE_URL || config.resortos.baseUrl || 'http://127.0.0.1:4038').replace(/\/$/, '');
@@ -18,6 +19,11 @@ function digits(raw: string): string {
   if (d.startsWith('00')) d = d.slice(2);
   if (d.startsWith('0')) d = `972${d.slice(1)}`;
   return d;
+}
+
+function scopeOf(row: LiveStaff): string[] | null {
+  const u = Array.isArray(row.allowed_units) ? row.allowed_units.map(String).filter(Boolean) : [];
+  return u.length ? u : null;
 }
 
 /** File identities keep their language and WhatsApp LIDs. Role and name come from the employee row. */
@@ -42,11 +48,13 @@ export function applyLiveRoles(file: CleanerProfile[], live: LiveStaff[]): Clean
     if (!row) return cleaner;
     seen.add(row.id);
     const recordsAs = String(row.crew_lead_name || '').trim();
+    const units = scopeOf(row);
     return {
       ...cleaner,
       name: row.name,
       role: row.role as CleanerProfile['role'],
       ...(recordsAs ? { recordsAs } : {}),
+      ...(units ? { allowedUnits: units } : {}),
     };
   });
   for (const row of live) {
@@ -61,6 +69,7 @@ export function applyLiveRoles(file: CleanerProfile[], live: LiveStaff[]): Clean
       role: row.role as CleanerProfile['role'],
       language: 'he' as Lang,
       ...(recordsAs ? { recordsAs } : {}),
+      ...(scopeOf(row) ? { allowedUnits: scopeOf(row)! } : {}),
     });
   }
   return merged;

@@ -399,7 +399,7 @@ export interface InboundResult {
 }
 
 /** Ran 2026-10-22: Barak gets every guest message Sun–Thu 19:00–21:00 (max 1 per guest per 15 min). */
-export const BARAK_FORWARD_PHONE = '972503934696';
+export const BARAK_FORWARD_PHONE = '972515262609'; // Ran 2026-10-28: new number (old ***4696)
 const BARAK_FORWARD_GAP_MS = 15 * 60 * 1000;
 export function inBarakForwardWindow(now: Date = new Date()): boolean {
   const { hour, dow } = israelClock(now);
@@ -501,10 +501,24 @@ export function createPipeline(deps: PipelineDeps) {
       }
     : undefined;
 
+  // Ran 2026-10-28: managers only see the units in their ResortOS allowed_units (empty = everything).
+  const scopeStorage = new AsyncLocalStorage<{ units: string[] | null }>();
+  const allRooms = () => deps.rooms();
+  /** Name of a complex in the text that has no unit in the current scope (null = in scope / no scope). */
+  const complexOutsideScope = (text: string): string | null => {
+    const units = scopeStorage.getStore()?.units;
+    const c = units ? matchComplex(text) : null;
+    return c && !c.roomIds.some((id) => units!.includes(id)) ? c.officialName : null;
+  };
   const d: PipelineDeps = {
     ...deps,
     send: wrappedSend,
     ...(wrappedSendImage ? { sendImage: wrappedSendImage } : {}),
+    rooms: () => {
+      const units = scopeStorage.getStore()?.units;
+      const rooms = deps.rooms();
+      return units ? rooms.filter((r) => units.includes(r.id)) : rooms;
+    },
   };
 
   const barakForwardLast = new Map<string, number>();
@@ -738,7 +752,8 @@ export function createPipeline(deps: PipelineDeps) {
       const isAudioMsg = (() => { try { return d.isAudio(msg); } catch { return false; } })();
       logConversation({ direction: 'inbound', jid, text: inboundText || (isAudioMsg ? '[voice note]' : ''), route });
       currentRoute = { jid, route };
-      const result = await handleInboundInner(msg, channelId);
+      const scope = isManagerRole(cleanerRow?.role) && route !== 'guest' && cleanerRow?.allowedUnits?.length ? cleanerRow.allowedUnits : null;
+      const result = await scopeStorage.run({ units: scope }, () => handleInboundInner(msg, channelId));
       if (route === 'guest' && jid && !msg.key.fromMe && channelId === 'resortos' && result.reason !== 'late_checkout') void forwardGuestToBarak(jid, inPn, inboundText || (isAudioMsg ? '[הודעה קולית]' : ''));
       logConversation({ direction: 'result', jid, route, handled: result.handled, reason: (result as any).reason, text: (result as any).transcript?.text });
       return result;
@@ -761,6 +776,9 @@ export function createPipeline(deps: PipelineDeps) {
         const today = getIsraelToday();
         const b = bookings.find((x) => today >= (x.check_in_date || '') && today <= (x.check_out_date || '')) || bookings[0];
         if (b) {
+          // Ran 2026-10-28: only guests in Barak's allowed units.
+          const barakRow = d.cleaners().find((c) => normalizePhoneTail(c.phone) === normalizePhoneTail(BARAK_FORWARD_PHONE));
+          if (barakRow?.allowedUnits?.length && b.unit_id && !barakRow.allowedUnits.includes(b.unit_id)) return;
           name = b.guest_name || null;
           const room = d.rooms().find((r) => r.id === b.unit_id);
           unit = room?.name || room?.letterCode || b.unit_id || null;
@@ -802,6 +820,18 @@ export function createPipeline(deps: PipelineDeps) {
     const isWorker = Boolean(cleaner && !isManager);
 
     let text = d.extractText(msg);
+    // Ran 2026-10-28: a room outside the manager's allowed units is refused politely.
+    {
+      const units = scopeStorage.getStore()?.units;
+      if (units && isManager && jid && text?.trim() && !msg.key.fromMe) {
+        const outside = resolveRoomByAlias(text, allRooms());
+        if (outside && !units.includes(outside) && !resolveRoomByAlias(text, d.rooms())) {
+          const name = allRooms().find((r) => r.id === outside)?.name || outside;
+          await d.send(jid, askByName(cleaner?.name, `${name} לא באזור האחריות שלך, אז אין לי פרטים עליו.`));
+          return { handled: true, reason: 'out_of_scope' };
+        }
+      }
+    }
     // Ran 2026-10-28 ("כולם"): reply to our "על איזה מתחם?" resolves against the pending query (10 min).
     if (isManager && jid && text?.trim() && !msg.key.fromMe) {
       const pend = pendingComplexQuery.get(sessionKey);
@@ -817,6 +847,11 @@ export function createPipeline(deps: PipelineDeps) {
               : answerComplexCheckinsQuestion(`${pend.text} ${t}`, d.rooms(), bookings, getIsraelToday());
             if (answer) {
               await d.send(jid, answer);
+              return { handled: true };
+            }
+            const outsideComplex = all ? null : complexOutsideScope(t);
+            if (outsideComplex) {
+              await d.send(jid, askByName(cleaner?.name, `${outsideComplex} לא באזור האחריות שלך.`));
               return { handled: true };
             }
           }
@@ -2493,6 +2528,11 @@ ${result.paymentURL}`);
             await d.send(jid, answer);
             return { handled: true, transcript };
           }
+          const outsideComplex = complexOutsideScope(text);
+          if (outsideComplex) {
+            await d.send(jid, askByName(cleaner?.name, `${outsideComplex} לא באזור האחריות שלך.`));
+            return { handled: true, transcript };
+          }
         }
         if (!matchComplex(text) && !resolveRoomByAlias(text, d.rooms())) {
           pendingComplexQuery.set(sessionKey, { text, at: Date.now() });
@@ -2579,7 +2619,8 @@ ${result.paymentURL}`);
       // 2c. Manager Cleaning Query: "מה ממתין לניקיון", "מה מלוכלך", "חדרים לניקיון", "מה לנקות"
       const isCleaningQuery = isManager && /(?:מה|מי|איזה חדרים|אילו חדרים)?\s*(?:ממתין|ממתינים|מחכה|מחכים|נשאר|נשארו|יש|צריך)?\s*ל?ניקיון|חדרים\s+ל?ניקיון|מה\s+מלוכלך|חדרים\s+מלוכלכים/i.test(text);
       if (isCleaningQuery && d.resortos.listUnits) {
-        const all = await d.resortos.listUnits();
+        const cleanScope = scopeStorage.getStore()?.units;
+        const all = (await d.resortos.listUnits()).filter((u) => !cleanScope || cleanScope.includes(u.id));
         const today = getIsraelToday();
         const bookings = (await d.resortos.listBookings?.({ from: today, to: today })) || [];
         const checkOuts = bookings.filter((b) => b.check_out_date === today && b.booking_status !== 'CANCELED' && !b.deleted_at);
@@ -2593,6 +2634,7 @@ ${result.paymentURL}`);
           }
         }
         for (const outId of checkOutUnitIds) {
+          if (cleanScope && !cleanScope.includes(outId)) continue;
           const u = all.find((x) => x.id === outId);
           const isAwaiting = u?.operational_status === 'READY' && (u.custom_reason === AWAITING_INSPECTION_REASON || u.custom_reason?.includes('ביקורת'));
           const isApproved = u?.operational_status === 'READY' && (u.custom_reason === 'אושר ע״י מנהל' || u.custom_reason === 'טופל');

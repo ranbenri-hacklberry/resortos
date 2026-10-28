@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { createPipeline, inBarakForwardWindow, barakForwardText, type PipelineDeps } from './pipeline.js';
+import { createPipeline, inBarakForwardWindow, barakForwardText, BARAK_FORWARD_PHONE, type PipelineDeps } from './pipeline.js';
 import { isLateCheckoutQuestion, isLateCheckoutFollowUp, answerLateCheckout, lateCheckoutManagerSms, whatsappCallbackReply } from './guest/guestKnowledge.js';
 import realRooms from '../data/rooms.json' with { type: 'json' };
 
@@ -33,7 +33,7 @@ function makeDeps(): PipelineDeps & { sent: { jid: string; text: string }[]; sms
 const msg = (text: string) => ({ key: { remoteJid: `${GUEST}@s.whatsapp.net`, fromMe: false }, message: { conversation: text } }) as any;
 const at = (iso: string) => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(iso)); };
 const guestReplies = (d: ReturnType<typeof makeDeps>) => d.sent.filter((s) => s.jid.startsWith(GUEST)).map((s) => s.text);
-const barak = (d: ReturnType<typeof makeDeps>) => d.sent.filter((s) => s.jid.startsWith('972503934696')).map((s) => s.text);
+const barak = (d: ReturnType<typeof makeDeps>) => d.sent.filter((s) => s.jid.startsWith(BARAK_FORWARD_PHONE)).map((s) => s.text);
 
 afterEach(() => { vi.useRealTimers(); });
 
