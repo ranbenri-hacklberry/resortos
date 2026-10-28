@@ -560,8 +560,9 @@ export function answerComplexCheckinsQuestion(
         b.check_in_date <= dateRange.to
     );
 
+    // Ran 2026-10-28 ("מה שאין כניסה שלא תרשום"): rooms without arrivals are omitted.
     if (unitBookings.length === 0) {
-      lines.push(`• ${r.name}: אין כניסה`);
+      continue;
     } else {
       const bDesc = unitBookings
         .map((b) => {
@@ -582,6 +583,7 @@ export function answerComplexCheckinsQuestion(
     }
   }
 
+  if (lines.length === 0) return `אין כניסות ב${complex.officialName} ${dateRange.label}.`;
   return `📋 *כניסות ב${complex.officialName} (${dateRange.label}):*\n${lines.join('\n')}`;
 }
 
@@ -613,9 +615,15 @@ export function answerAllComplexesCheckins(
   today: string
 ): string | null {
   const parts: string[] = [];
+  let anyComplex = false;
   for (const c of COMPLEXES) {
     const a = answerComplexCheckinsQuestion(`${question} ${c.officialName}`, allRooms, bookings, today);
-    if (a) parts.push(a);
+    if (!a) continue;
+    anyComplex = true;
+    if (a.startsWith('📋')) parts.push(a);
   }
-  return parts.length ? parts.join('\n\n') : null;
+  if (parts.length) return parts.join('\n\n');
+  if (!anyComplex) return null;
+  const range = extractDateRange(String(question || '').toLowerCase(), today);
+  return `אין כניסות ${range?.label || ''}.`.replace(/\s+\./, '.');
 }
