@@ -71,6 +71,8 @@ import {
   formatGuestDetails,
   answerManagerRoomQuestion,
   answerComplexCheckinsQuestion,
+  answerAllComplexesCheckins,
+  isAllComplexesReply,
   unitShortStatus,
   isComplexCheckinsQuestion,
   matchComplex,
@@ -570,6 +572,8 @@ export function createPipeline(deps: PipelineDeps) {
   const problemFlagged = new Map<string, number>();
   const backendHoldSent = new Map<string, number>();
   const mediaAckSent = new Map<string, number>();
+  const pendingComplexQuery = new Map<string, { text: string; at: number }>();
+  const PENDING_COMPLEX_TTL_MS = 10 * 60 * 1000;
   /** Staff flag for a guest-reported problem (SMS to the manager line, once per booking per 30 min). Never touches locks/bookings. */
   function flagGuestProblem(booking: BookingRow, roomName: string | undefined, text: string, when: string): void {
     const key = String(booking.id || booking.unit_id || '');
@@ -798,6 +802,27 @@ export function createPipeline(deps: PipelineDeps) {
     const isWorker = Boolean(cleaner && !isManager);
 
     let text = d.extractText(msg);
+    // Ran 2026-10-28 ("כולם"): reply to our "על איזה מתחם?" resolves against the pending query (10 min).
+    if (isManager && jid && text?.trim() && !msg.key.fromMe) {
+      const pend = pendingComplexQuery.get(sessionKey);
+      if (pend) {
+        pendingComplexQuery.delete(sessionKey);
+        if (Date.now() - pend.at <= PENDING_COMPLEX_TTL_MS) {
+          const all = isAllComplexesReply(text);
+          const t = text;
+          if (all || matchComplex(t)) {
+            const bookings = (await d.resortos.listBookings?.()) || [];
+            const answer = all
+              ? answerAllComplexesCheckins(pend.text, d.rooms(), bookings, getIsraelToday())
+              : answerComplexCheckinsQuestion(`${pend.text} ${t}`, d.rooms(), bookings, getIsraelToday());
+            if (answer) {
+              await d.send(jid, answer);
+              return { handled: true };
+            }
+          }
+        }
+      }
+    }
     // Ran 2026-10-22: a voice note (incl. forwarded) from Ran (admin) → reply to Ran only with its transcript.
     if (isManager && !msg.key.fromMe && !text?.trim() && d.isAudio(msg) &&
         [cleaner?.phone, senderPhone, senderPn].some((p) => normalizePhoneTail(p || '') === normalizePhoneTail('972548317887'))) {
@@ -2470,6 +2495,7 @@ ${result.paymentURL}`);
           }
         }
         if (!matchComplex(text) && !resolveRoomByAlias(text, d.rooms())) {
+          pendingComplexQuery.set(sessionKey, { text, at: Date.now() });
           await d.send(jid, askByName(cleaner?.name, 'על איזה מתחם? (למשל "מי נכנס לבתי נורית בסופ״ש")'));
           return { handled: true, transcript };
         }

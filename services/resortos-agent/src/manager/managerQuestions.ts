@@ -600,3 +600,22 @@ export function roomMenuPick(text: string): 'guest' | 'wifi' | null {
   if (/^(?:ה)?(?:וויפי|ווייפי|ויפי|וייפי|wi-?fi|ไวไฟ|วายฟาย)\??$|פרטי\s*(?:ה)?רשת|סיסמ[אה]\s*(?:ל|של\s*)?(?:ה)?(?:רשת|וויפי|ויפי|wi-?fi|אינטרנט)|(?:מה|מה ה)\s*(?:וויפי|ויפי|wi-?fi)|רשת\s*wi-?fi/i.test(t)) return 'wifi';
   return null;
 }
+
+/** Ran 2026-10-28 ("כולם"): manager answered "על איזה מתחם?" with all complexes. */
+export function isAllComplexesReply(text: string): boolean {
+  return /^\s*(?:ב?כולם|ה?כל|ב?כל\s+ה?מתחמים|ב?כל\s+ה?מקומות|את\s+כולם)\s*[.!?]*\s*$/.test(String(text || ''));
+}
+
+export function answerAllComplexesCheckins(
+  question: string,
+  allRooms: RoomEntry[],
+  bookings: BookingRow[],
+  today: string
+): string | null {
+  const parts: string[] = [];
+  for (const c of COMPLEXES) {
+    const a = answerComplexCheckinsQuestion(`${question} ${c.officialName}`, allRooms, bookings, today);
+    if (a) parts.push(a);
+  }
+  return parts.length ? parts.join('\n\n') : null;
+}
