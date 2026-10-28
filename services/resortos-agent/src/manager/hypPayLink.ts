@@ -15,6 +15,8 @@ export interface PayLinkDraft {
   phone: string;
   amountAgorot: number;
   description: string;
+  /** Guest email (optional) — HYP/EZcount emails the invoice only when present. */
+  guestEmail?: string;
 }
 
 export interface PayLinkResult {
@@ -59,9 +61,25 @@ export function buildCreateUrl(draft: PayLinkDraft, cfg: ReturnType<typeof payLi
     Info: draft.description,
     UTF8: 'True',
     UTF8out: 'True',
+    // Invoice (HYP ↔ EZcount, mirrors functions/lib/hypPay.js): one item line, Hebrew doc.
+    Pritim: 'True',
+    heshDesc: invoiceItemLine(draft),
+    'EZ.lang': 'he',
+    SendHesh: validEmail(draft.guestEmail) ? 'True' : 'False',
   });
+  if (validEmail(draft.guestEmail)) q.set('email', String(draft.guestEmail).trim());
   const base = cfg.baseUrl.endsWith('/') ? cfg.baseUrl : `${cfg.baseUrl}/`;
   return `${base}?${q.toString()}`;
+}
+
+function validEmail(e?: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || '').trim());
+}
+
+/** HYP heshDesc item: [code~description~qty~price incl. VAT]; total must equal Amount. */
+export function invoiceItemLine(draft: PayLinkDraft): string {
+  const desc = `לינה ${draft.roomLabel}`.replace(/[\[\]~]/g, ' ').trim().slice(0, 100);
+  return `[0~${desc}~1~${(draft.amountAgorot / 100).toFixed(2)}]`;
 }
 
 export function redactUrl(url: string): string {
@@ -163,5 +181,6 @@ export function draftFromBooking(roomId: string, roomLabel: string, b: BookingRo
     phone: displayPhone(b.guest_phone),
     amountAgorot: balanceDueAgorot(b),
     description: `${roomLabel} · הזמנה ${ref}`.slice(0, 120),
+    guestEmail: String(b.guest_email || b.email || '').trim() || undefined,
   };
 }

@@ -4,7 +4,7 @@ import { createPipeline, type PipelineDeps } from '../pipeline.js';
 import type { CleanerProfile, RoomEntry } from '../config.js';
 import {
   amountFromReply, balanceDueAgorot, buildCreateUrl, createHypPayLinkClient, parseCreateResponse,
-  payLinkConfig, readPayLinks, redactUrl,
+  payLinkConfig, readPayLinks, redactUrl, draftFromBooking, invoiceItemLine,
 } from './hypPayLink.js';
 
 // Ran 2026-10-28: manager scans / types a room → 8 = payment link; editable amount + phone; HYP mocked.
@@ -69,6 +69,26 @@ describe('HYP payment link helpers', () => {
     expect(q.get('Amount')).toBe('450.50');
     expect(q.get('cell')).toBe('0501112222');
     expect(redactUrl(url)).not.toContain('SECRET');
+  });
+  it('adds HYP/EZcount invoice params (one item = Amount, Hebrew, email only when known)', () => {
+    const cfg = { ...payLinkConfig({}), masof: 'M', passp: 'SECRET' };
+    const base = { roomId: 'k690', roomLabel: 'D1', bookingId: 'b', guestName: 'דנה', phone: '0501112222', amountAgorot: 45050, description: 'D1 · הזמנה b' };
+    const q = new URL(buildCreateUrl(base, cfg)).searchParams;
+    expect(q.get('Pritim')).toBe('True');
+    expect(q.get('heshDesc')).toBe('[0~לינה D1~1~450.50]');
+    expect(q.get('EZ.lang')).toBe('he');
+    expect(q.get('SendHesh')).toBe('False');
+    expect(q.get('email')).toBe(null);
+    const q2 = new URL(buildCreateUrl({ ...base, guestEmail: 'dana@example.com' }, cfg)).searchParams;
+    expect(q2.get('SendHesh')).toBe('True');
+    expect(q2.get('email')).toBe('dana@example.com');
+    expect(new URL(buildCreateUrl({ ...base, guestEmail: 'not-an-email' }, cfg)).searchParams.get('SendHesh')).toBe('False');
+    expect(invoiceItemLine({ ...base, roomLabel: 'A[1]~x', amountAgorot: 100 })).toBe('[0~לינה A 1  x~1~1.00]');
+  });
+  it('draftFromBooking carries the guest email when the booking has one', () => {
+    const b: any = { id: 'b1', unit_id: 'k690', guest_name: 'דנה', guest_phone: '0501112222', total_price_agorot: 10000, guest_email: 'd@x.co' };
+    expect(draftFromBooking('k690', 'D1', b).guestEmail).toBe('d@x.co');
+    expect(draftFromBooking('k690', 'D1', { ...b, guest_email: null }).guestEmail).toBeUndefined();
   });
   it('parses success / error / html responses', () => {
     expect(parseCreateResponse('payRequestId=abc&Fild1=&paymentURL=https://pay.hyp.co.il/p/?pay=x')).toMatchObject({ ok: true, payRequestId: 'abc' });
