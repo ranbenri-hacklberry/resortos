@@ -105,3 +105,52 @@ export function startPayLinkWatch(deps: WatchDeps = {}): (() => void) | undefine
   t.unref?.();
   return () => clearInterval(t);
 }
+
+// ── Transaction finder (Ran 2026-10-28): HYP transactions report → TransId for a paid link. ──
+export interface ReportRow { txn: string; amount: number; date: string; desc: string; order?: string; name?: string }
+export type ReportLister = (from: string, to: string) => Promise<ReportRow[]>;
+
+const ymd = (d: Date) => d.toISOString().slice(0, 10);
+
+/**
+ * Unambiguous match only: same amount (to the agora), dated on/after the link was created (−1 day slack),
+ * and the row text mentions the booking ref / link description when the report carries it.
+ * If 0 or >1 candidates remain → undefined (we never guess).
+ */
+export function matchReportRow(rows: ReportRow[], link: { bookingId: string; amountAgorot: number; description: string; createdAt: string }, alreadyUsed: Set<string> = new Set()): string | undefined {
+  const created = String(link.createdAt || '').slice(0, 10);
+  const minDay = created ? ymd(new Date(new Date(`${created}T12:00:00Z`).getTime() - 86400000)) : '';
+  const amountOk = rows.filter((r) => r.txn && !alreadyUsed.has(r.txn) && Math.round(Number(r.amount) * 100) === Math.round(link.amountAgorot) && (!minDay || !r.date || r.date.slice(0, 10) >= minDay));
+  const refs = [link.bookingId, String(link.description || '').split('הזמנה ').pop() || ''].map((s) => s.trim()).filter((s) => s.length >= 3);
+  const textOk = amountOk.filter((r) => refs.some((ref) => `${r.desc} ${r.order || ''}`.includes(ref)));
+  if (textOk.length === 1) return textOk[0].txn;
+  if (textOk.length > 1) return undefined;
+  return amountOk.length === 1 ? amountOk[0].txn : undefined;
+}
+
+/** Default lister: reuses ResortOS functions/lib/hypPay.js (listHypTerminalTransactions), terminal B creds from Chloe env. */
+export function defaultReportLister(env: NodeJS.ProcessEnv = process.env): ReportLister {
+  return async (from, to) => {
+    const libPath = env.HYP_LIB_PATH || join(process.cwd(), '..', '..', 'functions', 'lib', 'hypPay.js');
+    const lib: any = await import(libPath);
+    const scoped = {
+      HYP_B_MASOF: env.HYP_PAYLINK_MASOF || '', HYP_B_PASSP: env.HYP_PAYLINK_PASSP || '', HYP_B_KEY: env.HYP_PAYLINK_KEY || '',
+      HYP_B_API_NAME: env.HYP_PAYLINK_API_NAME || '', HYP_B_API_PASSWORD: env.HYP_PAYLINK_API_PASSWORD || '',
+    };
+    const res = await lib.listHypTerminalTransactions(scoped, 'B', { from, to });
+    return (res?.rows || []).map((r: any) => ({ txn: String(r.txn || ''), amount: Number(r.amount) || 0, date: String(r.date || ''), desc: String(r.desc || ''), order: String(r.order || ''), name: String(r.name || '') }));
+  };
+}
+
+export function createHypReportFinder(lister: ReportLister = defaultReportLister(), now: () => Date = () => new Date()): TransactionFinder {
+  const used = new Set<string>();
+  return {
+    async find(link) {
+      const from = String(link.createdAt || '').slice(0, 10) || ymd(new Date(now().getTime() - 7 * 86400000));
+      const rows = await lister(from, ymd(now()));
+      const txn = matchReportRow(rows, link, used);
+      if (txn) used.add(txn);
+      return txn;
+    },
+  };
+}
