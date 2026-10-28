@@ -44,6 +44,7 @@ HE_REGEX_FIXES = [
     (re.compile(r"קאסה נובה האורה"), "קאסה נובה אורה"),
     (re.compile(r"האורה(\s*)B1\b"), r"אורה\1B1"),
     (re.compile(r"והכחול זה"), "הכחול זה"),
+    (re.compile(r"(?<![ט\u0590-\u05FF])(ו?)(?:וסקנה|תוסקנה)"), r"\1טוסקנה"),
     # "30,41" -> "3041": Whisper inserts a thousands comma; never merges "C1, C2" or longer runs.
     (re.compile(r"(?<![\d,])(\d{2}),(\d{2})(?![\d,])"), r"\1\2"),
 ]
