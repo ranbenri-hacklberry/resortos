@@ -51,6 +51,17 @@ import { join as joinPath } from 'node:path';
 import { placeDetail, placeMenuFor } from './guest/placeMenu.js';
 import { handleManagerWifi } from './manager/managerWifi.js';
 import {
+  amountFromReply,
+  createHypPayLinkClient,
+  draftFromBooking,
+  payLinkConfig,
+  payLinkPreview,
+  recordPayLink,
+  shekelText,
+  type PayLinkClient,
+  type PayLinkDraft,
+} from './manager/hypPayLink.js';
+import {
   formatManagerInitialCard,
   formatRoomWifi,
   roomMenuPick,
@@ -129,7 +140,8 @@ export type ManagerSessionState =
   | { role: 'MANAGER'; state: 'AWAITING_SUPPLIES'; roomId: string }
   | { role: 'MANAGER'; state: 'AWAITING_GUEST_PICK'; roomId: string; choices: GuestLinkChoice[] }
   | { role: 'MANAGER'; state: 'AWAITING_GUEST_PHONE'; roomId: string; bookingId: string; stayUrl: string; guestName: string }
-  | { role: 'MANAGER'; state: 'AWAITING_GUEST_LINK'; roomId: string; bookingId: string; phone: string; stayUrl: string; guestName: string };
+  | { role: 'MANAGER'; state: 'AWAITING_GUEST_LINK'; roomId: string; bookingId: string; phone: string; stayUrl: string; guestName: string }
+  | { role: 'MANAGER'; state: 'AWAITING_PAYLINK'; roomId: string; draft: PayLinkDraft };
 
 export type GuestSessionState =
   | { role: 'GUEST'; state: 'AWAITING_PLACE'; placeIds: string[]; bookingId?: string }
@@ -143,6 +155,8 @@ export type SessionState = CleanerSessionState | ManagerSessionState | GuestSess
 
 /** Narrow interfaces so everything is mockable in tests. */
 export interface PipelineDeps {
+  /** Ran 2026-10-28: HYP Pay payment-link client (tests inject a mock; default reads env, dry-run unless enabled). */
+  payLink?: PayLinkClient;
   /** Manager inventory (stock questions + confirmed transfers) via the ResortOS bridge. Optional. */
   inventory?: InventoryClient;
   /** Supplier-invoice intake (manager photos → draft → "אשר חשבונית"). Optional. */
@@ -1020,6 +1034,46 @@ export function createPipeline(deps: PipelineDeps) {
       if (!jid) return;
       roomMenuShownAt.set(sessionKey, Date.now()); // menu-loop fix: same key as the lookup
       await d.send(jid, `🔍 נבחר: *${roomLabel}*\n\n${withManagerActions(body, roomLabel)}`);
+    }
+
+    // Ran 2026-10-28: manager-only HYP payment link (menu 8). Booking data is read-only.
+    async function beginPayLink(roomId: string) {
+      if (!jid) return;
+      if (!isManager) { await d.send(jid, 'האפשרות זמינה למנהלים בלבד.'); return; }
+      const today = getIsraelToday();
+      const bookings = (await d.resortos.listBookings?.({ from: today, to: today })) || [];
+      const occupancy = getRoomOccupancy(roomId, bookings, today);
+      const roomLabel = formatRoomDisplay(roomId, d.rooms());
+      const booking = occupancy.stayingBooking || occupancy.inBooking || occupancy.outBooking;
+      if (!booking) {
+        stayAction(roomId);
+        await d.send(jid, `אין הזמנה פעילה היום ב*${roomLabel}*, לא אפשר ליצור קישור תשלום.`);
+        return;
+      }
+      const draft = draftFromBooking(roomId, roomLabel, booking);
+      sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_PAYLINK', roomId, draft });
+      await d.send(jid, payLinkPreview(draft, payLinkConfig().dryRun));
+    }
+
+    async function createPayLink(draft: PayLinkDraft) {
+      if (!jid) return;
+      const client = d.payLink || createHypPayLinkClient();
+      const createdBy = cleaner?.name || 'מנהל';
+      const result = await client.create(draft);
+      recordPayLink({ ...draft, createdBy, result: { ...result } });
+      stayAction(draft.roomId);
+      if (result.ok && result.dryRun) {
+        await d.send(jid, `🧪 מצב בדיקה: לא נוצר קישור ולא נשלח סמס.
+${draft.guestName || 'אורח'} · ${shekelText(draft.amountAgorot)} · ${draft.phone}`);
+        return;
+      }
+      if (result.ok && result.paymentURL) {
+        await d.send(jid, `✅ קישור תשלום נוצר ונשלח בסמס ל-${draft.phone} (${shekelText(draft.amountAgorot)}).
+${result.paymentURL}`);
+        return;
+      }
+      d.log.warn({ roomId: draft.roomId, bookingId: draft.bookingId, error: result.error, ccode: result.ccode }, 'hyp paylink failed');
+      await d.send(jid, `❌ לא הצלחתי ליצור קישור תשלום (${result.error || 'שגיאה'}). לא נשלח כלום.`);
     }
 
     function stayAction(roomId: string) {
@@ -1999,6 +2053,9 @@ export function createPipeline(deps: PipelineDeps) {
               intent: { action: 'CLEANING_STARTED', room_id: currentSession.roomId, room_raw: roomLabel, issue_description_hebrew: null, acknowledgement_reply_cleaner_language: reply },
               transcript,
             };
+          } else if (trimmed === '8' || trimmed === '8.' || /^(?:💳\s*)?(?:שלח(?:י|ו)?\s*|שליחת\s*)?קישור\s*(?:ל)?תשלום$|^לינק\s*(?:ל)?תשלום$/iu.test(trimmed)) {
+            await beginPayLink(currentSession.roomId);
+            return { handled: true, transcript };
           } else if (trimmed === '4' || trimmed === '4.' || /^שלח(?:י|ו)?\s*קישור|^קישור\s*לאורח|^שליחת\s*קישור/i.test(trimmed)) {
             await beginGuestLink(currentSession.roomId);
             return { handled: true, transcript };
@@ -2184,6 +2241,30 @@ export function createPipeline(deps: PipelineDeps) {
             guestName: currentSession.guestName,
             label: '',
           });
+          return { handled: true, transcript };
+        } else if (currentSession.state === 'AWAITING_PAYLINK') {
+          const draft = { ...currentSession.draft };
+          const nextPhone = phoneFromReply(trimmed);
+          const nextAmount = amountFromReply(trimmed);
+          const dry = payLinkConfig().dryRun;
+          if (nextPhone || nextAmount) {
+            if (nextPhone) draft.phone = nextPhone;
+            if (nextAmount) draft.amountAgorot = nextAmount;
+            sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_PAYLINK', roomId: currentSession.roomId, draft });
+            await d.send(jid, payLinkPreview(draft, dry));
+            return { handled: true, transcript };
+          }
+          const answer = confirmAnswer(trimmed);
+          if (answer === 'yes' && isManager && draft.phone && draft.amountAgorot > 0) {
+            await createPayLink(draft);
+            return { handled: true, transcript };
+          }
+          if (answer === 'no') {
+            stayAction(currentSession.roomId);
+            await d.send(jid, 'בוטל. לא נוצר קישור תשלום.');
+            return { handled: true, transcript };
+          }
+          await d.send(jid, payLinkPreview(draft, dry));
           return { handled: true, transcript };
         } else if (currentSession.state === 'AWAITING_GUEST_LINK') {
           const nextPhone = phoneFromReply(trimmed);
