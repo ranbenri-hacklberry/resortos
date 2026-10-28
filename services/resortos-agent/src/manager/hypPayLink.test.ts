@@ -138,6 +138,30 @@ describe('manager flow: scan → 8 → edit amount/phone → confirm', () => {
     expect(resortos.collectCash).not.toHaveBeenCalled();
     expect(resortos.sendGuestLinkSms).not.toHaveBeenCalled();
   });
+  it('numbered edits: 1 → amount (even ₪1), 2 → phone; free text still works', async () => {
+    const who = { phone: '972500000005', name: 'מנהל', role: 'MANAGER', language: 'he' } as any;
+    const { deps, sent, payLink } = makeDeps(who);
+    const p = createPipeline(deps);
+    await say(p, who.phone, 'START_D1');
+    await say(p, who.phone, '8');
+    expect(sent.at(-1)).toContain('1 - שינוי סכום');
+    expect(sent.at(-1)).toContain('2 - שינוי טלפון');
+    await say(p, who.phone, '1');
+    expect(sent.at(-1)).toContain('הסכום החדש');
+    await say(p, who.phone, '1');
+    expect(sent.at(-1)).toContain('₪1');
+    await say(p, who.phone, '2');
+    expect(sent.at(-1)).toContain('מספר הנייד החדש');
+    await say(p, who.phone, 'שלום');
+    expect(sent.at(-1)).toContain('מספר הנייד החדש');
+    await say(p, who.phone, '052-777-8888');
+    expect(sent.at(-1)).toContain('0527778888');
+    await say(p, who.phone, '450');
+    expect(sent.at(-1)).toContain('₪450');
+    expect(payLink.create).not.toHaveBeenCalled();
+    await say(p, who.phone, 'כן');
+    expect(payLink.create).toHaveBeenCalledWith(expect.objectContaining({ phone: '0527778888', amountAgorot: 45000 }));
+  });
   it('typed room name also reaches the option; לא cancels without creating', async () => {
     const who = { phone: '972500000002', name: 'מנהל', role: 'OPS_MANAGER', language: 'he' } as any;
     const { deps, sent, payLink } = makeDeps(who);

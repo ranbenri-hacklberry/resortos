@@ -160,13 +160,26 @@ export function amountFromReply(raw: string): number | null {
   return v > 0 ? v : null;
 }
 
+/** Numbered edit options in the pay-link preview: "1" → amount, "2" → phone. */
+export function payLinkEditChoice(raw: string): 'amount' | 'phone' | null {
+  const t = String(raw || '').trim();
+  if (t === '1') return 'amount';
+  if (t === '2') return 'phone';
+  return null;
+}
+
+export function payLinkEditPrompt(field: 'amount' | 'phone'): string {
+  return field === 'amount' ? 'כתוב את הסכום החדש בש״ח (למשל 450).' : 'כתוב את מספר הנייד החדש לקישור (למשל 0521234567).';
+}
+
 export function payLinkPreview(d: PayLinkDraft, dryRun: boolean): string {
   return `💳 *קישור תשלום · ${d.roomLabel}*\n` +
     `• אורח: *${d.guestName || 'ללא שם'}*\n` +
     `• סכום לתשלום: *${shekelText(d.amountAgorot)}*\n` +
     `• טלפון לקישור: *${d.phone || 'חסר'}*\n` +
     `• תיאור: ${d.description}\n\n` +
-    `לשינוי סכום כתוב סכום (למשל 450). לשינוי טלפון (למשל בן/בת הזוג) כתוב מספר נייד.\n` +
+    `השב מספר:\n1 - שינוי סכום\n2 - שינוי טלפון (למשל בן/בת הזוג)\n` +
+    `(אפשר גם לכתוב ישר סכום, למשל 450, או מספר נייד.)\n` +
     (d.phone && d.amountAgorot > 0 ? `השב *כן* ליצירת הקישור ושליחתו בסמס, או *לא* לביטול.` : `חסר ${d.phone ? 'סכום' : 'מספר טלפון'} – כתוב אותו כדי להמשיך.`) +
     (dryRun ? `\n🧪 מצב בדיקה: לא ייווצר קישור אמיתי.` : '');
 }

@@ -57,6 +57,8 @@ import {
   draftFromBooking,
   payLinkConfig,
   payLinkPreview,
+  payLinkEditChoice,
+  payLinkEditPrompt,
   recordPayLink,
   shekelText,
   type PayLinkClient,
@@ -143,7 +145,7 @@ export type ManagerSessionState =
   | { role: 'MANAGER'; state: 'AWAITING_GUEST_PICK'; roomId: string; choices: GuestLinkChoice[] }
   | { role: 'MANAGER'; state: 'AWAITING_GUEST_PHONE'; roomId: string; bookingId: string; stayUrl: string; guestName: string }
   | { role: 'MANAGER'; state: 'AWAITING_GUEST_LINK'; roomId: string; bookingId: string; phone: string; stayUrl: string; guestName: string }
-  | { role: 'MANAGER'; state: 'AWAITING_PAYLINK'; roomId: string; draft: PayLinkDraft };
+  | { role: 'MANAGER'; state: 'AWAITING_PAYLINK'; roomId: string; draft: PayLinkDraft; edit?: 'amount' | 'phone' };
 
 export type GuestSessionState =
   | { role: 'GUEST'; state: 'AWAITING_PLACE'; placeIds: string[]; bookingId?: string }
@@ -2289,9 +2291,22 @@ ${result.paymentURL}`);
           return { handled: true, transcript };
         } else if (currentSession.state === 'AWAITING_PAYLINK') {
           const draft = { ...currentSession.draft };
-          const nextPhone = phoneFromReply(trimmed);
-          const nextAmount = amountFromReply(trimmed);
           const dry = payLinkConfig().dryRun;
+          const edit = currentSession.edit;
+          if (!edit) {
+            const choice = payLinkEditChoice(trimmed);
+            if (choice) {
+              sessionStates.set(sessionKey, { role: 'MANAGER', state: 'AWAITING_PAYLINK', roomId: currentSession.roomId, draft, edit: choice });
+              await d.send(jid, payLinkEditPrompt(choice));
+              return { handled: true, transcript };
+            }
+          }
+          const nextPhone = edit === 'amount' ? null : phoneFromReply(trimmed);
+          const nextAmount = edit === 'phone' ? null : amountFromReply(trimmed);
+          if (edit && !nextPhone && !nextAmount && !confirmAnswer(trimmed)) {
+            await d.send(jid, payLinkEditPrompt(edit));
+            return { handled: true, transcript };
+          }
           if (nextPhone || nextAmount) {
             if (nextPhone) draft.phone = nextPhone;
             if (nextAmount) draft.amountAgorot = nextAmount;
