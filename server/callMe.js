@@ -313,6 +313,25 @@ export async function createLocalGuestCall({ bookingId, unitId, guestName, guest
   return next;
 }
 
+/** Ran 2026-10-28: a call is only handed to someone whose ResortOS allowed_units include its unit (empty = all). */
+export async function callerSeesUnit(caller, unitId, staffList = null) {
+  const unit = String(unitId || '').trim();
+  if (!caller || !unit) return true;
+  let staff = staffList;
+  if (!staff) {
+    try {
+      staff = (await import('./agentStaff.js')).listAgentStaff();
+    } catch {
+      return true;
+    }
+  }
+  const tails = new Set((caller.phones || []).map((p) => String(p).replace(/\D/g, '').slice(-9)).filter(Boolean));
+  const row = staff.find((s) => (s.phones || []).some((p) => tails.has(String(p).replace(/\D/g, '').slice(-9))))
+    || staff.find((s) => String(s.name || '').trim() === String(caller.name || '').trim());
+  const units = Array.isArray(row?.allowed_units) ? row.allowed_units : [];
+  return units.length === 0 || units.includes(unit);
+}
+
 export async function transferGuestCall(token, toId) {
   const target = callerById(toId);
   const local = readStore();
@@ -320,6 +339,11 @@ export async function transferGuestCall(token, toId) {
   if (!target || !row || row.acked_at) {
     const err = new Error('CALL_NOT_FOUND');
     err.status = 404;
+    throw err;
+  }
+  if (!(await callerSeesUnit(target, row.unit_id))) {
+    const err = new Error('OUT_OF_SCOPE');
+    err.status = 409;
     throw err;
   }
   row.offered = (row.offered || []).filter((id) => id !== target.id);
@@ -364,6 +388,9 @@ export async function replyFromWhatsApp(phone, text, sinceMs = 0) {
     } catch (err) {
       console.warn('[call-me take]', err.message);
     }
+  }
+  if (result.transferTo && !(await callerSeesUnit(result.transferTo, row.unit_id))) {
+    return { reply: `השיחה על יחידה שלא באזור של ${result.transferTo.name}, לא העברתי. השיחה עדיין אצלך.` };
   }
   if (result.transferTo) {
     row.offered = (row.offered || []).filter((id) => id !== result.transferTo.id);

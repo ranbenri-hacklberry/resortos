@@ -7,7 +7,8 @@ FROM (
          e.name,
          e.role,
          ARRAY_REMOVE(ARRAY[COALESCE(e.phone, ''), COALESCE(e.whatsapp_phone, '')], '') AS phones,
-         COALESCE(lead.name, '') AS crew_lead_name
+         COALESCE(lead.name, '') AS crew_lead_name,
+         COALESCE(e.allowed_units, '[]'::jsonb) AS allowed_units
   FROM public.employees e
   LEFT JOIN public.employees lead ON lead.id = e.crew_lead_id
   WHERE COALESCE(e.is_active, true)
@@ -40,5 +41,7 @@ export function listAgentStaff() {
     role: String(row.role || ''),
     phones: Array.isArray(row.phones) ? row.phones.map((phone) => String(phone || '')).filter(Boolean) : [],
     crew_lead_name: String(row.crew_lead_name || ''),
+    // Ran 2026-10-28: per-user visible units (read-only). [] = sees everything.
+    allowed_units: Array.isArray(row.allowed_units) ? row.allowed_units.map((u) => String(u || '')).filter(Boolean) : [],
   }));
 }
