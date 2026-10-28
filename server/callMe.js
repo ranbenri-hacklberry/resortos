@@ -116,7 +116,28 @@ async function offerCaller(call, caller) {
       console.warn('[call-me parallel sms]', err.message);
     }
   }
-  if (ok || smsOk) call.offered = sent.concat(caller.id);
+  if (ok || smsOk) {
+    call.offered = sent.concat(caller.id);
+    call.offered_at = { ...(call.offered_at || {}), [caller.id]: new Date().toISOString() };
+  }
+}
+
+/** Offers older than this can no longer be answered by a bare WhatsApp reply (Ran 2026-10-28). */
+export const CALL_OFFER_TTL_MS = 2 * 60 * 60 * 1000;
+
+/** When this caller was last offered the call (offered_at map, else requested_at). */
+export function offerTimeMs(call, callerId) {
+  const iso = (call && call.offered_at && call.offered_at[callerId]) || (call && call.requested_at) || '';
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : 0;
+}
+
+/** A pending offer is answerable only if fresh (< TTL) and newer than the caller's own open WhatsApp menu (sinceMs). */
+export function offerIsAnswerable(call, callerId, nowMs = Date.now(), sinceMs = 0) {
+  const t = offerTimeMs(call, callerId);
+  if (!t || nowMs - t > CALL_OFFER_TTL_MS) return false;
+  if (sinceMs && t < sinceMs) return false;
+  return true;
 }
 
 async function closeCall(call, actor, text) {
@@ -319,15 +340,16 @@ export async function transferGuestCall(token, toId) {
   return row;
 }
 
-export async function replyFromWhatsApp(phone, text) {
+export async function replyFromWhatsApp(phone, text, sinceMs = 0) {
   const caller = callerByPhone(phone);
   if (!caller) return { reply: '' };
   const local = readStore();
+  const nowMs = Date.now();
   const row = Object.values(local)
     .filter((call) => {
       if (!call || call.acked_at) return false;
       if (call.phase === 'taken' || call.phase === 'note' || call.phase === 'task') return call.ownerId === caller.id;
-      return (call.offered || []).includes(caller.id);
+      return (call.offered || []).includes(caller.id) && offerIsAnswerable(call, caller.id, nowMs, Number(sinceMs) || 0);
     })
     .sort((a, b) => String(a.requested_at || '').localeCompare(String(b.requested_at || '')))[0];
   if (!row) return { reply: '' };

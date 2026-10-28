@@ -602,7 +602,7 @@ app.post('/api/internal/call-me/reply', async (req, res) => {
   if (!local) return res.status(403).json({ error: 'FORBIDDEN' });
   try {
     const { replyFromWhatsApp } = await import('./callMe.js');
-    res.json(await replyFromWhatsApp(req.body?.phone, req.body?.text));
+    res.json(await replyFromWhatsApp(req.body?.phone, req.body?.text, Number(req.body?.since_ms) || 0));
   } catch (err) {
     res.status(502).json({ error: err.message || 'CALL_REPLY_FAILED' });
   }
