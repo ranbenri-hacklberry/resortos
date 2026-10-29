@@ -38,6 +38,12 @@ export const PROPERTY_THEMES = {
       badgeText: '#FFFFFF'
     },
     heroImage: '/resorts/mialees.jpg',
+    galleryImages: [
+      '/resorts/mialees.jpg',
+      '/resorts/hero-luxury.jpg',
+      '/resorts/hero-couples.jpg',
+      '/hero-resort.jpg'
+    ],
     amenities: [
       'בריכה פרטית מחוממת ל-28° לכל יחידה',
       'ג׳קוזי ספא חיצוני',
@@ -73,9 +79,9 @@ export const PROPERTY_THEMES = {
           'Wi-Fi מהיר ומוצרי טיפוח ממותגים MIALEES'
         ],
         images: [
-          'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80',
-          'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80',
-          'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=80'
+          '/resorts/hero-luxury.jpg',
+          '/resorts/mialees.jpg',
+          '/resorts/hero-couples.jpg'
         ]
       },
       {
@@ -101,8 +107,8 @@ export const PROPERTY_THEMES = {
           'חלוקי רחצה ומוצרי אמבט ממותגים'
         ],
         images: [
-          'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1200&q=80',
-          'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=1200&q=80'
+          '/resorts/hero-couples.jpg',
+          '/resorts/mialees.jpg'
         ]
       },
       {
@@ -127,8 +133,8 @@ export const PROPERTY_THEMES = {
           'מוצרי טיפוח ממותגי יוקרה MIALEES'
         ],
         images: [
-          'https://images.unsplash.com/photo-1578683010236-d716f9a3f461?auto=format&fit=crop&w=1200&q=80',
-          'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=1200&q=80'
+          '/resorts/mialees.jpg',
+          '/resorts/hero-couples.jpg'
         ]
       },
       {
@@ -152,8 +158,9 @@ export const PROPERTY_THEMES = {
           'עד 20 אורחים בפרטיות מושלמת'
         ],
         images: [
-          'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1200&q=80',
-          'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80'
+          '/resorts/hero-luxury.jpg',
+          '/resorts/hero-couples.jpg',
+          '/resorts/mialees.jpg'
         ]
       }
     ]
@@ -560,6 +567,13 @@ export const PROPERTY_THEMES = {
       gold: '#C5A880'
     },
     heroImage: '/resorts/hill.jpg',
+    galleryImages: [
+      '/resorts/hill.jpg',
+      '/resorts/gallery/hill/hill-night.jpg',
+      '/resorts/gallery/hill/hill-loft.jpg',
+      '/resorts/gallery/hill/hill-living.jpg',
+      '/resorts/gallery/hill/hill-jacuzzi.jpg'
+    ],
     amenities: [
       'בריכה מרכזית מחוממת ל-28° לכל המתחם',
       'ג׳קוזי ספא ענק בכל בקתה',
