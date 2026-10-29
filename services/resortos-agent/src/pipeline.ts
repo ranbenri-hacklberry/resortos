@@ -15,6 +15,8 @@ import type { Transcript } from './whatsapp/media.js';
 import { resolveStaffPhone } from './whatsapp/client.js';
 import { generateRoomQrPng } from './whatsapp/qrGenerator.js';
 import { consultCallDesk } from './calls/deskReply.js';
+import { decodeQrFromImage, startCommandFromQr } from './staff/qrDecode.js';
+import { FINISH_TEXT, finishLang, parseFinishChoice, storeCleaningPhotoLocal, FINISH_PHOTO_DEBOUNCE_MS, type FinishLang } from './staff/finishFlow.js';
 import {
   getPendingCheck,
   setPendingCheck,
@@ -170,6 +172,10 @@ export interface PipelineDeps {
   /** Supplier-invoice intake (manager photos → draft → "אשר חשבונית"). Optional. */
   invoiceIntake?: InvoiceIntake;
   downloadMedia?: (m: WAMessage) => Promise<InvoiceMedia | null>;
+  /** Ran 2026-10-29: where finish/problem photos are kept (default: local data/cleaning-photos). */
+  /** QR decoder for room-sticker photos (default: local sharp+jsQR). */
+  decodeQr?: (buf: Buffer) => Promise<string | null>;
+  storeCleaningPhoto?: (p: { roomId: string; by: string; buffer: Buffer; mimetype: string; kind: 'finish' | 'problem' }) => Promise<string>;
   send: (jid: string, text: string, channelId?: ChannelId) => Promise<unknown>;
   notifyManagerSms?: (message: string) => Promise<unknown> | void;
   sendImage?: (jid: string, buffer: Buffer, caption?: string, channelId?: ChannelId) => Promise<unknown>;
@@ -586,6 +592,191 @@ export function createPipeline(deps: PipelineDeps) {
   const problemFlagged = new Map<string, number>();
   const backendHoldSent = new Map<string, number>();
   const mediaAckSent = new Map<string, number>();
+  // ---- Ran 2026-10-29: cleaning finish by photos ----
+  type FinishState = { roomId: string; stage: 'choice' | 'problem'; kind?: 'repair' | 'missing'; photos: number; problemPhotos: number; desc?: string; askedAt?: number; explAskedAt?: number; pendingStartText?: string };
+  const finishStates = new Map<string, FinishState>();
+  const qrRetryAsked = new Map<string, number>();
+  const storePhoto = d.storeCleaningPhoto || storeCleaningPhotoLocal;
+  const finishRoomLabel = (roomId: string, lang: FinishLang) => {
+    const r = d.rooms().find((x) => x.id === roomId);
+    return lang === 'th' ? (r?.letterCode || r?.name || roomId) : (r?.name || r?.letterCode || roomId);
+  };
+  const findOpenRoom = async (cleaner: CleanerProfile): Promise<string | null> => {
+    if (!d.resortos.listUnits) return null;
+    const who = new Set([cleaningCredit(cleaner), cleaner.name].filter(Boolean));
+    const mine = (await d.resortos.listUnits()).filter((u) => u.operational_status === 'IN_PROGRESS' && who.has(String(u.assigned_staff || '')));
+    mine.sort((a, b) => String((b as any).cleaning_started_at || '').localeCompare(String((a as any).cleaning_started_at || '')));
+    return mine[0]?.id || null;
+  };
+  async function finishFlow(
+    cleaner: CleanerProfile, jid: string, msg: WAMessage, sessionKey: string, textIn: string | null, isWorker: boolean,
+  ): Promise<{ result: InboundResult } | { resumeText: string } | null> {
+    let text = textIn;
+    const mm: any = msg.message || {};
+    let isImg = Boolean(mm.imageMessage || mm.documentWithCaptionMessage?.message?.documentMessage?.mimetype?.startsWith?.('image/'));
+    const caption = String(mm.imageMessage?.caption || '').trim();
+    // A photo of a room QR sticker counts as a scan (checked before treating it as a finish photo).
+    let qrScanText: string | null = null;
+    let imgBuf: { buffer: Buffer; mimetype: string } | null = null;
+    if (isImg && d.downloadMedia) {
+      try {
+        imgBuf = await d.downloadMedia(msg);
+        const cmd = imgBuf ? startCommandFromQr(await (d.decodeQr || decodeQrFromImage)(imgBuf.buffer)) : null;
+        if (cmd && resolveRoomByAlias(cmd.slice(6).replace(/_/g, ' '), d.rooms())) {
+          qrScanText = cmd;
+          text = cmd;
+          isImg = false;
+        }
+      } catch (e) { d.log.warn({ err: String(e) }, 'finish image download/QR failed'); }
+    }
+    const fallThrough = (): { resumeText: string } | null => (qrScanText ? { resumeText: qrScanText } : null);
+    const needsPhotos = isWorker;
+    const by = cleaningCredit(cleaner, 'צוות');
+    let lang = finishLang(cleaner.language, text || caption);
+    const say = async (t: string) => { await d.send(jid, t); };
+    const done = { result: { handled: true } as InboundResult };
+    const startMatch = text?.match(/^\s*START[_\s]+([a-zA-Z0-9_\-\u0590-\u05FF]+)\s*$/i);
+    const startRoom = startMatch ? resolveRoomByAlias(startMatch[1].replace(/_/g, ' '), d.rooms()) : null;
+    const savePhoto = async (roomId: string, kind: 'finish' | 'problem') => {
+      if (!d.downloadMedia) return;
+      try {
+        const media = imgBuf || await d.downloadMedia(msg);
+        if (media) await storePhoto({ roomId, by, buffer: media.buffer, mimetype: media.mimetype, kind });
+      } catch (e) { d.log.warn({ err: String(e), roomId }, 'finish photo store failed'); }
+    };
+    const closeRoom = async (st: FinishState, result: InboundResult): Promise<{ result: InboundResult } | { resumeText: string }> => {
+      finishStates.delete(sessionKey);
+      if (st.pendingStartText) return { resumeText: st.pendingStartText };
+      return { result };
+    };
+    const completeProblem = async (st: FinishState) => {
+      const desc = `${st.desc || ''}${st.problemPhotos ? ` (📷 ${st.problemPhotos})` : ''}`.trim();
+      if (st.kind === 'repair') await d.resortos.reportMaintenance({ unitId: st.roomId, description: desc, reportedBy: by });
+      else await d.resortos.reportSupplies({ unitId: st.roomId, description: desc, reportedBy: by });
+      const reply = FINISH_TEXT.problemSaved[lang](finishRoomLabel(st.roomId, lang));
+      await say(reply);
+      return closeRoom(st, { handled: true, intent: { action: st.kind === 'repair' ? 'MAINTENANCE_ISSUE' : 'SUPPLIES_NEEDED', room_id: st.roomId, room_raw: '', issue_description_hebrew: desc, acknowledgement_reply_cleaner_language: reply } });
+    };
+
+    let st = finishStates.get(sessionKey);
+    if (st) {
+      const label = finishRoomLabel(st.roomId, lang);
+      if (startRoom) {
+        if (startRoom === st.roomId) {
+          await say(st.stage === 'problem'
+            ? (needsPhotos ? FINISH_TEXT.askProblem : FINISH_TEXT.askProblemOptional)[lang](st.kind!)
+            : (st.photos || !needsPhotos ? FINISH_TEXT.askChoice[lang](label) : FINISH_TEXT.stillWaitingPhotos[lang](label)));
+          return done;
+        }
+        st.pendingStartText = text!;
+        await say((needsPhotos ? FINISH_TEXT.closePreviousFirst : FINISH_TEXT.closePreviousFirstNoPhotos)[lang](label, finishRoomLabel(startRoom, lang)));
+        return done;
+      }
+      if (isImg) {
+        if (st.stage === 'choice') {
+          await savePhoto(st.roomId, 'finish');
+          st.photos++;
+          if (!st.askedAt || Date.now() - st.askedAt > FINISH_PHOTO_DEBOUNCE_MS) {
+            st.askedAt = Date.now();
+            await say(FINISH_TEXT.askChoice[lang](label));
+          }
+          return done;
+        }
+        await savePhoto(st.roomId, 'problem');
+        st.problemPhotos++;
+        if (caption) st.desc = [st.desc, caption].filter(Boolean).join(' / ');
+        if (st.desc) return completeProblem(st);
+        if (!st.explAskedAt || Date.now() - st.explAskedAt > FINISH_PHOTO_DEBOUNCE_MS) {
+          st.explAskedAt = Date.now();
+          await say(FINISH_TEXT.needExplanation[lang]);
+        }
+        return done;
+      }
+      let heard = text?.trim() || '';
+      if (!heard && d.isAudio(msg)) {
+        const tr = await d.transcribe(msg, cleaner.language || 'he');
+        heard = tr.text?.trim() || '';
+        if (['th', 'ar', 'he', 'en'].includes(tr.language)) lang = tr.language as FinishLang;
+      }
+      if (!heard) return fallThrough();
+      if (st.stage === 'choice') {
+        const choice = parseFinishChoice(heard);
+        if (!choice) {
+          await say(FINISH_TEXT.notUnderstood[lang]);
+          return done;
+        }
+        if (needsPhotos && !st.photos) {
+          await say(FINISH_TEXT.stillWaitingPhotos[lang](label));
+          return done;
+        }
+        if (choice === 'ready') {
+          let skipped: string | undefined;
+          try {
+            const r = await d.resortos.markRoomReady({ unitId: st.roomId, reportedBy: by, ...(st.photos ? { note: `סיום ניקיון (📷 ${st.photos})` } : {}) });
+            if (r && !r.ok) skipped = r.skipped;
+          } catch (e) {
+            d.log.error({ err: String(e) }, 'finish markRoomReady failed');
+            await say(FINISH_TEXT.notUnderstood[lang]);
+            return done;
+          }
+          const reply = skipped === 'maintenance_open' ? FINISH_TEXT.readyBlocked[lang](label) : FINISH_TEXT.ready[lang](label);
+          await say(reply);
+          return closeRoom(st, { handled: true, intent: { action: 'ROOM_READY', room_id: st.roomId, room_raw: '', issue_description_hebrew: null, acknowledgement_reply_cleaner_language: reply } });
+        }
+        st.stage = 'problem';
+        st.kind = choice;
+        await say((needsPhotos ? FINISH_TEXT.askProblem : FINISH_TEXT.askProblemOptional)[lang](choice));
+        return done;
+      }
+      st.desc = [st.desc, heard].filter(Boolean).join(' / ');
+      if (st.problemPhotos || !needsPhotos) return completeProblem(st);
+      await say(FINISH_TEXT.needProblemPhoto[lang]);
+      return done;
+    }
+
+    // No finish dialog yet.
+    if (isImg && isWorker) {
+      const open = await findOpenRoom(cleaner);
+      if (!open) {
+        // Not a readable room QR and no room open: most likely an unreadable sticker photo.
+        const k = `${sessionKey}|qr`;
+        if (Date.now() - (qrRetryAsked.get(k) || 0) > FINISH_PHOTO_DEBOUNCE_MS) {
+          qrRetryAsked.set(k, Date.now());
+          await say(FINISH_TEXT.qrUnreadable[lang]);
+        }
+        return done;
+      }
+      sessionStates.delete(sessionKey);
+      st = { roomId: open, stage: 'choice', photos: 0, problemPhotos: 0 };
+      finishStates.set(sessionKey, st);
+      await savePhoto(open, 'finish');
+      st.photos = 1;
+      st.askedAt = Date.now();
+      await say(FINISH_TEXT.askChoice[lang](finishRoomLabel(open, lang)));
+      return done;
+    }
+    const managerDone = !isWorker && /^\s*(?:סיימתי|סיום|גמרתי|done|finish(?:ed)?|เสร็จแล้ว|خلصت)\s*$/i.test(text || '');
+    if (startRoom || managerDone) {
+      const open = await findOpenRoom(cleaner);
+      if (!open) return fallThrough();
+      if (startRoom && startRoom !== open) {
+        sessionStates.delete(sessionKey);
+        finishStates.set(sessionKey, { roomId: open, stage: 'choice', photos: 0, problemPhotos: 0, pendingStartText: text! });
+        await say((needsPhotos ? FINISH_TEXT.closePreviousFirst : FINISH_TEXT.closePreviousFirstNoPhotos)[lang](finishRoomLabel(open, lang), finishRoomLabel(startRoom, lang)));
+        return done;
+      }
+      if (!isWorker) {
+        // Manager finishing their own cleaning (rescan of the same room or "סיימתי"): 1/2/3 directly, no photos.
+        sessionStates.delete(sessionKey);
+        finishStates.set(sessionKey, { roomId: open, stage: 'choice', photos: 0, problemPhotos: 0, askedAt: Date.now() });
+        await say(FINISH_TEXT.askChoiceNoPhotos[lang](finishRoomLabel(open, lang)));
+        return done;
+      }
+      // Worker rescanning the same open room → existing exit menu (unchanged).
+    }
+    return fallThrough();
+  }
+
   const pendingComplexQuery = new Map<string, { text: string; at: number }>();
   const PENDING_COMPLEX_TTL_MS = 10 * 60 * 1000;
   /** Staff flag for a guest-reported problem (SMS to the manager line, once per booking per 30 min). Never touches locks/bookings. */
@@ -829,6 +1020,22 @@ export function createPipeline(deps: PipelineDeps) {
           const name = allRooms().find((r) => r.id === outside)?.name || outside;
           await d.send(jid, askByName(cleaner?.name, `${name} לא באזור האחריות שלך, אז אין לי פרטים עליו.`));
           return { handled: true, reason: 'out_of_scope' };
+        }
+      }
+    }
+    // Ran 2026-10-29: finish-by-photos → 1 ready / 2 repair / 3 missing; an open room must be closed before a new START.
+    // Managers / ops managers who clean: no photos required.
+    if (cleaner && jid && !msg.key.fromMe && (isWorker || cleaner.role === 'MANAGER' || cleaner.role === 'OPS_MANAGER')) {
+      const fin = await finishFlow(cleaner, jid, msg, sessionKey, text, isWorker);
+      if (fin) {
+        if ('resumeText' in fin) {
+          text = fin.resumeText;
+          // Continue as a plain text scan (a QR photo must not reach invoice/ID intake).
+          msg = { ...msg, message: { conversation: fin.resumeText } } as WAMessage;
+          sessionStates.delete(sessionKey);
+          currentSession = undefined;
+        } else {
+          return fin.result;
         }
       }
     }
