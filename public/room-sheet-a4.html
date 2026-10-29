@@ -1453,13 +1453,13 @@
         }
       }
 
-      // Maya Cabins specific cooking prohibition (Rule 5)
+      // Maya Cabins & Musical Yard cooking prohibition (Rule 5)
       const cookingIconEl = sheetElement.querySelector('#rule-cooking-icon');
       const cookingTextEl = sheetElement.querySelector('#rule-cooking-text');
       const rulesBadgeEl = sheetElement.querySelector('#rules-badge-el');
-      const isMaya = unit.property === 'בקתות מאיה' || ['k693', 'k694', 'k695'].includes(unit.id);
+      const isNoCookingInCabin = unit.property === 'בקתות מאיה' || unit.property === 'החצר המוסיקלית' || unit.property === 'החצר המוזיקלית' || ['k693', 'k694', 'k695', 'k690', 'k691', 'k692'].includes(unit.id);
       if (cookingTextEl) {
-        if (isMaya) {
+        if (isNoCookingInCabin) {
           if (cookingIconEl) cookingIconEl.textContent = '🍳';
           cookingTextEl.innerHTML = '<strong>איסור בישול בבקתה ומנגל:</strong> <strong style="color:#991B1B;">חל איסור מוחלט על בישול או טיגון בתוך הבקתות!</strong> מנגל והכנת מזון מותרים אך ורק בעמדת החצר המוסדרת (לא על הדק). אין להבעיר אש בשבת.';
           if (rulesBadgeEl) {

@@ -32,8 +32,9 @@ export function AllResortsShowcase({ onOpenCalendarModal }) {
       {/* Grid of all 12 properties */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {allProperties.map((prop) => {
-          const firstUnit = prop.units?.[0];
-          const basePrice = firstUnit?.basePrice || 850;
+          const validUnits = (prop.units || []).filter((u) => u.basePrice && u.basePrice > 0 && !u.isFullBuyout);
+          const minWeekday = validUnits.length > 0 ? Math.min(...validUnits.map((u) => u.basePrice)) : (prop.units?.[0]?.basePrice || 850);
+          const minWeekend = validUnits.length > 0 ? Math.min(...validUnits.map((u) => u.weekendPrice || Math.round((u.basePrice || 850) * 1.3))) : (prop.units?.[0]?.weekendPrice || 1100);
           const unitsCount = prop.units?.filter((u) => !u.isFullBuyout).length || prop.units?.length || 3;
 
           return (
@@ -87,9 +88,9 @@ export function AllResortsShowcase({ onOpenCalendarModal }) {
                 {/* Pricing & Actions */}
                 <div className="pt-4 border-t border-stone-100 flex items-center justify-between gap-3">
                   <div>
-                    <div className="text-[11px] text-stone-400">החל מ-</div>
-                    <div className="text-lg font-bold text-[var(--brand-primary)] font-montserrat">
-                      ₪{basePrice.toLocaleString()}{' '}
+                    <div className="text-[11px] text-stone-500 font-medium">אמצ״ש: החל מ-₪{minWeekday.toLocaleString()}</div>
+                    <div className="text-base font-bold text-[var(--brand-primary)] font-montserrat">
+                      סופ״ש: החל מ-₪{minWeekend.toLocaleString()}{' '}
                       <span className="text-xs font-normal text-stone-500 font-sans">/ לילה</span>
                     </div>
                   </div>

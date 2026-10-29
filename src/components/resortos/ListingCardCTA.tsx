@@ -14,6 +14,7 @@ export interface PropertyItem {
   claimed_status: 'unclaimed_seeded' | 'claim_pending' | 'claimed_verified';
   direct_booking_enabled: boolean;
   min_price?: number;
+  weekend_price?: number;
   hero_image?: string | null;
   is_public?: boolean;
   crm_status?: 'Lead_Identified' | 'Portal_Free_Active' | 'Upsell_Pitch_Sent' | 'Verified_Subscriber' | 'Opt_Out';

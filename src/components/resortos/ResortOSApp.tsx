@@ -184,6 +184,14 @@ function mapManagedToPropertyItem(
   isPreviewMode: boolean,
   previewSlug: string | null
 ): PropertyItem {
+  const validUnits = (p.units || []).filter(u => u.base_price && u.base_price > 0);
+  const minWeekday = validUnits.length > 0
+    ? Math.min(...validUnits.map(u => u.base_price))
+    : (p.units?.[0]?.base_price || 850);
+  const minWeekend = validUnits.length > 0
+    ? Math.min(...validUnits.map(u => u.weekend_price || Math.round((u.base_price || 850) * 1.3)))
+    : (p.units?.[0]?.weekend_price || 1100);
+
   return {
     id: p.id,
     slug: p.slug,
@@ -196,7 +204,8 @@ function mapManagedToPropertyItem(
     phone: p.phone,
     claimed_status: p.claimed_status,
     direct_booking_enabled: p.direct_booking_enabled,
-    min_price: p.units?.[0]?.base_price || 850,
+    min_price: minWeekday,
+    weekend_price: minWeekend,
     hero_image: p.hero_image,
     is_public: p.is_public ?? (p.claimed_status === 'claimed_verified'),
     crm_status: p.crm_status || 'Lead_Identified',
@@ -320,7 +329,7 @@ const HERO_CAROUSEL_SLIDES: HeroCarouselSlide[] = [
     badge: '👨‍👩‍👧‍👦 למשפחות וילדים · בריכה ומדשאות',
     title: 'החצר המוסיקלית · נופש משפחתי מלא במרחבים וטבע',
     tagline: 'בריכת שחייה מרעננת, מדשאות ירוקות ובקתות עץ שקטות',
-    description: 'מתחם נופש בטוח ומגודר ברמות עם בריכת שחייה גדולה, מיטות שיזוף, פינות ישיבה מוצלות תחת עצי דקל ושפע מרחב למשחקים ולרוגע.',
+    description: 'מתחם נופש בטוח ומגודר ברמות עם בריכת שחייה גדולה, מיטות שיזוף, פינות ישיבה מוצלות תחת עצי דקל ושפע מרחב למשחקים ולרוגע (ללא אפשרות לבשל בבקתה).',
     image: '/resorts/musical.jpg',
     highlights: ['בריכת שחייה גדולה', 'מדשאות ופינות ישיבה מוצלות', 'חצר פסטורלית למשפחות'],
     ctaLabel: 'לצפייה בחצר המוסיקלית'
@@ -333,7 +342,7 @@ const HERO_CAROUSEL_SLIDES: HeroCarouselSlide[] = [
     badge: '🪵 בקתות עץ אלפיניות · ניחוח אורן',
     title: 'בקתות מאיה · בקתות עץ כפריות מול השקט הגלילי',
     tagline: 'עץ מלא, ג׳קוזי עגול פרטי, עמדת מנגל ומרפסת דק',
-    description: 'חוויית נופש כפרית אותנטית בבקתות עץ כהות ומרווחות, ג׳קוזי פנימי עגול ומפנק, מטבחון מאובזר, נספרסו וקרבה לחופי הכנרת ולמסלולי הגולן.',
+    description: 'חוויית נופש כפרית אותנטית בבקתות עץ כהות ומרווחות, ג׳קוזי פנימי עגול ומפנק, עמדת קפה ומקרר (ללא אפשרות בישול בתוך הבקתה), נספרסו וקרבה לחופי הכנרת ולמסלולי הגולן.',
     image: '/resorts/maya.jpg',
     highlights: ['ג׳קוזי עגול פנימי', 'מרפסת דק ועמדת מנגל', 'עץ מלא בניחוח אורן'],
     ctaLabel: 'לצפייה בבקתות מאיה'
@@ -956,6 +965,7 @@ export function ResortOSApp() {
       claimed_status: prop.claimed_status,
       direct_booking_enabled: prop.direct_booking_enabled,
       min_price: (prop as any).units?.[0]?.base_price || (prop as PropertyItem).min_price || 850,
+      weekend_price: (prop as any).units?.[0]?.weekend_price || (prop as PropertyItem).weekend_price || 1100,
       hero_image: prop.hero_image,
       is_public: prop.is_public,
       crm_status: prop.crm_status,
@@ -1418,9 +1428,13 @@ export function ResortOSApp() {
                           </div>
                           <div className="absolute bottom-3 right-3 left-3 text-white pointer-events-none">
                             <h3 className="text-xl font-bold tracking-tight">{prop.hebrew_name}</h3>
-                            <div className="flex items-center justify-between mt-0.5">
-                              <span className="text-xs text-stone-300 font-light truncate max-w-[65%]">{prop.tagline || 'מתחם נופש ואירוח כפרי'}</span>
-                              <span className="text-xs text-[#E6CA9D] font-mono font-bold">החל מ-₪{prop.min_price} / לילה</span>
+                            <div className="flex items-center justify-between mt-1 gap-2">
+                              <span className="text-xs text-stone-300 font-light truncate flex-1">{prop.tagline || 'מתחם נופש ואירוח כפרי'}</span>
+                              <div className="flex items-center gap-1.5 text-[11px] font-mono font-bold bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-lg border border-white/15 shrink-0">
+                                <span className="text-[#E6CA9D]">אמצ״ש: מ-₪{prop.min_price}</span>
+                                <span className="text-stone-400">·</span>
+                                <span className="text-stone-200">סופ״ש: מ-₪{prop.weekend_price || Math.round((prop.min_price || 850) * 1.3)}</span>
+                              </div>
                             </div>
                           </div>
                         </div>

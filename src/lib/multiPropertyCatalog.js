@@ -473,13 +473,13 @@ export const PROPERTY_THEMES = {
       'חצר פסטורלית ומדשאות',
       'מנגל פרטי לכל בקתה',
       'מכונת נספרסו ומיקרוגל',
-      'מקרר ומטבחון בכל יחידה',
+      'ללא אפשרות לבשל בבקתה (מקרר, מיקרוגל ופינת קפה בלבד)',
       'טלוויזיה עם יס ו-Wi-Fi'
     ],
     units: [
-      { id: 'k690', propertyId: 'musical', name: 'חצר מוסיקלית · חליל', type: 'cabin', maxOccupancy: 2, basePrice: 600, weekendPrice: 900, description: 'בקתת עץ כפרית ונעימה עם ג׳קוזי זוגי.', features: ['לזוגות בלבד', 'ג׳קוזי זוגי', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'], images: ['/resorts/musical.jpg', '/resorts/gallery/musical/musical-suite.jpg'] },
-      { id: 'k691', propertyId: 'musical', name: 'חצר מוסיקלית · מיתר', type: 'cabin', maxOccupancy: 2, basePrice: 600, weekendPrice: 900, description: 'בקתת עץ פסטורלית ושקטה.', features: ['לזוגות בלבד', 'ג׳קוזי זוגי', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'], images: ['/resorts/gallery/musical/musical-courtyard.jpg', '/resorts/gallery/musical/musical-jacuzzi.jpg'] },
-      { id: 'k692', propertyId: 'musical', name: 'חצר מוסיקלית · פעמון', type: 'cabin', maxOccupancy: 2, basePrice: 600, weekendPrice: 900, description: 'בקתת עץ שלווה מול המדשאות.', features: ['לזוגות בלבד', 'ג׳קוזי זוגי', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'], images: ['/resorts/gallery/musical/musical-bedroom.jpg', '/resorts/musical.jpg'] }
+      { id: 'k690', propertyId: 'musical', name: 'חצר מוסיקלית · חליל', type: 'cabin', maxOccupancy: 2, basePrice: 600, weekendPrice: 900, description: 'בקתת עץ כפרית ונעימה עם ג׳קוזי זוגי (ללא אפשרות לבשל בבקתה).', features: ['לזוגות בלבד', 'ג׳קוזי זוגי', 'ללא אפשרות לבשל בבקתה', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'], images: ['/resorts/musical.jpg', '/resorts/gallery/musical/musical-suite.jpg'] },
+      { id: 'k691', propertyId: 'musical', name: 'חצר מוסיקלית · מיתר', type: 'cabin', maxOccupancy: 2, basePrice: 600, weekendPrice: 900, description: 'בקתת עץ פסטורלית ושקטה (ללא אפשרות לבשל בבקתה).', features: ['לזוגות בלבד', 'ג׳קוזי זוגי', 'ללא אפשרות לבשל בבקתה', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'], images: ['/resorts/gallery/musical/musical-courtyard.jpg', '/resorts/gallery/musical/musical-jacuzzi.jpg'] },
+      { id: 'k692', propertyId: 'musical', name: 'חצר מוסיקלית · פעמון', type: 'cabin', maxOccupancy: 2, basePrice: 600, weekendPrice: 900, description: 'בקתת עץ שלווה מול המדשאות (ללא אפשרות לבשל בבקתה).', features: ['לזוגות בלבד', 'ג׳קוזי זוגי', 'ללא אפשרות לבשל בבקתה', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'], images: ['/resorts/gallery/musical/musical-bedroom.jpg', '/resorts/musical.jpg'] }
     ]
   },
 
@@ -523,13 +523,13 @@ export const PROPERTY_THEMES = {
       'מדשאה גדולה ומרחבים ירוקים',
       'מתקני ברביקיו ומנגל פרטי',
       'מכונת נספרסו ומיקרוגל',
-      'מקרר ומטבחון בכל יחידה',
+      'ללא אפשרות בישול בתוך הבקתה (מקרר, מיקרוגל ופינת קפה בלבד)',
       'טלוויזיה עם יס ו-Wi-Fi'
     ],
     units: [
-      { id: 'k693', propertyId: 'maya', name: 'בקתות מאיה · בקתה 1', type: 'cabin', maxOccupancy: 2, basePrice: 750, weekendPrice: 1300, description: 'בקתת עץ מפנקת צמודה לבריכת השחייה הראשונה עם ג׳קוזי פנימי.', features: ['לזוגות בלבד', 'בריכה פרטית מחוממת ל-28°', 'ג׳קוזי פנימי', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'], images: ['/resorts/maya.jpg', '/resorts/gallery/maya/maya-living.jpg'] },
-      { id: 'k694', propertyId: 'maya', name: 'בקתות מאיה · בקתה 2', type: 'cabin', maxOccupancy: 2, basePrice: 600, weekendPrice: 900, description: 'בקתת עץ כפרית ושקטה עם ג׳קוזי פנימי.', features: ['לזוגות בלבד', 'בלי בריכה', 'ג׳קוזי פנימי', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'], images: ['/resorts/gallery/maya/maya-garden.jpg', '/resorts/gallery/maya/maya-bath.jpg'] },
-      { id: 'k695', propertyId: 'maya', name: 'בקתות מאיה · בקתה 3', type: 'cabin', maxOccupancy: 2, basePrice: 750, weekendPrice: 1300, description: 'בקתת עץ מפנקת צמודה לבריכת השחייה השנייה עם ג׳קוזי פנימי.', features: ['לזוגות בלבד', 'בריכה פרטית מחוממת ל-28°', 'ג׳קוזי פנימי', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'], images: ['/resorts/maya.jpg', '/resorts/gallery/maya/maya-jacuzzi.jpg'] }
+      { id: 'k693', propertyId: 'maya', name: 'בקתות מאיה · בקתה 1', type: 'cabin', maxOccupancy: 2, basePrice: 750, weekendPrice: 1300, description: 'בקתת עץ מפנקת צמודה לבריכת השחייה הראשונה עם ג׳קוזי פנימי (ללא אפשרות בישול בבקתה).', features: ['לזוגות בלבד', 'בריכה פרטית מחוממת ל-28°', 'ג׳קוזי פנימי', 'ללא אפשרות בישול בבקתה', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'], images: ['/resorts/maya.jpg', '/resorts/gallery/maya/maya-living.jpg'] },
+      { id: 'k694', propertyId: 'maya', name: 'בקתות מאיה · בקתה 2', type: 'cabin', maxOccupancy: 2, basePrice: 600, weekendPrice: 900, description: 'בקתת עץ כפרית ושקטה עם ג׳קוזי פנימי (ללא אפשרות בישול בבקתה).', features: ['לזוגות בלבד', 'בלי בריכה', 'ג׳קוזי פנימי', 'ללא אפשרות בישול בבקתה', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'], images: ['/resorts/gallery/maya/maya-garden.jpg', '/resorts/gallery/maya/maya-bath.jpg'] },
+      { id: 'k695', propertyId: 'maya', name: 'בקתות מאיה · בקתה 3', type: 'cabin', maxOccupancy: 2, basePrice: 750, weekendPrice: 1300, description: 'בקתת עץ מפנקת צמודה לבריכת השחייה השנייה עם ג׳קוזי פנימי (ללא אפשרות בישול בבקתה).', features: ['לזוגות בלבד', 'בריכה פרטית מחוממת ל-28°', 'ג׳קוזי פנימי', 'ללא אפשרות בישול בבקתה', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'], images: ['/resorts/maya.jpg', '/resorts/gallery/maya/maya-jacuzzi.jpg'] }
     ]
   },
 
