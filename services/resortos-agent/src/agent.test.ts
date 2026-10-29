@@ -692,8 +692,8 @@ describe('cleaner exit state machine & numeric fast-path', () => {
     expect(deps.sent).toHaveLength(1);
     expect(deps.sent[0][0]).toBe('66812345678@s.whatsapp.net');
     expect(deps.sent[0][1]).toContain('1 - เรียบร้อยสมบูรณ์ ปิดไฟ/แอร์แล้ว 🟢');
-    expect(deps.sent[0][1]).toContain('2 - ขาดของ / ผ้าปู / ผ้าเช็ดตัว 🟡');
-    expect(deps.sent[0][1]).toContain('3 - มีจุดชำรุดเสียหายต้องซ่อม 🔴');
+    expect(deps.sent[0][1]).toContain('3 - ขาดของ / ผ้าปู / ผ้าเช็ดตัว 🟡');
+    expect(deps.sent[0][1]).toContain('2 - มีจุดชำรุดเสียหายต้องซ่อม 🔴');
     expect(pipeline.getSession('66812345678')).toEqual({
       role: 'CLEANER',
       state: 'AWAITING_STATUS',
@@ -739,16 +739,16 @@ describe('cleaner exit state machine & numeric fast-path', () => {
     expect(pipeline.getSession('66812345678')).toBeUndefined();
   });
 
-  it('cleaner option 2: transitions to AWAITING_SUPPLIES, prompts for details, reports supplies upon response', async () => {
+  it('cleaner option 3: transitions to AWAITING_SUPPLIES, prompts for details, reports supplies upon response', async () => {
     const deps = makeDeps();
     const pipeline = createPipeline(deps);
     await pipeline.triggerRoomExit({ cleanerPhone: '66812345678', roomId: 'k680' });
     deps.sent.length = 0;
 
-    // Cleaner presses 2
+    // Cleaner presses 3 (missing; numbering changed 2026-10-29)
     const msg2 = {
       key: { remoteJid: '66812345678@s.whatsapp.net', fromMe: false },
-      message: { conversation: '2' },
+      message: { conversation: '3' },
     } as any;
     const r2 = await pipeline.handleInbound(msg2);
     expect(r2.handled).toBe(true);
@@ -776,16 +776,16 @@ describe('cleaner exit state machine & numeric fast-path', () => {
     expect(pipeline.getSession('66812345678')).toBeUndefined();
   });
 
-  it('cleaner option 3: transitions to AWAITING_MAINTENANCE, prompts for details, reports maintenance upon response', async () => {
+  it('cleaner option 2: transitions to AWAITING_MAINTENANCE, prompts for details, reports maintenance upon response', async () => {
     const deps = makeDeps();
     const pipeline = createPipeline(deps);
     await pipeline.triggerRoomExit({ cleanerPhone: '962791234567', roomId: 'k681' });
     deps.sent.length = 0;
 
-    // Arabic cleaner Khaled presses 3
+    // Arabic cleaner Khaled presses 2 (repair; numbering changed 2026-10-29)
     const msg3 = {
       key: { remoteJid: '962791234567@s.whatsapp.net', fromMe: false },
-      message: { conversation: '3' },
+      message: { conversation: '2' },
     } as any;
     const r3 = await pipeline.handleInbound(msg3);
     expect(r3.handled).toBe(true);

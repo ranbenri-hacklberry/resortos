@@ -2042,7 +2042,7 @@ ${result.paymentURL}`);
         }
         const trimmed = text?.trim() || '';
         if (currentSession.state === 'AWAITING_STATUS') {
-          if (trimmed === '1' || trimmed === '1.' || trimmed === '๑' || confirmAnswer(trimmed) === 'yes') {
+          if (parseFinishChoice(trimmed) === 'ready' || confirmAnswer(trimmed) === 'yes') {
             sessionStates.delete(sessionKey);
             let apiOk = true;
             let skipped: string | undefined;
@@ -2071,13 +2071,15 @@ ${result.paymentURL}`);
               },
             };
           }
-          if (trimmed === '2' || trimmed === '2.' || trimmed === '๒') {
+          // Ran 2026-10-29: menu numbering aligned with the photo flow — 2 = repair, 3 = missing.
+          const menuPick = parseFinishChoice(trimmed);
+          if (menuPick === 'missing') {
             sessionStates.set(sessionKey, { role: 'CLEANER', state: 'AWAITING_SUPPLIES', roomId: currentSession.roomId });
             const reply = askByName(cleaner?.name, CLEANER_ASK_SUPPLIES[lang] || CLEANER_ASK_SUPPLIES.he);
             await d.send(jid, reply);
             return { handled: true };
           }
-          if (trimmed === '3' || trimmed === '3.' || trimmed === '๓') {
+          if (menuPick === 'repair') {
             sessionStates.set(sessionKey, { role: 'CLEANER', state: 'AWAITING_MAINTENANCE', roomId: currentSession.roomId });
             const reply = askByName(cleaner?.name, CLEANER_ASK_MAINTENANCE[lang] || CLEANER_ASK_MAINTENANCE.he);
             await d.send(jid, reply);
