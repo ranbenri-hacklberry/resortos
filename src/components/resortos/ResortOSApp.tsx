@@ -1177,19 +1177,19 @@ export function ResortOSApp() {
                 onTouchStart={() => setIsSliderHovered(true)}
                 onTouchEnd={() => setIsSliderHovered(false)}
               >
-                {/* Background Authentic Photo Crossfade */}
+                {/* Background Authentic Photo Crossfade - Full Natural Brightness */}
                 <img
                   key={HERO_CAROUSEL_SLIDES[activeSlideIdx].id}
                   src={HERO_CAROUSEL_SLIDES[activeSlideIdx].image}
                   alt={HERO_CAROUSEL_SLIDES[activeSlideIdx].title}
-                  className={`absolute inset-0 w-full h-full object-cover brightness-[0.52] transition-transform duration-1000 group-hover:scale-105 ${
+                  className={`absolute inset-0 w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105 ${
                     prefersReducedMotion ? '' : 'animate-fadeIn'
                   }`}
                   loading="eager"
                 />
 
-                {/* Soft natural bottom gradient for high contrast reading */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent pointer-events-none" />
+                {/* Shading ONLY where the text area is (bottom 40%) - top 60% of the photo is 100% clear and unshaded */}
+                <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-black/85 via-black/30 to-transparent pointer-events-none" />
 
                 {/* Subtle side navigation arrows that appear gently on hover */}
                 <div className="absolute inset-y-0 right-3 left-3 sm:right-6 sm:left-6 flex items-center justify-between pointer-events-none z-10 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1211,26 +1211,26 @@ export function ResortOSApp() {
                   </button>
                 </div>
 
-                {/* Clean Content: Only Title and Description */}
-                <div className="relative z-10 max-w-3xl space-y-3">
-                  <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight text-white drop-shadow-md">
+                {/* Clean Content: Only Title and Description with localized soft shadow */}
+                <div className="relative z-10 max-w-3xl space-y-3 p-2 sm:p-4 rounded-2xl md:bg-black/20 md:backdrop-blur-xs">
+                  <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)]">
                     {HERO_CAROUSEL_SLIDES[activeSlideIdx].title}
                   </h1>
 
-                  <p className="text-sm sm:text-base lg:text-lg text-stone-200 leading-relaxed font-light max-w-2xl drop-shadow-sm">
+                  <p className="text-sm sm:text-base lg:text-lg text-stone-100 leading-relaxed font-medium max-w-2xl drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]">
                     {HERO_CAROUSEL_SLIDES[activeSlideIdx].description}
                   </p>
 
                   {/* Minimal Subtle Indicators */}
-                  <div className="flex items-center gap-2 pt-4">
+                  <div className="flex items-center gap-2 pt-3">
                     {HERO_CAROUSEL_SLIDES.map((slide, idx) => (
                       <button
                         key={slide.id}
                         type="button"
                         onClick={() => setActiveSlideIdx(idx)}
                         aria-label={`שקופית ${idx + 1}`}
-                        className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                          activeSlideIdx === idx ? 'w-8 bg-[#C5A880]' : 'w-2 bg-white/40 hover:bg-white/70'
+                        className={`h-2 rounded-full transition-all cursor-pointer shadow-md ${
+                          activeSlideIdx === idx ? 'w-8 bg-[#C5A880]' : 'w-2 bg-white/60 hover:bg-white'
                         }`}
                       />
                     ))}
@@ -1421,7 +1421,7 @@ export function ResortOSApp() {
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                             loading="lazy"
                           />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent pointer-events-none" />
+                          <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/85 via-black/30 to-transparent pointer-events-none" />
                           <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md text-white text-[11px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 border border-white/20">
                             <MapPin className="w-3.5 h-3.5 text-[#C5A880]" />
                             <span>{prop.village}</span>
