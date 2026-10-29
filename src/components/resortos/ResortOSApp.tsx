@@ -321,7 +321,7 @@ const HERO_CAROUSEL_SLIDES: HeroCarouselSlide[] = [
     title: 'החצר המוסיקלית · נופש משפחתי מלא במרחבים וטבע',
     tagline: 'בריכת שחייה מרעננת, מדשאות ירוקות ובקתות עץ שקטות',
     description: 'מתחם נופש בטוח ומגודר ברמות עם בריכת שחייה גדולה, מיטות שיזוף, פינות ישיבה מוצלות תחת עצי דקל ושפע מרחב למשחקים ולרוגע.',
-    image: '/resorts/hero-family.jpg',
+    image: '/resorts/musical.jpg',
     highlights: ['בריכת שחייה גדולה', 'מדשאות ופינות ישיבה מוצלות', 'חצר פסטורלית למשפחות'],
     ctaLabel: 'לצפייה בחצר המוסיקלית'
   },
@@ -984,16 +984,11 @@ export function ResortOSApp() {
                 <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-[#C5A880]" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-black text-lg sm:text-2xl tracking-tight text-[#26130F]">
-                    MIALEES RESORTS
-                  </span>
-                  <span className="bg-[#C5A880]/20 text-[#8C6239] border border-[#C5A880]/40 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider hidden sm:inline-block">
-                    קולקציית הנופש והבקתות
-                  </span>
-                </div>
+                <span className="font-black text-lg sm:text-2xl tracking-tight text-[#26130F] block">
+                  MIALEES RESORTS
+                </span>
                 <span className="text-[11px] sm:text-xs text-stone-500 font-medium">
-                  בקתות עץ כפריות, סוויטות ו-וילות נופש ברמת הגולן והכנרת
+                  קולקציית הנופש והבקתות · רמת הגולן והכנרת
                 </span>
               </div>
             </a>
@@ -1164,9 +1159,9 @@ export function ResortOSApp() {
             </div>
           ) : (
             <div className="space-y-8 animate-fadeIn">
-              {/* Boutique Hero Carousel - 6 Authentic Complexes */}
+              {/* Boutique Hero Carousel - Clean Image, Title & Description Only */}
               <div
-                className="relative rounded-3xl overflow-hidden shadow-2xl border border-[#C5A880]/30 text-white min-h-[500px] sm:min-h-[560px] lg:min-h-[580px] flex flex-col justify-between p-6 sm:p-10 transition-all group"
+                className="relative rounded-3xl overflow-hidden shadow-2xl text-white min-h-[440px] sm:min-h-[520px] lg:min-h-[560px] flex flex-col justify-end p-6 sm:p-12 transition-all group"
                 onMouseEnter={() => setIsSliderHovered(true)}
                 onMouseLeave={() => setIsSliderHovered(false)}
                 onTouchStart={() => setIsSliderHovered(true)}
@@ -1177,146 +1172,64 @@ export function ResortOSApp() {
                   key={HERO_CAROUSEL_SLIDES[activeSlideIdx].id}
                   src={HERO_CAROUSEL_SLIDES[activeSlideIdx].image}
                   alt={HERO_CAROUSEL_SLIDES[activeSlideIdx].title}
-                  className={`absolute inset-0 w-full h-full object-cover brightness-[0.42] transition-transform duration-1000 group-hover:scale-105 ${
+                  className={`absolute inset-0 w-full h-full object-cover brightness-[0.52] transition-transform duration-1000 group-hover:scale-105 ${
                     prefersReducedMotion ? '' : 'animate-fadeIn'
                   }`}
                   loading="eager"
                 />
 
-                {/* Ambient Depth Gradient & Glow */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/45 to-black/30 pointer-events-none" />
-                <div className="absolute top-0 right-0 w-96 h-96 bg-[#C5A880]/15 rounded-full blur-3xl pointer-events-none" />
-                <div className="absolute bottom-0 left-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+                {/* Soft natural bottom gradient for high contrast reading */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent pointer-events-none" />
 
-                {/* Top Row: Floating Pill, Next Slide Hint & Arrow Controls */}
-                <div className="relative z-10 flex flex-wrap items-center justify-between gap-3">
-                  <div className="inline-flex items-center gap-2 bg-[#C5A880]/25 text-[#F4E3C5] text-xs font-black px-4 py-1.5 rounded-full border border-[#C5A880]/40 backdrop-blur-md shadow-sm">
-                    <Sparkles className="w-3.5 h-3.5 text-[#C5A880]" />
-                    <span>{HERO_CAROUSEL_SLIDES[activeSlideIdx].badge}</span>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    {/* Next Slide Preview Peek */}
-                    {(() => {
-                      const nextIdx = (activeSlideIdx + 1) % HERO_CAROUSEL_SLIDES.length;
-                      const nextSlide = HERO_CAROUSEL_SLIDES[nextIdx];
-                      return (
-                        <button
-                          type="button"
-                          onClick={() => setActiveSlideIdx(nextIdx)}
-                          className="hidden sm:inline-flex items-center gap-2 bg-black/40 hover:bg-black/60 text-white/90 text-xs font-bold px-3.5 py-1.5 rounded-full border border-white/20 backdrop-blur-md transition-all cursor-pointer group/peek"
-                        >
-                          <span className="text-[#E6CA9D] text-[11px]">השקופית הבאה:</span>
-                          <span className="group-hover/peek:text-white transition-colors">{nextSlide.propertyName}</span>
-                          <ChevronLeft className="w-3.5 h-3.5 text-[#E6CA9D] transition-transform group-hover/peek:-translate-x-0.5" />
-                        </button>
-                      );
-                    })()}
-
-                    {/* Prev / Next Controls */}
-                    <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-md p-1 rounded-full border border-white/20">
-                      <button
-                        type="button"
-                        onClick={() => setActiveSlideIdx((prev) => (prev - 1 + HERO_CAROUSEL_SLIDES.length) % HERO_CAROUSEL_SLIDES.length)}
-                        aria-label="השקופית הקודמת"
-                        className="w-8 h-8 rounded-full hover:bg-white/20 text-white flex items-center justify-center transition active:scale-95 cursor-pointer"
-                      >
-                        <ChevronRight className="w-4 h-4 text-stone-100" />
-                      </button>
-                      <span className="text-[11px] font-mono text-stone-300 font-bold px-1.5 select-none">
-                        {activeSlideIdx + 1} / {HERO_CAROUSEL_SLIDES.length}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setActiveSlideIdx((prev) => (prev + 1) % HERO_CAROUSEL_SLIDES.length)}
-                        aria-label="השקופית הבאה"
-                        className="w-8 h-8 rounded-full hover:bg-white/20 text-white flex items-center justify-center transition active:scale-95 cursor-pointer"
-                      >
-                        <ChevronLeft className="w-4 h-4 text-stone-100" />
-                      </button>
-                    </div>
-                  </div>
+                {/* Subtle side navigation arrows that appear gently on hover */}
+                <div className="absolute inset-y-0 right-3 left-3 sm:right-6 sm:left-6 flex items-center justify-between pointer-events-none z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    type="button"
+                    onClick={() => setActiveSlideIdx((prev) => (prev - 1 + HERO_CAROUSEL_SLIDES.length) % HERO_CAROUSEL_SLIDES.length)}
+                    aria-label="השקופית הקודמת"
+                    className="w-10 h-10 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center backdrop-blur-md transition pointer-events-auto cursor-pointer border border-white/20 active:scale-95 shadow-md"
+                  >
+                    <ChevronRight className="w-5 h-5 text-white" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveSlideIdx((prev) => (prev + 1) % HERO_CAROUSEL_SLIDES.length)}
+                    aria-label="השקופית הבאה"
+                    className="w-10 h-10 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center backdrop-blur-md transition pointer-events-auto cursor-pointer border border-white/20 active:scale-95 shadow-md"
+                  >
+                    <ChevronLeft className="w-5 h-5 text-white" />
+                  </button>
                 </div>
 
-                {/* Middle Content: Title, Description, Highlights & CTAs */}
-                <div className="relative z-10 max-w-3xl space-y-4 my-auto py-6">
-                  <div className="text-xs sm:text-sm font-bold text-[#E6CA9D] tracking-wide">
-                    {HERO_CAROUSEL_SLIDES[activeSlideIdx].tagline}
-                  </div>
-
-                  <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-[1.2] text-white">
+                {/* Clean Content: Only Title and Description */}
+                <div className="relative z-10 max-w-3xl space-y-3">
+                  <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight text-white drop-shadow-md">
                     {HERO_CAROUSEL_SLIDES[activeSlideIdx].title}
                   </h1>
 
-                  <p className="text-xs sm:text-base text-stone-200 leading-relaxed max-w-2xl font-light">
+                  <p className="text-sm sm:text-base lg:text-lg text-stone-200 leading-relaxed font-light max-w-2xl drop-shadow-sm">
                     {HERO_CAROUSEL_SLIDES[activeSlideIdx].description}
                   </p>
 
-                  {/* Feature Highlights Chips */}
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    {HERO_CAROUSEL_SLIDES[activeSlideIdx].highlights.map((h) => (
-                      <span
-                        key={h}
-                        className="inline-flex items-center gap-1.5 bg-white/10 backdrop-blur-md text-stone-100 text-xs font-semibold px-3 py-1.5 rounded-xl border border-white/15"
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5 text-[#C5A880] shrink-0" />
-                        <span>{h}</span>
-                      </span>
-                    ))}
-                  </div>
-
-                  {/* Slide Direct CTAs */}
-                  <div className="flex flex-wrap items-center gap-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => scrollToSection(`property-${HERO_CAROUSEL_SLIDES[activeSlideIdx].propertyId}`)}
-                      className="bg-[#C5A880] hover:bg-[#d4b993] text-[#26130F] font-black text-xs sm:text-sm px-5 py-2.5 rounded-xl shadow-lg transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
-                    >
-                      <Compass className="w-4 h-4 text-[#26130F]" />
-                      <span>{HERO_CAROUSEL_SLIDES[activeSlideIdx].ctaLabel}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => scrollToSection('search-booking')}
-                      className="bg-black/50 hover:bg-black/70 text-white border border-white/30 text-xs sm:text-sm font-bold px-4 py-2.5 rounded-xl backdrop-blur-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
-                    >
-                      <Calendar className="w-4 h-4 text-[#E6CA9D]" />
-                      <span>בדיקת זמינות</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Bottom Row: 6 Interactive Navigation Tabs for Authentic Complexes */}
-                <div className="relative z-10 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-4 border-t border-white/15">
-                  {HERO_CAROUSEL_SLIDES.map((slide, idx) => {
-                    const isActive = activeSlideIdx === idx;
-                    return (
+                  {/* Minimal Subtle Indicators */}
+                  <div className="flex items-center gap-2 pt-4">
+                    {HERO_CAROUSEL_SLIDES.map((slide, idx) => (
                       <button
                         key={slide.id}
                         type="button"
                         onClick={() => setActiveSlideIdx(idx)}
-                        className={`text-right p-2.5 sm:p-3 rounded-2xl transition-all border text-xs flex flex-col justify-between cursor-pointer ${
-                          isActive
-                            ? 'bg-[#C5A880]/30 border-[#C5A880] text-white shadow-lg backdrop-blur-md ring-1 ring-[#C5A880]/50'
-                            : 'bg-black/30 hover:bg-black/50 border-white/10 text-stone-300 backdrop-blur-xs'
+                        aria-label={`שקופית ${idx + 1}`}
+                        className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                          activeSlideIdx === idx ? 'w-8 bg-[#C5A880]' : 'w-2 bg-white/40 hover:bg-white/70'
                         }`}
-                      >
-                        <div className="font-extrabold text-xs sm:text-sm flex items-center justify-between mb-0.5">
-                          <span className={isActive ? 'text-white' : 'text-stone-200'}>{slide.propertyName}</span>
-                          <span className="text-[10px] font-mono opacity-60">0{idx + 1}</span>
-                        </div>
-                        <div className="text-[10px] text-stone-400 truncate">
-                          {slide.village}
-                        </div>
-                      </button>
-                    );
-                  })}
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
 
               {/* Compact Search & Booking Bar */}
-              <div id="search-booking" className="relative z-20 max-w-5xl mx-auto -mt-6 sm:-mt-8 px-2 sm:px-0">
+              <div id="search-booking" className="relative z-20 max-w-5xl mx-auto px-2 sm:px-0">
                 <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl border border-stone-200/90 p-4 sm:p-6 backdrop-blur-md">
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 items-end">
                     {/* Check-In */}
