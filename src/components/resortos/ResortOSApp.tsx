@@ -22,7 +22,11 @@ import {
   Award,
   Camera,
   Users,
-  MapPinOff
+  MapPinOff,
+  Menu,
+  Heart,
+  Clock,
+  ArrowDown
 } from 'lucide-react';
 import { ListingCardCTA, PropertyItem } from './ListingCardCTA';
 import { ComicGuideRenderer, ComicGuideData } from './ComicGuideRenderer';
@@ -267,82 +271,173 @@ function buildDefaultProperties(rawProperties: PropertyConfig[]): ManagedPropert
   return flagship;
 }
 
-interface HeroSlide {
+interface HeroCarouselSlide {
   id: string;
+  propertyId: string;
+  propertyName: string;
+  village: string;
   badge: string;
-  tabLabel: string;
-  icon: string;
   title: string;
   tagline: string;
   description: string;
   image: string;
-  badges: string[];
-  matchingNames: string;
+  highlights: string[];
+  ctaLabel: string;
 }
 
-const HERO_SLIDES: HeroSlide[] = [
+const HERO_CAROUSEL_SLIDES: HeroCarouselSlide[] = [
   {
-    id: 'rustic',
-    badge: '🪵 בקתות עץ כפריות ושלווה',
-    tabLabel: 'בקתות כפריות',
-    icon: '🪵',
-    title: 'בקתות עץ כפריות, ניחוח אורן ושלווה בטבע',
-    tagline: 'חמימות כפרית אמיתית ברמת הגולן והכנרת',
-    description: 'בקתות עץ פסטורליות עם מרפסות דק מוצלות, ג׳קוזי פנימי מפנק, עמדות מנגל פרטיות ומדשאות רחבות באווירה שלווה ומרגיעה.',
-    image: '/resorts/hero-rustic.jpg',
-    badges: ['בקתות עץ מרווחות', 'פינת מנגל וחצר', 'ג׳קוזי חם פנימי', 'פרטיות וטבע'],
-    matchingNames: 'צימר בגבעה · בקתות מאיה · מול הנוף · טאג׳ מאהל'
+    id: 'hill',
+    propertyId: 'hill',
+    propertyName: 'צימר בגבעה',
+    village: 'מושב גבעת יואב',
+    badge: '🪵 בקתות כפריות ושלווה · גבעת יואב',
+    title: 'צימר בגבעה · חמימות כפרית מול מצוקי הגולן',
+    tagline: '4 בקתות עץ מתומנות, ג׳קוזי ספא וחצר מוארת בקסם לילי',
+    description: 'בקתות עץ מרווחות עם גלריית שינה נפרדת לילדים, ג׳קוזי ספא פרטי, מרפסת דק מוצלת, שולחנות פיקניק ותאורת גרלנדות חמה בין עצי האלון.',
+    image: '/resorts/hill.jpg',
+    highlights: ['ג׳קוזי ספא פרטי בכל בקתה', 'גלריית עץ לילדים', 'חצר ירוקה ותאורת ערב'],
+    ctaLabel: 'לצפייה בצימר בגבעה'
   },
   {
-    id: 'family',
-    badge: '👨‍👩‍👧‍👦 חופשות משפחתיות עם בריכה',
-    tabLabel: 'למשפחות וילדים',
-    icon: '👨‍👩‍👧‍👦',
-    title: 'מרחבים, מדשאות ירוקות ובריכות שחייה',
-    tagline: 'חופשה מהנה ובטוחה לכל המשפחה עם שפע מקום לילדים',
-    description: 'מתחמי נופש מגודרים ובטוחים עם בריכות שחייה מרעננות, מדשאות מטופחות, פינות ישיבה מוצלות ומרחב פתוח לילדים ולהורים.',
+    id: 'nofim',
+    propertyId: 'nofim',
+    propertyName: 'נופים בלבן',
+    village: 'מושב רמות',
+    badge: '🍷 סוויטות רומנטיות לזוגות · שקיעות כנרת',
+    title: 'נופים בלבן · סוויטות בוטיק יוקרתיות מעל הכנרת',
+    tagline: 'בריכה פרטית מחוממת ל-28°, ג׳קוזי ספא ושקיעות פנורמיות',
+    description: 'סוויטות עץ אדריכליות בעיצוב לבן נקי, בריכת שחייה פרטית מחוממת לכל חדר, ג׳קוזי ספא זרמים, מטבחון פרטי ונוף עוצר נשימה למימי הכנרת.',
+    image: '/resorts/nofim.jpg',
+    highlights: ['בריכה פרטית מחוממת ל-28°', 'ג׳קוזי ספא זרמים', 'נוף פנורמי מלא לכנרת'],
+    ctaLabel: 'לצפייה בנופים בלבן'
+  },
+  {
+    id: 'musical',
+    propertyId: 'musical',
+    propertyName: 'החצר המוסיקלית',
+    village: 'מושב רמות',
+    badge: '👨‍👩‍👧‍👦 למשפחות וילדים · בריכה ומדשאות',
+    title: 'החצר המוסיקלית · נופש משפחתי מלא במרחבים וטבע',
+    tagline: 'בריכת שחייה מרעננת, מדשאות ירוקות ובקתות עץ שקטות',
+    description: 'מתחם נופש בטוח ומגודר ברמות עם בריכת שחייה גדולה, מיטות שיזוף, פינות ישיבה מוצלות תחת עצי דקל ושפע מרחב למשחקים ולרוגע.',
     image: '/resorts/hero-family.jpg',
-    badges: ['בריכת שחייה גדולה', 'מדשאות ופינות ישיבה', 'מתאים למשפחות', 'חצר פסטורלית'],
-    matchingNames: 'החצר המוסיקלית · בקתות מאיה · מיאליס ריזורט'
+    highlights: ['בריכת שחייה גדולה', 'מדשאות ופינות ישיבה מוצלות', 'חצר פסטורלית למשפחות'],
+    ctaLabel: 'לצפייה בחצר המוסיקלית'
   },
   {
-    id: 'couples',
-    badge: '🍷 סוויטות רומנטיות לזוגות',
-    tabLabel: 'רומנטי לזוגות',
-    icon: '🍷',
-    title: 'אינטימיות, שקיעות זהב ונוף פתוח לכנרת',
-    tagline: 'פינוק שקט ואינטימי מול השקיעות הקסומות',
-    description: 'סוויטות מבודדות לזוגות בלבד, בריכות פרטיות מחוממות ל-28°, ג׳קוזי ספא זרמים, ייין מקומי ושקט מוחלט מול מימי הכנרת.',
-    image: '/resorts/hero-couples.jpg',
-    badges: ['לזוגות בלבד', 'בריכה פרטית מחוממת', 'ג׳קוזי ספא זרמים', 'נוף פנורמי לכנרת'],
-    matchingNames: 'נופים בלבן · מול הנוף · טאג׳ מאהל'
+    id: 'maya',
+    propertyId: 'maya',
+    propertyName: 'בקתות מאיה',
+    village: 'מושב רמות',
+    badge: '🪵 בקתות עץ אלפיניות · ניחוח אורן',
+    title: 'בקתות מאיה · בקתות עץ כפריות מול השקט הגלילי',
+    tagline: 'עץ מלא, ג׳קוזי עגול פרטי, עמדת מנגל ומרפסת דק',
+    description: 'חוויית נופש כפרית אותנטית בבקתות עץ כהות ומרווחות, ג׳קוזי פנימי עגול ומפנק, מטבחון מאובזר, נספרסו וקרבה לחופי הכנרת ולמסלולי הגולן.',
+    image: '/resorts/maya.jpg',
+    highlights: ['ג׳קוזי עגול פנימי', 'מרפסת דק ועמדת מנגל', 'עץ מלא בניחוח אורן'],
+    ctaLabel: 'לצפייה בבקתות מאיה'
   },
   {
-    id: 'luxury',
-    badge: '✨ וילות נופש וסוויטות בוטיק',
-    tabLabel: 'וילות בוטיק',
-    icon: '✨',
-    title: 'בריכות מחוממות 28°C-38°C ואירוח בוטיק מוקפד',
-    tagline: 'אירוח יוקרתי ברמה הגבוהה ביותר עם פרטיות אבסולוטית',
-    description: 'וילות רחבות ידיים וסוויטות אדריכליות מעוצבות, בריכות פרטיות מחוממות כל השנה, מטבחי שף, מערכות שמע ונוף פנורמי.',
-    image: '/resorts/hero-luxury.jpg',
-    badges: ['בריכות מחוממות כל השנה', 'וילות עד 20 איש', 'מטבחי שף וסלון ענק', 'סגירה בבלעדיות'],
-    matchingNames: 'מיאליס ריזורט · קאסה נובה · כיפת שמיים · אחוזת טוסקנה'
+    id: 'mool',
+    propertyId: 'mool',
+    propertyName: 'מול הנוף',
+    village: 'מושב רמות',
+    badge: '🌅 נוף פתוח לכנרת · שלווה ופרטיות',
+    title: 'מול הנוף · מרפסות תצפית לשקיעות הזהב של הכנרת',
+    tagline: 'שקט מוחלט, ערסלים בגינה, יין מקומי ונוף מרהיב',
+    description: 'בקתות עץ פסטורליות בקו ראשון אל מול הכנרת, פינות ישיבה מברזל מחושל, ערסלים במדשאה, ג׳קוזי זרמים זוגי ואוויר הרים צלול ומרגיע.',
+    image: '/resorts/mool.jpg',
+    highlights: ['מרפסת דק מול הכנרת', 'ערסלים וגינה פסטורלית', 'ג׳קוזי זרמים זוגי'],
+    ctaLabel: 'לצפייה במול הנוף'
+  },
+  {
+    id: 'toscana',
+    propertyId: 'toscana',
+    propertyName: 'אחוזת טוסקנה',
+    village: 'מושב רמות',
+    badge: '✨ אחוזת אירוח כפרית · גנים טרופיים',
+    title: 'אחוזת טוסקנה · אירוח כפרי מרווח מוקף עצי דקל ומדשאות',
+    tagline: 'בקתות עץ רחבות ידיים, גן מטופח ובריכת שחייה',
+    description: 'אחוזת נופש שלווה במושב רמות עם מבני עץ מוקפדים, בריכת שחייה, פינות ישיבה מוצלות בין צמחייה עשירה ומרחב מושלם לזוגות ולמשפחות.',
+    image: '/resorts/toscana.jpg',
+    highlights: ['בריכת שחייה צמודה', 'גנים טרופיים מטופחים', 'בקתות עץ מרווחות'],
+    ctaLabel: 'לצפייה באחוזת טוסקנה'
   }
 ];
 
 export function ResortOSApp() {
-  // Hero Lifestyle Slider State
+  // Hero Carousel Slider State & Motion Preference
   const [activeSlideIdx, setActiveSlideIdx] = useState(0);
   const [isSliderHovered, setIsSliderHovered] = useState(false);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
+  // Mobile Menu State
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Search & Booking State
+  const [searchCheckIn, setSearchCheckIn] = useState(() => {
+    const today = new Date();
+    const day = today.getDay();
+    const daysUntilFriday = (5 - day + 7) % 7 || 7;
+    const nextFriday = new Date(today);
+    nextFriday.setDate(today.getDate() + daysUntilFriday);
+    return nextFriday.toISOString().split('T')[0];
+  });
+  const [searchCheckOut, setSearchCheckOut] = useState(() => {
+    const today = new Date();
+    const day = today.getDay();
+    const daysUntilFriday = (5 - day + 7) % 7 || 7;
+    const nextSunday = new Date(today);
+    nextSunday.setDate(today.getDate() + daysUntilFriday + 2);
+    return nextSunday.toISOString().split('T')[0];
+  });
+  const [searchGuests, setSearchGuests] = useState('all');
+  const [searchNotice, setSearchNotice] = useState<string | null>(null);
+
+  // Reduced motion detection
   useEffect(() => {
-    if (isSliderHovered) return;
+    if (typeof window !== 'undefined') {
+      const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+      setPrefersReducedMotion(mq.matches);
+      const handler = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches);
+      mq.addEventListener('change', handler);
+      return () => mq.removeEventListener('change', handler);
+    }
+  }, []);
+
+  // Carousel auto-rotate every 6.5s (pauses on hover or touch)
+  useEffect(() => {
+    if (isSliderHovered || prefersReducedMotion) return;
     const interval = setInterval(() => {
-      setActiveSlideIdx((prev) => (prev + 1) % HERO_SLIDES.length);
-    }, 6000);
+      setActiveSlideIdx((prev) => (prev + 1) % HERO_CAROUSEL_SLIDES.length);
+    }, 6500);
     return () => clearInterval(interval);
-  }, [isSliderHovered]);
+  }, [isSliderHovered, prefersReducedMotion]);
+
+  const scrollToSection = (id: string) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const handleSearchAvailability = () => {
+    if (activeTab !== 'marketplace') {
+      setActiveTab('marketplace');
+    }
+    const inDate = searchCheckIn ? new Date(searchCheckIn).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' }) : '';
+    const outDate = searchCheckOut ? new Date(searchCheckOut).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' }) : '';
+    const guestLabel = searchGuests === 'couple' ? 'זוג (2 מבוגרים)' :
+                       searchGuests === 'family_small' ? 'זוג + ילד' :
+                       searchGuests === 'family_large' ? 'משפחה (4+ אורחים)' :
+                       searchGuests === 'villa' ? 'וילה גדולה (עד 20 איש)' : 'כל ההרכבים';
+
+    setSearchNotice(`נבחרו תאריכים: ${inDate}–${outDate} (${guestLabel}). צפו במתחמים הפנויים למטה, או פנו לבדיקת יומן ישירה מול המארחים:`);
+    setTimeout(() => {
+      scrollToSection('resorts');
+    }, 50);
+  };
 
   // 1. URL Path & Query Resolution (/p/:slug vs legacy ?preview=true&slug=...)
   const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
@@ -903,62 +998,134 @@ export function ResortOSApp() {
               </div>
             </a>
 
-            {/* Quick Guest Navigation */}
-            <nav className="hidden md:flex items-center gap-2 lg:gap-4 text-xs sm:text-sm font-bold text-stone-700">
+            {/* Desktop Minimalist Nav */}
+            <nav className="hidden md:flex items-center gap-6 lg:gap-8 text-sm font-bold text-stone-700">
               <button
                 type="button"
-                onClick={() => setActiveTab('marketplace')}
-                className={`py-2 px-3.5 rounded-xl flex items-center gap-2 transition-all ${
-                  activeTab === 'marketplace'
-                    ? 'bg-[#26130F] text-[#C5A880] shadow-sm font-black'
-                    : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
-                }`}
+                onClick={() => {
+                  if (activeTab !== 'marketplace') setActiveTab('marketplace');
+                  scrollToSection('resorts');
+                }}
+                className="hover:text-[#8C6239] transition-colors py-1 cursor-pointer"
               >
-                <Compass className="w-4 h-4 text-[#C5A880]" />
-                <span>מתחמי הנופש</span>
-                <span className="text-[10px] bg-stone-200/80 text-stone-800 px-2 py-0.5 rounded-full font-mono">
-                  {managedProperties.length}
-                </span>
+                המתחמים שלנו
               </button>
-
               <button
                 type="button"
-                onClick={() => setActiveTab('playbook')}
-                className={`py-2 px-3.5 rounded-xl flex items-center gap-2 transition-all ${
-                  activeTab === 'playbook'
-                    ? 'bg-[#26130F] text-[#C5A880] shadow-sm font-black'
-                    : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
-                }`}
+                onClick={() => {
+                  if (activeTab !== 'marketplace') setActiveTab('marketplace');
+                  scrollToSection('vacation-types');
+                }}
+                className="hover:text-[#8C6239] transition-colors py-1 cursor-pointer"
               >
-                <BookOpen className="w-4 h-4 text-[#8C6239]" />
-                <span>מדריכי שהייה לאורח</span>
+                סוגי חופשות
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (activeTab !== 'marketplace') setActiveTab('marketplace');
+                  scrollToSection('about');
+                }}
+                className="hover:text-[#8C6239] transition-colors py-1 cursor-pointer"
+              >
+                אודות
               </button>
             </nav>
 
-            {/* Direct Contact & Booking Phone / WhatsApp */}
-            <div className="flex items-center gap-2 sm:gap-3">
-              <a
-                href="https://wa.me/972548076123?text=%D7%A9%D7%9C%D7%95%D7%9D%20%D7%9E%D7%99%D7%90%D7%9C%D7%99%D7%A1%20%D7%A8%D7%99%D7%96%D7%95%D7%A8%D7%98%D7%A1%2C%20%D7%90%D7%A9%D7%9E%D7%97%20%D7%9C%D7%A7%D7%91%D7%9C%20%D7%A4%D7%A8%D7%98%D7%99%D7%9D%20%D7%95%D7%9C%D7%91%D7%93%D7%95%D7%A7%20%D7%96%D7%9E%D7%99%D7%A2%D7%95%D7%AA%20%D7%9C%D7%97%D7%95%D7%A4%D7%A9%D7%94"
-                target="_blank"
-                rel="noreferrer"
-                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-extrabold px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl shadow-sm flex items-center gap-1.5 sm:gap-2 transition-all active:scale-95"
+            {/* Header Right Action CTA & Mobile Toggle */}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  if (activeTab !== 'marketplace') setActiveTab('marketplace');
+                  scrollToSection('search-booking');
+                }}
+                className="bg-[#26130F] hover:bg-[#3F2C29] text-[#C5A880] border border-[#C5A880]/40 text-xs sm:text-sm font-black px-4 sm:px-5 py-2.5 rounded-xl shadow-sm flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
               >
-                <MessageCircle className="w-4 h-4 shrink-0" />
-                <span className="hidden sm:inline">הזמנה ישירה בוואטסאפ</span>
-                <span className="sm:hidden">וואטסאפ</span>
-              </a>
+                <Calendar className="w-4 h-4 text-[#C5A880]" />
+                <span>בדיקת זמינות והזמנה</span>
+              </button>
 
-              <a
-                href="tel:0548076123"
-                className="bg-[#26130F] hover:bg-[#3F2C29] text-[#C5A880] text-xs sm:text-sm font-extrabold px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl shadow-sm flex items-center gap-1.5 sm:gap-2 transition-all active:scale-95 border border-[#C5A880]/30"
+              {/* Mobile Hamburger Button */}
+              <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="md:hidden p-2 rounded-xl border border-stone-200 text-stone-700 hover:bg-stone-100 transition cursor-pointer"
+                aria-label="תפריט ניווט"
               >
-                <Phone className="w-4 h-4 shrink-0 text-[#C5A880]" />
-                <span className="hidden md:inline font-mono">054-807-6123</span>
-                <span className="md:hidden">חיוג</span>
-              </a>
+                {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </button>
             </div>
           </div>
         </div>
+
+        {/* Mobile Navigation Drawer / Dropdown */}
+        {isMobileMenuOpen && (
+          <div className="md:hidden border-t border-stone-200/80 bg-white/98 backdrop-blur-md px-4 py-4 space-y-3 shadow-lg animate-fadeIn">
+            <div className="flex flex-col space-y-2 text-sm font-bold text-stone-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  if (activeTab !== 'marketplace') setActiveTab('marketplace');
+                  scrollToSection('resorts');
+                }}
+                className="text-right p-2.5 rounded-xl hover:bg-stone-50 flex items-center justify-between"
+              >
+                <span>המתחמים שלנו</span>
+                <ChevronLeft className="w-4 h-4 text-stone-400" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  if (activeTab !== 'marketplace') setActiveTab('marketplace');
+                  scrollToSection('vacation-types');
+                }}
+                className="text-right p-2.5 rounded-xl hover:bg-stone-50 flex items-center justify-between"
+              >
+                <span>סוגי חופשות</span>
+                <ChevronLeft className="w-4 h-4 text-stone-400" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  if (activeTab !== 'marketplace') setActiveTab('marketplace');
+                  scrollToSection('about');
+                }}
+                className="text-right p-2.5 rounded-xl hover:bg-stone-50 flex items-center justify-between"
+              >
+                <span>אודות</span>
+                <ChevronLeft className="w-4 h-4 text-stone-400" />
+              </button>
+            </div>
+
+            <div className="pt-2 border-t border-stone-100 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  if (activeTab !== 'marketplace') setActiveTab('marketplace');
+                  scrollToSection('search-booking');
+                }}
+                className="w-full bg-[#26130F] text-[#C5A880] border border-[#C5A880]/30 font-black text-xs py-3 rounded-xl flex items-center justify-center gap-2 shadow-sm"
+              >
+                <Calendar className="w-4 h-4 text-[#C5A880]" />
+                <span>בדיקת זמינות והזמנה</span>
+              </button>
+              <a
+                href="https://wa.me/972548076123?text=%D7%A9%D7%9C%D7%95%D7%9D%20%D7%9E%D7%99%D7%90%D7%9C%D7%99%D7%A1%20%D7%A8%D7%99%D7%96%D7%95%D7%A8%D7%98%D7%A1%2C%20%D7%90%D7%A9%D7%9E%D7%97%20%D7%9C%D7%91%D7%93%D7%95%D7%A7%20%D7%96%D7%9E%D7%99%D7%A2%D7%95%D7%AA"
+                target="_blank"
+                rel="noreferrer"
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-xs"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>הודעה ישירה בוואטסאפ</span>
+              </a>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Main Content Area */}
@@ -997,117 +1164,241 @@ export function ResortOSApp() {
             </div>
           ) : (
             <div className="space-y-8 animate-fadeIn">
-              {/* Warm Inclusive Vacation Lifestyle Hero Slider */}
+              {/* Boutique Hero Carousel - 6 Authentic Complexes */}
               <div
-                className="relative rounded-3xl overflow-hidden shadow-2xl border border-[#C5A880]/30 text-white min-h-[480px] sm:min-h-[520px] flex flex-col justify-between p-6 sm:p-10 transition-all group"
+                className="relative rounded-3xl overflow-hidden shadow-2xl border border-[#C5A880]/30 text-white min-h-[500px] sm:min-h-[560px] lg:min-h-[580px] flex flex-col justify-between p-6 sm:p-10 transition-all group"
                 onMouseEnter={() => setIsSliderHovered(true)}
                 onMouseLeave={() => setIsSliderHovered(false)}
+                onTouchStart={() => setIsSliderHovered(true)}
+                onTouchEnd={() => setIsSliderHovered(false)}
               >
-                {/* Background Crossfade Image */}
+                {/* Background Authentic Photo Crossfade */}
                 <img
-                  key={HERO_SLIDES[activeSlideIdx].id}
-                  src={HERO_SLIDES[activeSlideIdx].image}
-                  alt={HERO_SLIDES[activeSlideIdx].title}
-                  className="absolute inset-0 w-full h-full object-cover brightness-[0.38] transition-transform duration-1000 group-hover:scale-105 animate-fadeIn"
+                  key={HERO_CAROUSEL_SLIDES[activeSlideIdx].id}
+                  src={HERO_CAROUSEL_SLIDES[activeSlideIdx].image}
+                  alt={HERO_CAROUSEL_SLIDES[activeSlideIdx].title}
+                  className={`absolute inset-0 w-full h-full object-cover brightness-[0.42] transition-transform duration-1000 group-hover:scale-105 ${
+                    prefersReducedMotion ? '' : 'animate-fadeIn'
+                  }`}
+                  loading="eager"
                 />
 
                 {/* Ambient Depth Gradient & Glow */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/45 to-black/35 pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/45 to-black/30 pointer-events-none" />
                 <div className="absolute top-0 right-0 w-96 h-96 bg-[#C5A880]/15 rounded-full blur-3xl pointer-events-none" />
                 <div className="absolute bottom-0 left-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
 
-                {/* Top Row: Floating Pill & Arrow Navigation */}
-                <div className="relative z-10 flex items-center justify-between gap-3">
+                {/* Top Row: Floating Pill, Next Slide Hint & Arrow Controls */}
+                <div className="relative z-10 flex flex-wrap items-center justify-between gap-3">
                   <div className="inline-flex items-center gap-2 bg-[#C5A880]/25 text-[#F4E3C5] text-xs font-black px-4 py-1.5 rounded-full border border-[#C5A880]/40 backdrop-blur-md shadow-sm">
                     <Sparkles className="w-3.5 h-3.5 text-[#C5A880]" />
-                    <span>{HERO_SLIDES[activeSlideIdx].badge} · רשת מיאליס</span>
+                    <span>{HERO_CAROUSEL_SLIDES[activeSlideIdx].badge}</span>
                   </div>
 
-                  {/* Slider Prev / Next Controls */}
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setActiveSlideIdx((prev) => (prev - 1 + HERO_SLIDES.length) % HERO_SLIDES.length)}
-                      aria-label="השקופית הקודמת"
-                      className="w-9 h-9 rounded-full bg-black/40 hover:bg-black/70 text-white border border-white/20 backdrop-blur-md flex items-center justify-center transition active:scale-95"
-                    >
-                      <ChevronRight className="w-5 h-5 text-stone-200" />
-                    </button>
-                    <span className="text-[11px] font-mono text-stone-300 font-bold px-1">
-                      {activeSlideIdx + 1} / {HERO_SLIDES.length}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setActiveSlideIdx((prev) => (prev + 1) % HERO_SLIDES.length)}
-                      aria-label="השקופית הבאה"
-                      className="w-9 h-9 rounded-full bg-black/40 hover:bg-black/70 text-white border border-white/20 backdrop-blur-md flex items-center justify-center transition active:scale-95"
-                    >
-                      <ChevronLeft className="w-5 h-5 text-stone-200" />
-                    </button>
+                  <div className="flex items-center gap-3">
+                    {/* Next Slide Preview Peek */}
+                    {(() => {
+                      const nextIdx = (activeSlideIdx + 1) % HERO_CAROUSEL_SLIDES.length;
+                      const nextSlide = HERO_CAROUSEL_SLIDES[nextIdx];
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => setActiveSlideIdx(nextIdx)}
+                          className="hidden sm:inline-flex items-center gap-2 bg-black/40 hover:bg-black/60 text-white/90 text-xs font-bold px-3.5 py-1.5 rounded-full border border-white/20 backdrop-blur-md transition-all cursor-pointer group/peek"
+                        >
+                          <span className="text-[#E6CA9D] text-[11px]">השקופית הבאה:</span>
+                          <span className="group-hover/peek:text-white transition-colors">{nextSlide.propertyName}</span>
+                          <ChevronLeft className="w-3.5 h-3.5 text-[#E6CA9D] transition-transform group-hover/peek:-translate-x-0.5" />
+                        </button>
+                      );
+                    })()}
+
+                    {/* Prev / Next Controls */}
+                    <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-md p-1 rounded-full border border-white/20">
+                      <button
+                        type="button"
+                        onClick={() => setActiveSlideIdx((prev) => (prev - 1 + HERO_CAROUSEL_SLIDES.length) % HERO_CAROUSEL_SLIDES.length)}
+                        aria-label="השקופית הקודמת"
+                        className="w-8 h-8 rounded-full hover:bg-white/20 text-white flex items-center justify-center transition active:scale-95 cursor-pointer"
+                      >
+                        <ChevronRight className="w-4 h-4 text-stone-100" />
+                      </button>
+                      <span className="text-[11px] font-mono text-stone-300 font-bold px-1.5 select-none">
+                        {activeSlideIdx + 1} / {HERO_CAROUSEL_SLIDES.length}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setActiveSlideIdx((prev) => (prev + 1) % HERO_CAROUSEL_SLIDES.length)}
+                        aria-label="השקופית הבאה"
+                        className="w-8 h-8 rounded-full hover:bg-white/20 text-white flex items-center justify-center transition active:scale-95 cursor-pointer"
+                      >
+                        <ChevronLeft className="w-4 h-4 text-stone-100" />
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                {/* Middle Content: Title, Description, Feature Badges */}
-                <div className="relative z-10 max-w-3xl space-y-4 my-auto py-4">
+                {/* Middle Content: Title, Description, Highlights & CTAs */}
+                <div className="relative z-10 max-w-3xl space-y-4 my-auto py-6">
                   <div className="text-xs sm:text-sm font-bold text-[#E6CA9D] tracking-wide">
-                    {HERO_SLIDES[activeSlideIdx].tagline}
+                    {HERO_CAROUSEL_SLIDES[activeSlideIdx].tagline}
                   </div>
 
                   <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-[1.2] text-white">
-                    {HERO_SLIDES[activeSlideIdx].title}
+                    {HERO_CAROUSEL_SLIDES[activeSlideIdx].title}
                   </h1>
 
                   <p className="text-xs sm:text-base text-stone-200 leading-relaxed max-w-2xl font-light">
-                    {HERO_SLIDES[activeSlideIdx].description}
+                    {HERO_CAROUSEL_SLIDES[activeSlideIdx].description}
                   </p>
 
-                  {/* Feature Badges */}
+                  {/* Feature Highlights Chips */}
                   <div className="flex flex-wrap gap-2 pt-1">
-                    {HERO_SLIDES[activeSlideIdx].badges.map((b) => (
+                    {HERO_CAROUSEL_SLIDES[activeSlideIdx].highlights.map((h) => (
                       <span
-                        key={b}
+                        key={h}
                         className="inline-flex items-center gap-1.5 bg-white/10 backdrop-blur-md text-stone-100 text-xs font-semibold px-3 py-1.5 rounded-xl border border-white/15"
                       >
                         <CheckCircle2 className="w-3.5 h-3.5 text-[#C5A880] shrink-0" />
-                        <span>{b}</span>
+                        <span>{h}</span>
                       </span>
                     ))}
                   </div>
 
-                  {/* Suitable Matching Resorts */}
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-stone-300 pt-2 border-t border-white/10">
-                    <span className="text-[#E6CA9D] font-bold">מתחמים מומלצים בסגנון זה:</span>
-                    <span className="text-white/90 font-medium">
-                      {HERO_SLIDES[activeSlideIdx].matchingNames}
-                    </span>
+                  {/* Slide Direct CTAs */}
+                  <div className="flex flex-wrap items-center gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => scrollToSection(`property-${HERO_CAROUSEL_SLIDES[activeSlideIdx].propertyId}`)}
+                      className="bg-[#C5A880] hover:bg-[#d4b993] text-[#26130F] font-black text-xs sm:text-sm px-5 py-2.5 rounded-xl shadow-lg transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
+                    >
+                      <Compass className="w-4 h-4 text-[#26130F]" />
+                      <span>{HERO_CAROUSEL_SLIDES[activeSlideIdx].ctaLabel}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => scrollToSection('search-booking')}
+                      className="bg-black/50 hover:bg-black/70 text-white border border-white/30 text-xs sm:text-sm font-bold px-4 py-2.5 rounded-xl backdrop-blur-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
+                    >
+                      <Calendar className="w-4 h-4 text-[#E6CA9D]" />
+                      <span>בדיקת זמינות</span>
+                    </button>
                   </div>
                 </div>
 
-                {/* Bottom Row: 4 Interactive Lifestyle Selection Tabs */}
-                <div className="relative z-10 grid grid-cols-2 sm:grid-cols-4 gap-2 pt-4 border-t border-white/15">
-                  {HERO_SLIDES.map((slide, idx) => {
+                {/* Bottom Row: 6 Interactive Navigation Tabs for Authentic Complexes */}
+                <div className="relative z-10 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-4 border-t border-white/15">
+                  {HERO_CAROUSEL_SLIDES.map((slide, idx) => {
                     const isActive = activeSlideIdx === idx;
                     return (
                       <button
                         key={slide.id}
                         type="button"
                         onClick={() => setActiveSlideIdx(idx)}
-                        className={`text-right p-3 rounded-2xl transition-all border text-xs flex flex-col justify-between ${
+                        className={`text-right p-2.5 sm:p-3 rounded-2xl transition-all border text-xs flex flex-col justify-between cursor-pointer ${
                           isActive
                             ? 'bg-[#C5A880]/30 border-[#C5A880] text-white shadow-lg backdrop-blur-md ring-1 ring-[#C5A880]/50'
                             : 'bg-black/30 hover:bg-black/50 border-white/10 text-stone-300 backdrop-blur-xs'
                         }`}
                       >
-                        <div className="font-extrabold text-xs sm:text-sm flex items-center gap-1.5 mb-0.5">
-                          <span>{slide.icon}</span>
-                          <span className={isActive ? 'text-white' : 'text-stone-200'}>{slide.tabLabel}</span>
+                        <div className="font-extrabold text-xs sm:text-sm flex items-center justify-between mb-0.5">
+                          <span className={isActive ? 'text-white' : 'text-stone-200'}>{slide.propertyName}</span>
+                          <span className="text-[10px] font-mono opacity-60">0{idx + 1}</span>
                         </div>
-                        <div className="text-[10px] text-stone-400 line-clamp-1">
-                          {slide.tagline}
+                        <div className="text-[10px] text-stone-400 truncate">
+                          {slide.village}
                         </div>
                       </button>
                     );
                   })}
+                </div>
+              </div>
+
+              {/* Compact Search & Booking Bar */}
+              <div id="search-booking" className="relative z-20 max-w-5xl mx-auto -mt-6 sm:-mt-8 px-2 sm:px-0">
+                <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl border border-stone-200/90 p-4 sm:p-6 backdrop-blur-md">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 items-end">
+                    {/* Check-In */}
+                    <div className="space-y-1.5 text-right">
+                      <label htmlFor="search-check-in" className="block text-xs font-black text-stone-700">
+                        תאריך הגעה
+                      </label>
+                      <div className="relative">
+                        <input
+                          id="search-check-in"
+                          type="date"
+                          value={searchCheckIn}
+                          onChange={(e) => setSearchCheckIn(e.target.value)}
+                          className="w-full p-2.5 sm:p-3 rounded-xl border border-stone-200 bg-stone-50 text-xs sm:text-sm font-semibold text-stone-800 focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Check-Out */}
+                    <div className="space-y-1.5 text-right">
+                      <label htmlFor="search-check-out" className="block text-xs font-black text-stone-700">
+                        תאריך עזיבה
+                      </label>
+                      <div className="relative">
+                        <input
+                          id="search-check-out"
+                          type="date"
+                          value={searchCheckOut}
+                          onChange={(e) => setSearchCheckOut(e.target.value)}
+                          className="w-full p-2.5 sm:p-3 rounded-xl border border-stone-200 bg-stone-50 text-xs sm:text-sm font-semibold text-stone-800 focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Guests */}
+                    <div className="space-y-1.5 text-right">
+                      <label htmlFor="search-guests" className="block text-xs font-black text-stone-700">
+                        מספר אורחים
+                      </label>
+                      <select
+                        id="search-guests"
+                        value={searchGuests}
+                        onChange={(e) => setSearchGuests(e.target.value)}
+                        className="w-full p-2.5 sm:p-3 rounded-xl border border-stone-200 bg-stone-50 text-xs sm:text-sm font-semibold text-stone-800 focus:ring-2 focus:ring-[#C5A880] focus:outline-none cursor-pointer"
+                      >
+                        <option value="all">כל ההרכבים</option>
+                        <option value="couple">זוג (2 מבוגרים)</option>
+                        <option value="family_small">זוג + ילד</option>
+                        <option value="family_large">משפחה (4+ אורחים)</option>
+                        <option value="villa">וילה גדולה (עד 20 איש)</option>
+                      </select>
+                    </div>
+
+                    {/* Submit CTA */}
+                    <div>
+                      <button
+                        type="button"
+                        onClick={handleSearchAvailability}
+                        className="w-full bg-[#26130F] hover:bg-[#3F2C29] text-[#C5A880] border border-[#C5A880]/30 font-black text-xs sm:text-sm py-3 px-4 rounded-xl shadow-md flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
+                      >
+                        <Calendar className="w-4 h-4 text-[#C5A880]" />
+                        <span>בדיקת זמינות</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Search Notice Feedback */}
+                  {searchNotice && (
+                    <div className="mt-4 p-3.5 bg-amber-50/90 border border-amber-200 rounded-2xl text-xs sm:text-sm text-stone-800 flex items-center justify-between gap-3 animate-fadeIn">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-[#8C6239] shrink-0" />
+                        <span>{searchNotice}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSearchNotice(null)}
+                        className="text-stone-400 hover:text-stone-700 p-1 rounded-full text-xs cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1173,8 +1464,8 @@ export function ResortOSApp() {
                 </div>
               </div>
 
-              {/* 12 Resorts Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {/* Resorts Catalog Grid */}
+              <div id="resorts" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredProperties.map((prop) => {
                   const catalogMatch = rawProperties.find((p) => p.slug === prop.slug);
                   const matchingManaged = managedProperties.find((mp) => mp.id === prop.id);
@@ -1187,7 +1478,8 @@ export function ResortOSApp() {
                   return (
                     <div
                       key={prop.id}
-                      className={`bg-white rounded-3xl overflow-hidden border shadow-sm hover:shadow-lg transition-all flex flex-col justify-between relative ${
+                      id={`property-${prop.slug || prop.id}`}
+                      className={`bg-white rounded-3xl overflow-hidden border shadow-sm hover:shadow-lg transition-all flex flex-col justify-between relative scroll-mt-24 ${
                         isThisPreview ? 'ring-2 ring-[#C5A880] border-[#C5A880]' : 'border-stone-200'
                       }`}
                     >
@@ -1248,6 +1540,149 @@ export function ResortOSApp() {
                     </div>
                   );
                 })}
+              </div>
+
+              {/* Vacation Types Section */}
+              <section id="vacation-types" className="pt-8 pb-4 space-y-6 scroll-mt-24">
+                <div className="text-center space-y-2 max-w-2xl mx-auto">
+                  <div className="inline-flex items-center gap-2 bg-[#C5A880]/15 text-[#8C6239] border border-[#C5A880]/30 text-xs font-black px-3.5 py-1 rounded-full uppercase tracking-wider">
+                    <Sparkles className="w-3.5 h-3.5 text-[#C5A880]" />
+                    <span>סגנונות אירוח וחופשה</span>
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-black text-[#26130F]">
+                    סוגי חופשות בקולקציית מיאליס
+                  </h2>
+                  <p className="text-xs sm:text-sm text-stone-600 leading-relaxed">
+                    בחרו את סגנון החופשה המתאים בדיוק עבורכם — מבריחות רומנטיות שקטות ועד נופש משפחתי מלא במרחבים ובריכה
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {[
+                    {
+                      id: 'rustic',
+                      title: 'בקתות עץ כפריות',
+                      tagline: 'שקט גלילי, ריח אורן וג׳קוזי פרטי',
+                      desc: 'בקתות עץ כפריות אותנטיות מוקפות צמחייה עשירה ופרטיות.',
+                      resorts: 'צימר בגבעה · בקתות מאיה · מול הנוף',
+                      icon: '🪵'
+                    },
+                    {
+                      id: 'family',
+                      title: 'נופש משפחתי עם בריכה',
+                      tagline: 'בריכות שחייה מגודרות ומדשאות רחבות',
+                      desc: 'חצרות ענקיות, מתקני משחקים ושפע מקום לכל המשפחה יחד.',
+                      resorts: 'החצר המוסיקלית · אחוזת טוסקנה · מיאליס ריזורט',
+                      icon: '🏊‍♂️'
+                    },
+                    {
+                      id: 'couples',
+                      title: 'רומנטיקה ושקיעות לזוגות',
+                      tagline: 'סוויטות מבודדות מול שקיעות הכנרת',
+                      desc: 'בריכות מחוממות פרטיות, ג׳קוזי זרמים, יין ושקט אינטימי.',
+                      resorts: 'נופים בלבן · מול הנוף · טאג׳ מאהל',
+                      icon: '🍷'
+                    },
+                    {
+                      id: 'luxury',
+                      title: 'וילות בוטיק ומתחמים',
+                      tagline: 'סגירה בבלעדיות לקבוצות ומשפחות',
+                      desc: 'וילות מרווחות, מטבחי שף, מתחמי ספא ואירוח ברמה הגבוהה ביותר.',
+                      resorts: 'קאסה נובה · כיפת שמיים · מיאליס ריזורט',
+                      icon: '✨'
+                    }
+                  ].map((cat) => (
+                    <div
+                      key={cat.id}
+                      onClick={() => scrollToSection('resorts')}
+                      className="bg-white p-5 rounded-3xl border border-stone-200/90 shadow-xs hover:shadow-md transition-all hover:border-[#C5A880]/60 cursor-pointer flex flex-col justify-between group"
+                    >
+                      <div className="space-y-3">
+                        <div className="w-12 h-12 rounded-2xl bg-stone-50 border border-stone-200 flex items-center justify-center text-2xl group-hover:scale-105 transition-transform">
+                          {cat.icon}
+                        </div>
+                        <div>
+                          <h3 className="text-base font-black text-[#26130F]">{cat.title}</h3>
+                          <p className="text-xs text-[#8C6239] font-bold mt-0.5">{cat.tagline}</p>
+                        </div>
+                        <p className="text-xs text-stone-600 leading-relaxed font-light">
+                          {cat.desc}
+                        </p>
+                      </div>
+                      <div className="pt-4 mt-3 border-t border-stone-100 flex items-center justify-between text-[11px]">
+                        <span className="text-stone-400 font-mono">{cat.resorts}</span>
+                        <span className="text-[#8C6239] font-bold group-hover:translate-x-[-2px] transition-transform">
+                          צפו במתחמים ←
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* About Section */}
+              <section id="about" className="pt-6 pb-6 scroll-mt-24">
+                <div className="bg-gradient-to-br from-[#26130F] to-[#3F2C29] text-white rounded-3xl p-6 sm:p-12 shadow-xl border border-[#C5A880]/30 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-80 h-80 bg-[#C5A880]/10 rounded-full blur-3xl pointer-events-none" />
+                  <div className="relative z-10 max-w-3xl space-y-5">
+                    <div className="inline-flex items-center gap-2 bg-[#C5A880]/20 text-[#F4E3C5] border border-[#C5A880]/40 text-xs font-black px-3.5 py-1 rounded-full uppercase tracking-wider">
+                      <Sparkles className="w-3.5 h-3.5 text-[#C5A880]" />
+                      <span>קולקציית מיאליס ריזורטס · MIALEES RESORTS</span>
+                    </div>
+
+                    <h2 className="text-2xl sm:text-4xl font-black tracking-tight leading-tight">
+                      אירוח בוטיק אותנטי בלב הגולן והכנרת — ישירות מול המארחים
+                    </h2>
+
+                    <p className="text-xs sm:text-base text-stone-200 leading-relaxed font-light">
+                      רשת מיאליס ריזורטס מאגדת 10 מתחמי אירוח ייחודיים במושב רמות, גבעת יואב, חד נס ונאות גולן. 
+                      כל מתחם נבחר בקפידה ומציע שילוב נדיר של פרטיות, טבע גלילי פראי, בריכות שחייה וג׳קוזי ספא מחוממים — 
+                      ללא פערי תיווך, ללא עמלות נסתרות (0% עמלה) ובשירות אישי וחם מהרגע הראשון.
+                    </p>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-4 border-t border-white/15">
+                      <div>
+                        <div className="text-[#C5A880] text-xl font-black font-mono">10 מתחמים</div>
+                        <div className="text-xs text-stone-300">ברמת הגולן וסובב כנרת</div>
+                      </div>
+                      <div>
+                        <div className="text-[#C5A880] text-xl font-black font-mono">28°C-38°C</div>
+                        <div className="text-xs text-stone-300">בריכות וג׳קוזי מחוממים</div>
+                      </div>
+                      <div>
+                        <div className="text-[#C5A880] text-xl font-black font-mono">0% עמלה</div>
+                        <div className="text-xs text-stone-300">הזמנה ישירה מול המארחים</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* Guest Playbook Luxury Banner in Marketplace */}
+              <div className="mt-8 bg-gradient-to-r from-stone-900 via-[#26130F] to-stone-900 text-white rounded-3xl p-6 sm:p-8 border border-[#C5A880]/30 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="space-y-2 text-right md:max-w-xl">
+                  <div className="inline-flex items-center gap-2 bg-[#C5A880]/20 text-[#F4E3C5] text-xs font-black px-3.5 py-1 rounded-full border border-[#C5A880]/30">
+                    <BookOpen className="w-3.5 h-3.5 text-[#C5A880]" />
+                    <span>אזור אורחים שוהים</span>
+                  </div>
+                  <h3 className="text-xl sm:text-2xl font-black text-white">
+                    מדריכי שהייה דיגיטליים לאורחי מיאליס ריזורטס
+                  </h3>
+                  <p className="text-xs sm:text-sm text-stone-300 leading-relaxed font-light">
+                    כבר שוהים באחד המתחמים שלנו? קבלו גישה מיידית למדריכים מאוירים לתפעול ג׳קוזי ספא ובקרת טמפרטורה, מכונת אספרסו, רשת Wi-Fi וקודי כניסה.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('playbook');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="bg-[#C5A880] hover:bg-[#d4b993] text-[#26130F] font-black text-xs sm:text-sm px-6 py-3.5 rounded-xl shadow-lg transition-all active:scale-95 shrink-0 flex items-center gap-2 cursor-pointer"
+                >
+                  <BookOpen className="w-4 h-4 text-[#26130F]" />
+                  <span>למדריכי השהייה לאורח ←</span>
+                </button>
               </div>
             </div>
           )
@@ -1492,6 +1927,148 @@ export function ResortOSApp() {
           />
         )}
       </main>
+
+      {/* Boutique Footer */}
+      <footer className="bg-[#1A0C09] text-stone-300 border-t border-stone-800 pt-12 pb-8 mt-12 no-print">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pb-10 border-b border-stone-800/80">
+            {/* Col 1: Brand & Bio */}
+            <div className="space-y-3 md:col-span-2">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#26130F] to-[#3F2C29] flex items-center justify-center text-[#C5A880] border border-[#C5A880]/30">
+                  <Sparkles className="w-5 h-5 text-[#C5A880]" />
+                </div>
+                <div>
+                  <span className="font-black text-lg tracking-tight text-white block">
+                    MIALEES RESORTS
+                  </span>
+                  <span className="text-[11px] text-[#C5A880] font-medium">
+                    קולקציית הנופש והבקתות · רמת הגולן והכנרת
+                  </span>
+                </div>
+              </div>
+              <p className="text-xs text-stone-400 leading-relaxed font-light max-w-md">
+                10 מתחמי נופש מובחרים במושב רמות, גבעת יואב, חד נס ונאות גולן. 
+                אירוח כפרי איכותי עם בריכות מחוממות, ג׳קוזי ספא, מרחבים ירוקים וחיבור ישיר 100% מול המארחים ללא עמלות תיווך.
+              </p>
+            </div>
+
+            {/* Col 2: Navigation Links */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-black uppercase tracking-wider text-[#C5A880]">ניווט מהיר</h4>
+              <ul className="space-y-2 text-xs">
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (activeTab !== 'marketplace') setActiveTab('marketplace');
+                      scrollToSection('resorts');
+                    }}
+                    className="hover:text-white transition-colors cursor-pointer"
+                  >
+                    המתחמים שלנו
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (activeTab !== 'marketplace') setActiveTab('marketplace');
+                      scrollToSection('vacation-types');
+                    }}
+                    className="hover:text-white transition-colors cursor-pointer"
+                  >
+                    סוגי חופשות
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (activeTab !== 'marketplace') setActiveTab('marketplace');
+                      scrollToSection('about');
+                    }}
+                    className="hover:text-white transition-colors cursor-pointer"
+                  >
+                    אודות הקולקציה
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('playbook');
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="text-[#C5A880] hover:underline font-bold cursor-pointer"
+                  >
+                    מדריכי שהייה לאורחים שוהים
+                  </button>
+                </li>
+              </ul>
+            </div>
+
+            {/* Col 3: Direct Contact */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-black uppercase tracking-wider text-[#C5A880]">הזמנה ישירה ושירות</h4>
+              <div className="space-y-2 text-xs">
+                <a
+                  href="https://wa.me/972548076123?text=%D7%A9%D7%9C%D7%95%D7%9D%20%D7%9E%D7%99%D7%90%D7%9C%D7%99%D7%A1%20%D7%A8%D7%99%D7%96%D7%95%D7%A8%D7%98%D7%A1"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 text-emerald-400 hover:text-emerald-300 font-bold"
+                >
+                  <MessageCircle className="w-4 h-4 shrink-0" />
+                  <span>וואטסאפ: 054-807-6123</span>
+                </a>
+                <a
+                  href="tel:0548076123"
+                  className="flex items-center gap-2 text-stone-300 hover:text-white font-mono"
+                >
+                  <Phone className="w-4 h-4 text-[#C5A880] shrink-0" />
+                  <span>054-807-6123</span>
+                </a>
+                <div className="text-[11px] text-stone-500 pt-1">
+                  מענה אנושי מהיר בכל ימות השבוע
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Copyright & Admin Link */}
+          <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-stone-500">
+            <div>
+              © {new Date().getFullYear()} MIALEES RESORTS · כל הזכויות שמורות לרשת מתחמי הנופש
+            </div>
+            <div className="flex items-center gap-4 text-[11px]">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('b2b_deals');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="hover:text-stone-400 transition cursor-pointer"
+              >
+                הטבות ספקים למארחים
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAdminAuthenticated(true);
+                  try {
+                    localStorage.setItem('resortos_admin_session', 'true');
+                  } catch {}
+                  setActiveTab('admin_funnel');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="text-stone-600 hover:text-stone-400 transition cursor-pointer"
+              >
+                כניסת מערכת ResortOS
+              </button>
+            </div>
+          </div>
+        </div>
+      </footer>
 
       {/* ========================================================================= */}
       {/* CLAIM LISTING OTP MODAL */}
