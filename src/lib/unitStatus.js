@@ -395,3 +395,36 @@ export function hideHousekeepingTaskWhileOccupied(unit, bookings, today = israel
   if (ops === 'READY' && isAwaitingManagerInspect(unit) && checkoutToday) return false;
   return true;
 }
+
+/**
+ * Guest-driven departure time (ISO) for a booking, or null.
+ * Kinorot's automatic booking_status=CHECKED_OUT is NOT evidence; only the
+ * stay page / Chloe self-checkout or auto-departure timestamps count.
+ */
+export function guestDepartedAt(booking) {
+  if (!booking) return null;
+  const s = booking.stay || {};
+  return booking.checked_out_at || s.self_checked_out_at || s.auto_checked_out_at || null;
+}
+
+/**
+ * Checkout pill: a guest whose departure date is today actually left, and the
+ * unit status has not been manually changed since (unit.updated_at <= departure).
+ * Returns the departure ISO string while unacknowledged, otherwise null.
+ */
+export function unackedCheckoutToday(unit, bookings, today = israelToday()) {
+  if (!unit?.id) return null;
+  let latest = null;
+  for (const booking of bookings || []) {
+    if (booking.unit_id !== unit.id || booking.deleted_at) continue;
+    if (booking.booking_status === 'CANCELED' || isUnavailableHoldBooking(booking)) continue;
+    if (String(booking.check_out_date || '').slice(0, 10) !== today) continue;
+    const at = guestDepartedAt(booking);
+    if (at && (!latest || Date.parse(at) > Date.parse(latest))) latest = at;
+  }
+  if (!latest) return null;
+  const outMs = Date.parse(latest);
+  const unitMs = Date.parse(unit.updated_at || '');
+  if (Number.isFinite(outMs) && Number.isFinite(unitMs) && unitMs > outMs) return null;
+  return latest;
+}

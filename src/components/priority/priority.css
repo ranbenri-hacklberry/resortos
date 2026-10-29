@@ -3183,3 +3183,17 @@
 
 
 
+
+/* Guest checked out today; pulses until a manager manually changes the unit status. */
+.clean-badge.is-checkout-alert {
+  background: #7c3aed;
+  color: #fff;
+  animation: checkout-pill-pulse 2.4s ease-in-out infinite;
+}
+@keyframes checkout-pill-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.45); }
+  50% { opacity: 0.6; box-shadow: 0 0 0 4px rgba(124, 58, 237, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .clean-badge.is-checkout-alert { animation: none; outline: 2px solid #c4b5fd; }
+}

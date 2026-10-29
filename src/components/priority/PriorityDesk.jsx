@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom';
 import { Check, CheckCheck, ExternalLink, FileSpreadsheet, FileText, FolderOpen, Link2, MessageCircle, Phone, Printer, RefreshCw, Send, Table2, X } from 'lucide-react';
 import { formatIlsFromAgorot, normalizeClearingPayment, normalizeIsraeliId } from '../../lib/clearingPayments';
-import { printCashDayReport } from '../../lib/cashDayReport';
+import { previousCashWeek, printCashDayReport } from '../../lib/cashDayReport';
 import { calendarPartyLabel, dutyPrintAreaOf, dutyUnitGroup, printDailyDutyReport } from '../../lib/dailyDutyReport';
 import { getUnitSign } from '../../lib/fieldUnitCatalog';
 import { israelToday } from '../../lib/cabinAccess';
@@ -30,7 +30,7 @@ import {
   priorityShowsGuest,
   selectPriorityStay
 } from '../../lib/priorityStay';
-import { priorityRoomStatus, unitDisplayStatus } from '../../lib/unitStatus';
+import { priorityRoomStatus, unackedCheckoutToday, unitDisplayStatus } from '../../lib/unitStatus';
 import { kinorotReservationId } from '../../lib/kinorotReservationNote';
 import { coveringUnavailableHold, isUnavailableHoldBooking, unavailableHoldLabel } from '../../lib/unavailableHold';
 import { printGuestFile } from '../../lib/guestFile';
@@ -395,6 +395,8 @@ function ramotLetterRank(unitId, name) {
   return match ? RAMOT_LETTERS.indexOf(match[0]) : 99;
 }
 
+const CHECKOUT_PILL_LABEL = 'צ׳ק-אאוט';
+
 function rowFromUnit(unit, bookings, today) {
   const { booking, arrivalToday, nextStay, hold, holdLabel } = selectPriorityStay(bookings, unit.id, today);
   const desk = priorityDeskGuests(bookings, unit.id, today);
@@ -404,6 +406,7 @@ function rowFromUnit(unit, bookings, today) {
   const out = guestSide(current, today, 'out');
   const inn = guestSide(incoming, today, 'in');
   const badge = unitDisplayStatus(unit, bookings, today);
+  const checkoutAlertAt = unackedCheckoutToday(unit, bookings, today);
   const stay = lodgingKey(unit);
   const clean = cleaningKey(unit);
   const dated = primary || hold;
@@ -424,6 +427,7 @@ function rowFromUnit(unit, bookings, today) {
     letter: ramotLetterRank(unit.id, unit.name),
     unitType: UNIT_TYPE[unit.unit_type] || unit.unit_type || 'יחידה',
     stayKey: stay,
+    checkoutAlertAt: checkoutAlertAt || '',
     arrivalToday,
     holdLabel: holdLabel || '',
     roomStatus: desk.roomStatus,
@@ -849,11 +853,13 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       weekLabel: (() => {
         const staffName = draft.staff != null ? draft.staff : row.staff;
         const cleanKey = draft.clean || row.cleanKey;
+        if (row.checkoutAlertAt && !row.holdLabel && !draft.weekMark && !draft.clean && !draft.stay && draft.staff == null) return CHECKOUT_PILL_LABEL;
         const isProgress = draft.weekMark === 'in_progress' || (!draft.weekMark && !row.holdLabel && (cleanKey === 'IN_PROGRESS' || liveWeekKey(draft.stay || row.stayKey, cleanKey, row.reason) === 'in_progress'));
         if (isProgress) return staffName ? `בנקיון | ${staffName}` : 'בנקיון';
         if (draft.weekMark) return (WEEK_STATUSES.find((choice) => choice.key === draft.weekMark) || {}).label || row.clean;
         return row.holdLabel || (WEEK_STATUSES.find((choice) => choice.key === liveWeekKey(draft.stay || row.stayKey, clean, row.reason)) || {}).label || row.clean;
       })(),
+      checkoutAlert: Boolean(row.checkoutAlertAt && !row.holdLabel && !draft.weekMark && !draft.clean && !draft.stay && draft.staff == null),
       weekDirty: Boolean(draft.weekMark),
       stayDirty: Boolean(draft.stay && draft.stay !== row.stayKey),
       cleanDirty: Boolean(draft.clean && draft.clean !== row.cleanKey),
@@ -1749,7 +1755,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         <button type="button" className="tb-btn" onClick={() => window.open('/price-list.html', '_blank', 'noopener')}><Printer size={14} /> מחירון</button>
         <button type="button" className="tb-btn is-highlight" onClick={() => window.open('/qr-stickers.html#work-order', '_blank', 'noopener')} title="טופס הזמנת עבודה מספק A4 להדפסה"><FileText size={14} /> הזמנת עבודה</button>
         <button type="button" className="tb-btn" onClick={() => printDailyDutyReport({ dateStr: today, kind: 'both', area: 'all', bookings, units })}><Printer size={14} /> דוח יומי מלא</button>
-        <button type="button" className="tb-btn" onClick={() => printCashDayReport(bookings, units, today)}><Printer size={14} /> דוח מזומנים</button>
+        <button type="button" className="tb-btn" onClick={() => printCashDayReport(bookings, units, previousCashWeek(today))}><Printer size={14} /> דוח מזומנים</button>
         <button type="button" className="tb-btn" onClick={() => printDailyDutyReport({ dateStr: today, kind: 'morning', area: 'all', bookings, units })}><Printer size={14} /> תחילת יום</button>
       </div>
       {view === 'cashflow' && showCashflow ? (
@@ -1765,7 +1771,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
           <PriorityForms
             onOpenWord={() => setView('docs')}
             onPrintDutyReport={() => printDailyDutyReport({ dateStr: today, kind: 'both', area: 'all', bookings, units })}
-            onPrintCashReport={() => printCashDayReport(bookings, units, today)}
+            onPrintCashReport={() => printCashDayReport(bookings, units, previousCashWeek(today))}
             onPrintMorningReport={() => printDailyDutyReport({ dateStr: today, kind: 'morning', area: 'all', bookings, units })}
           />
         </div>
@@ -2058,7 +2064,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                           onClick={(event) => openEditor(event, row, 'week')}
                         >
                           <span className="unit-name">{row.name}</span>
-                          {row.weekLabel ? <em className={`clean-badge ${toneOf(row.weekLabel)}`}>{row.weekLabel}{row.weekDirty ? ' *' : ''}</em> : null}
+                          {row.weekLabel ? <em className={`clean-badge ${toneOf(row.weekLabel)}${row.checkoutAlert ? ' is-checkout-alert' : ''}`}>{row.weekLabel}{row.weekDirty ? ' *' : ''}</em> : null}
                         </button>
                       </td>
                       {horizon.map((day) => {
