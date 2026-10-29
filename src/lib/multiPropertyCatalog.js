@@ -439,8 +439,8 @@ export const PROPERTY_THEMES = {
       'טלוויזיה עם יס ו-Wi-Fi'
     ],
     units: [
-      { id: 'k685', propertyId: 'nofim', name: 'נופים בלבן · בקתה 1', type: 'cabin', maxOccupancy: 4, basePrice: 750, weekendPrice: 1200, description: 'בקתת עץ רומנטית ומרווחת עם בריכה פרטית וג׳קוזי מול הכנרת.', features: ['זוג + 2', 'בריכה פרטית מחוממת ל-28°', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס'], images: ['/resorts/nofim.jpg', '/resorts/gallery/nofim/nofim-suite-jacuzzi.jpg'] },
-      { id: 'k686', propertyId: 'nofim', name: 'נופים בלבן · בקתה 2', type: 'cabin', maxOccupancy: 4, basePrice: 750, weekendPrice: 1200, description: 'בקתת עץ יוקרתית עם בריכה פרטית ונוף פנורמי.', features: ['זוג + 2', 'בריכה פרטית מחוממת ל-28°', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס'], images: ['/resorts/gallery/nofim/nofim-pool-wide.jpg', '/resorts/gallery/nofim/nofim-terrace-lake.jpg'] }
+      { id: 'k685', propertyId: 'nofim', name: 'נופים בלבן · בקתה 1', type: 'cabin', maxOccupancy: 4, basePrice: 750, weekendPrice: 1200, description: 'בקתת עץ מעוצבת ומרווחת בלבן עם קומת גלריית שינה, בריכה פרטית וג׳קוזי מול הכנרת.', features: ['זוג + 2', 'קומת גלריה מרווחת', 'בריכה פרטית מחוממת ל-28°', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס'], images: ['/resorts/nofim.jpg', '/resorts/gallery/nofim/nofim-suite-jacuzzi.jpg'] },
+      { id: 'k686', propertyId: 'nofim', name: 'נופים בלבן · בקתה 2', type: 'cabin', maxOccupancy: 4, basePrice: 750, weekendPrice: 1200, description: 'בקתת עץ יוקרתית בלבן עם קומת גלריה, בריכה פרטית ונוף פנורמי.', features: ['זוג + 2', 'קומת גלריה מרווחת', 'בריכה פרטית מחוממת ל-28°', 'ג׳קוזי ספא', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס'], images: ['/resorts/nofim.jpg', '/resorts/gallery/nofim/nofim-terrace-lake.jpg'] }
     ]
   },
 
