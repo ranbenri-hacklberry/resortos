@@ -2,9 +2,55 @@
  * Client API layer for MIALEES RESORT and multi-property booking engine.
  * Calls relative endpoints (/api/...) on Cloudflare Edge without exposing any DB credentials.
  * Implements strict zero-guessing on availability errors (503 -> WhatsApp banner).
+ * Features 15-minute client cache (900,000 ms) with manual re-sync option.
  */
 
-export async function fetchLiveAvailability({ unitId, propertyId, from, to }) {
+export const AVAILABILITY_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const availabilityCache = new Map();
+
+export function clearAvailabilityCache(propertyId) {
+  if (propertyId) {
+    for (const key of availabilityCache.keys()) {
+      if (key.startsWith(`${propertyId}:`)) {
+        availabilityCache.delete(key);
+      }
+    }
+  } else {
+    availabilityCache.clear();
+  }
+}
+
+export function getAvailabilityCacheInfo(propertyId, unitId) {
+  const prefix = `${propertyId || 'all'}:${unitId || 'all'}:`;
+  for (const [k, entry] of availabilityCache.entries()) {
+    if (k.startsWith(prefix)) {
+      return {
+        cached: true,
+        lastSyncedAt: entry.timestamp,
+        ageMs: Date.now() - entry.timestamp,
+        expiresInMs: Math.max(0, AVAILABILITY_CACHE_TTL_MS - (Date.now() - entry.timestamp))
+      };
+    }
+  }
+  return { cached: false, lastSyncedAt: null, ageMs: null, expiresInMs: 0 };
+}
+
+export async function fetchLiveAvailability({ unitId, propertyId, from, to, forceRefresh = false }) {
+  const cacheKey = `${propertyId || 'all'}:${unitId || 'all'}:${from || ''}:${to || ''}`;
+  const now = Date.now();
+
+  // If cached and fresh (< 15 mins) and not forceRefresh, return immediately
+  if (!forceRefresh && availabilityCache.has(cacheKey)) {
+    const entry = availabilityCache.get(cacheKey);
+    if (now - entry.timestamp < AVAILABILITY_CACHE_TTL_MS) {
+      return {
+        ...entry.data,
+        fromCache: true,
+        lastSyncedAt: entry.timestamp
+      };
+    }
+  }
+
   const params = new URLSearchParams();
   if (unitId) params.set('unit_id', unitId);
   if (propertyId) params.set('property_id', propertyId);
@@ -20,31 +66,59 @@ export async function fetchLiveAvailability({ unitId, propertyId, from, to }) {
 
     if (res.status === 503) {
       const err = await res.json().catch(() => ({}));
+      if (availabilityCache.has(cacheKey)) {
+        const stale = availabilityCache.get(cacheKey);
+        return {
+          ...stale.data,
+          fromCache: true,
+          isStale: true,
+          lastSyncedAt: stale.timestamp,
+          warning: 'הוצגה תמונת יומן אחרונה (חיבור הרשת במתחם ממתין לחידוש)'
+        };
+      }
       return {
         ok: false,
         isOffline: true,
         message: err.message || 'זמנית לא ניתן לאמת זמינות מול היומן. אנא פנו ישירות בוואטסאפ של המתחם.',
-        blockedRanges: []
+        blockedRanges: [],
+        lastSyncedAt: null
       };
     }
 
     if (!res.ok) {
-      return { ok: false, isOffline: false, blockedRanges: [] };
+      return { ok: false, isOffline: false, blockedRanges: [], lastSyncedAt: null };
     }
 
     const data = await res.json();
-    return {
+    const result = {
       ok: true,
       isOffline: false,
-      blockedRanges: data.blockedRanges || []
+      blockedRanges: data.blockedRanges || [],
+      fromCache: false,
+      lastSyncedAt: now
     };
+
+    // Store in cache
+    availabilityCache.set(cacheKey, { data: result, timestamp: now });
+    return result;
   } catch (err) {
     console.warn('[Availability API Fetch]', err?.message || err);
+    if (availabilityCache.has(cacheKey)) {
+      const stale = availabilityCache.get(cacheKey);
+      return {
+        ...stale.data,
+        fromCache: true,
+        isStale: true,
+        lastSyncedAt: stale.timestamp,
+        warning: 'הוצגה תמונת יומן אחרונה'
+      };
+    }
     return {
       ok: false,
       isOffline: true,
       message: 'לא התקבלה תגובה מיומן התפוסה. ניתן לבצע בדיקה וסגירה מיידית בוואטסאפ.',
-      blockedRanges: []
+      blockedRanges: [],
+      lastSyncedAt: null
     };
   }
 }

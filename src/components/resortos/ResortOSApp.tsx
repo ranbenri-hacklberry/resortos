@@ -34,7 +34,8 @@ import { SupplierDealCard, B2BDealItem } from './SupplierDealCard';
 import { HostPropertyEditor, ManagedProperty } from './HostPropertyEditor';
 import { ChloeHostChat } from './ChloeHostChat';
 import { AdminFunnelDashboard } from './AdminFunnelDashboard';
-import { listAllProperties, PropertyConfig } from '../../lib/multiPropertyCatalog';
+import { listAllProperties, getPropertyConfig, PropertyConfig } from '../../lib/multiPropertyCatalog';
+import { CalendarAvailabilityModal } from '../mialees/CalendarAvailabilityModal';
 import { generateSeededLeads, getWeekendRealLeads } from '../../lib/seededLeadsData';
 import { toIsraeliPhone, formatMaskedPhone } from './phoneUtils';
 import { supabase } from '../../lib/supabaseClient';
@@ -403,6 +404,9 @@ export function ResortOSApp() {
   });
   const [searchGuests, setSearchGuests] = useState('all');
   const [searchNotice, setSearchNotice] = useState<string | null>(null);
+
+  // Calendar Availability Popup Modal State
+  const [calendarModalProperty, setCalendarModalProperty] = useState<any>(null);
 
   // Reduced motion detection
   useEffect(() => {
@@ -1460,7 +1464,8 @@ export function ResortOSApp() {
                           property={prop}
                           isPreviewMode={false}
                           onOpenBookingModal={(p) => {
-                            window.location.href = `/mialees.html?property=${p.slug}`;
+                            const config = getPropertyConfig(p.slug || p.id);
+                            setCalendarModalProperty(config);
                           }}
                         />
                       </div>
@@ -2249,6 +2254,14 @@ export function ResortOSApp() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Live Calendar Availability Modal with Multi-Cabin Support & 15-Minute Sync */}
+      {calendarModalProperty && (
+        <CalendarAvailabilityModal
+          property={calendarModalProperty}
+          onClose={() => setCalendarModalProperty(null)}
+        />
       )}
     </div>
   );
