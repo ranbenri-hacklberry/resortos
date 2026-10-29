@@ -193,6 +193,9 @@ export const PROPERTY_THEMES = {
       gold: '#C5A880'
     },
     heroImage: '/resorts/toscana.jpg',
+    galleryImages: [
+      '/resorts/toscana.jpg'
+    ],
     amenities: [
       'בריכה מרכזית מחוממת ל-28° לכל המתחם',
       'ג׳קוזי ספא ענק',
@@ -213,7 +216,8 @@ export const PROPERTY_THEMES = {
         basePrice: 600,
         weekendPrice: 900,
         description: 'בקתת עץ איטלקית כפרית ורחבת ידיים עם ג׳קוזי ספא פנימי, מרפסת דק מעץ ומטבחון מאובזר.',
-        features: ['זוג + 2', 'ג׳קוזי ספא פנימי', 'מטבחון, נספרסו, מיקרוגל, מקרר ומנגל', 'טלוויזיה עם יס ו-Wi-Fi']
+        features: ['זוג + 2', 'ג׳קוזי ספא פנימי', 'מטבחון, נספרסו, מיקרוגל, מקרר ומנגל', 'טלוויזיה עם יס ו-Wi-Fi'],
+        images: ['/resorts/toscana.jpg']
       },
       {
         id: 'k688',
@@ -224,7 +228,8 @@ export const PROPERTY_THEMES = {
         basePrice: 600,
         weekendPrice: 900,
         description: 'בקתת עץ משפחתית חמימה מול מדשאות ירוקות ובריכת השחייה של המתחם.',
-        features: ['זוג + 2', 'ג׳קוזי ספא מפנק', 'מטבחון מאובזר, נספרסו ומנגל', 'טלוויזיה עם יס ו-Wi-Fi']
+        features: ['זוג + 2', 'ג׳קוזי ספא מפנק', 'מטבחון מאובזר, נספרסו ומנגל', 'טלוויזיה עם יס ו-Wi-Fi'],
+        images: ['/resorts/toscana.jpg']
       },
       {
         id: 'k689',
@@ -235,7 +240,8 @@ export const PROPERTY_THEMES = {
         basePrice: 850,
         weekendPrice: 1500,
         description: 'בקתת שאטו ענקית ומפוארת למשפחות וקבוצות, כוללת סאונה יבשה פרטית, ג׳קוזי ספא ומטבח רחב.',
-        features: ['זוג + 5', 'סאונה יבשה פרטית', 'ג׳קוזי ספא', 'מטבחון מאובזר, נספרסו ומנגל', 'טלוויזיה עם יס ו-Wi-Fi']
+        features: ['זוג + 5', 'סאונה יבשה פרטית', 'ג׳קוזי ספא', 'מטבחון מאובזר, נספרסו ומנגל', 'טלוויזיה עם יס ו-Wi-Fi'],
+        images: ['/resorts/toscana.jpg']
       }
     ]
   },
