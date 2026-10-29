@@ -125,6 +125,7 @@ export function extractAllCashBookings(bookings = [], units = []) {
       checkIn,
       checkOut,
       primaryDate,
+      cashDates,
       guestName: booking.guest_name || 'אורח',
       guestPhone: booking.guest_phone || '',
       guestIdNumber: booking.guest_id_number || (stored.find((p) => p.payer_id)?.payer_id) || '',
@@ -169,9 +170,51 @@ export function cashDayTotalAgorot(rows = []) {
   return (rows || []).reduce((sum, row) => sum + (Number(row.amountAgorot) || 0), 0);
 }
 
+function isoDay(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/** Previous Israeli week, Sunday through Saturday, relative to a YYYY-MM-DD day. */
+export function previousCashWeek(todayStr) {
+  const match = String(todayStr || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const base = match
+    ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12)
+    : new Date();
+  const thisSunday = new Date(base);
+  thisSunday.setDate(base.getDate() - base.getDay());
+  const from = new Date(thisSunday);
+  from.setDate(thisSunday.getDate() - 7);
+  const to = new Date(thisSunday);
+  to.setDate(thisSunday.getDate() - 1);
+  return { from: isoDay(from), to: isoDay(to) };
+}
+
+export function cashWeekSelection(range) {
+  if (!range?.from || !range?.to) return '';
+  return `week:${range.from}:${range.to}`;
+}
+
+export function rowMatchesCashSelection(row, selected) {
+  if (!selected || selected === 'all') return true;
+  const week = String(selected).match(/^week:(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})$/);
+  if (week) {
+    const dates = [
+      ...(Array.isArray(row?.cashDates) ? row.cashDates : []),
+      row?.primaryDate,
+      row?.checkIn
+    ].filter(Boolean);
+    return dates.some((day) => day >= week[1] && day <= week[2]);
+  }
+  return row?.checkIn === selected || row?.primaryDate === selected;
+}
+
 export function buildCashDayReportHtml(bookings, units, initialDateStr = '') {
   const allRows = extractAllCashBookings(bookings, units);
-  const initialDay = dayOf(initialDateStr);
+  const weekRange = initialDateStr && typeof initialDateStr === 'object' ? initialDateStr : null;
+  const initialDay = weekRange ? '' : dayOf(initialDateStr);
 
   const datesSet = new Set();
   allRows.forEach((r) => {
@@ -181,7 +224,10 @@ export function buildCashDayReportHtml(bookings, units, initialDateStr = '') {
   const availableDates = Array.from(datesSet).sort();
 
   const initialDateHasRows = initialDay && allRows.some((r) => r.checkIn === initialDay || r.primaryDate === initialDay);
-  const defaultSelection = initialDateHasRows ? initialDay : 'all';
+  const defaultSelection = weekRange ? cashWeekSelection(weekRange) : (initialDateHasRows ? initialDay : 'all');
+  const weekLabel = weekRange
+    ? `השבוע הקודם · ${formatDateShort(weekRange.from)}–${formatDateShort(weekRange.to)}`
+    : '';
 
   const rowsJson = JSON.stringify(allRows).replace(/</g, '\\u003c');
   const availableDatesJson = JSON.stringify(availableDates);
@@ -387,6 +433,7 @@ export function buildCashDayReportHtml(bookings, units, initialDateStr = '') {
       <label for="dateFilter" style="font-size: 12px; font-weight: 600; margin-left: 6px;">סינון מועד אירוח:</label>
       <select id="dateFilter" class="tb-select" onchange="renderReport(this.value)">
         <option value="all">כל תנועות המזומן בדוח (${allRows.length} יחידות)</option>
+        ${weekRange ? `<option value="${defaultSelection}">${weekLabel}</option>` : ''}
       </select>
     </div>
     <div>
@@ -433,6 +480,7 @@ export function buildCashDayReportHtml(bookings, units, initialDateStr = '') {
     const allData = ${rowsJson};
     const availableDates = ${availableDatesJson};
     const defaultSelection = "${defaultSelection}";
+    const rowMatches = ${rowMatchesCashSelection.toString()};
 
     function formatNumber(num) {
       return (Math.round(num || 0)).toLocaleString('he-IL');
@@ -457,10 +505,19 @@ export function buildCashDayReportHtml(bookings, units, initialDateStr = '') {
       select.value = defaultSelection;
     }
 
+    function weekLabel(selected) {
+      const m = String(selected || '').match(/^week:(\\d{4}-\\d{2}-\\d{2}):(\\d{4}-\\d{2}-\\d{2})$/);
+      return m ? ('שבוע ' + formatDateShort(m[1]) + '–' + formatDateShort(m[2])) : '';
+    }
+
     function renderReport(selectedDate) {
       let filtered = allData;
-      if (selectedDate && selectedDate !== 'all') {
-        filtered = allData.filter(r => r.checkIn === selectedDate || r.primaryDate === selectedDate);
+      const weekText = weekLabel(selectedDate);
+      if (weekText) {
+        filtered = allData.filter(r => rowMatches(r, selectedDate));
+        document.getElementById('bannerSubtitle').textContent = 'על פי רישומי המערכת | ' + weekText;
+      } else if (selectedDate && selectedDate !== 'all') {
+        filtered = allData.filter(r => rowMatches(r, selectedDate));
         document.getElementById('bannerSubtitle').textContent = 'על פי רישומי המערכת | תאריך אירוח: ' + formatDateShort(selectedDate);
       } else {
         const firstDate = allData[0]?.checkIn || allData[0]?.primaryDate;

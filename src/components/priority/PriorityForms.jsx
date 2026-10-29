@@ -804,9 +804,9 @@ export default function PriorityForms({
     {
       id: 'report-cash-day',
       category: 'reports',
-      title: 'דוח קופת מזומנים וגבייה (Cash Flow Day)',
-      subtitle: 'דוח מעקב גביית מזומנים לפי יחידות',
-      description: 'הדפסה מרוכזת של כל תקבולי המזומן שנגבו היום מול יתרות פתוחות ופירוט תשלומים מול אורחים.',
+      title: 'דוח קופת מזומנים וגבייה (שבועי)',
+      subtitle: 'ברירת המחדל: השבוע הקודם, ראשון עד שבת',
+      description: 'הדפסה מרוכזת של תקבולי המזומן מהשבוע הקודם, מול יתרות פתוחות ופירוט תשלומים מול אורחים. אפשר לבחור יום אחר מתוך הדוח.',
       formatBadge: 'דוח חי להדפסה',
       tagColor: 'purple',
       isAction: true,

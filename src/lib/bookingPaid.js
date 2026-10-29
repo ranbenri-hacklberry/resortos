@@ -136,3 +136,43 @@ export function awaitingCashCollection(booking) {
   if (mode === 'CASH' && !hasRecordedReceipt(booking) && status !== 'PAID') return true;
   return false;
 }
+
+export function applyBookingUpsell(booking, { is_birthday, birthday_note, upsell_description, upsell_price } = {}) {
+  if (!booking) return null;
+  const prevUpsell = Number(booking.upsell_price) || 0;
+  const hasNewUpsell = upsell_price !== '' && upsell_price != null && !Number.isNaN(Number(upsell_price));
+  const newUpsell = hasNewUpsell ? Math.max(0, Number(upsell_price)) : null;
+  const effectiveNew = newUpsell || 0;
+  const deltaAgorot = Math.round((effectiveNew - prevUpsell) * 100);
+
+  const prevTotalAgorot = Number(booking.total_price_agorot) || 0;
+  const newTotalAgorot = Math.max(0, prevTotalAgorot + deltaAgorot);
+
+  let paidAgorot = recordedPaidAgorot(booking);
+  if (booking.payment_status === 'PAID' && paidAgorot < prevTotalAgorot) {
+    paidAgorot = prevTotalAgorot;
+  }
+
+  let nextPaymentStatus = booking.payment_status;
+  if (deltaAgorot !== 0) {
+    if (newTotalAgorot > 0 && paidAgorot + 50 >= newTotalAgorot) {
+      nextPaymentStatus = 'PAID';
+    } else if (paidAgorot > 0) {
+      nextPaymentStatus = 'PARTIAL';
+    } else {
+      nextPaymentStatus = booking.payment_status === 'PAID' ? 'PARTIAL' : (booking.payment_status || 'UNPAID');
+    }
+  }
+
+  return {
+    ...booking,
+    total_price_agorot: newTotalAgorot,
+    payment_status: nextPaymentStatus,
+    is_birthday: is_birthday !== undefined ? Boolean(is_birthday) : Boolean(booking.is_birthday),
+    birthday_note: birthday_note !== undefined ? (birthday_note ? String(birthday_note).trim() : null) : (booking.birthday_note || null),
+    upsell_description: upsell_description !== undefined ? (upsell_description ? String(upsell_description).trim() : null) : (booking.upsell_description || null),
+    upsell_price: newUpsell,
+    updated_at: new Date().toISOString()
+  };
+}
+

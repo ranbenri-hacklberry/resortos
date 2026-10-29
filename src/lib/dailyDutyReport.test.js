@@ -210,6 +210,29 @@ describe('listDutyBoardRows', () => {
       .find((row) => row.guest === 'יצא בלבד');
     expect(leaving?.checkoutHour).toBe('11:00');
   });
+
+  it('exposes birthday and upsell details on duty rows', () => {
+    const celebrationBookings = [
+      {
+        id: 'bday-upsell',
+        unit_id: 'hill-1',
+        guest_name: 'חוגג יום הולדת',
+        check_in_date: '2026-08-26',
+        check_out_date: '2026-08-28',
+        booking_status: 'CONFIRMED',
+        is_birthday: true,
+        birthday_note: 'בלונים ועוגת שוקולד',
+        upsell_description: 'ארוחת בוקר זוגית ויציאה מאוחרת',
+        upsell_price: 250
+      }
+    ];
+    const rows = listDutyBoardRows({ bookings: celebrationBookings, units, dateStr: '2026-08-26', tab: 'checkins' });
+    expect(rows[0].isBirthday).toBe(true);
+    expect(rows[0].birthdayNote).toBe('בלונים ועוגת שוקולד');
+    expect(rows[0].hasUpsell).toBe(true);
+    expect(rows[0].upsellDescription).toBe('ארוחת בוקר זוגית ויציאה מאוחרת');
+    expect(rows[0].upsellPrice).toBe(250);
+  });
 });
 
 describe('housekeeping WhatsApp', () => {

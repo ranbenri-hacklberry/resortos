@@ -333,13 +333,10 @@ export function createMcpHandler(deps) {
         throw missing;
       }
       if (name === 'resortos_guest_page_print') {
-        return {
-          ...stamp,
-          ...GUEST_PRINT_ABSENT,
-          ...(loaded.mode === 'list'
-            ? { items: loaded.rows.map(projectGuestPageSummary) }
-            : projectGuestPageSummary(loaded.rows[0]))
-        };
+        if (loaded.mode === 'list') {
+          return { ...stamp, ...GUEST_PRINT_ABSENT, items: loaded.rows.map(projectGuestPageSummary) };
+        }
+        return { ...stamp, ...projectGuestPage(loaded.rows[0]), ...GUEST_PRINT_ABSENT };
       }
       if (loaded.mode === 'list') {
         return { ...stamp, items: loaded.rows.map(projectGuestPageSummary), print_url: null };

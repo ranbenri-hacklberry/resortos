@@ -51,7 +51,7 @@ async function rowsFromPostgrest(env, tail) {
     `/hotelos_bookings?tenant_id=eq.${tenantId}`,
     'deleted_at=is.null',
     `guest_phone=like.*${encodeURIComponent(tail)}*`,
-    'select=id,unit_id,guest_name,guest_phone,check_in_date,check_out_date,booking_status,adults_count,children_count,special_requests',
+    'select=id,unit_id,guest_name,guest_phone,check_in_date,check_out_date,booking_status,adults_count,children_count,special_requests,is_birthday,birthday_note,upsell_description,upsell_price',
     'order=check_in_date.asc',
     'limit=40'
   ].join('&');

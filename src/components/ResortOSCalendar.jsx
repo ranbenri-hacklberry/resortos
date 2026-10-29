@@ -85,8 +85,7 @@ import {
 } from '../lib/unitStatus';
 import UnitOpsStatusSheet from './UnitOpsStatusSheet';
 import { formatIlsFromAgorot, hypAccountOf, isValidIsraeliId, listClearingPayments, mergeClearingPayments, normalizeIsraeliId } from '../lib/clearingPayments';
-import { cashDayTotalAgorot, cashPaymentsOnDate, printCashDayReport } from '../lib/cashDayReport';
-import { awaitingBankReview, awaitingCashCollection, dueAgorotOf, hasRecordedReceipt, isFullyPaid, kinorotSettlementKind, paidIlsOfBooking, paymentStatusAfterPaid, recordedClearingPayments, recordedPaidAgorot } from '../lib/bookingPaid';
+import { applyBookingUpsell, awaitingBankReview, awaitingCashCollection, dueAgorotOf, hasRecordedReceipt, isFullyPaid, kinorotSettlementKind, paidIlsOfBooking, paymentStatusAfterPaid, recordedClearingPayments, recordedPaidAgorot } from '../lib/bookingPaid';
 import GuestCommsPanel, { PresenceDot } from './GuestCommsPanel';
 import ClearingPaymentsList from './ClearingPaymentsList';
 import CleaningChecklistModal from './CleaningChecklistModal';
@@ -663,7 +662,11 @@ export default function ResortOSCalendar({
     custom_nightly_rate: 850,
     total_price_ils: 1700,
     deposit_ils: 340,
-    channel_source: 'DIRECT'
+    channel_source: 'DIRECT',
+    is_birthday: false,
+    birthday_note: '',
+    upsell_description: '',
+    upsell_price: ''
   });
 
   // Edit Reservation Form State
@@ -1219,7 +1222,11 @@ export default function ResortOSCalendar({
         getDaysDiff(booking.check_in_date, booking.check_out_date)
       ),
     payment_status: booking.payment_status || 'UNPAID',
-    channel_source: booking.channel_source || 'DIRECT'
+    channel_source: booking.channel_source || 'DIRECT',
+    is_birthday: Boolean(booking.is_birthday),
+    birthday_note: booking.birthday_note || '',
+    upsell_description: booking.upsell_description || '',
+    upsell_price: booking.upsell_price != null ? Number(booking.upsell_price) : ''
   });
 
   // 2. EXISTING BOOKING CLICK -> Open Existing Booking Details & Edit Modal
@@ -1530,6 +1537,10 @@ export default function ResortOSCalendar({
       payment_status: depositAgorot > 0 ? (depositAgorot >= totalPriceAgorot ? 'PAID' : 'PARTIAL') : 'UNPAID',
       channel_source: newFormData.channel_source,
       checkout_token: token,
+      is_birthday: Boolean(newFormData.is_birthday),
+      birthday_note: newFormData.birthday_note ? String(newFormData.birthday_note).trim() : null,
+      upsell_description: newFormData.upsell_description ? String(newFormData.upsell_description).trim() : null,
+      upsell_price: newFormData.upsell_price !== '' && newFormData.upsell_price != null ? Number(newFormData.upsell_price) : null,
       stay: {
         custom_nightly_rate_ils: Number(newFormData.custom_nightly_rate || 0)
       },
@@ -1582,7 +1593,7 @@ export default function ResortOSCalendar({
     const totalPriceAgorot = ilsToAgorot(editFormData.total_price_ils);
     const depositAgorot = ilsToAgorot(editFormData.deposit_ils);
 
-    const updatedBooking = {
+    const baseUpdated = {
       ...editingBooking,
       unit_id: editFormData.unit_id,
       guest_name: editFormData.guest_name,
@@ -1602,6 +1613,13 @@ export default function ResortOSCalendar({
       },
       updated_at: new Date().toISOString()
     };
+
+    const updatedBooking = applyBookingUpsell(baseUpdated, {
+      is_birthday: Boolean(editFormData.is_birthday),
+      birthday_note: editFormData.birthday_note,
+      upsell_description: editFormData.upsell_description,
+      upsell_price: editFormData.upsell_price !== '' && editFormData.upsell_price != null ? Number(editFormData.upsell_price) : null
+    });
 
     await db.bookings.put(updatedBooking);
     await pushBookingToCloud(updatedBooking);
@@ -2806,6 +2824,14 @@ export default function ResortOSCalendar({
             const cube = unitNameFrame(frameKey, isLight);
 
             const lockbox = lockboxCodeForUnit(unit);
+            const activeUnitBooking = (rawBookings || []).find((b) => (
+              b.unit_id === unit.id &&
+              b.booking_status !== 'CANCELED' &&
+              !b.deleted_at &&
+              ((todayStr >= String(b.check_in_date || '').slice(0, 10) && todayStr < String(b.check_out_date || '').slice(0, 10)) || String(b.check_in_date || '').slice(0, 10) === todayStr)
+            ));
+            const unitHasBirthday = Boolean(activeUnitBooking?.is_birthday);
+            const unitHasUpsell = Boolean(activeUnitBooking?.upsell_description || (Number(activeUnitBooking?.upsell_price) > 0));
 
             return (
               <div
@@ -2831,7 +2857,7 @@ export default function ResortOSCalendar({
                 <div
                   role="button"
                   tabIndex={0}
-                  title={lockbox ? `${fullUnitName} · ${room.label} · כספת ${lockbox}` : `${fullUnitName} · ${room.label}`}
+                  title={`${lockbox ? `${fullUnitName} · ${room.label} · כספת ${lockbox}` : `${fullUnitName} · ${room.label}`}${unitHasBirthday ? ' · 🎂 יום הולדת' : ''}${unitHasUpsell ? ' · 🎁 שדרוג' : ''}`}
                   onClick={(event) => {
                     event.stopPropagation();
                     openOpsSheet(unit.id);
@@ -2908,6 +2934,20 @@ export default function ResortOSCalendar({
                       textOverflow: 'ellipsis'
                     }}>
                       {lockbox}
+                    </div>
+                  ) : null}
+                  {(unitHasBirthday || unitHasUpsell) ? (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 2,
+                      fontSize: '0.62rem',
+                      lineHeight: 1,
+                      marginTop: 1
+                    }}>
+                      {unitHasBirthday ? <span title={activeUnitBooking.birthday_note ? `יום הולדת: ${activeUnitBooking.birthday_note}` : 'חוגג יום הולדת 🎂'}>🎂</span> : null}
+                      {unitHasUpsell ? <span title={activeUnitBooking.upsell_description ? `שדרוג: ${activeUnitBooking.upsell_description}${activeUnitBooking.upsell_price ? ` (₪${activeUnitBooking.upsell_price})` : ''}` : 'שדרוג 🎁'}>🎁</span> : null}
                     </div>
                   ) : null}
                 </div>
@@ -3140,6 +3180,26 @@ export default function ResortOSCalendar({
                       <Banknote size={11} strokeWidth={2.4} aria-label="מזומן בהגעה" />
                     ) : null}
                     {!hold && bookingHasCrib(booking) ? <Baby size={11} strokeWidth={2.4} aria-label="מיטת תינוק" /> : null}
+                    {!hold && booking.is_birthday ? (
+                      <span
+                        role="img"
+                        aria-label={`יום הולדת${booking.birthday_note ? `: ${booking.birthday_note}` : ''}`}
+                        title={`יום הולדת${booking.birthday_note ? `: ${booking.birthday_note}` : ''}`}
+                        style={{ fontSize: 11, lineHeight: 1, flexShrink: 0 }}
+                      >
+                        🎂
+                      </span>
+                    ) : null}
+                    {!hold && (booking.upsell_description || Number(booking.upsell_price) > 0) ? (
+                      <span
+                        role="img"
+                        aria-label={`שדרוג${booking.upsell_description ? `: ${booking.upsell_description}` : ''}${booking.upsell_price ? ` (₪${booking.upsell_price})` : ''}`}
+                        title={`שדרוג${booking.upsell_description ? `: ${booking.upsell_description}` : ''}${booking.upsell_price ? ` (₪${booking.upsell_price})` : ''}`}
+                        style={{ fontSize: 11, lineHeight: 1, flexShrink: 0 }}
+                      >
+                        🎁
+                      </span>
+                    ) : null}
                   </div>
                 );
               })
@@ -3274,8 +3334,12 @@ export default function ResortOSCalendar({
                           style={{ marginTop: '0.2rem', width: 18, height: 18, accentColor: '#6366F1' }}
                         />
                         <span>
-                          <span style={{ fontWeight: 800, display: 'block' }}>{booking.guest_name || 'אורח'}</span>
-                          <span style={{ fontSize: '0.8rem', color: themeStyles.textMuted }}>
+                          <span style={{ fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            <span>{booking.guest_name || 'אורח'}</span>
+                            {booking.is_birthday ? <span title="יום הולדת 🎂">🎂</span> : null}
+                            {(booking.upsell_description || Number(booking.upsell_price) > 0) ? <span title="שדרוג 🎁">🎁</span> : null}
+                          </span>
+                          <span style={{ fontSize: '0.8rem', color: themeStyles.textMuted, display: 'block' }}>
                             {unitName} · יציאה {formatDisplayDate(booking.check_out_date)}
                           </span>
                         </span>
@@ -3432,7 +3496,11 @@ export default function ResortOSCalendar({
                       }}
                     >
                       <div>
-                        <div style={{ fontWeight: 800 }}>{booking.guest_name || 'אורח'}</div>
+                        <div style={{ fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <span>{booking.guest_name || 'אורח'}</span>
+                          {booking.is_birthday ? <span title="יום הולדת 🎂">🎂</span> : null}
+                          {(booking.upsell_description || Number(booking.upsell_price) > 0) ? <span title="שדרוג 🎁">🎁</span> : null}
+                        </div>
                         <div style={{ fontSize: '0.8rem', color: themeStyles.textMuted }}>{unitName}</div>
                       </div>
                       <button
@@ -4094,6 +4162,50 @@ export default function ResortOSCalendar({
                         {guestNotes(editingBooking)}
                       </div>
                     ) : null}
+                    {(editingBooking.is_birthday || editFormData.is_birthday) ? (
+                      <div style={{
+                        marginTop: '0.45rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '6px 10px',
+                        borderRadius: 8,
+                        background: isLight ? '#FCE7F3' : 'rgba(236,72,153,0.18)',
+                        border: '1px solid rgba(236,72,153,0.35)',
+                        color: isLight ? '#9D174D' : '#F472B6',
+                        fontSize: '0.84rem',
+                        fontWeight: 800
+                      }}>
+                        <span style={{ fontSize: 16 }}>🎂</span>
+                        <span>חוגגים יום הולדת{(editFormData.birthday_note || editingBooking.birthday_note) ? `: ${editFormData.birthday_note || editingBooking.birthday_note}` : ''}</span>
+                      </div>
+                    ) : null}
+                    {(editFormData.upsell_description || editingBooking.upsell_description || Number(editFormData.upsell_price || editingBooking.upsell_price) > 0) ? (
+                      <div style={{
+                        marginTop: '0.45rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 8,
+                        padding: '6px 10px',
+                        borderRadius: 8,
+                        background: isLight ? '#EDE9FE' : 'rgba(139,92,246,0.18)',
+                        border: '1px solid rgba(139,92,246,0.35)',
+                        color: isLight ? '#5B21B6' : '#C4B5FD',
+                        fontSize: '0.84rem',
+                        fontWeight: 800
+                      }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 16 }}>🎁</span>
+                          <span>{editFormData.upsell_description || editingBooking.upsell_description || 'שדרוג מוסכם'}</span>
+                        </span>
+                        {Number(editFormData.upsell_price || editingBooking.upsell_price) > 0 ? (
+                          <span style={{ fontWeight: 900, whiteSpace: 'nowrap' }}>
+                            ₪{Number(editFormData.upsell_price || editingBooking.upsell_price).toLocaleString('he-IL')}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
 
                   {editingBooking?.booking_status !== 'CANCELED' ? (
@@ -4401,7 +4513,7 @@ export default function ResortOSCalendar({
                           window.alert(agentLockLabel(hold));
                           return;
                         }
-                        const confirmedBooking = {
+                        const confirmedBooking = applyBookingUpsell({
                           ...editingBooking,
                           guest_name: editFormData.guest_name || 'אורח (WhatsApp)',
                           guest_phone: editFormData.guest_phone,
@@ -4411,7 +4523,12 @@ export default function ResortOSCalendar({
                           booking_status: 'CONFIRMED',
                           payment_status: editFormData.payment_status || 'UNPAID',
                           updated_at: new Date().toISOString()
-                        };
+                        }, {
+                          is_birthday: editFormData.is_birthday,
+                          birthday_note: editFormData.birthday_note,
+                          upsell_description: editFormData.upsell_description,
+                          upsell_price: editFormData.upsell_price
+                        });
                         await db.bookings.put(confirmedBooking);
                         await pushBookingToCloud(confirmedBooking);
                         setIsEditingBookingDetails(false);
@@ -4638,6 +4755,117 @@ export default function ResortOSCalendar({
                 </div>
                 ) : null}
 
+                {/* Birthday & Upsell */}
+                <div style={{
+                  padding: '0.85rem 1rem',
+                  borderRadius: 12,
+                  border: `1px solid ${themeStyles.inputBorder}`,
+                  background: isLight ? 'rgba(0,0,0,0.02)' : 'rgba(255,255,255,0.02)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.75rem'
+                }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                    <label style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      fontSize: '0.88rem',
+                      fontWeight: 800,
+                      color: themeStyles.textPrimary,
+                      cursor: 'pointer'
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(editFormData.is_birthday)}
+                        onChange={(e) => setEditFormData({ ...editFormData, is_birthday: e.target.checked })}
+                        style={{ width: 17, height: 17, accentColor: '#EC4899', cursor: 'pointer' }}
+                      />
+                      <span>חוגגים יום הולדת 🎂</span>
+                    </label>
+                    {editFormData.is_birthday ? (
+                      <input
+                        type="text"
+                        placeholder="פרטים / מה הובטח (עוגה, בלונים, של מי...)"
+                        value={editFormData.birthday_note || ''}
+                        onChange={(e) => setEditFormData({ ...editFormData, birthday_note: e.target.value })}
+                        style={{
+                          width: '100%',
+                          padding: '0.55rem 0.65rem',
+                          borderRadius: '8px',
+                          background: themeStyles.inputBg,
+                          border: `1px solid ${themeStyles.inputBorder}`,
+                          color: themeStyles.textPrimary,
+                          fontSize: '0.85rem'
+                        }}
+                      />
+                    ) : null}
+                  </div>
+
+                  <div style={{ borderTop: `1px solid ${themeStyles.inputBorder}`, paddingTop: '0.65rem' }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 700, color: themeStyles.textMuted, marginBottom: '0.35rem' }}>
+                      שדרוגים ותוספות 🎁
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: '0.6rem' }}>
+                      <div>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 600, color: themeStyles.textMuted }}>מה סוכם עם האורח</label>
+                        <input
+                          type="text"
+                          placeholder="ארוחת בוקר, צ'ק-אאוט מאוחר, סידור..."
+                          value={editFormData.upsell_description || ''}
+                          onChange={(e) => setEditFormData({ ...editFormData, upsell_description: e.target.value })}
+                          style={{
+                            width: '100%',
+                            padding: '0.55rem 0.65rem',
+                            borderRadius: '8px',
+                            background: themeStyles.inputBg,
+                            border: `1px solid ${themeStyles.inputBorder}`,
+                            color: themeStyles.textPrimary,
+                            fontSize: '0.85rem'
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 600, color: themeStyles.textMuted }}>מחיר שדרוג (₪)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          placeholder="0"
+                          value={editFormData.upsell_price ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const newUpsell = val === '' ? 0 : Number(val) || 0;
+                            const oldUpsell = editFormData.upsell_price === '' || editFormData.upsell_price == null ? 0 : Number(editFormData.upsell_price) || 0;
+                            const delta = newUpsell - oldUpsell;
+                            const curTotal = Number(editFormData.total_price_ils || 0);
+                            const newTotal = Math.max(0, curTotal + delta);
+                            let nextStatus = editFormData.payment_status;
+                            if (delta > 0 && editFormData.payment_status === 'PAID') {
+                              nextStatus = 'PARTIAL';
+                            }
+                            setEditFormData({
+                              ...editFormData,
+                              upsell_price: val === '' ? '' : val,
+                              total_price_ils: newTotal,
+                              payment_status: nextStatus
+                            });
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '0.55rem 0.65rem',
+                            borderRadius: '8px',
+                            background: themeStyles.inputBg,
+                            border: `1px solid ${themeStyles.inputBorder}`,
+                            color: themeStyles.textPrimary,
+                            fontSize: '0.85rem'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 {canSeePayments && (editingBooking?.payment_mode || paymentProofUrl || paymentProofBusy) ? (
                   <div style={{
                     padding: '0.85rem 1rem',
@@ -4724,7 +4952,7 @@ export default function ResortOSCalendar({
                         window.alert(agentLockLabel(hold));
                         return;
                       }
-                      const confirmedBooking = {
+                      const confirmedBooking = applyBookingUpsell({
                         ...editingBooking,
                         guest_name: editFormData.guest_name || 'אורח (WhatsApp)',
                         guest_phone: editFormData.guest_phone,
@@ -4734,7 +4962,12 @@ export default function ResortOSCalendar({
                         booking_status: 'CONFIRMED',
                         payment_status: editFormData.payment_status || 'UNPAID',
                         updated_at: new Date().toISOString()
-                      };
+                      }, {
+                        is_birthday: editFormData.is_birthday ?? editingBooking.is_birthday,
+                        birthday_note: editFormData.birthday_note ?? editingBooking.birthday_note,
+                        upsell_description: editFormData.upsell_description ?? editingBooking.upsell_description,
+                        upsell_price: editFormData.upsell_price !== '' && editFormData.upsell_price != null ? editFormData.upsell_price : editingBooking.upsell_price
+                      });
                       await db.bookings.put(confirmedBooking);
                       await pushBookingToCloud(confirmedBooking);
                       forgetCardForm();
@@ -5517,6 +5750,100 @@ export default function ResortOSCalendar({
                   onDeposit={(value) => setNewFormData({ ...newFormData, deposit_ils: value })}
                 />
                 ) : null}
+
+                {/* Birthday & Upsell */}
+                <div style={{
+                  padding: '0.85rem 1rem',
+                  borderRadius: 12,
+                  border: `1px solid ${themeStyles.inputBorder}`,
+                  background: isLight ? 'rgba(0,0,0,0.02)' : 'rgba(255,255,255,0.02)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.75rem'
+                }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                    <label style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      fontSize: '0.88rem',
+                      fontWeight: 800,
+                      color: themeStyles.textPrimary,
+                      cursor: 'pointer'
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(newFormData.is_birthday)}
+                        onChange={(e) => setNewFormData({ ...newFormData, is_birthday: e.target.checked })}
+                        style={{ width: 17, height: 17, accentColor: '#EC4899', cursor: 'pointer' }}
+                      />
+                      <span>חוגגים יום הולדת 🎂</span>
+                    </label>
+                    {newFormData.is_birthday ? (
+                      <input
+                        type="text"
+                        placeholder="פרטים / מה הובטח (עוגה, בלונים, של מי...)"
+                        value={newFormData.birthday_note || ''}
+                        onChange={(e) => setNewFormData({ ...newFormData, birthday_note: e.target.value })}
+                        style={{
+                          width: '100%',
+                          padding: '0.55rem 0.65rem',
+                          borderRadius: '8px',
+                          background: themeStyles.inputBg,
+                          border: `1px solid ${themeStyles.inputBorder}`,
+                          color: themeStyles.textPrimary,
+                          fontSize: '0.85rem'
+                        }}
+                      />
+                    ) : null}
+                  </div>
+
+                  <div style={{ borderTop: `1px solid ${themeStyles.inputBorder}`, paddingTop: '0.65rem' }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 700, color: themeStyles.textMuted, marginBottom: '0.35rem' }}>
+                      שדרוגים ותוספות 🎁
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: '0.6rem' }}>
+                      <div>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 600, color: themeStyles.textMuted }}>מה סוכם עם האורח</label>
+                        <input
+                          type="text"
+                          placeholder="ארוחת בוקר, צ'ק-אאוט מאוחר, סידור..."
+                          value={newFormData.upsell_description || ''}
+                          onChange={(e) => setNewFormData({ ...newFormData, upsell_description: e.target.value })}
+                          style={{
+                            width: '100%',
+                            padding: '0.55rem 0.65rem',
+                            borderRadius: '8px',
+                            background: themeStyles.inputBg,
+                            border: `1px solid ${themeStyles.inputBorder}`,
+                            color: themeStyles.textPrimary,
+                            fontSize: '0.85rem'
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 600, color: themeStyles.textMuted }}>מחיר שדרוג (₪)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          placeholder="0"
+                          value={newFormData.upsell_price ?? ''}
+                          onChange={(e) => setNewFormData({ ...newFormData, upsell_price: e.target.value === '' ? '' : e.target.value })}
+                          style={{
+                            width: '100%',
+                            padding: '0.55rem 0.65rem',
+                            borderRadius: '8px',
+                            background: themeStyles.inputBg,
+                            border: `1px solid ${themeStyles.inputBorder}`,
+                            color: themeStyles.textPrimary,
+                            fontSize: '0.85rem'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
                 <button
                   type="submit"

@@ -3,7 +3,8 @@ import {
   awaitingCashCollection,
   hasRecordedReceipt,
   isFullyPaid,
-  recordedPaidAgorot
+  recordedPaidAgorot,
+  applyBookingUpsell
 } from './bookingPaid.js';
 
 describe('status-only PAID without a receipt', () => {
@@ -79,3 +80,43 @@ describe('awaiting cash collection', () => {
     })).toBe(false);
   });
 });
+
+describe('applyBookingUpsell', () => {
+  it('increases total price and turns a paid booking into PARTIAL when upsell price is added', () => {
+    const booking = {
+      id: 'b-100',
+      total_price_agorot: 100000,
+      payment_status: 'PAID',
+      clearing_payments: [{ amount_agorot: 100000, source: 'CASH' }]
+    };
+    const updated = applyBookingUpsell(booking, {
+      is_birthday: true,
+      birthday_note: 'עוגה ובלונים',
+      upsell_description: 'ארוחת בוקר',
+      upsell_price: 200
+    });
+    expect(updated.total_price_agorot).toBe(120000);
+    expect(updated.payment_status).toBe('PARTIAL');
+    expect(updated.is_birthday).toBe(true);
+    expect(updated.birthday_note).toBe('עוגה ובלונים');
+    expect(updated.upsell_description).toBe('ארוחת בוקר');
+    expect(updated.upsell_price).toBe(200);
+  });
+
+  it('restores PAID status when upsell price is removed', () => {
+    const booking = {
+      id: 'b-101',
+      total_price_agorot: 120000,
+      payment_status: 'PARTIAL',
+      upsell_price: 200,
+      clearing_payments: [{ amount_agorot: 100000, source: 'CASH' }]
+    };
+    const updated = applyBookingUpsell(booking, {
+      upsell_price: null
+    });
+    expect(updated.total_price_agorot).toBe(100000);
+    expect(updated.payment_status).toBe('PAID');
+    expect(updated.upsell_price).toBeNull();
+  });
+});
+

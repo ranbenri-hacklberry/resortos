@@ -445,15 +445,15 @@ export const SEEDED_PROPERTIES: CabinProperty[] = [
     "mapsUrl": "",
     "heroImage": "/resorts/toscana.jpg",
     "amenities": [
-      "מטבח מרכזי משותף מאובזר",
-      "בריכת שחייה משותפת במתחם",
-      "ג׳קוזי פנימי בכל בקתה + ג׳קוזי חיצוני במתחם",
+      "בריכה מרכזית מחוממת ל-28° לכל המתחם",
+      "ג׳קוזי ספא ענק",
+      "נוף פנורמי לכנרת",
+      "מכונת קפה נספרסו",
+      "מטבחון מאובזר",
+      "מנגל פרטי לכל בקתה",
       "סאונה יבשה (בשאטו)",
-      "מכונת נספרסו ומיקרוגל",
-      "מקרר ומטבחון בכל יחידה",
-      "מנגל פרטי",
-      "טלוויזיה עם יס ו-Wi-Fi חופשי"
-    ],
+      "טלוויזיה עם יס ו-Wi-Fi"
+],
     "theme": {
       "primary": "#1E3A2F",
       "secondary": "#4D6A5A",
@@ -787,14 +787,14 @@ export const SEEDED_PROPERTIES: CabinProperty[] = [
     "mapsUrl": "",
     "heroImage": "/resorts/taj.jpg",
     "amenities": [
-      "מטבח מרכזי משותף",
-      "בריכת שחייה משותפת במתחם",
+      "בריכה מרכזית מחוממת ל-28°",
       "ג׳קוזי ספא בכל בקתה",
+      "עמדת גריל גז ומנגל",
+      "נוף מלא לכנרת",
       "מכונת נספרסו ומיקרוגל",
       "מקרר ומטבחון בכל יחידה",
-      "מנגל פרטי",
       "טלוויזיה עם יס ו-Wi-Fi"
-    ],
+],
     "theme": {
       "primary": "#2B261F",
       "secondary": "#5C5449",
@@ -923,15 +923,15 @@ export const SEEDED_PROPERTIES: CabinProperty[] = [
     "mapsUrl": "",
     "heroImage": "/resorts/mool.jpg",
     "amenities": [
-      "מטבח מרכזי משותף",
-      "בריכת שחייה משותפת במתחם",
-      "ג׳קוזי ספא / אמבט זרמים",
-      "נוף פנורמי פתוח לכנרת",
+      "בריכה מרכזית מחוממת ל-28°",
+      "ג׳קוזי פנורמי",
+      "נוף עוצר נשימה לכנרת",
+      "מטבחון שף בכל יחידה",
       "מכונת נספרסו ומיקרוגל",
-      "מקרר ומטבחון בכל יחידה",
+      "מקרר ומטבחון",
       "מנגל פרטי",
       "טלוויזיה עם יס ו-Wi-Fi"
-    ],
+],
     "theme": {
       "primary": "#1A3344",
       "secondary": "#436174",
@@ -1085,15 +1085,15 @@ export const SEEDED_PROPERTIES: CabinProperty[] = [
     "mapsUrl": "",
     "heroImage": "/resorts/nofim.jpg",
     "amenities": [
-      "בריכה פרטית לכל בקתה",
-      "מטבח מרכזי משותף",
-      "ג׳קוזי ספא מפנק",
+      "בריכה פרטית מחוממת ל-28° לכל צימר",
+      "ג׳קוזי ספא זרמים",
+      "עיצוב אדריכלי לבן",
       "נוף פתוח לכנרת",
       "מכונת נספרסו ומיקרוגל",
-      "מקרר ומטבחון",
-      "מנגל פרטי",
-      "טלוויזיה עם יס"
-    ],
+      "מקרר ומטבחון פרטי",
+      "מנגל פרטי בחצר",
+      "טלוויזיה עם יס ו-Wi-Fi"
+],
     "theme": {
       "primary": "#2E353B",
       "secondary": "#5A6570",
@@ -1177,14 +1177,16 @@ export const SEEDED_PROPERTIES: CabinProperty[] = [
     "mapsUrl": "",
     "heroImage": "/resorts/musical.jpg",
     "amenities": [
-      "מטבח מרכזי משותף",
-      "בריכת שחייה משותפת במתחם",
-      "ג׳קוזי פנימי בכל בקתה",
+      "לזוגות בלבד",
+      "בריכה מרכזית מחוממת ל-28°",
+      "ג׳קוזי זוגי בכל בקתה",
+      "מערכת שמע איכותית",
+      "חצר פסטורלית ומדשאות",
+      "מנגל פרטי לכל בקתה",
       "מכונת נספרסו ומיקרוגל",
       "מקרר ומטבחון בכל יחידה",
-      "מנגל פרטי לכל בקתה",
       "טלוויזיה עם יס ו-Wi-Fi"
-    ],
+],
     "theme": {
       "primary": "#332724",
       "secondary": "#66524C",
@@ -1289,14 +1291,14 @@ export const SEEDED_PROPERTIES: CabinProperty[] = [
     "mapsUrl": "",
     "heroImage": "/resorts/maya.jpg",
     "amenities": [
-      "מטבח מרכזי משותף",
-      "שתי בריכות שחייה במתחם (ליד בקתה 1 וליד בקתה 3)",
-      "ג׳קוזי פנימי בכל בקתה",
+      "לזוגות בלבד. בריכה פרטית מחוממת ל-28° לבקתות 1 ו-3. בקתה 2 בלי בריכה",
+      "ג׳קוזי בכל בקתה",
+      "מדשאה גדולה ומרחבים ירוקים",
+      "מתקני ברביקיו ומנגל פרטי",
       "מכונת נספרסו ומיקרוגל",
       "מקרר ומטבחון בכל יחידה",
-      "מנגל פרטי לכל בקתה",
       "טלוויזיה עם יס ו-Wi-Fi"
-    ],
+],
     "theme": {
       "primary": "#2C3527",
       "secondary": "#53624D",
@@ -1387,187 +1389,6 @@ export const SEEDED_PROPERTIES: CabinProperty[] = [
     ]
   },
   {
-    "id": "siesta",
-    "slug": "siesta",
-    "name": "סייסטה",
-    "hebrewName": "סייסטה",
-    "tagline": "6 בקתות עץ משפחתיות ורומנטיות במושב רמות",
-    "subTitle": "בריכת שחייה משותפת, מטבח מרכזי וג׳קוזי ספא",
-    "description": "בריכת שחייה משותפת, מטבח מרכזי וג׳קוזי ספא",
-    "village": "מושב רמות",
-    "region": "רמת הגולן והכנרת",
-    "phone": "050-759-7944",
-    "whatsappNumber": "972507597944",
-    "email": "info@resortos.co.il",
-    "wazeUrl": "https://waze.com/ul?q=Siesta+Ramot&navigate=yes",
-    "mapsUrl": "",
-    "heroImage": "/resorts/siesta.jpg",
-    "amenities": [
-      "מטבח מרכזי משותף",
-      "בריכת שחייה משותפת במתחם",
-      "ג׳קוזי ספא בכל בקתה",
-      "מכונת נספרסו ומיקרוגל",
-      "מקרר ומטבחון בכל יחידה",
-      "מנגל פרטי לכל בקתה",
-      "טלוויזיה עם יס"
-    ],
-    "theme": {
-      "primary": "#302621",
-      "secondary": "#605149",
-      "accent": "#8C6C58",
-      "background": "#FAF8F5",
-      "bgSoft": "#EDE6DF",
-      "surface": "#FFFFFF",
-      "surfaceSoft": "#F4ECE4",
-      "border": "#D8CBC0",
-      "borderLight": "#E7DDD4",
-      "dark": "#302621",
-      "darkSoft": "#423630",
-      "gold": "#C5A880"
-    },
-    "unitsCount": 6,
-    "units": [
-      {
-        "id": "k618",
-        "propertyId": "siesta",
-        "name": "סייסטה · משפחתית 1",
-        "englishName": "",
-        "type": "cabin",
-        "bedrooms": 1,
-        "bathrooms": 1,
-        "maxOccupancy": 7,
-        "basePrice": 850,
-        "weekendPrice": 1100,
-        "sizeM2": 55,
-        "description": "בקתת עץ משפחתית מרווחת עם ג׳קוזי ומטבחון.",
-        "features": [
-          "עד 7 אורחים",
-          "ג׳קוזי ספא",
-          "נספרסו, מיקרוגל, מנגל",
-          "טלוויזיה עם יס"
-        ],
-        "images": [
-          "/resorts/siesta.jpg"
-        ]
-      },
-      {
-        "id": "k619",
-        "propertyId": "siesta",
-        "name": "סייסטה · משפחתית 2",
-        "englishName": "",
-        "type": "cabin",
-        "bedrooms": 1,
-        "bathrooms": 1,
-        "maxOccupancy": 7,
-        "basePrice": 850,
-        "weekendPrice": 1100,
-        "sizeM2": 55,
-        "description": "בקתת עץ משפחתית גדולה.",
-        "features": [
-          "עד 7 אורחים",
-          "ג׳קוזי ספא",
-          "נספרסו, מיקרוגל, מנגל",
-          "טלוויזיה עם יס"
-        ],
-        "images": [
-          "/resorts/siesta.jpg"
-        ]
-      },
-      {
-        "id": "k620",
-        "propertyId": "siesta",
-        "name": "סייסטה · רומנטית 3",
-        "englishName": "",
-        "type": "cabin",
-        "bedrooms": 1,
-        "bathrooms": 1,
-        "maxOccupancy": 4,
-        "basePrice": 850,
-        "weekendPrice": 1100,
-        "sizeM2": 55,
-        "description": "בקתת עץ רומנטית לזוגות.",
-        "features": [
-          "לזוגות (עד 4 אורחים)",
-          "ג׳קוזי ספא",
-          "נספרסו ומנגל",
-          "טלוויזיה עם יס"
-        ],
-        "images": [
-          "/resorts/siesta.jpg"
-        ]
-      },
-      {
-        "id": "k621",
-        "propertyId": "siesta",
-        "name": "סייסטה · רומנטית 4",
-        "englishName": "",
-        "type": "cabin",
-        "bedrooms": 1,
-        "bathrooms": 1,
-        "maxOccupancy": 4,
-        "basePrice": 850,
-        "weekendPrice": 1100,
-        "sizeM2": 55,
-        "description": "בקתת עץ רומנטית לזוגות.",
-        "features": [
-          "לזוגות (עד 4 אורחים)",
-          "ג׳קוזי ספא",
-          "נספרסו ומנגל",
-          "טלוויזיה עם יס"
-        ],
-        "images": [
-          "/resorts/siesta.jpg"
-        ]
-      },
-      {
-        "id": "k622",
-        "propertyId": "siesta",
-        "name": "סייסטה · בת הים 5",
-        "englishName": "",
-        "type": "cabin",
-        "bedrooms": 1,
-        "bathrooms": 1,
-        "maxOccupancy": 5,
-        "basePrice": 850,
-        "weekendPrice": 1100,
-        "sizeM2": 55,
-        "description": "בקתת עץ בת הים המפנקת.",
-        "features": [
-          "עד 5 אורחים",
-          "ג׳קוזי ספא",
-          "נספרסו ומנגל",
-          "טלוויזיה עם יס"
-        ],
-        "images": [
-          "/resorts/siesta.jpg"
-        ]
-      },
-      {
-        "id": "k623",
-        "propertyId": "siesta",
-        "name": "סייסטה · בת הים 6",
-        "englishName": "",
-        "type": "cabin",
-        "bedrooms": 1,
-        "bathrooms": 1,
-        "maxOccupancy": 5,
-        "basePrice": 850,
-        "weekendPrice": 1100,
-        "sizeM2": 55,
-        "description": "בקתת עץ בת הים המפנקת.",
-        "features": [
-          "עד 5 אורחים",
-          "ג׳קוזי ספא",
-          "נספרסו ומנגל",
-          "טלוויזיה עם יס"
-        ],
-        "images": [
-          "/resorts/siesta.jpg"
-        ]
-      }
-    ]
-  },
-  {
     "id": "hill",
     "slug": "hill",
     "name": "צימר בגבעה",
@@ -1584,14 +1405,15 @@ export const SEEDED_PROPERTIES: CabinProperty[] = [
     "mapsUrl": "",
     "heroImage": "/resorts/hill.jpg",
     "amenities": [
-      "מטבח מרכזי משותף מאובזר",
-      "בריכת שחייה משותפת במתחם",
-      "ג׳קוזי ספא בכל בקתה",
+      "בריכה מרכזית מחוממת ל-28° לכל המתחם",
+      "ג׳קוזי ספא ענק בכל בקתה",
+      "נוף פתוח לגולן",
+      "מדשאות ופינות ישיבה",
       "מכונת נספרסו ומיקרוגל",
       "מקרר ומטבחון בכל יחידה",
       "מנגל פרטי לכל בקתה",
-      "טלוויזיה עם יס"
-    ],
+      "טלוויזיה עם יס ו-Wi-Fi"
+],
     "theme": {
       "primary": "#2F382B",
       "secondary": "#5E6B56",

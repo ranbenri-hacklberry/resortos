@@ -22,10 +22,10 @@ export function AllResortsShowcase({ onOpenCalendarModal }) {
           <NorthStarIcon className="w-5 h-5 text-[var(--brand-accent)]" />
         </div>
         <h2 className="text-3xl sm:text-5xl font-bold tracking-tight text-[var(--brand-primary)] mb-4">
-          מתחמי הנופש והבקתות היוקרתיות
+          מתחמי הנופש, בקתות העץ והסוויטות
         </h2>
         <p className="text-[var(--brand-secondary)] text-sm sm:text-base max-w-2xl mx-auto leading-relaxed">
-          12 מתחמי נופש ייחודיים במושב רמות, נאות גולן, גבעת יואב ונוב. בחרו מתחם לצפייה בלוח השנה המלא, מחירים יומיים וסגירה מיידית.
+          {allProperties.length} מתחמי נופש מובחרים של רשת מיאליס במושב רמות, נאות גולן, גבעת יואב ונוב. בחרו מתחם לצפייה בלוח השנה המלא, מחירים יומיים וסגירה מיידית.
         </p>
       </div>
 

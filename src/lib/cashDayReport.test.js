@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isValidIsraeliId } from './clearingPayments.js';
-import { buildCashDayReportHtml, cashPaymentsOnDate } from './cashDayReport.js';
+import { buildCashDayReportHtml, cashPaymentsOnDate, cashWeekSelection, previousCashWeek, rowMatchesCashSelection } from './cashDayReport.js';
 
 const booking = {
   id: 'b1',
@@ -31,5 +31,19 @@ describe('cash day report', () => {
     expect(html).toContain('123456782');
     expect(html).toContain('₪1,700');
     expect(cashPaymentsOnDate([booking], [], '2026-10-13')).toHaveLength(0);
+  });
+
+  it('opens Priority on the previous Sunday–Saturday week', () => {
+    expect(previousCashWeek('2026-10-29')).toEqual({ from: '2026-10-18', to: '2026-10-24' });
+    expect(previousCashWeek('2026-10-25')).toEqual({ from: '2026-10-18', to: '2026-10-24' });
+    expect(previousCashWeek('2026-10-24')).toEqual({ from: '2026-10-11', to: '2026-10-17' });
+    const week = previousCashWeek('2026-10-29');
+    const selection = cashWeekSelection(week);
+    expect(rowMatchesCashSelection({ cashDates: ['2026-10-20'], primaryDate: '2026-10-20' }, selection)).toBe(true);
+    expect(rowMatchesCashSelection({ cashDates: ['2026-10-29'], checkIn: '2026-10-29' }, selection)).toBe(false);
+    const html = buildCashDayReportHtml([booking], [{ id: 'k671', name: 'בתי נורית 1' }], week);
+    expect(html).toContain('value="week:2026-10-18:2026-10-24"');
+    expect(html).toContain('השבוע הקודם · 18/10–24/10');
+    expect(html).toContain('const defaultSelection = "week:2026-10-18:2026-10-24"');
   });
 });

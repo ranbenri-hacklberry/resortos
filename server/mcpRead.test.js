@@ -5,6 +5,7 @@ import {
   ilsFromAgorot,
   maskAccountNumber,
   projectBankAccount,
+  projectBooking,
   projectBookingMoney,
   projectPayment
 } from './mcpRead.js';
@@ -87,3 +88,35 @@ test('bank account number is masked and payment drops card fields', () => {
   assert.equal(payment.last4, undefined);
   assert.equal(payment.amount_ils, '1.00');
 });
+
+test('projectBooking exposes birthday and upsell fields as read-only', () => {
+  const row = {
+    id: 'b_birthday_1',
+    unit_id: 'k685',
+    guest_name: 'יוסי כהן',
+    check_in_date: '2026-11-10',
+    check_out_date: '2026-11-12',
+    adults_count: 2,
+    children_count: 0,
+    booking_status: 'CONFIRMED',
+    payment_status: 'PAID',
+    is_birthday: true,
+    birthday_note: 'עוגת שוקולד ובלונים',
+    upsell_description: 'ארוחת בוקר כפרית + צ׳ק אאוט מאוחר',
+    upsell_price: '250.00'
+  };
+  const projected = projectBooking(row);
+  assert.equal(projected.id, 'b_birthday_1');
+  assert.equal(projected.is_birthday, true);
+  assert.equal(projected.birthday_note, 'עוגת שוקולד ובלונים');
+  assert.equal(projected.upsell_description, 'ארוחת בוקר כפרית + צ׳ק אאוט מאוחר');
+  assert.equal(projected.upsell_price, 250);
+
+  // default / empty fallback
+  const empty = projectBooking({ id: 'b_plain', unit_id: 'k686' });
+  assert.equal(empty.is_birthday, false);
+  assert.equal(empty.birthday_note, null);
+  assert.equal(empty.upsell_description, null);
+  assert.equal(empty.upsell_price, null);
+});
+

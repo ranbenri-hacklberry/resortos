@@ -117,7 +117,11 @@ export function projectBooking(row) {
     adults_count: row.adults_count ?? null,
     children_count: row.children_count ?? null,
     booking_status: row.booking_status || '',
-    payment_status: row.payment_status || ''
+    payment_status: row.payment_status || '',
+    is_birthday: Boolean(row.is_birthday),
+    birthday_note: row.birthday_note || null,
+    upsell_description: row.upsell_description || null,
+    upsell_price: row.upsell_price != null ? Number(row.upsell_price) : null
   };
 }
 

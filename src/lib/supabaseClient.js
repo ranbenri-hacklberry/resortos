@@ -29,7 +29,7 @@ function resolveSupabaseUrl() {
 }
 
 const supabaseUrl = resolveSupabaseUrl();
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBvc3RncmVzIiwicm9sZSI6ImFub24iLCJpYXQiOjE2NDU1NzM4MTksImV4cCI6MTk2MTE0OTgxOX0.dummy_token';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY || 'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 

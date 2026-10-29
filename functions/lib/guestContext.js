@@ -72,6 +72,10 @@ export function guestContextPayload(rows, phoneRaw, unitNames = {}) {
     status: chosen.status,
     partySize: chosen.partySize,
     notes: chosen.notes,
+    isBirthday: chosen.isBirthday,
+    birthdayNote: chosen.birthdayNote,
+    upsellDescription: chosen.upsellDescription,
+    upsellPrice: chosen.upsellPrice,
     reservations
   };
 }
@@ -87,6 +91,10 @@ export function toReservation(row, unitNames = {}) {
     checkOut: row.check_out_date,
     status: mapBookingStatus(row.booking_status),
     partySize: partySize(row),
-    notes: String(row.special_requests || '').trim()
+    notes: String(row.special_requests || '').trim(),
+    isBirthday: Boolean(row.is_birthday),
+    birthdayNote: row.birthday_note || null,
+    upsellDescription: row.upsell_description || null,
+    upsellPrice: row.upsell_price != null ? Number(row.upsell_price) : null
   };
 }

@@ -55,8 +55,6 @@ const PROPERTY_NAV = {
   'casa-nova': { query: 'קאסה נובה נוב' }
 };
 
-const GIVAT_GATE = '#2580';
-
 export const GUEST_PRINT_ABSENT = {
   print_url: null,
   print_text: null,
@@ -77,12 +75,42 @@ export function lockboxVisibleToGuest(booking) {
   return Boolean(booking) && (inStay || (ready && isFullyPaid(booking)));
 }
 
-function gateFor(unitId) {
+function lockboxByUnit() {
+  try {
+    const source = readFileSync(new URL('./guestProfileSeed.js', import.meta.url), 'utf8');
+    const block = source.match(/export const LOCKBOX_BY_UNIT = \{([\s\S]*?)\n\};/);
+    const map = {};
+    if (block) {
+      for (const match of block[1].matchAll(/['"]?([A-Za-z0-9-]+)['"]?\s*:\s*'([^']*)'/g)) {
+        map[match[1]] = match[2];
+      }
+    }
+    if (Object.keys(map).length) return map;
+  } catch {
+    // GuestInStay reads LOCKBOX_BY_UNIT. The catalog is the same list for Kinorot units.
+  }
+  return CATALOG_LOCKBOX;
+}
+
+const LOCKBOX_BY_UNIT = lockboxByUnit();
+
+function gateModeFor(unitId) {
   const propertyId = UNIT_PROPERTY[unitId] || '';
-  if (String(unitId).startsWith('k')) return { code: RAMOT_GATE_CODE, mode: 'code' };
-  if (propertyId === 'hill' || propertyId === 'kipat' || propertyId === 'mialis') return { code: GIVAT_GATE, mode: 'dial' };
-  if (propertyId === 'casa-nova') return { code: '', mode: 'call' };
-  return { code: '', mode: '' };
+  if (String(unitId).startsWith('k')) return 'code';
+  if (propertyId === 'hill' || propertyId === 'kipat' || propertyId === 'mialis') return 'dial';
+  if (propertyId === 'casa-nova') return 'call';
+  return '';
+}
+
+/** Same resolution as GuestInStay: the booking's own codes, then the fixed unit code. */
+export function guestAccessCodes(booking) {
+  const stay = booking?.stay && typeof booking.stay === 'object' ? booking.stay : {};
+  const unitId = String(booking?.unit_id || stay.unit_id || '');
+  return {
+    door_code: stay.door_pin || LOCKBOX_BY_UNIT[unitId] || CATALOG_LOCKBOX[unitId] || '',
+    gate_code: stay.gate_code || (String(booking?.unit_id || '').startsWith('k') ? RAMOT_GATE_CODE : ''),
+    gate_mode: stay.gate_mode || gateModeFor(unitId)
+  };
 }
 
 function wifiFor(unitId) {
@@ -111,7 +139,7 @@ export function projectGuestPage(booking) {
   const propertyId = UNIT_PROPERTY[unitId] || '';
   const hours = hoursFor(booking);
   const visible = lockboxVisibleToGuest(booking);
-  const gate = gateFor(unitId);
+  const access = guestAccessCodes(booking);
   const nav = PROPERTY_NAV[propertyId] || {};
   return {
     booking_id: booking?.id || '',
@@ -128,9 +156,9 @@ export function projectGuestPage(booking) {
     print_url: null,
     arrival: nav,
     access: {
-      door_code: CATALOG_LOCKBOX[unitId] || '',
-      gate_code: gate.code,
-      gate_mode: gate.mode,
+      door_code: access.door_code,
+      gate_code: access.gate_code,
+      gate_mode: access.gate_mode,
       visible_to_guest_now: visible
     },
     wifi: wifiFor(unitId).map((row) => ({ ssid: row.ssid || '', password: row.password || '' })),

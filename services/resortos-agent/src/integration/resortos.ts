@@ -45,6 +45,10 @@ export interface BookingRow {
   total_price_agorot?: number | null;
   deposit_agorot?: number | null;
   deleted_at?: string | null;
+  is_birthday?: boolean | null;
+  birthday_note?: string | null;
+  upsell_description?: string | null;
+  upsell_price?: number | null;
   [k: string]: unknown;
 }
 

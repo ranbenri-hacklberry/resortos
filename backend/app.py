@@ -54,7 +54,7 @@ def build_system_prompt(source_lang: str, target_lang: str, mode: Optional[str])
             "Identify the PROPERTY (complex) and UNIT (cabin/room) when mentioned. "
             "Known complexes: מיאליס/Mialees, צימר בגבעה/Hill, כיפת שמיים/Domes (כחול/אדום/ירוק), "
             "בתי נורית/Nurit, טאג' מאהל/Taj, מול הנוף/Mool, נופים בלבן/Nofim, טוסקנה/Toscana "
-            "(פירנצה/שאטו), חצר מוסיקלית/Musical (חליל/מיתר/פעמון), מאיה/Maya, סייסטה/Siesta, "
+            "(פירנצה/שאטו), חצר מוסיקלית/Musical (חליל/מיתר/פעמון), מאיה/Maya, "
             "קאסה נובה/Casa Nova (Aura/Bloom).\n"
             "Thai visual signs also count as unit labels: 🔵כחול, 🔴אדום, 🟢ירוק, 🩷ורודה, "
             "🪈חליל, 🎸מיתר, 🔔פעמון, 🏰שאטו, ✨Aura, 🌸Bloom.\n"

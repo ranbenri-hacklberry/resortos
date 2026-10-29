@@ -180,6 +180,41 @@ test('booking tools pass the date window into the loader', async () => {
   assert.equal(stopped.json.result.structuredContent.source_complete, false);
 });
 
+test('resortos_bookings exposes birthday and upsell fields in structuredContent', async () => {
+  const { handler, oauth } = harness({
+    loadBookings: async () => ({
+      rows: [{
+        id: 'b-party',
+        property_id: 'mool',
+        unit_id: 'k680',
+        guest_name: 'יעל כהן',
+        guest_phone: '0501234567',
+        check_in_date: '2026-10-20',
+        check_out_date: '2026-10-22',
+        booking_status: 'CONFIRMED',
+        is_birthday: true,
+        birthday_note: 'עוגת יום הולדת ובלונים',
+        upsell_description: 'ארוחת בוקר זוגית',
+        upsell_price: 180.00
+      }],
+      truncated: false
+    })
+  });
+  const issued = await managerToken(oauth);
+  const response = await call(handler, {
+    jsonrpc: '2.0',
+    id: 10,
+    method: 'tools/call',
+    params: { name: 'resortos_bookings', arguments: {} }
+  }, issued.access_token);
+  const items = response.json.result.structuredContent.items;
+  assert.equal(items.length, 1);
+  assert.equal(items[0].is_birthday, true);
+  assert.equal(items[0].birthday_note, 'עוגת יום הולדת ובלונים');
+  assert.equal(items[0].upsell_description, 'ארוחת בוקר זוגית');
+  assert.equal(items[0].upsell_price, 180.00);
+});
+
 test('discovery document advertises the owner scope', async () => {
   const { handler } = harness();
   const res = response();

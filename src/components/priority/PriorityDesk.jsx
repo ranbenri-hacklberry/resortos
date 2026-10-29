@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom';
 import { Check, CheckCheck, ExternalLink, FileSpreadsheet, FileText, FolderOpen, Link2, MessageCircle, Phone, Printer, RefreshCw, Send, Table2, X } from 'lucide-react';
 import { formatIlsFromAgorot, normalizeClearingPayment, normalizeIsraeliId } from '../../lib/clearingPayments';
-import { printCashDayReport } from '../../lib/cashDayReport';
+import { previousCashWeek, printCashDayReport } from '../../lib/cashDayReport';
 import { calendarPartyLabel, dutyPrintAreaOf, dutyUnitGroup, printDailyDutyReport } from '../../lib/dailyDutyReport';
 import { getUnitSign } from '../../lib/fieldUnitCatalog';
 import { israelToday } from '../../lib/cabinAccess';
@@ -20,7 +20,7 @@ import {
   lodgingLabel,
   savePriorityStatusDrafts
 } from '../../lib/priorityStatus';
-import { recordedPaidAgorot } from '../../lib/bookingPaid';
+import { applyBookingUpsell, recordedPaidAgorot } from '../../lib/bookingPaid';
 import { defaultGroundStatus, groundsBands, statusChoices, statusLabel } from '../../lib/priorityGrounds';
 import {
   ARRIVAL_TODAY_LABEL,
@@ -551,11 +551,13 @@ function GuestPill({ kind, booking, swap = false, onOpen, callPending = null, on
   const full = booking?.guest_name || '';
   const name = swap ? guestFirstName(full) : (full || 'אורח');
   const shekel = priorityShekelMark(booking);
+  const isBday = Boolean(booking?.is_birthday);
+  const hasUpsell = Boolean(booking?.upsell_description || (Number(booking?.upsell_price) > 0));
   return (
     <button
       type="button"
       className={`stay-pill is-${kind}${swap ? ' is-swap' : ''}`}
-      title={full || name}
+      title={`${full || name}${isBday ? ' · 🎂 יום הולדת' : ''}${hasUpsell ? ' · 🎁 שדרוג' : ''}`}
       onClick={(event) => {
         event.stopPropagation();
         onOpen();
@@ -563,6 +565,8 @@ function GuestPill({ kind, booking, swap = false, onOpen, callPending = null, on
     >
       {kind === 'in' ? <span className="pill-arrow" dir="ltr">←</span> : null}
       <b>{name}</b>
+      {isBday ? <span title={booking?.birthday_note ? `יום הולדת: ${booking.birthday_note}` : 'חוגג יום הולדת 🎂'}> 🎂</span> : null}
+      {hasUpsell ? <span title={booking?.upsell_description ? `שדרוג: ${booking.upsell_description}${booking.upsell_price ? ` (₪${booking.upsell_price})` : ''}` : 'שדרוג 🎁'}> 🎁</span> : null}
       {unreadCount > 0 ? (
         <span
           className="unread-msg-badge"
@@ -1749,7 +1753,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         <button type="button" className="tb-btn" onClick={() => window.open('/price-list.html', '_blank', 'noopener')}><Printer size={14} /> מחירון</button>
         <button type="button" className="tb-btn is-highlight" onClick={() => window.open('/qr-stickers.html#work-order', '_blank', 'noopener')} title="טופס הזמנת עבודה מספק A4 להדפסה"><FileText size={14} /> הזמנת עבודה</button>
         <button type="button" className="tb-btn" onClick={() => printDailyDutyReport({ dateStr: today, kind: 'both', area: 'all', bookings, units })}><Printer size={14} /> דוח יומי מלא</button>
-        <button type="button" className="tb-btn" onClick={() => printCashDayReport(bookings, units, today)}><Printer size={14} /> דוח מזומנים</button>
+        <button type="button" className="tb-btn" onClick={() => printCashDayReport(bookings, units, previousCashWeek(today))}><Printer size={14} /> דוח מזומנים</button>
         <button type="button" className="tb-btn" onClick={() => printDailyDutyReport({ dateStr: today, kind: 'morning', area: 'all', bookings, units })}><Printer size={14} /> תחילת יום</button>
       </div>
       {view === 'cashflow' && showCashflow ? (
@@ -1765,7 +1769,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
           <PriorityForms
             onOpenWord={() => setView('docs')}
             onPrintDutyReport={() => printDailyDutyReport({ dateStr: today, kind: 'both', area: 'all', bookings, units })}
-            onPrintCashReport={() => printCashDayReport(bookings, units, today)}
+            onPrintCashReport={() => printCashDayReport(bookings, units, previousCashWeek(today))}
             onPrintMorningReport={() => printDailyDutyReport({ dateStr: today, kind: 'morning', area: 'all', bookings, units })}
           />
         </div>
@@ -1955,6 +1959,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
             {/* צד שמאל (35%): פאנל WhatsApp / Task Feed בגובה מלא */}
             <SplitFeedPanel
               card={card}
+              booking={cardBooking}
               tab={tab}
               setTab={setTab}
               logScope={logScope}
@@ -2051,15 +2056,28 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                         </td>
                       ) : null}
                       <td className="unit-cell">
-                        <button
-                          type="button"
-                          className="unit-status"
-                          disabled={!canEdit || saving}
-                          onClick={(event) => openEditor(event, row, 'week')}
-                        >
-                          <span className="unit-name">{row.name}</span>
-                          {row.weekLabel ? <em className={`clean-badge ${toneOf(row.weekLabel)}`}>{row.weekLabel}{row.weekDirty ? ' *' : ''}</em> : null}
-                        </button>
+                        {(() => {
+                          const todayCell = priorityDayCell(bookings, row.id, today);
+                          const todayBooking = todayCell.guest || todayCell.inn || todayCell.out;
+                          const hasBday = Boolean(todayBooking?.is_birthday);
+                          const hasUp = Boolean(todayBooking?.upsell_description || (Number(todayBooking?.upsell_price) > 0));
+                          return (
+                            <button
+                              type="button"
+                              className="unit-status"
+                              disabled={!canEdit || saving}
+                              onClick={(event) => openEditor(event, row, 'week')}
+                              title={row.fullName ? `${row.fullName}${hasBday ? ' · 🎂 יום הולדת' : ''}${hasUp ? ' · 🎁 שדרוג' : ''}` : undefined}
+                            >
+                              <span className="unit-name">
+                                {row.name}
+                                {hasBday ? ' 🎂' : ''}
+                                {hasUp ? ' 🎁' : ''}
+                              </span>
+                              {row.weekLabel ? <em className={`clean-badge ${toneOf(row.weekLabel)}`}>{row.weekLabel}{row.weekDirty ? ' *' : ''}</em> : null}
+                            </button>
+                          );
+                        })()}
                       </td>
                       {horizon.map((day) => {
                         const cell = priorityDayCell(bookings, row.id, day);
@@ -2349,6 +2367,7 @@ function RoomBeaconInventory({ card }) {
 
 function SplitFeedPanel({
   card,
+  booking = null,
   tab,
   setTab,
   logScope,
@@ -2377,11 +2396,60 @@ function SplitFeedPanel({
   const [autoReplyEnabled, setAutoReplyEnabled] = useState(true);
   const [automationChannel, setAutomationChannel] = useState('resortos');
   const [automationLoading, setAutomationLoading] = useState(false);
+  const [celebrationDraft, setCelebrationDraft] = useState({
+    is_birthday: false,
+    birthday_note: '',
+    upsell_description: '',
+    upsell_price: ''
+  });
   const feedEndRef = useRef(null);
 
-  const bookingId = card?.bookingId || '';
+  const bookingId = card?.bookingId || booking?.id || '';
   const phone = card?.phoneRaw || card?.phone || '';
   const localPhone = toMicropayPhone(phone);
+
+  useEffect(() => {
+    setCelebrationDraft({
+      is_birthday: Boolean(booking?.is_birthday),
+      birthday_note: booking?.birthday_note || '',
+      upsell_description: booking?.upsell_description || '',
+      upsell_price: booking?.upsell_price != null ? Number(booking.upsell_price) : ''
+    });
+  }, [booking?.id, booking?.is_birthday, booking?.birthday_note, booking?.upsell_description, booking?.upsell_price]);
+
+  const isCelebrationDirty = useMemo(() => {
+    if (!booking) return false;
+    const bBday = Boolean(booking.is_birthday);
+    const bNote = booking.birthday_note || '';
+    const bDesc = booking.upsell_description || '';
+    const bPrice = booking.upsell_price != null ? String(booking.upsell_price) : '';
+
+    const dBday = Boolean(celebrationDraft.is_birthday);
+    const dNote = celebrationDraft.birthday_note || '';
+    const dDesc = celebrationDraft.upsell_description || '';
+    const dPrice = celebrationDraft.upsell_price !== '' && celebrationDraft.upsell_price != null ? String(celebrationDraft.upsell_price) : '';
+
+    return bBday !== dBday || bNote !== dNote || bDesc !== dDesc || bPrice !== dPrice;
+  }, [booking, celebrationDraft]);
+
+  const saveCelebration = async () => {
+    if (!booking || !canEdit || saving) return;
+    setSaving(true);
+    setSaveError('');
+    try {
+      const updated = applyBookingUpsell(booking, celebrationDraft);
+      if (!updated) return;
+      await db.bookings.put(updated);
+      await pushBookingToCloud(updated, { allowOverlap: true });
+      setMessage(`${card?.name || 'יחידה'}: פרטי יום הולדת ושדרוג נשמרו`);
+    } catch (err) {
+      const msg = `שמירת יום הולדת ושדרוג נכשלה: ${err?.message || 'שגיאה'}`;
+      setSaveError(msg);
+      setMessage(msg);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   async function loadAutomationState() {
     if (!bookingId && !phone) return;
@@ -2765,6 +2833,74 @@ function SplitFeedPanel({
                 value={kinorotNote?.saved || ''}
                 placeholder={kinorotNote?.loading ? 'טוען את ההערה מכינורות...' : kinorotNote?.resId ? 'אין הערה בכינורות' : 'אין הזמנת כינורות'}
               />
+            </div>
+
+            {/* יום הולדת ושדרוג מוסכם */}
+            <div className="priority-celebration-card">
+              <label className="celebration-bday-toggle">
+                <input
+                  type="checkbox"
+                  disabled={!canEdit || saving || !bookingId}
+                  checked={Boolean(celebrationDraft.is_birthday)}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setCelebrationDraft((prev) => ({ ...prev, is_birthday: checked }));
+                  }}
+                />
+                <span className="celebration-bday-title">🎂 חוגג יום הולדת</span>
+              </label>
+
+              {celebrationDraft.is_birthday ? (
+                <div className="celebration-bday-details">
+                  <textarea
+                    className="celebration-bday-note"
+                    disabled={!canEdit || saving || !bookingId}
+                    placeholder="פרטי יום הולדת (למי, בלונים, עוגה שהובטחה...)"
+                    value={celebrationDraft.birthday_note || ''}
+                    onChange={(e) => setCelebrationDraft((prev) => ({ ...prev, birthday_note: e.target.value }))}
+                    rows={2}
+                  />
+                </div>
+              ) : null}
+
+              <div className="celebration-upsell-box">
+                <div className="celebration-upsell-header">
+                  <span>🎁 שדרוג / אפסייל מוסכם</span>
+                </div>
+                <div className="celebration-upsell-row">
+                  <input
+                    type="text"
+                    className="celebration-upsell-desc"
+                    disabled={!canEdit || saving || !bookingId}
+                    placeholder="תיאור שדרוג (ארוחת בוקר, עזיבה מאוחרת...)"
+                    value={celebrationDraft.upsell_description || ''}
+                    onChange={(e) => setCelebrationDraft((prev) => ({ ...prev, upsell_description: e.target.value }))}
+                  />
+                  <div className="celebration-upsell-price-wrap">
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      className="celebration-upsell-price"
+                      disabled={!canEdit || saving || !bookingId}
+                      placeholder="0"
+                      value={celebrationDraft.upsell_price ?? ''}
+                      onChange={(e) => setCelebrationDraft((prev) => ({ ...prev, upsell_price: e.target.value === '' ? '' : e.target.value }))}
+                    />
+                    <span className="celebration-price-shekel">₪</span>
+                  </div>
+                </div>
+                {canEdit && bookingId && isCelebrationDirty ? (
+                  <button
+                    type="button"
+                    className="celebration-save-btn"
+                    disabled={saving}
+                    onClick={saveCelebration}
+                  >
+                    {saving ? 'שומר…' : 'שמור יום הולדת ושדרוג'}
+                  </button>
+                ) : null}
+              </div>
             </div>
 
             {/* הערות של האורח הפתוח */}

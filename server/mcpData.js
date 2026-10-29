@@ -54,7 +54,7 @@ export async function loadUnits(user) {
 }
 
 const BOOKING_PAGE_SIZE = 1000;
-const BOOKING_COLUMNS = 'id,unit_id,guest_name,check_in_date,check_out_date,adults_count,children_count,booking_status,payment_status,payment_mode,total_price_agorot,deposit_agorot,clearing_payments,channel_source,special_requests,deleted_at,cash_receipt_at';
+const BOOKING_COLUMNS = 'id,unit_id,guest_name,check_in_date,check_out_date,adults_count,children_count,booking_status,payment_status,payment_mode,total_price_agorot,deposit_agorot,clearing_payments,channel_source,special_requests,deleted_at,cash_receipt_at,is_birthday,birthday_note,upsell_description,upsell_price';
 
 export async function collectPages(fetchPage, { pageSize = BOOKING_PAGE_SIZE, maxRows = pageSize * 100 } = {}) {
   const rows = [];

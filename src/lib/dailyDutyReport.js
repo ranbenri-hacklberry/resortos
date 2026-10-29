@@ -197,6 +197,11 @@ function toDutyRow(booking, unitsById, otherDate) {
       || people.infants > 0
       || /תינוק|לול|crib|cot|infant/i.test(`${booking?.special_requests || ''} ${booking?.stay?.special_requests || ''}`)
     ),
+    isBirthday: Boolean(booking?.is_birthday),
+    birthdayNote: booking?.birthday_note || '',
+    hasUpsell: Boolean(booking?.upsell_description || (Number(booking?.upsell_price) > 0)),
+    upsellDescription: booking?.upsell_description || '',
+    upsellPrice: booking?.upsell_price != null ? Number(booking.upsell_price) : null,
     peopleKey: String(booking.id || '').replace(/^kin_[^_]+_/, '') || booking.id,
     checkoutHour: hours.checkout,
     checkinHour: hours.checkin,

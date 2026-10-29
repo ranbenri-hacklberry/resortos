@@ -246,26 +246,6 @@ const CANONICAL_PROPERTIES: PropertySeed[] = [
     ]
   },
   {
-    slug: 'siesta',
-    name: 'Siesta Cabins',
-    hebrew_name: 'סייסטה',
-    tagline: '6 בקתות עץ כפריות וסוויטות בת הים מול הכנרת',
-    description: 'מתחם נופש ותיק ואהוב במושב רמות עם בריכה גדולה, בקתות משפחתיות מרווחות ובקתות בת הים הרומנטיות.',
-    region: 'golan_heights',
-    village: 'רמות',
-    address: 'מושב רמות, רמת הגולן',
-    geo_lat: 32.8628,
-    geo_lng: 35.6662,
-    whatsapp_number: '0548076123',
-    phone: '054-807-6123',
-    email: 'siesta@ramot-resorts.co.il',
-    hero_image: 'https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=1200&q=80',
-    amenities: ['בריכת שחייה גדולה', 'ג׳קוזי ספא', 'מתחם ברביקיו מרכזי', 'חניה צמודה'],
-    units: [
-      { id: 'k618', name: 'סייסטה משפחתית 1', type: 'cabin', bedrooms: 1, bathrooms: 1, max_occupancy: 7, base_price_cents: 85000, weekend_price_cents: 110000, size_m2: 50, features: ['גלריה לילדים', 'ג׳קוזי ספא'] }
-    ]
-  },
-  {
     slug: 'hill',
     name: 'Zimmer BaGiva',
     hebrew_name: 'צימר בגבעה',

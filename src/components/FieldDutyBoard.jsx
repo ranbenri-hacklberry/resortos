@@ -403,6 +403,46 @@ export default function FieldDutyBoard({
                     מיטת תינוק
                   </span>
                 ) : null}
+                {row.isBirthday ? (
+                  <span
+                    title={`יום הולדת${row.birthdayNote ? `: ${row.birthdayNote}` : ''}`}
+                    aria-label="יום הולדת"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontSize: '0.74rem',
+                      fontWeight: 800,
+                      color: '#EC4899',
+                      background: 'rgba(236,72,153,0.12)',
+                      border: '1px solid rgba(236,72,153,0.28)',
+                      borderRadius: 999,
+                      padding: '2px 8px'
+                    }}
+                  >
+                    🎂 יום הולדת
+                  </span>
+                ) : null}
+                {row.hasUpsell ? (
+                  <span
+                    title={`שדרוג${row.upsellDescription ? `: ${row.upsellDescription}` : ''}${row.upsellPrice ? ` (₪${row.upsellPrice})` : ''}`}
+                    aria-label="שדרוג"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontSize: '0.74rem',
+                      fontWeight: 800,
+                      color: '#8B5CF6',
+                      background: 'rgba(139,92,246,0.12)',
+                      border: '1px solid rgba(139,92,246,0.28)',
+                      borderRadius: 999,
+                      padding: '2px 8px'
+                    }}
+                  >
+                    🎁 שדרוג{row.upsellPrice ? ` · ₪${row.upsellPrice}` : ''}
+                  </span>
+                ) : null}
               </div>
             ) : null}
             {cashIls > 0 ? (

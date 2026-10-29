@@ -698,21 +698,20 @@ ON CONFLICT (id) DO UPDATE SET
     ELSE public.hotelos_bookings.deposit_agorot
   END,
   payment_mode = CASE
-    WHEN public.hotelos_bookings.payment_mode = 'CASH' THEN 'CASH'
+    WHEN public.hotelos_bookings.payment_mode IN ('CASH', 'CARD', 'CARD_CASH', 'BANK_TRANSFER', 'MANUAL', 'SPLIT', 'MAX', 'TERMINAL')
+      THEN public.hotelos_bookings.payment_mode
+    WHEN public.hotelos_bookings.payment_mode IS NOT NULL AND public.hotelos_bookings.payment_mode <> ''
+      THEN public.hotelos_bookings.payment_mode
     ELSE COALESCE(EXCLUDED.payment_mode, public.hotelos_bookings.payment_mode)
   END,
   clearing_payments = CASE
     WHEN EXCLUDED.clearing_payments = '[]'::jsonb THEN public.hotelos_bookings.clearing_payments
-    WHEN EXISTS (
-      SELECT 1
-      FROM jsonb_array_elements(COALESCE(public.hotelos_bookings.clearing_payments, '[]'::jsonb)) e
-      WHERE COALESCE(e->>'source', '') = 'CASH'
-    ) THEN public.hotelos_bookings.clearing_payments
+    WHEN public.hotelos_bookings.clearing_payments IS NULL OR public.hotelos_bookings.clearing_payments = '[]'::jsonb THEN EXCLUDED.clearing_payments
     ELSE (
       SELECT COALESCE(jsonb_agg(e), '[]'::jsonb)
       FROM (
         SELECT e
-        FROM jsonb_array_elements(COALESCE(public.hotelos_bookings.clearing_payments, '[]'::jsonb)) e
+        FROM jsonb_array_elements(public.hotelos_bookings.clearing_payments) e
         WHERE COALESCE(e->>'source', '') <> 'KINOROT'
         UNION ALL
         SELECT e
@@ -721,15 +720,18 @@ ON CONFLICT (id) DO UPDATE SET
     )
   END,
   payment_status = CASE
-    WHEN public.hotelos_bookings.payment_status IN ('PAID', 'PENDING_CASH', 'PENDING_BANK')
+    WHEN public.hotelos_bookings.payment_status IN ('PAID', 'DEPOSIT_PAID', 'PARTIAL', 'PENDING_CASH', 'PENDING_BANK')
       THEN public.hotelos_bookings.payment_status
+    WHEN EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(COALESCE(public.hotelos_bookings.clearing_payments, '[]'::jsonb)) e
+      WHERE COALESCE(e->>'source', '') <> 'KINOROT'
+        AND COALESCE((e->>'amount_agorot')::numeric, 0) > 0
+    ) THEN public.hotelos_bookings.payment_status
     WHEN EXCLUDED.payment_mode IN ('VOUCHER', 'COMP', 'BOOKING') THEN 'PAID'
     WHEN EXCLUDED.clearing_payments <> '[]'::jsonb AND EXCLUDED.payment_status IN ('PAID', 'DEPOSIT_PAID', 'PARTIAL')
       THEN EXCLUDED.payment_status
-    WHEN COALESCE(public.hotelos_bookings.clearing_payments, '[]'::jsonb) = '[]'::jsonb
-      AND public.hotelos_bookings.payment_status IN ('PAID', 'DEPOSIT_PAID', 'PARTIAL')
-      THEN COALESCE(NULLIF(EXCLUDED.payment_status, ''), 'UNPAID')
-    ELSE public.hotelos_bookings.payment_status
+    ELSE COALESCE(NULLIF(public.hotelos_bookings.payment_status, ''), EXCLUDED.payment_status, 'UNPAID')
   END;
 `).join('\n');
 

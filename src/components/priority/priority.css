@@ -1950,6 +1950,128 @@
   background: #fffbeb;
 }
 
+/* Celebration & Upsell Card inside Notes Tab */
+.priority-celebration-card {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.celebration-bday-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  color: #1e293b;
+  cursor: pointer;
+  user-select: none;
+}
+
+.celebration-bday-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #6366f1;
+}
+
+.celebration-bday-note {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #94a3b8;
+  border-radius: 4px;
+  background: #fffbeb;
+  color: #0f172a;
+  font: 12px Tahoma, Arial, sans-serif;
+  padding: 6px 8px;
+  resize: vertical;
+}
+
+.celebration-bday-note:focus {
+  outline: 1px solid #d97706;
+}
+
+.celebration-upsell-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed #cbd5e1;
+}
+
+.celebration-upsell-header {
+  font-weight: 700;
+  font-size: 12px;
+  color: #475569;
+}
+
+.celebration-upsell-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.celebration-upsell-desc {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid #94a3b8;
+  border-radius: 4px;
+  background: #f8fafc;
+  color: #0f172a;
+  font: 12px Tahoma, Arial, sans-serif;
+  padding: 6px 8px;
+}
+
+.celebration-upsell-price-wrap {
+  position: relative;
+  width: 90px;
+  flex-shrink: 0;
+}
+
+.celebration-upsell-price {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #94a3b8;
+  border-radius: 4px;
+  background: #f8fafc;
+  color: #0f172a;
+  font: 12px Tahoma, Arial, sans-serif;
+  padding: 6px 20px 6px 6px;
+}
+
+.celebration-price-shekel {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  color: #64748b;
+  pointer-events: none;
+}
+
+.celebration-save-btn {
+  background: #1b365d;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  align-self: flex-start;
+  transition: background 0.15s ease;
+}
+
+.celebration-save-btn:hover {
+  background: #152c4c;
+}
+
 /* Room Beacon Inventory Panel */
 .beacon-inventory-box {
   display: flex;

@@ -347,6 +347,50 @@ ensureGuestStayPublished(next).catch(() => {});
           );
         })()}
 
+        {booking.is_birthday ? (
+          <div style={{
+            marginTop: 10,
+            padding: '0.6rem 0.8rem',
+            borderRadius: 12,
+            background: 'rgba(236,72,153,0.14)',
+            border: '1px solid rgba(236,72,153,0.32)',
+            color: '#F472B6',
+            fontWeight: 800,
+            fontSize: '0.82rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8
+          }}>
+            <span style={{ fontSize: 16 }}>🎂</span>
+            <span>חוגגים יום הולדת{booking.birthday_note ? `: ${booking.birthday_note}` : ''}</span>
+          </div>
+        ) : null}
+
+        {Boolean(booking.upsell_description || Number(booking.upsell_price) > 0) ? (
+          <div style={{
+            marginTop: 8,
+            padding: '0.6rem 0.8rem',
+            borderRadius: 12,
+            background: 'rgba(139,92,246,0.14)',
+            border: '1px solid rgba(139,92,246,0.32)',
+            color: '#C4B5FD',
+            fontWeight: 800,
+            fontSize: '0.82rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8
+          }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 16 }}>🎁</span>
+              <span>{booking.upsell_description || 'שדרוג מוסכם'}</span>
+            </span>
+            {Number(booking.upsell_price) > 0 ? (
+              <span style={{ fontWeight: 900 }}>₪{Number(booking.upsell_price).toLocaleString('he-IL')}</span>
+            ) : null}
+          </div>
+        ) : null}
+
         {cash > 0 && !fullyPaid ? (
           <div style={{
             marginTop: 12,

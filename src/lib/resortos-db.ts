@@ -77,6 +77,10 @@ export interface Booking {
   channel_source: 'DIRECT' | 'AIRBNB' | 'BOOKING_COM' | 'ICAL' | string;
   checkout_token?: string;
   special_requests?: string;
+  is_birthday?: boolean;
+  birthday_note?: string | null;
+  upsell_description?: string | null;
+  upsell_price?: number | null;
   expires_at?: string;
   cancellation_reason?: string;
   created_at: string;

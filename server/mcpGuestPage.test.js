@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
 import { createMcpHandler } from './mcpHttp.js';
 import { createMemoryOauthStore, createOauthService, s256 } from './mcpAuth.js';
-import { guestPageUrl, lockboxVisibleToGuest, projectGuestPage } from '../src/lib/guestPageRead.js';
+import { guestAccessCodes, guestPageUrl, lockboxVisibleToGuest, projectGuestPage } from '../src/lib/guestPageRead.js';
 import { guestStayUrl } from '../src/lib/guestStayUrl.js';
 import { CATALOG_LOCKBOX, RAMOT_GATE_CODE } from '../functions/lib/unitNames.js';
 
@@ -50,7 +50,7 @@ function handlerFor({ role = 'MANAGER', rows = [booking] } = {}) {
     oauth,
     loadStaff: async () => ({ id: 'staff', username: 'staff', role, is_active: true, allowed_units: [] }),
     loadGuestBookings: async (_user, query = {}) => {
-      if (query.booking_id && query.booking_id !== 'b1') return [];
+      if (query.booking_id) return rows.filter((row) => row.id === query.booking_id);
       return rows;
     },
     loadCatalog: async () => [],
@@ -118,6 +118,47 @@ test('guest page matches the stay link and hides phone and payment', () => {
   const checkedIn = projectGuestPage({ ...booking, booking_status: 'CHECKED_IN' });
   assert.equal(checkedIn.access.visible_to_guest_now, true);
   assert.equal(lockboxVisibleToGuest(booking), false);
+});
+
+test('a booking code wins, and an empty stay uses the unit code', async () => {
+  const ownStay = { door_pin: '9001', gate_code: '#1111' };
+  const own = projectGuestPage({ ...booking, id: 'own', stay: ownStay });
+  const plain = projectGuestPage({ ...booking, id: 'plain', stay: { door_pin: '', gate_code: '' } });
+  assert.deepEqual(guestAccessCodes({ ...booking, stay: ownStay }), {
+    door_code: '9001',
+    gate_code: '#1111',
+    gate_mode: 'code'
+  });
+  assert.equal(own.access.door_code, '9001');
+  assert.equal(own.access.gate_code, '#1111');
+  assert.equal(plain.access.door_code, CATALOG_LOCKBOX.k680);
+  assert.equal(plain.access.gate_code, RAMOT_GATE_CODE);
+  const hill = projectGuestPage({ ...booking, id: 'hill', unit_id: 'hill-1', stay: {} });
+  assert.equal(hill.access.gate_code, '');
+  assert.ok(hill.access.door_code);
+  assert.notEqual(hill.access.door_code, '9001');
+
+  const { handler, oauth } = handlerFor({
+    rows: [
+      { ...booking, id: 'own', stay: ownStay },
+      { ...booking, id: 'plain', stay: {} }
+    ]
+  });
+  const issued = await tokenFor(oauth, 'rani');
+  for (const name of ['resortos_guest_page', 'resortos_guest_page_print']) {
+    const withCodes = await call(handler, {
+      jsonrpc: '2.0', id: 1, method: 'tools/call',
+      params: { name, arguments: { booking_id: 'own' } }
+    }, issued.access_token);
+    const without = await call(handler, {
+      jsonrpc: '2.0', id: 2, method: 'tools/call',
+      params: { name, arguments: { booking_id: 'plain' } }
+    }, issued.access_token);
+    assert.equal(withCodes.json.result.structuredContent.access.door_code, '9001');
+    assert.equal(withCodes.json.result.structuredContent.access.gate_code, '#1111');
+    assert.equal(without.json.result.structuredContent.access.door_code, CATALOG_LOCKBOX.k680);
+    assert.equal(without.json.result.structuredContent.access.gate_code, RAMOT_GATE_CODE);
+  }
 });
 
 test('the call button text is the guest page label', () => {

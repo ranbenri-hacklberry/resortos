@@ -10,6 +10,7 @@ import { buildStaySnapshot } from './staySnapshot';
 import { canonicalUnitSeed, DEFAULT_RESORT_UNITS, FORCE_DOCUMENT_NAMES, isBookingEligible, isPhantomUnitId, isRetiredUnitId, matchCanonicalUnitId, unitUsage } from './units';
 import { listBookings, listUnitCatalog, listUnitOperations, saveUnitOperation, subscribeOpsEvents } from './opsApi';
 import { clearingPaidAgorot, clearingProofCount, isCanceledBooking, isVisibleKinorotRemoval, shouldApplyIncomingBooking as shouldApplyIncomingBookingBase } from './bookingMerge';
+import { mergeClearingPayments } from './clearingPayments';
 
 const BOOKING_PAGE_SIZE = 1000;
 const BOOKING_SNAP_PREFIX = 'resortos_bookings_snap_v1:';
@@ -36,6 +37,10 @@ function compactBookingSnap(row) {
     deposit_agorot: row.deposit_agorot,
     checkout_token: row.checkout_token,
     channel_source: row.channel_source,
+    is_birthday: Boolean(row.is_birthday),
+    birthday_note: row.birthday_note || null,
+    upsell_description: row.upsell_description || null,
+    upsell_price: row.upsell_price != null ? Number(row.upsell_price) : null,
     updated_at: row.updated_at,
     deleted_at: row.deleted_at || null
   };
@@ -114,7 +119,8 @@ function bookingRowsEquivalent(a, b) {
     'check_in_date', 'check_out_date', 'booking_status', 'payment_status',
     'payment_mode', 'special_requests', 'updated_at', 'deleted_at',
     'adults_count', 'children_count', 'total_price_agorot', 'deposit_agorot',
-    'channel_source', 'checkout_token'
+    'channel_source', 'checkout_token',
+    'is_birthday', 'birthday_note', 'upsell_description', 'upsell_price'
   ];
   for (const key of keys) {
     if (String(a[key] ?? '') !== String(b[key] ?? '')) return false;
@@ -195,6 +201,10 @@ const BOOKING_KEYS = [
   'hyp_deal_id',
   'checkout_token',
   'special_requests',
+  'is_birthday',
+  'birthday_note',
+  'upsell_description',
+  'upsell_price',
   'expires_at',
   'cancellation_reason',
   'created_at',
@@ -247,9 +257,17 @@ function fillMissingMoney(existing, incoming) {
   };
 }
 
-function mergeBookingRow(base, incoming) {
+export function mergeBookingRow(base, incoming) {
   const merged = { ...(base || {}), ...(incoming || {}) };
   merged.guest_phone = keepGuestPhone(incoming?.guest_phone, base?.guest_phone);
+  if (incoming?.is_birthday !== undefined) merged.is_birthday = Boolean(incoming.is_birthday);
+  else if (base?.is_birthday !== undefined) merged.is_birthday = Boolean(base.is_birthday);
+  if (incoming?.birthday_note !== undefined) merged.birthday_note = incoming.birthday_note;
+  else if (base?.birthday_note !== undefined) merged.birthday_note = base.birthday_note;
+  if (incoming?.upsell_description !== undefined) merged.upsell_description = incoming.upsell_description;
+  else if (base?.upsell_description !== undefined) merged.upsell_description = base.upsell_description;
+  if (incoming?.upsell_price !== undefined) merged.upsell_price = incoming.upsell_price != null ? Number(incoming.upsell_price) : null;
+  else if (base?.upsell_price !== undefined) merged.upsell_price = base.upsell_price != null ? Number(base.upsell_price) : null;
   const baseStay = base?.stay && typeof base.stay === 'object' ? base.stay : {};
   const incomingStay = incoming?.stay && typeof incoming.stay === 'object' ? incoming.stay : {};
   merged.stay = { ...baseStay, ...incomingStay };
@@ -257,11 +275,7 @@ function mergeBookingRow(base, incoming) {
   if (incomingStay.hyp_deposit?.paid) merged.stay.hyp_deposit = incomingStay.hyp_deposit;
   if (baseStay.hyp?.paid && !incomingStay.hyp?.paid) merged.stay.hyp = baseStay.hyp;
   if (incomingStay.hyp?.paid) merged.stay.hyp = incomingStay.hyp;
-  if (Array.isArray(incoming?.clearing_payments) && incoming.clearing_payments.length) {
-    merged.clearing_payments = incoming.clearing_payments;
-  } else   if (Array.isArray(base?.clearing_payments) && base.clearing_payments.length) {
-    merged.clearing_payments = base.clearing_payments;
-  }
+  merged.clearing_payments = mergeClearingPayments(base?.clearing_payments, incoming?.clearing_payments);
   if (isCanceledBooking(incoming)) {
     merged.booking_status = 'CANCELED';
     if (isVisibleKinorotRemoval(incoming)) {
@@ -276,14 +290,29 @@ function mergeBookingRow(base, incoming) {
   if (incomingStay.payment_proof_at) merged.stay.payment_proof_at = incomingStay.payment_proof_at;
   const incomingBankReview = incoming?.payment_status === 'PENDING_BANK'
     || Boolean(incomingStay.payment_proof);
-  if (incomingBankReview && paymentStatusRank(base?.payment_status) < 40) {
+  const baseStatus = base?.payment_status;
+  const incomingStatus = incoming?.payment_status;
+  if (incomingBankReview && paymentStatusRank(baseStatus) < 40) {
     merged.payment_status = 'PENDING_BANK';
     merged.payment_mode = incoming?.payment_mode || base?.payment_mode || 'BANK_TRANSFER';
-  } else if (paymentStatusRank(base?.payment_status) > paymentStatusRank(incoming?.payment_status)) {
+  } else if (
+    baseStatus
+    && ['PAID', 'PARTIAL', 'DEPOSIT_PAID', 'PENDING_CASH', 'PENDING_BANK'].includes(baseStatus)
+    && (incomingStatus === 'UNPAID' || !incomingStatus || paymentStatusRank(baseStatus) >= paymentStatusRank(incomingStatus))
+  ) {
+    // Under NO circumstances should Kinorot/remote UNPAID overwrite a payment status updated in our system
+    merged.payment_status = baseStatus;
+    if (base?.payment_mode && !incoming?.payment_mode) {
+      merged.payment_mode = base.payment_mode;
+    }
+  } else if (paymentStatusRank(baseStatus) > paymentStatusRank(incomingStatus)) {
     const incomingNewer = Date.parse(incoming?.updated_at || '') > Date.parse(base?.updated_at || '');
     if (!incomingNewer || hasRecordedReceipt(base)) {
-      merged.payment_status = base.payment_status;
+      merged.payment_status = baseStatus;
     }
+  }
+  if (base?.payment_mode && !merged.payment_mode) {
+    merged.payment_mode = base.payment_mode;
   }
   if (bookingStatusRank(base?.booking_status) > bookingStatusRank(incoming?.booking_status)) {
     const incomingNewer = Date.parse(incoming?.updated_at || '') > Date.parse(base?.updated_at || '');
@@ -304,9 +333,14 @@ function mergeBookingRow(base, incoming) {
   if (paymentStatusRank(merged.payment_status) >= 30 && merged.booking_status === 'PENDING') {
     merged.booking_status = 'CONFIRMED';
   }
-  if (!(Number(base?.total_price_agorot) > 0) && Number(incoming?.total_price_agorot) > 0) {
-    merged.total_price_agorot = incoming.total_price_agorot;
-    if (Number(incoming.deposit_agorot) > 0) merged.deposit_agorot = incoming.deposit_agorot;
+  merged.total_price_agorot = Math.max(
+    Number(base?.total_price_agorot) || 0,
+    Number(incoming?.total_price_agorot) || 0
+  );
+  if (!(Number(base?.deposit_agorot) > 0) && Number(incoming?.deposit_agorot) > 0) {
+    merged.deposit_agorot = incoming.deposit_agorot;
+  } else if (Number(base?.deposit_agorot) > 0) {
+    merged.deposit_agorot = base.deposit_agorot;
   }
   return merged;
 }
