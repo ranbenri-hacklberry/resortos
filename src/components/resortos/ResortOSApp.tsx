@@ -327,12 +327,12 @@ const HERO_CAROUSEL_SLIDES: HeroCarouselSlide[] = [
     propertyId: 'musical',
     propertyName: 'החצר המוסיקלית',
     village: 'מושב רמות',
-    badge: '👨‍👩‍👧‍👦 למשפחות וילדים · בריכה ומדשאות',
-    title: 'החצר המוסיקלית · נופש משפחתי מלא במרחבים וטבע',
-    tagline: 'בריכת שחייה מרעננת, מדשאות ירוקות ובקתות עץ שקטות',
-    description: 'מתחם נופש בטוח ומגודר ברמות עם בריכת שחייה גדולה, מיטות שיזוף, פינות ישיבה מוצלות תחת עצי דקל ושפע מרחב למשחקים ולרוגע (ללא אפשרות לבשל בבקתה).',
+    badge: '🪵 מתחם אינטימי · חצר מרכזית',
+    title: 'החצר המוסיקלית · מתחם נופש אינטימי עם חצר מרכזית',
+    tagline: 'שלוש בקתות עץ אינטימיות סביב חצר מרכזית ירוקה ושלווה',
+    description: 'מתחם נופש אינטימי עם חצר מרכזית במושב רמות, שלוש בקתות עץ אותנטיות, ג׳קוזי זרמים מפנק (ללא אפשרות לבשל בבקתה), בריכה מרכזית מרעננת (המתחם אינו מגודר) ואווירה כפרית שלווה לזוגות.',
     image: '/resorts/hero-musical.jpg',
-    highlights: ['בריכת שחייה גדולה', 'מדשאות ופינות ישיבה מוצלות', 'חצר פסטורלית למשפחות'],
+    highlights: ['מתחם נופש אינטימי', 'חצר מרכזית ירוקה', 'ג׳קוזי זרמים מפנק'],
     ctaLabel: 'לצפייה בחצר המוסיקלית'
   },
   {
@@ -385,26 +385,6 @@ export function ResortOSApp() {
   // Mobile Menu State
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Search & Booking State
-  const [searchCheckIn, setSearchCheckIn] = useState(() => {
-    const today = new Date();
-    const day = today.getDay();
-    const daysUntilFriday = (5 - day + 7) % 7 || 7;
-    const nextFriday = new Date(today);
-    nextFriday.setDate(today.getDate() + daysUntilFriday);
-    return nextFriday.toISOString().split('T')[0];
-  });
-  const [searchCheckOut, setSearchCheckOut] = useState(() => {
-    const today = new Date();
-    const day = today.getDay();
-    const daysUntilFriday = (5 - day + 7) % 7 || 7;
-    const nextSunday = new Date(today);
-    nextSunday.setDate(today.getDate() + daysUntilFriday + 2);
-    return nextSunday.toISOString().split('T')[0];
-  });
-  const [searchGuests, setSearchGuests] = useState('all');
-  const [searchNotice, setSearchNotice] = useState<string | null>(null);
-
   // Calendar Availability Popup Modal State
   const [calendarModalProperty, setCalendarModalProperty] = useState<any>(null);
 
@@ -433,23 +413,6 @@ export function ResortOSApp() {
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-  };
-
-  const handleSearchAvailability = () => {
-    if (activeTab !== 'marketplace') {
-      setActiveTab('marketplace');
-    }
-    const inDate = searchCheckIn ? new Date(searchCheckIn).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' }) : '';
-    const outDate = searchCheckOut ? new Date(searchCheckOut).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' }) : '';
-    const guestLabel = searchGuests === 'couple' ? 'זוג (2 מבוגרים)' :
-                       searchGuests === 'family_small' ? 'זוג + ילד' :
-                       searchGuests === 'family_large' ? 'משפחה (4+ אורחים)' :
-                       searchGuests === 'villa' ? 'וילה גדולה (עד 20 איש)' : 'כל ההרכבים';
-
-    setSearchNotice(`נבחרו תאריכים: ${inDate}–${outDate} (${guestLabel}). צפו במתחמים הפנויים למטה, או פנו לבדיקת יומן ישירה מול המארחים:`);
-    setTimeout(() => {
-      scrollToSection('resorts');
-    }, 50);
   };
 
   // 1. URL Path & Query Resolution (/p/:slug vs legacy ?preview=true&slug=...)
@@ -1047,7 +1010,7 @@ export function ResortOSApp() {
                 type="button"
                 onClick={() => {
                   if (activeTab !== 'marketplace') setActiveTab('marketplace');
-                  scrollToSection('search-booking');
+                  scrollToSection('resorts');
                 }}
                 className="bg-[#26130F] hover:bg-[#3F2C29] text-[#C5A880] border border-[#C5A880]/40 text-xs sm:text-sm font-black px-4 sm:px-5 py-2.5 rounded-xl shadow-sm flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
               >
@@ -1116,7 +1079,7 @@ export function ResortOSApp() {
                 onClick={() => {
                   setIsMobileMenuOpen(false);
                   if (activeTab !== 'marketplace') setActiveTab('marketplace');
-                  scrollToSection('search-booking');
+                  scrollToSection('resorts');
                 }}
                 className="w-full bg-[#26130F] text-[#C5A880] border border-[#C5A880]/30 font-black text-xs py-3 rounded-xl flex items-center justify-center gap-2 shadow-sm"
               >
@@ -1242,157 +1205,45 @@ export function ResortOSApp() {
                 </div>
               </div>
 
-              {/* Compact Search & Booking Bar */}
-              <div id="search-booking" className="relative z-20 max-w-5xl mx-auto px-2 sm:px-0">
-                <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl border border-stone-200/90 p-4 sm:p-6 backdrop-blur-md">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 items-end">
-                    {/* Check-In */}
-                    <div className="space-y-1.5 text-right">
-                      <label htmlFor="search-check-in" className="block text-xs font-black text-stone-700">
-                        תאריך הגעה
-                      </label>
-                      <div className="relative">
-                        <input
-                          id="search-check-in"
-                          type="date"
-                          value={searchCheckIn}
-                          onChange={(e) => setSearchCheckIn(e.target.value)}
-                          className="w-full p-2.5 sm:p-3 rounded-xl border border-stone-200 bg-stone-50 text-xs sm:text-sm font-semibold text-stone-800 focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Check-Out */}
-                    <div className="space-y-1.5 text-right">
-                      <label htmlFor="search-check-out" className="block text-xs font-black text-stone-700">
-                        תאריך עזיבה
-                      </label>
-                      <div className="relative">
-                        <input
-                          id="search-check-out"
-                          type="date"
-                          value={searchCheckOut}
-                          onChange={(e) => setSearchCheckOut(e.target.value)}
-                          className="w-full p-2.5 sm:p-3 rounded-xl border border-stone-200 bg-stone-50 text-xs sm:text-sm font-semibold text-stone-800 focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Guests */}
-                    <div className="space-y-1.5 text-right">
-                      <label htmlFor="search-guests" className="block text-xs font-black text-stone-700">
-                        מספר אורחים
-                      </label>
-                      <select
-                        id="search-guests"
-                        value={searchGuests}
-                        onChange={(e) => setSearchGuests(e.target.value)}
-                        className="w-full p-2.5 sm:p-3 rounded-xl border border-stone-200 bg-stone-50 text-xs sm:text-sm font-semibold text-stone-800 focus:ring-2 focus:ring-[#C5A880] focus:outline-none cursor-pointer"
-                      >
-                        <option value="all">כל ההרכבים</option>
-                        <option value="couple">זוג (2 מבוגרים)</option>
-                        <option value="family_small">זוג + ילד</option>
-                        <option value="family_large">משפחה (4+ אורחים)</option>
-                        <option value="villa">וילה גדולה (עד 20 איש)</option>
-                      </select>
-                    </div>
-
-                    {/* Submit CTA */}
-                    <div>
+              {/* Resorts Section: Direct Flow into Complexes */}
+              <section id="resorts" className="scroll-mt-24 space-y-6 pt-2">
+                {/* Filter Pills */}
+                <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 sm:p-4 rounded-2xl border border-stone-200 shadow-sm">
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                    {[
+                      { id: 'all', label: `כל המתחמים (${managedProperties.length})` },
+                      { id: 'רמות', label: 'מושב רמות (6)' },
+                      { id: 'דרום הגולן', label: 'נאות גולן וגבעת יואב (2)' },
+                      { id: 'חד נס ונוב', label: 'חד נס ונוב (2)' }
+                    ].map((tab) => (
                       <button
+                        key={tab.id}
                         type="button"
-                        onClick={handleSearchAvailability}
-                        className="w-full bg-[#26130F] hover:bg-[#3F2C29] text-[#C5A880] border border-[#C5A880]/30 font-black text-xs sm:text-sm py-3 px-4 rounded-xl shadow-md flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
+                        onClick={() => setRegionFilter(tab.id)}
+                        className={`py-2 px-3 sm:px-4 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                          regionFilter === tab.id
+                            ? 'bg-[#26130F] text-[#C5A880] shadow-sm font-black'
+                            : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                        }`}
                       >
-                        <Calendar className="w-4 h-4 text-[#C5A880]" />
-                        <span>בדיקת זמינות</span>
+                        {tab.label}
                       </button>
-                    </div>
+                    ))}
                   </div>
 
-                  {/* Search Notice Feedback */}
-                  {searchNotice && (
-                    <div className="mt-4 p-3.5 bg-amber-50/90 border border-amber-200 rounded-2xl text-xs sm:text-sm text-stone-800 flex items-center justify-between gap-3 animate-fadeIn">
-                      <div className="flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-[#8C6239] shrink-0" />
-                        <span>{searchNotice}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setSearchNotice(null)}
-                        className="text-stone-400 hover:text-stone-700 p-1 rounded-full text-xs cursor-pointer"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* 4 Bento-style Value Badges for All Stays */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-right">
-                <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-xs">
-                  <div className="text-[#8C6239] text-base sm:text-lg mb-1 font-black">🪵 10 מתחמים</div>
-                  <div className="text-xs font-black text-[#26130F]">לכל סגנון חופשה</div>
-                  <div className="text-[10px] text-stone-500">מבקתות עץ ועד וילות</div>
+                  <div className="relative w-full sm:w-72">
+                    <input
+                      type="text"
+                      placeholder="חיפוש לפי שם מתחם או מושב..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full p-2.5 pr-3 rounded-xl border border-stone-200 bg-stone-50 text-xs focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
+                    />
+                  </div>
                 </div>
 
-                <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-xs">
-                  <div className="text-[#8C6239] text-base sm:text-lg mb-1 font-black">🏊‍♂️ 28°C-38°C</div>
-                  <div className="text-xs font-black text-[#26130F]">בריכות וג׳קוזי ספא</div>
-                  <div className="text-[10px] text-stone-500">מחוממות ומפנקות בכל עונה</div>
-                </div>
-
-                <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-xs">
-                  <div className="text-[#8C6239] text-base sm:text-lg mb-1 font-black">🌅 שקיעות כנרת</div>
-                  <div className="text-xs font-black text-[#26130F]">נוף פנורמי וטבע</div>
-                  <div className="text-[10px] text-stone-500">אוויר צלול ברמת הגולן</div>
-                </div>
-
-                <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-xs">
-                  <div className="text-[#8C6239] text-base sm:text-lg mb-1 font-black">🛡️ 0% עמלה</div>
-                  <div className="text-xs font-black text-[#26130F]">סגירה ישירה</div>
-                  <div className="text-[10px] text-stone-500">המחיר הטוב ביותר מול המארחים</div>
-                </div>
-              </div>
-
-              {/* Filter Pills */}
-              <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 sm:p-4 rounded-2xl border border-stone-200 shadow-sm">
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-                  {[
-                    { id: 'all', label: `כל המתחמים (${managedProperties.length})` },
-                    { id: 'רמות', label: 'מושב רמות (6)' },
-                    { id: 'דרום הגולן', label: 'נאות גולן וגבעת יואב (2)' },
-                    { id: 'חד נס ונוב', label: 'חד נס ונוב (2)' }
-                  ].map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setRegionFilter(tab.id)}
-                      className={`py-2 px-3 sm:px-4 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                        regionFilter === tab.id
-                          ? 'bg-[#26130F] text-[#C5A880] shadow-sm font-black'
-                          : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                      }`}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="relative w-full sm:w-72">
-                  <input
-                    type="text"
-                    placeholder="חיפוש לפי שם מתחם או מושב..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full p-2.5 pr-3 rounded-xl border border-stone-200 bg-stone-50 text-xs focus:ring-2 focus:ring-[#C5A880] focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Resorts Catalog Grid */}
-              <div id="resorts" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* Resorts Catalog Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredProperties.map((prop) => {
                   const catalogMatch = rawProperties.find((p) => p.slug === prop.slug);
                   const matchingManaged = managedProperties.find((mp) => mp.id === prop.id);
@@ -1473,6 +1324,7 @@ export function ResortOSApp() {
                   );
                 })}
               </div>
+            </section>
 
               {/* Vacation Types Section */}
               <section id="vacation-types" className="pt-8 pb-4 space-y-6 scroll-mt-24">

@@ -449,8 +449,8 @@ export const PROPERTY_THEMES = {
     slug: 'musical',
     name: 'החצר המוסיקלית',
     hebrewName: 'החצר המוסיקלית',
-    tagline: 'מתחם בקתות שלווה כפרי עם נשמה ומוזיקה',
-    subTitle: 'שלוש בקתות עץ אינטימיות ונעימות במושב רמות – חליל, מיתר ופעמון',
+    tagline: 'מתחם נופש אינטימי עם חצר מרכזית',
+    subTitle: 'שלוש בקתות עץ אינטימיות סביב חצר מרכזית פסטורלית במושב רמות – חליל, מיתר ופעמון',
     village: 'מושב רמות',
     region: 'רמת הגולן והכנרת',
     whatsappNumber: '972507597944',
@@ -479,20 +479,20 @@ export const PROPERTY_THEMES = {
       '/resorts/gallery/musical/musical-bedroom.jpg'
     ],
     amenities: [
+      'מתחם נופש אינטימי עם חצר מרכזית',
       'לזוגות בלבד',
-      'בריכה מרכזית מחוממת ל-28°',
+      'בריכה מרכזית מרעננת',
       'ג׳קוזי זוגי בכל בקתה',
-      'מערכת שמע איכותית',
-      'חצר פסטורלית ומדשאות',
+      'חצר מרכזית פסטורלית (המתחם אינו מגודר)',
       'מנגל פרטי לכל בקתה',
       'מכונת נספרסו ומיקרוגל',
       'ללא אפשרות לבשל בבקתה (מקרר, מיקרוגל ופינת קפה בלבד)',
       'טלוויזיה עם יס ו-Wi-Fi'
     ],
     units: [
-      { id: 'k690', propertyId: 'musical', name: 'חצר מוסיקלית · חליל', type: 'cabin', maxOccupancy: 2, basePrice: 600, weekendPrice: 900, description: 'בקתת עץ כפרית ונעימה עם ג׳קוזי זוגי (ללא אפשרות לבשל בבקתה).', features: ['לזוגות בלבד', 'ג׳קוזי זוגי', 'ללא אפשרות לבשל בבקתה', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'], images: ['/resorts/musical.jpg', '/resorts/gallery/musical/musical-suite.jpg'] },
-      { id: 'k691', propertyId: 'musical', name: 'חצר מוסיקלית · מיתר', type: 'cabin', maxOccupancy: 2, basePrice: 600, weekendPrice: 900, description: 'בקתת עץ פסטורלית ושקטה (ללא אפשרות לבשל בבקתה).', features: ['לזוגות בלבד', 'ג׳קוזי זוגי', 'ללא אפשרות לבשל בבקתה', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'], images: ['/resorts/gallery/musical/musical-courtyard.jpg', '/resorts/gallery/musical/musical-jacuzzi.jpg'] },
-      { id: 'k692', propertyId: 'musical', name: 'חצר מוסיקלית · פעמון', type: 'cabin', maxOccupancy: 2, basePrice: 600, weekendPrice: 900, description: 'בקתת עץ שלווה מול המדשאות (ללא אפשרות לבשל בבקתה).', features: ['לזוגות בלבד', 'ג׳קוזי זוגי', 'ללא אפשרות לבשל בבקתה', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'], images: ['/resorts/gallery/musical/musical-bedroom.jpg', '/resorts/musical.jpg'] }
+      { id: 'k690', propertyId: 'musical', name: 'חצר מוסיקלית · חליל', type: 'cabin', maxOccupancy: 2, basePrice: 600, weekendPrice: 900, description: 'מתחם נופש אינטימי עם חצר מרכזית · בקתת עץ כפרית ונעימה עם ג׳קוזי זוגי (ללא אפשרות לבשל בבקתה).', features: ['מתחם נופש אינטימי עם חצר מרכזית', 'לזוגות בלבד', 'ג׳קוזי זוגי', 'ללא אפשרות לבשל בבקתה', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'], images: ['/resorts/musical.jpg', '/resorts/gallery/musical/musical-suite.jpg'] },
+      { id: 'k691', propertyId: 'musical', name: 'חצר מוסיקלית · מיתר', type: 'cabin', maxOccupancy: 2, basePrice: 600, weekendPrice: 900, description: 'מתחם נופש אינטימי עם חצר מרכזית · בקתת עץ פסטורלית ושקטה (ללא אפשרות לבשל בבקתה).', features: ['מתחם נופש אינטימי עם חצר מרכזית', 'לזוגות בלבד', 'ג׳קוזי זוגי', 'ללא אפשרות לבשל בבקתה', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'], images: ['/resorts/gallery/musical/musical-courtyard.jpg', '/resorts/gallery/musical/musical-jacuzzi.jpg'] },
+      { id: 'k692', propertyId: 'musical', name: 'חצר מוסיקלית · פעמון', type: 'cabin', maxOccupancy: 2, basePrice: 600, weekendPrice: 900, description: 'מתחם נופש אינטימי עם חצר מרכזית · בקתת עץ שלווה מול החצר (ללא אפשרות לבשל בבקתה).', features: ['מתחם נופש אינטימי עם חצר מרכזית', 'לזוגות בלבד', 'ג׳קוזי זוגי', 'ללא אפשרות לבשל בבקתה', 'נספרסו, מיקרוגל, מנגל', 'טלוויזיה עם יס ו-Wi-Fi'], images: ['/resorts/gallery/musical/musical-bedroom.jpg', '/resorts/musical.jpg'] }
     ]
   },
 
