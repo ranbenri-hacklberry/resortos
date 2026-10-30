@@ -291,16 +291,16 @@ export function MialeesResortApp() {
           <div className="space-y-3">
             <h4 className="text-xs uppercase tracking-widest text-[#C5A880] font-bold">יצירת קשר</h4>
             <p className="text-xs text-white/60">רמת הגולן והכנרת, ישראל</p>
-            <p className="text-xs text-white/60">טלפון: {property.phone || '050-759-7944'}</p>
+            <p className="text-xs text-white/60">טלפון: {property.phone || '051-526-2612'}</p>
             <div className="pt-2">
               <a
-                href={property.whatsappDirect || `https://wa.me/972507597944`}
+                href={property.whatsappDirect || `https://wa.me/972515262612`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#25D366] text-white text-xs font-bold shadow-md"
               >
                 <MessageCircle className="w-4 h-4" />
-                <span>פנייה ישירה בוואטסאפ</span>
+                <span>פנייה ישירה בוואטסאפ (קלואי)</span>
               </a>
             </div>
           </div>

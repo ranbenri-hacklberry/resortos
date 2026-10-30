@@ -225,8 +225,8 @@ function buildDefaultProperties(rawProperties: PropertyConfig[]): ManagedPropert
     village: p.village,
     region: p.region.includes('גולן') ? 'רמת הגולן' : 'סובב כנרת',
     address: `מושב ${p.village}`,
-    whatsapp_number: p.whatsappNumber || '972548076123',
-    phone: p.phone || '054-807-6123',
+    whatsapp_number: p.whatsappNumber || '972515262612',
+    phone: p.phone || '051-526-2612',
     email: p.email || 'info@resortos.app',
     hero_image: p.heroImage || '/resorts/mialees.jpg',
     gallery_images: ((p as any).galleryImages && (p as any).galleryImages.length > 0)
@@ -1087,13 +1087,13 @@ export function ResortOSApp() {
                 <span>בדיקת זמינות והזמנה</span>
               </button>
               <a
-                href="https://wa.me/972548076123?text=%D7%A9%D7%9C%D7%95%D7%9D%20%D7%9E%D7%99%D7%90%D7%9C%D7%99%D7%A1%20%D7%A8%D7%99%D7%96%D7%95%D7%A8%D7%98%D7%A1%2C%20%D7%90%D7%A9%D7%9E%D7%97%20%D7%9C%D7%91%D7%93%D7%95%D7%A7%20%D7%96%D7%9E%D7%99%D7%A2%D7%95%D7%AA"
+                href="https://wa.me/972515262612?text=%D7%A9%D7%9C%D7%95%D7%9D%20%D7%A8%D7%99%D7%96%D7%95%D7%A8%D7%98%D7%A1%2C%20%D7%90%D7%A9%D7%9E%D7%97%20%D7%9C%D7%91%D7%93%D7%95%D7%A7%20%D7%96%D7%9E%D7%99%D7%A2%D7%95%D7%AA"
                 target="_blank"
                 rel="noreferrer"
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-xs"
               >
                 <MessageCircle className="w-4 h-4" />
-                <span>הודעה ישירה בוואטסאפ</span>
+                <span>הודעה ישירה בוואטסאפ (קלואי)</span>
               </a>
             </div>
           </div>
@@ -1797,20 +1797,20 @@ export function ResortOSApp() {
               <h4 className="text-xs font-black uppercase tracking-wider text-[#C5A880]">הזמנה ישירה ושירות</h4>
               <div className="space-y-2 text-xs">
                 <a
-                  href="https://wa.me/972548076123?text=%D7%A9%D7%9C%D7%95%D7%9D%20%D7%9E%D7%99%D7%90%D7%9C%D7%99%D7%A1%20%D7%A8%D7%99%D7%96%D7%95%D7%A8%D7%98%D7%A1"
+                  href="https://wa.me/972515262612?text=%D7%A9%D7%9C%D7%95%D7%9D%20%D7%A8%D7%99%D7%96%D7%95%D7%A8%D7%98%D7%A1"
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center gap-2 text-emerald-400 hover:text-emerald-300 font-bold"
                 >
                   <MessageCircle className="w-4 h-4 shrink-0" />
-                  <span>וואטסאפ: 054-807-6123</span>
+                  <span>וואטסאפ: 051-526-2612 (קלואי)</span>
                 </a>
                 <a
-                  href="tel:0548076123"
+                  href="tel:0515262612"
                   className="flex items-center gap-2 text-stone-300 hover:text-white font-mono"
                 >
                   <Phone className="w-4 h-4 text-[#C5A880] shrink-0" />
-                  <span>054-807-6123</span>
+                  <span>051-526-2612</span>
                 </a>
                 <div className="text-[11px] text-stone-500 pt-1">
                   מענה אנושי מהיר בכל ימות השבוע

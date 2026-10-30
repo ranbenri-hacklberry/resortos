@@ -703,7 +703,7 @@ export const ChloeHostChat: React.FC<ChloeHostChatProps> = ({
     processHostPrompt(inputText);
   };
 
-  const CHLOE_WHATSAPP_NUMBER = '972506102416';
+  const CHLOE_WHATSAPP_NUMBER = '972515262612';
   const propTitle = currentProp?.hebrew_name ? ` עבור ${currentProp.hebrew_name}` : '';
   const whatsappUrl = `https://wa.me/${CHLOE_WHATSAPP_NUMBER}?text=${encodeURIComponent(`היי קלואי, אני רוצה לעדכן פרטים ותמונות${propTitle} ב-ResortOS`)}`;
 

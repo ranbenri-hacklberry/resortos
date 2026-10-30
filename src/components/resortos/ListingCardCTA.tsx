@@ -43,10 +43,10 @@ export const ListingCardCTA: React.FC<ListingCardCTAProps> = ({
     property.claimed_status === 'claimed_verified' && property.direct_booking_enabled;
 
   if (isClaimedAndConnected) {
-    const cleanPhone = (property.whatsapp_number || '972548076123').replace(/\D/g, '');
+    const cleanPhone = (property.whatsapp_number || '972515262612').replace(/\D/g, '');
     const waPhone = cleanPhone.startsWith('972') ? cleanPhone : '972' + cleanPhone.replace(/^0/, '');
     const waText = encodeURIComponent(
-      `שלום מיאליס ריזורטס, אשמח לברר זמינות ומחיר עבור ${property.hebrew_name} (${property.village}).`
+      `שלום קלואי, אשמח לברר זמינות ומחיר עבור ${property.hebrew_name} (${property.village}).`
     );
 
     return (
@@ -84,9 +84,9 @@ export const ListingCardCTA: React.FC<ListingCardCTAProps> = ({
   }
 
   // Fallback Direct WhatsApp Flow
-  const cleanPhone = (property.whatsapp_number || '972548076123').replace(/\D/g, '');
+  const cleanPhone = (property.whatsapp_number || '972515262612').replace(/\D/g, '');
   const inquiryText = encodeURIComponent(
-    `שלום, ראיתי את ${property.hebrew_name} ב-${property.village} ואשמח לבדוק זמינות ומחיר לתאריכים הקרובים.`
+    `שלום קלואי, ראיתי את ${property.hebrew_name} ב-${property.village} ואשמח לבדוק זמינות ומחיר לתאריכים הקרובים.`
   );
   const whatsappUrl = `https://wa.me/${cleanPhone.startsWith('972') ? cleanPhone : '972' + cleanPhone.replace(/^0/, '')}?text=${inquiryText}`;
 

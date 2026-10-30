@@ -14,8 +14,8 @@ export const PROPERTY_THEMES = {
     subTitle: 'וילת יוקרה וסוויטות בוטיק פרטיות במושב נאות גולן',
     village: 'מושב נאות גולן',
     region: 'דרום רמת הגולן והכנרת',
-    whatsappNumber: '972548076123',
-    phone: '054-807-6123',
+    whatsappNumber: '972515262612',
+    phone: '051-526-2612',
     email: 'info@mialees.co.il',
     wazeUrl: 'https://waze.com/ul?q=Mialees+Resort&navigate=yes',
     mapsUrl: 'https://maps.google.com/?q=Neot+Golan',
@@ -175,8 +175,8 @@ export const PROPERTY_THEMES = {
     subTitle: 'בקתות עץ איטלקיות מרווחות, בריכת שחייה, ג׳קוזי ספא וסאונה בשאטו',
     village: 'מושב רמות',
     region: 'רמת הגולן והכנרת',
-    whatsappNumber: '972507597944',
-    phone: '050-759-7944',
+    whatsappNumber: '972515262612',
+    phone: '051-526-2612',
     wazeUrl: 'https://waze.com/ul?q=Toscana+Cabins+Ramot&navigate=yes',
     theme: {
       primary: '#1E3A2F',
@@ -257,8 +257,8 @@ export const PROPERTY_THEMES = {
     subTitle: 'מתחם נופש פסטורלי עם בריכת שחייה, סאונה יבשה, מטבח מרכזי וג׳קוזי',
     village: 'מושב רמות',
     region: 'רמת הגולן והכנרת',
-    whatsappNumber: '972507597944',
-    phone: '050-759-7944',
+    whatsappNumber: '972515262612',
+    phone: '051-526-2612',
     wazeUrl: 'https://waze.com/ul?q=Batey+Nurit+Ramot&navigate=yes',
     theme: {
       primary: '#3B2F2F',
@@ -306,8 +306,8 @@ export const PROPERTY_THEMES = {
     subTitle: 'מתחם 4 בקתות עץ בעיצוב אוריינטלי יוקרתי עם בריכת שחייה מחוממת ונוף ישיר לקו המים של הכנרת',
     village: 'מושב רמות',
     region: 'רמת הגולן והכנרת',
-    whatsappNumber: '972507597944',
-    phone: '050-759-7944',
+    whatsappNumber: '972515262612',
+    phone: '051-526-2612',
     wazeUrl: 'https://waze.com/ul?q=Taj+Mahal+Ramot&navigate=yes',
     theme: {
       primary: '#2B261F',
@@ -350,8 +350,8 @@ export const PROPERTY_THEMES = {
     subTitle: 'מתחם מול הנוף ממוקם בנקודה הגבוהה ברמות, ומציע נוף ישיר לכנרת, צמחייה עשירה ובריכת שחייה',
     village: 'מושב רמות',
     region: 'רמת הגולן והכנרת',
-    whatsappNumber: '972507597944',
-    phone: '050-759-7944',
+    whatsappNumber: '972515262612',
+    phone: '051-526-2612',
     wazeUrl: 'https://waze.com/ul?q=Mool+Hanof+Ramot&navigate=yes',
     theme: {
       primary: '#1A3344',
@@ -403,8 +403,8 @@ export const PROPERTY_THEMES = {
     subTitle: '2 בקתות עץ רומנטיות, בריכה פרטית מחוממת ל-28° ונוף פתוח לכנרת',
     village: 'מושב רמות',
     region: 'רמת הגולן והכנרת',
-    whatsappNumber: '972507597944',
-    phone: '050-759-7944',
+    whatsappNumber: '972515262612',
+    phone: '051-526-2612',
     wazeUrl: 'https://waze.com/ul?q=Nofim+Belavan+Ramot&navigate=yes',
     theme: {
       primary: '#2E353B',
@@ -453,8 +453,8 @@ export const PROPERTY_THEMES = {
     subTitle: 'שלוש בקתות עץ אינטימיות סביב חצר מרכזית פסטורלית במושב רמות – חליל, מיתר ופעמון',
     village: 'מושב רמות',
     region: 'רמת הגולן והכנרת',
-    whatsappNumber: '972507597944',
-    phone: '050-759-7944',
+    whatsappNumber: '972515262612',
+    phone: '051-526-2612',
     wazeUrl: 'https://waze.com/ul?q=Musical+Yard+Ramot&navigate=yes',
     theme: {
       primary: '#332724',
@@ -505,8 +505,8 @@ export const PROPERTY_THEMES = {
     subTitle: 'מתחם 3 בקתות עץ יפהפיות ברמות, המציע 2 בריכות שחייה נפרדות לחופשה מושלמת',
     village: 'מושב רמות',
     region: 'רמת הגולן והכנרת',
-    whatsappNumber: '972507597944',
-    phone: '050-759-7944',
+    whatsappNumber: '972515262612',
+    phone: '051-526-2612',
     wazeUrl: 'https://waze.com/ul?q=Maya+Cabins+Ramot&navigate=yes',
     theme: {
       primary: '#2C3527',
@@ -555,8 +555,8 @@ export const PROPERTY_THEMES = {
     subTitle: 'מתחם אירוח כפרי שקט במושב גבעת יואב, 5 דקות מנאות גולן והכנרת',
     village: 'מושב גבעת יואב',
     region: 'דרום רמת הגולן',
-    whatsappNumber: '972507597944',
-    phone: '050-759-7944',
+    whatsappNumber: '972515262612',
+    phone: '051-526-2612',
     wazeUrl: 'https://waze.com/ul?q=Zimmer+Bagiva+Givat+Yoav&navigate=yes',
     theme: {
       primary: '#2F382B',
@@ -607,8 +607,8 @@ export const PROPERTY_THEMES = {
     subTitle: 'חוויית גלמפינג ייחודית ממוזגת עם ג׳קוזי ספא ושמיים זרועי כוכבים',
     village: 'מושב גבעת יואב',
     region: 'דרום רמת הגולן',
-    whatsappNumber: '972507597944',
-    phone: '050-759-7944',
+    whatsappNumber: '972515262612',
+    phone: '051-526-2612',
     wazeUrl: 'https://waze.com/ul?q=Kipat+Hashamayim+Givat+Yoav&navigate=yes',
     theme: {
       primary: '#1B263B',
@@ -652,8 +652,8 @@ export const PROPERTY_THEMES = {
     subTitle: 'סוויטות Aura ו-Bloom ברמת הגולן (יישוב שומר שבת)',
     village: 'מושב נוב',
     region: 'דרום רמת הגולן',
-    whatsappNumber: '972507597944',
-    phone: '050-759-7944',
+    whatsappNumber: '972515262612',
+    phone: '051-526-2612',
     wazeUrl: 'https://waze.com/ul?q=CasaNov+Nov&navigate=yes',
     theme: {
       primary: '#242B28',
@@ -804,7 +804,7 @@ export function buildWhatsAppReservationUrl({
   totalPrice,
   customNotes = ''
 }) {
-  const number = property?.whatsappNumber || '972548076123';
+  const number = property?.whatsappNumber || '972515262612';
   const propName = property?.name || 'MIALEES RESORT';
   const unitName = unit?.name || 'יחידת אירוח';
 
