@@ -24,7 +24,7 @@
     "deploy:volthub": "npm run build:volthub && wrangler pages deploy dist-volthub --project-name volthub --commit-dirty=true",
     "deploy:volthub:vercel": "npm run build:volthub && npx vercel deploy dist-volthub --prod --name volthub --yes",
     "build:resortos": "node ./node_modules/vite/bin/vite.js build --config vite.resortos.config.js && cp dist-resortos/resortos.html dist-resortos/index.html && cp vercel.static.json dist-resortos/vercel.json && cp -f public/_redirects dist-resortos/_redirects 2>/dev/null && cp -R public/guides dist-resortos/ 2>/dev/null && cp -R public/resorts dist-resortos/ 2>/dev/null && cp resources/favicon.png resources/apple-touch-icon.png dist-resortos/ 2>/dev/null || true",
-    "deploy:resortos:vercel": "npm run build:resortos && npx vercel deploy dist-resortos --prod --yes",
+    "deploy:resortos:vercel": "npm run build:resortos && ./node_modules/.bin/vercel deploy dist-resortos --prod --yes",
     "deploy:mialees": "npm run build:mialees && wrangler pages deploy dist-mialees --project-name mialees-resort --commit-dirty=true",
     "native:sync": "npm run build:reviews && npx cap sync android",
     "native:aab": "npm run native:sync && node native/build-aab.js",
@@ -68,6 +68,7 @@
     "@types/bcryptjs": "^2.4.6",
     "@vitejs/plugin-react": "^4.0.0",
     "tailwindcss": "^4.3.3",
+    "vercel": "^65.7.0",
     "vite": "^6.0.0",
     "vitest": "^3.2.7",
     "wrangler": "^4.123.0"
