@@ -160,27 +160,22 @@ describe('worker finish by photos', () => {
 });
 
 describe('previous room must be closed before a new START', () => {
-  it('worker: new scan blocked → photos + 1 → new room auto-starts (no rescan)', async () => {
+  // Ran 2026-10-30 (approved): workers' new scan auto-closes the previous room as ready and starts the new one.
+  it('worker: new scan auto-closes previous room (ready) and starts the new room in one message', async () => {
     const t = makeDeps(); const p = createPipeline(t.deps);
     await p.handleInbound(txt(TH, 'START_hill_1'));
     await p.handleInbound(txt(TH, 'START_hill_2'));
-    expect(t.units.get('hill-2').operational_status).toBe('DIRTY');
-    expect(last(t.sent)).toContain('ไม่ต้องสแกนใหม่');
-    await p.handleInbound(txt(TH, '1'));
-    expect(t.resortos.markRoomReady).not.toHaveBeenCalled(); // photos required first
-    await p.handleInbound(img(TH, PLAIN));
-    await p.handleInbound(txt(TH, '1'));
+    expect(last(t.sent)).toContain('ปิดงานแล้ว');
     expect(t.units.get('hill-1').operational_status).toBe('READY');
     expect(t.units.get('hill-2').operational_status).toBe('IN_PROGRESS');
   });
-  it('worker: 2 on previous room → only after photo+explanation does the new room start', async () => {
+  it('worker: 2 after auto-close → repair flow (photo+explanation) on the previous room; new room stays open', async () => {
     const t = makeDeps(); const p = createPipeline(t.deps);
     await p.handleInbound(txt(AR, 'START_hill_1'));
     await p.handleInbound(txt(AR, 'START_hill_2'));
-    await p.handleInbound(img(AR, PLAIN));
+    expect(t.units.get('hill-2').operational_status).toBe('IN_PROGRESS');
     await p.handleInbound(txt(AR, '2'));
     await p.handleInbound(txt(AR, 'الحنفية بتنقط'));
-    expect(t.units.get('hill-2').operational_status).toBe('DIRTY');
     await p.handleInbound(img(AR, PLAIN));
     expect(t.units.get('hill-1').operational_status).toBe('MAINTENANCE_ALERT');
     expect(t.units.get('hill-2').operational_status).toBe('IN_PROGRESS');
@@ -222,16 +217,18 @@ describe('QR sticker photo = scan', () => {
     expect(t.units.get('hill-1').operational_status).toBe('IN_PROGRESS');
     expect(t.photos).toHaveLength(0);
   });
-  it('with a room open, a QR photo of another room is a scan (close-previous rule), a normal photo is a finish photo', async () => {
+  it('with a room open, a QR photo of another room is a scan (auto-close previous), a normal photo is a finish photo', async () => {
     const t = makeDeps(); const p = createPipeline(t.deps);
     await p.handleInbound(txt(TH, 'START_hill_1'));
     await p.handleInbound(img(TH, QR_HILL2));
     expect(t.photos).toHaveLength(0);
-    expect(last(t.sent)).toContain('ไม่ต้องสแกนใหม่');
+    expect(last(t.sent)).toContain('ปิดงานแล้ว');
+    expect(t.units.get('hill-1').operational_status).toBe('READY');
+    expect(t.units.get('hill-2').operational_status).toBe('IN_PROGRESS');
     await p.handleInbound(img(TH, PLAIN));
     expect(t.photos).toHaveLength(1);
     await p.handleInbound(txt(TH, '1'));
-    expect(t.units.get('hill-2').operational_status).toBe('IN_PROGRESS');
+    expect(t.units.get('hill-2').operational_status).toBe('READY');
   });
   it('unreadable sticker photo with no room open → asks for clearer photo / room code (worker language)', async () => {
     const t = makeDeps(); const p = createPipeline(t.deps);
