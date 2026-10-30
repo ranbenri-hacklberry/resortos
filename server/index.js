@@ -673,6 +673,38 @@ app.post('/api/finance/hyp/sync', requireManagerStaff, async (req, res) => {
   }
 });
 
+app.get('/api/channex/status', allowStaffOrPrivate, async (req, res) => {
+  try {
+    const { getChannexStatus } = await import('./channexService.js');
+    res.json(await getChannexStatus());
+  } catch (err) {
+    res.status(502).json({ error: err.message || 'CHANNEX_STATUS_FAILED' });
+  }
+});
+
+app.post('/api/channex/sync', allowStaffOrPrivate, async (req, res) => {
+  try {
+    const { syncChannexOffice } = await import('./channexService.js');
+    res.json(await syncChannexOffice());
+  } catch (err) {
+    res.status(502).json({ error: err.message || 'CHANNEX_SYNC_FAILED' });
+  }
+});
+
+const channexWebhookHandler = async (req, res) => {
+  try {
+    const { handleChannexWebhook } = await import('./channexService.js');
+    const result = await handleChannexWebhook(req.body);
+    res.status(200).json(result);
+  } catch (err) {
+    console.error('[channex webhook error]', err);
+    res.status(200).json({ ok: false, error: err.message });
+  }
+};
+
+app.post('/api/webhooks/channex', channexWebhookHandler);
+app.post('/webhooks/channex', channexWebhookHandler);
+
 function requireAttendanceKey(req, res, next) {
     const expected = process.env.ATTENDANCE_API_KEY;
     if (!expected) {

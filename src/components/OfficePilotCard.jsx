@@ -17,6 +17,20 @@ export default function OfficePilotCard({ operator = 'צוות' }) {
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState('');
 
+  // Channex Channel Manager state
+  const [channexStatus, setChannexStatus] = useState(null);
+  const [channexBusy, setChannexBusy] = useState(false);
+  const [channexNotice, setChannexNotice] = useState('');
+
+  const refreshChannex = useCallback(async () => {
+    try {
+      const res = await fetch('/api/channex/status');
+      if (res.ok) {
+        setChannexStatus(await res.json());
+      }
+    } catch {}
+  }, []);
+
   const refresh = useCallback(async () => {
     try {
       setStatus(await pilotFetch('/api/pilot/office'));
@@ -28,9 +42,34 @@ export default function OfficePilotCard({ operator = 'צוות' }) {
 
   useEffect(() => {
     refresh();
-    const id = setInterval(refresh, 15000);
+    refreshChannex();
+    const id = setInterval(() => {
+      refresh();
+      refreshChannex();
+    }, 15000);
     return () => clearInterval(id);
-  }, [refresh]);
+  }, [refresh, refreshChannex]);
+
+  async function syncChannex() {
+    if (channexBusy) return;
+    setChannexBusy(true);
+    setChannexNotice('');
+    try {
+      const res = await fetch('/api/channex/sync', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok || data.ok === false) {
+        throw new Error(data.error || 'הסנכרון נכשל');
+      }
+      const pulled = data.pull?.upsertedCount ?? 0;
+      const pushed = data.push?.daysAhead ?? 45;
+      setChannexNotice(`סונכרן בהצלחה: נמשכו ${pulled} הזמנות, עודכנו ${pushed} ימי זמינות`);
+      await refreshChannex();
+    } catch (err) {
+      setChannexNotice(`שגיאת סנכרון: ${err.message || 'לא ניתן לתקשר עם Channex'}`);
+    } finally {
+      setChannexBusy(false);
+    }
+  }
 
   async function run(action, extra = {}) {
     if (busy) return;
@@ -115,6 +154,116 @@ export default function OfficePilotCard({ operator = 'צוות' }) {
       </div>
       <div style={{ marginTop: '0.65rem', fontSize: '0.75rem', color: error ? '#FDE68A' : '#94A3B8' }}>
         {busy ? 'שולח לבקר…' : (error || notice || unit?.note || 'הפקודות יוצאות מהעין ומהמנעול של המשרד.')}
+      </div>
+
+      {/* Channex Channel Manager Integration Section */}
+      <div
+        style={{
+          marginTop: '1rem',
+          paddingTop: '0.85rem',
+          borderTop: '1px solid rgba(148, 163, 184, 0.15)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+          <div>
+            <div style={{ fontSize: '0.72rem', letterSpacing: '0.04em', color: '#38BDF8', fontWeight: 800 }}>
+              ערוצי הפצה · Channex Channel Manager (Staging)
+            </div>
+            <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#F1F5F9', marginTop: '0.1rem' }}>
+              סנכרון הזמנות וזמינות עבור יחידת המשרד
+            </div>
+          </div>
+          <div
+            style={{
+              fontSize: '0.72rem',
+              fontWeight: 800,
+              padding: '0.2rem 0.6rem',
+              borderRadius: '999px',
+              background: channexStatus?.connectionHealthy ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+              color: channexStatus?.connectionHealthy ? '#34D399' : '#FCA5A5',
+              border: `1px solid ${channexStatus?.connectionHealthy ? 'rgba(52, 211, 153, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
+            }}
+          >
+            {channexStatus?.connectionHealthy ? '● Staging מחובר' : '● לא מחובר'}
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+            gap: '0.5rem',
+            marginTop: '0.65rem',
+            background: 'rgba(15, 23, 42, 0.6)',
+            padding: '0.6rem 0.75rem',
+            borderRadius: '10px',
+            border: '1px solid rgba(255, 255, 255, 0.05)',
+            fontSize: '0.72rem',
+          }}
+        >
+          <div>
+            <span style={{ color: '#94A3B8' }}>נכס Channex: </span>
+            <strong style={{ color: '#E2E8F0' }}>{channexStatus?.propertyName || 'ResortOS Sandbox'}</strong>
+          </div>
+          <div>
+            <span style={{ color: '#94A3B8' }}>סוג חדר: </span>
+            <strong style={{ color: '#E2E8F0' }}>{channexStatus?.roomName || 'Office Pilot'}</strong>
+          </div>
+          <div>
+            <span style={{ color: '#94A3B8' }}>תוכנית מחיר: </span>
+            <strong style={{ color: '#E2E8F0' }}>{channexStatus?.ratePlanName || 'Office Pilot Test Rate'}</strong>
+          </div>
+          <div>
+            <span style={{ color: '#94A3B8' }}>יחידה במערכת: </span>
+            <strong style={{ color: '#38BDF8' }}>משרד ({channexStatus?.unitId || 'pilot-office'})</strong>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            disabled={channexBusy}
+            onClick={syncChannex}
+            style={{
+              ...pill,
+              background: channexBusy ? '#475569' : '#0284C7',
+              fontSize: '0.78rem',
+              padding: '0.4rem 0.9rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+            }}
+          >
+            {channexBusy ? '⟳ מסנכרן מול Channex…' : '🔄 סנכרן עכשיו מול Channex'}
+          </button>
+
+          <div style={{ fontSize: '0.7rem', color: '#94A3B8' }}>
+            {channexStatus?.lastSyncAt ? (
+              <span>
+                סנכרון אחרון: {new Date(channexStatus.lastSyncAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                {channexStatus.pulledBookings !== undefined ? ` · ${channexStatus.pulledBookings} הזמנות` : ''}
+              </span>
+            ) : (
+              'טרם בוצע סנכרון ידני בסשן זה'
+            )}
+          </div>
+        </div>
+
+        {channexNotice && (
+          <div
+            style={{
+              marginTop: '0.5rem',
+              fontSize: '0.72rem',
+              padding: '0.35rem 0.6rem',
+              borderRadius: '6px',
+              background: channexNotice.includes('שגיא') ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.15)',
+              color: channexNotice.includes('שגיא') ? '#FCA5A5' : '#6EE7B7',
+              border: `1px solid ${channexNotice.includes('שגיא') ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
+            }}
+          >
+            {channexNotice}
+          </div>
+        )}
       </div>
     </section>
   );
