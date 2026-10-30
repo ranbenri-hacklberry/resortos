@@ -593,7 +593,9 @@ export function createPipeline(deps: PipelineDeps) {
   const backendHoldSent = new Map<string, number>();
   const mediaAckSent = new Map<string, number>();
   // ---- Ran 2026-10-29: cleaning finish by photos ----
-  type FinishState = { roomId: string; stage: 'choice' | 'problem'; kind?: 'repair' | 'missing'; photos: number; problemPhotos: number; desc?: string; askedAt?: number; explAskedAt?: number; pendingStartText?: string };
+  type FinishState = { roomId: string; stage: 'choice' | 'problem'; kind?: 'repair' | 'missing'; photos: number; problemPhotos: number; desc?: string; askedAt?: number; explAskedAt?: number; pendingStartText?: string; autoClosed?: boolean };
+  /** Ran 2026-10-30: rooms auto-closed by a scan of `next`, rendered into the start message of `next`. */
+  const autoClosePending = new Map<string, { next: string; closed: Array<{ id: string; blocked: boolean }> }>();
   const finishStates = new Map<string, FinishState>();
   const qrRetryAsked = new Map<string, number>();
   const storePhoto = d.storeCleaningPhoto || storeCleaningPhotoLocal;
@@ -607,6 +609,13 @@ export function createPipeline(deps: PipelineDeps) {
     const mine = (await d.resortos.listUnits()).filter((u) => u.operational_status === 'IN_PROGRESS' && who.has(String(u.assigned_staff || '')));
     mine.sort((a, b) => String((b as any).cleaning_started_at || '').localeCompare(String((a as any).cleaning_started_at || '')));
     return mine[0]?.id || null;
+  };
+  const findMyOpenRooms = async (cleaner: CleanerProfile): Promise<string[]> => {
+    if (!d.resortos.listUnits) return [];
+    const who = new Set([cleaningCredit(cleaner), cleaner.name].filter(Boolean));
+    const mine = (await d.resortos.listUnits()).filter((u) => u.operational_status === 'IN_PROGRESS' && who.has(String(u.assigned_staff || '')));
+    mine.sort((a, b) => String((b as any).cleaning_started_at || '').localeCompare(String((a as any).cleaning_started_at || '')));
+    return mine.map((u) => u.id);
   };
   async function finishFlow(
     cleaner: CleanerProfile, jid: string, msg: WAMessage, sessionKey: string, textIn: string | null, isWorker: boolean,
@@ -658,7 +667,43 @@ export function createPipeline(deps: PipelineDeps) {
       return closeRoom(st, { handled: true, intent: { action: st.kind === 'repair' ? 'MAINTENANCE_ISSUE' : 'SUPPLIES_NEEDED', room_id: st.roomId, room_raw: '', issue_description_hebrew: desc, acknowledgement_reply_cleaner_language: reply } });
     };
 
+    // Ran 2026-10-30: worker scans room B while A (started by them) is still open → close A as ready, then start B.
+    const autoClosePrevious = async (next: string, photosByRoom: Record<string, number> = {}): Promise<{ resumeText: string }> => {
+      const prevs = (await findMyOpenRooms(cleaner)).filter((id) => id !== next);
+      const closed: Array<{ id: string; blocked: boolean }> = [];
+      for (const id of prevs) {
+        let blocked = false;
+        try {
+          const n = photosByRoom[id] || 0;
+          const r = await d.resortos.markRoomReady({ unitId: id, reportedBy: by, note: `סגירה אוטומטית בסריקת חדר חדש${n ? ` (📷 ${n})` : ''}` });
+          if (r && !r.ok) blocked = r.skipped === 'maintenance_open';
+          closed.push({ id, blocked });
+        } catch (e) { d.log.error({ err: String(e), roomId: id }, 'auto-close markRoomReady failed'); }
+      }
+      sessionStates.delete(sessionKey);
+      finishStates.delete(sessionKey);
+      if (closed.length) {
+        autoClosePending.set(sessionKey, { next, closed });
+        // A following "2"/"3" applies to the (most recent) auto-closed room via the regular problem flow.
+        finishStates.set(sessionKey, { roomId: closed[0].id, stage: 'choice', photos: 0, problemPhotos: 0, autoClosed: true });
+      }
+      return { resumeText: text! };
+    };
+
     let st = finishStates.get(sessionKey);
+    if (st?.autoClosed) {
+      const choice = !isImg && text ? parseFinishChoice(text) : null;
+      if (choice === 'repair' || choice === 'missing') {
+        st.autoClosed = false;
+        st.stage = 'problem';
+        st.kind = choice;
+        await say((needsPhotos ? FINISH_TEXT.askProblem : FINISH_TEXT.askProblemOptional)[lang](choice));
+        return done;
+      }
+      // Anything else → normal flow (the auto-closed room stays ready).
+      finishStates.delete(sessionKey);
+      st = undefined;
+    }
     if (st) {
       const label = finishRoomLabel(st.roomId, lang);
       if (startRoom) {
@@ -668,6 +713,7 @@ export function createPipeline(deps: PipelineDeps) {
             : (st.photos || !needsPhotos ? FINISH_TEXT.askChoice[lang](label) : FINISH_TEXT.stillWaitingPhotos[lang](label)));
           return done;
         }
+        if (isWorker && st.stage === 'choice') return autoClosePrevious(startRoom, { [st.roomId]: st.photos });
         st.pendingStartText = text!;
         await say((needsPhotos ? FINISH_TEXT.closePreviousFirst : FINISH_TEXT.closePreviousFirstNoPhotos)[lang](label, finishRoomLabel(startRoom, lang)));
         return done;
@@ -760,6 +806,7 @@ export function createPipeline(deps: PipelineDeps) {
       const open = await findOpenRoom(cleaner);
       if (!open) return fallThrough();
       if (startRoom && startRoom !== open) {
+        if (isWorker) return autoClosePrevious(startRoom);
         sessionStates.delete(sessionKey);
         finishStates.set(sessionKey, { roomId: open, stage: 'choice', photos: 0, problemPhotos: 0, pendingStartText: text! });
         await say((needsPhotos ? FINISH_TEXT.closePreviousFirst : FINISH_TEXT.closePreviousFirstNoPhotos)[lang](finishRoomLabel(open, lang), finishRoomLabel(startRoom, lang)));
@@ -2953,6 +3000,8 @@ ${result.paymentURL}`);
 
         // ---- ROLE B: STAFF / WORKER ----
         if (cleaner && !isManager) {
+          const autoClosed = autoClosePending.get(sessionKey);
+          autoClosePending.delete(sessionKey);
           const units = (await d.resortos.listUnits?.()) || [];
           const currentUnit = units.find((u) => u.id === resolvedId);
           // If unit is already IN_PROGRESS, worker scanning again triggers the exit menu!
@@ -2970,7 +3019,15 @@ ${result.paymentURL}`);
           }
           const roomLabel = cleaner.language === 'th' ? (r?.letterCode || r?.name || '') : (r?.name || r?.letterCode || '');
           let reply = '';
-          if (cleaner.language === 'th') {
+          if (autoClosed && autoClosed.next === resolvedId && autoClosed.closed.length) {
+            const lang = finishLang(cleaner.language);
+            const ready = autoClosed.closed.filter((c) => !c.blocked).map((c) => finishRoomLabel(c.id, lang));
+            const blocked = autoClosed.closed.filter((c) => c.blocked).map((c) => FINISH_TEXT.readyBlocked[lang](finishRoomLabel(c.id, lang)));
+            const body = FINISH_TEXT.autoCloseStart[lang](ready.length ? ready.join(', ') : finishRoomLabel(autoClosed.closed[0].id, lang), roomLabel, lockbox || '—');
+            reply = ready.length
+              ? (blocked.length ? `${body}\n⚠️ ${blocked.join('\n⚠️ ')}` : body)
+              : `⚠️ ${blocked.join('\n⚠️ ')}\n` + body.split('\n').slice(1).join('\n');
+          } else if (cleaner.language === 'th') {
             reply = `บันทึกเรียบร้อยค่ะ: คุณ${cleaner.name} เริ่มทำความสะอาดห้อง ${roomLabel} แล้วค่ะ ✅\n🔑 รหัสตู้เซฟกุญแจ: ${lockbox || 'ไม่มี'}\n\n📲 เมื่อทำความสะอาดเสร็จแล้ว ให้สแกน QR Code อีกครั้ง เพื่อส่งรายงานและตรวจปิดไฟ/แอร์นะคะ`;
           } else if (cleaner.language === 'ar') {
             reply = `تم تسجيل بدء تنظيف غرفة ${roomLabel} بنجاح! ✅\n🔑 كود صندوق المفتاح: ${lockbox || 'غير محدد'}\n\n📲 عند الانتهاء من التنظيف، يرجى مسح رمز الـ QR مرة أخرى لتأكيد الإنهاء وإطفاء الأنوار والمكيفات.`;

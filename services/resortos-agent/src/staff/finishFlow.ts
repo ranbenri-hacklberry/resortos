@@ -86,6 +86,13 @@ export const FINISH_TEXT = {
     ar: (prev: string, next: string) => `قبل ما تبلش ${next}، لازم تسكّر ${prev}. 1 جاهزة / 2 تصليح / 3 نقص. بعدها بفتحلك ${next} تلقائياً.`,
     en: (prev: string, next: string) => `Before starting ${next}, please close ${prev}: 1 ready / 2 repair / 3 missing. I'll then open ${next} automatically.`,
   },
+  // Ran 2026-10-30: scanning a new room auto-closes the worker's previous open room as ready (one message).
+  autoCloseStart: {
+    he: (prev: string, next: string, code: string) => `✅ חדר ${prev} נסגר כמוכן.\n🧹 התחלת לנקות את ${next} ✅\n🔑 קוד כספת: ${code}\nאם בחדר ${prev} יש תקלה או חסר משהו – ענו 2 (תקלה) או 3 (חסר ציוד).`,
+    th: (prev: string, next: string, code: string) => `✅ ห้อง ${prev} ปิดงานแล้ว บันทึกว่าพร้อมค่ะ\n🧹 เริ่มทำความสะอาดห้อง ${next} แล้วค่ะ ✅\n🔑 รหัสตู้เซฟกุญแจ: ${code}\nถ้าห้อง ${prev} มีของเสียหรือของขาด ตอบ 2 (ต้องซ่อม) หรือ 3 (ของขาด) ค่ะ`,
+    ar: (prev: string, next: string, code: string) => `✅ غرفة ${prev} تسكّرت كجاهزة.\n🧹 بلّشت تنظيف ${next} ✅\n🔑 كود صندوق المفتاح: ${code}\nإذا في ${prev} عطل أو نقص – جاوب 2 (تصليح) أو 3 (نقص).`,
+    en: (prev: string, next: string, code: string) => `✅ Room ${prev} closed as ready.\n🧹 You started cleaning ${next} ✅\n🔑 Key safe code: ${code}\nIf ${prev} has a fault or something missing, reply 2 (repair) or 3 (missing).`,
+  },
   qrUnreadable: { he: 'לא הצלחתי לקרוא את הברקוד בתמונה. שלחו תמונה ברורה יותר של הברקוד, או כתבו את קוד החדר.', th: 'อ่าน QR ในรูปไม่ได้ค่ะ ช่วยส่งรูป QR ที่ชัดกว่านี้ หรือพิมพ์รหัสห้องมาได้เลยค่ะ', ar: 'ما قدرت أقرأ الباركود بالصورة. ابعت صورة أوضح للباركود أو اكتب كود الغرفة.', en: "I couldn't read the QR in the photo. Please send a clearer photo of the QR, or type the room code." },
   stillWaitingPhotos: { he: (room: string) => `עדיין מחכה לתמונות של ${room} 📸`, th: (room: string) => `ยังรอรูปห้อง ${room} อยู่นะคะ 📸`, ar: (room: string) => `لسا بستنى صور ${room} 📸`, en: (room: string) => `Still waiting for photos of ${room} 📸` },
 };
