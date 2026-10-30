@@ -69,8 +69,8 @@ export async function onRequest(context) {
   if (request.method !== 'GET') return errorJson('Method not allowed', 405, 'METHOD_NOT_ALLOWED');
 
   const url = new URL(request.url);
-  const unitId = url.searchParams.get('unit_id') || url.searchParams.get('unitId') || '';
-  const propertyId = url.searchParams.get('property_id') || url.searchParams.get('propertyId') || '';
+  const rawPropertyId = url.searchParams.get('property_id') || url.searchParams.get('propertyId') || '';
+  const propertyId = rawPropertyId === 'mialees' ? 'mialis' : rawPropertyId;
   const date = url.searchParams.get('date') || '';
   const from = url.searchParams.get('from') || date || new Date().toISOString().split('T')[0];
   const to = url.searchParams.get('to') || (date ? shiftIso(date, 1) : null);

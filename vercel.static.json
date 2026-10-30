@@ -2,7 +2,7 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "https://api.resortos.app/api/$1"
+      "dest": "https://resortos.app/api/$1"
     },
     {
       "src": "/p/(.*)",

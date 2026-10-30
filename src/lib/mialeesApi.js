@@ -8,10 +8,35 @@
 export const AVAILABILITY_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 const availabilityCache = new Map();
 
+/**
+ * Direct authoritative Cloudflare Edge origin with CORS enabled (Access-Control-Allow-Origin: *).
+ * Used when relative proxy fails or on external deployments.
+ */
+const DIRECT_API_BASE = 'https://resortos.app';
+
+async function smartFetch(urlPath, options = {}) {
+  // 1. Try local/relative path first (benefits from same-origin proxy or Cloudflare Pages)
+  try {
+    const res = await fetch(urlPath, options);
+    // If not a 502/504 Bad Gateway / Gateway Timeout (e.g. proxy failure)
+    if (res.status !== 502 && res.status !== 504) {
+      return res;
+    }
+    console.warn('[smartFetch] Relative fetch returned', res.status, '- attempting direct fallback to', DIRECT_API_BASE);
+  } catch (err) {
+    console.warn('[smartFetch] Relative fetch network error - attempting direct fallback to', DIRECT_API_BASE, err?.message || err);
+  }
+
+  // 2. Direct fallback to authoritative resortos.app origin (CORS enabled)
+  const fullUrl = `${DIRECT_API_BASE}${urlPath.startsWith('/') ? '' : '/'}${urlPath}`;
+  return fetch(fullUrl, options);
+}
+
 export function clearAvailabilityCache(propertyId) {
-  if (propertyId) {
+  const normalizedPropertyId = propertyId === 'mialees' ? 'mialis' : propertyId;
+  if (normalizedPropertyId) {
     for (const key of availabilityCache.keys()) {
-      if (key.startsWith(`${propertyId}:`)) {
+      if (key.startsWith(`${normalizedPropertyId}:`)) {
         availabilityCache.delete(key);
       }
     }
@@ -21,7 +46,8 @@ export function clearAvailabilityCache(propertyId) {
 }
 
 export function getAvailabilityCacheInfo(propertyId, unitId) {
-  const prefix = `${propertyId || 'all'}:${unitId || 'all'}:`;
+  const normalizedPropertyId = propertyId === 'mialees' ? 'mialis' : propertyId;
+  const prefix = `${normalizedPropertyId || 'all'}:${unitId || 'all'}:`;
   for (const [k, entry] of availabilityCache.entries()) {
     if (k.startsWith(prefix)) {
       return {
@@ -36,7 +62,9 @@ export function getAvailabilityCacheInfo(propertyId, unitId) {
 }
 
 export async function fetchLiveAvailability({ unitId, propertyId, from, to, forceRefresh = false }) {
-  const cacheKey = `${propertyId || 'all'}:${unitId || 'all'}:${from || ''}:${to || ''}`;
+  // Normalize property ID alias if needed (e.g. mialees -> mialis)
+  const normalizedPropertyId = propertyId === 'mialees' ? 'mialis' : propertyId;
+  const cacheKey = `${normalizedPropertyId || 'all'}:${unitId || 'all'}:${from || ''}:${to || ''}`;
   const now = Date.now();
 
   // If cached and fresh (< 15 mins) and not forceRefresh, return immediately
@@ -53,15 +81,15 @@ export async function fetchLiveAvailability({ unitId, propertyId, from, to, forc
 
   const params = new URLSearchParams();
   if (unitId) params.set('unit_id', unitId);
-  if (propertyId) params.set('property_id', propertyId);
+  if (normalizedPropertyId) params.set('property_id', normalizedPropertyId);
   if (from) params.set('from', from);
   if (to) params.set('to', to);
 
   try {
-    const res = await fetch(`/api/availability?${params.toString()}`, {
+    const res = await smartFetch(`/api/availability?${params.toString()}`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(6000)
+      signal: AbortSignal.timeout(8000)
     });
 
     if (res.status === 503) {
@@ -86,7 +114,22 @@ export async function fetchLiveAvailability({ unitId, propertyId, from, to, forc
     }
 
     if (!res.ok) {
-      return { ok: false, isOffline: false, blockedRanges: [], lastSyncedAt: null };
+      if (availabilityCache.has(cacheKey)) {
+        const stale = availabilityCache.get(cacheKey);
+        return {
+          ...stale.data,
+          fromCache: true,
+          isStale: true,
+          lastSyncedAt: stale.timestamp
+        };
+      }
+      return {
+        ok: false,
+        isOffline: true,
+        message: 'זמנית לא ניתן לאמת זמינות מול היומן. אנא פנו ישירות בוואטסאפ של המתחם לבדיקה מהירה.',
+        blockedRanges: [],
+        lastSyncedAt: null
+      };
     }
 
     const data = await res.json();
@@ -124,11 +167,12 @@ export async function fetchLiveAvailability({ unitId, propertyId, from, to, forc
 }
 
 export async function fetchLiveRestrictions(propertyId) {
+  const normalizedPropertyId = propertyId === 'mialees' ? 'mialis' : propertyId;
   try {
-    const res = await fetch(`/api/restrictions?property_id=${encodeURIComponent(propertyId || '')}`, {
+    const res = await smartFetch(`/api/restrictions?property_id=${encodeURIComponent(normalizedPropertyId || '')}`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(5000)
+      signal: AbortSignal.timeout(6000)
     });
 
     if (!res.ok) return null;
@@ -142,7 +186,7 @@ export async function fetchLiveRestrictions(propertyId) {
 
 export async function createLiveBooking(bookingPayload) {
   try {
-    const res = await fetch('/api/bookings', {
+    const res = await smartFetch('/api/bookings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(bookingPayload),
@@ -190,7 +234,7 @@ export async function startCheckoutPayment({ token, guestName, guestEmail }) {
   if (!token) return { success: false, message: 'חסר מזהה הזמנה' };
 
   try {
-    const res = await fetch(`/api/checkout/${encodeURIComponent(token)}/stay`, {
+    const res = await smartFetch(`/api/checkout/${encodeURIComponent(token)}/stay`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

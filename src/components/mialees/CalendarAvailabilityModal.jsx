@@ -93,7 +93,7 @@ export function CalendarAvailabilityModal({
   const [paymentPayUrl, setPaymentPayUrl] = useState(null);
   const [bookingError, setBookingError] = useState(null);
 
-  // Fetch live availability (property-level or unit-level)
+  // Fetch live availability (property-level covers all units in the complex)
   const loadAvailability = useCallback(
     async (force = false) => {
       if (!property?.id) return;
@@ -105,7 +105,6 @@ export function CalendarAvailabilityModal({
 
       try {
         const res = await fetchLiveAvailability({
-          unitId: isAllCabinsView || selectedUnit?.isFullBuyout ? undefined : selectedUnit?.id,
           propertyId: property.id,
           from: fromDate,
           to: toDate,
@@ -128,7 +127,7 @@ export function CalendarAvailabilityModal({
         setIsRefreshing(false);
       }
     },
-    [property?.id, isAllCabinsView, selectedUnit?.id, selectedUnit?.isFullBuyout, todayIso]
+    [property?.id, todayIso]
   );
 
   useEffect(() => {
