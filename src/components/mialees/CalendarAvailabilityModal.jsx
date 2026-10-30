@@ -95,10 +95,10 @@ export function CalendarAvailabilityModal({
 
   // Fetch live availability (property-level covers all units in the complex)
   const loadAvailability = useCallback(
-    async (force = false) => {
+    async (force = true) => {
       if (!property?.id) return;
+      setIsLoadingAvailability(true);
       if (force) setIsRefreshing(true);
-      else setIsLoadingAvailability(true);
 
       const fromDate = todayIso;
       const toDate = addDaysIso(todayIso, 180);
@@ -131,7 +131,7 @@ export function CalendarAvailabilityModal({
   );
 
   useEffect(() => {
-    loadAvailability(false);
+    loadAvailability(true);
   }, [loadAvailability]);
 
   const monthNamesHe = [
@@ -643,7 +643,31 @@ export function CalendarAvailabilityModal({
             </div>
 
             {/* Calendar Body */}
-            <div className="p-2 sm:p-4 overflow-y-auto flex-1 space-y-2 sm:space-y-3">
+            <div className="p-2 sm:p-4 overflow-y-auto flex-1 space-y-2 sm:space-y-3 relative min-h-[380px]">
+              {/* Live Studio Sync Loading Overlay */}
+              {isLoadingAvailability && (
+                <div className="absolute inset-0 bg-white/92 backdrop-blur-[2px] z-30 flex flex-col items-center justify-center p-6 text-center transition-opacity duration-300">
+                  <div className="relative mb-3.5">
+                    {/* Outer smooth spinning circle */}
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border-3 border-stone-200 border-t-[#C5A880] animate-spin" />
+                    {/* Inner glowing sparkles icon */}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Sparkles className="w-5 h-5 text-[#8C6239] animate-pulse" />
+                    </div>
+                  </div>
+                  <h4 className="text-sm sm:text-base font-black text-[#26130F] mb-1">
+                    בודק זמינות עדכנית מול יומן המתחם...
+                  </h4>
+                  <p className="text-xs text-stone-500 max-w-xs leading-relaxed">
+                    מתחבר ישירות ליומן ההזמנות בסטודיו לקבלת תמונת מצב מדויקת בזמן אמת
+                  </p>
+                  <div className="mt-3 flex items-center gap-1.5 text-[11px] text-[#8C6239] font-bold bg-[#FAF6F0] px-3 py-1 rounded-full border border-[#C5A880]/30 shadow-xs">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                    <span>סנכרון יומן חי ישירות מהסטודיו</span>
+                  </div>
+                </div>
+              )}
+
               {/* Forward Rolling Calendar Navigation */}
               <div className="flex items-center justify-between px-1 py-1">
                 <button
