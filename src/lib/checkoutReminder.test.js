@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   normalizeIsraeliMobile, buildCheckoutReminder, dedupeKey, classifyForDate,
-  effectiveDepartureDate, checkoutTimeFor, formatReport
+  effectiveDepartureDate, checkoutTimeFor, formatReport, isCheckedOut
 } from './checkoutReminder.js';
 
 const g = (o = {}) => ({ id: 'b1', unit_id: 'k681', guest_name: 'יובל כהן', guest_phone: '054-5726177',
@@ -34,7 +34,9 @@ describe('skips', () => {
     [{ guest_name: 'מתחם סגור לא להזמין' }, 'חסימה / לא זמין'],
     [{ guest_name: 'תחזוקה' }, 'חסימה / לא זמין'],
     [{ channel_source: 'Siesta' }, 'סיאסטה'],
-    [{ booking_status: 'CHECKED_OUT' }, 'כבר עזב'],
+    [{ checked_out_at: '2026-10-22T08:00:00Z' }, 'כבר עזב'],
+    [{ guest_name: "טאג' מאהל 4 – תפוס" }, 'חסימה / לא זמין'],
+    [{ guest_name: 'תפוסה' }, 'חסימה / לא זמין'],
     [{ stay: { self_checked_out_at: '2026-10-22T07:00:00Z' } }, 'כבר עזב'],
     [{ guest_phone: null }, 'אין טלפון'],
     [{ guest_phone: '1929333' }, 'טלפון לא תקין']
@@ -77,17 +79,17 @@ describe('late checkout', () => {
 describe('template', () => {
   it('full', () => {
     expect(buildCheckoutReminder({ guestName: 'יובל כהן', unitName: 'מול הנוף 2', checkoutTime: '11:00', stayUrl: 'https://resortos.app/stay/tok' }))
-      .toBe('בוקר טוב יובל! היום יום העזיבה ממול הנוף 2. העזיבה עד 11:00. אפשר לסמן צ׳ק-אאוט או לבקש צ׳ק-אאוט מאוחר בדף האירוח: https://resortos.app/stay/tok. תודה שהתארחתם!');
+      .toBe('בוקר טוב יובל! היום יום העזיבה ממול הנוף 2. העזיבה עד 11:00. אפשר לסמן צ׳ק-אאוט או לבקש צ׳ק-אאוט מאוחר בדף האירוח: https://resortos.app/stay/tok. אפשר גם לכתוב לנו בוואטסאפ: https://wa.me/972515262612?text=%D7%A6%D7%B3%D7%A7-%D7%90%D7%90%D7%95%D7%98 תודה שהתארחתם!');
   });
   it('no name, no link, default time', () => {
     expect(buildCheckoutReminder({ unitName: 'טוסקנה 1' }))
-      .toBe('בוקר טוב! היום יום העזיבה מטוסקנה 1. העזיבה עד 11:00. תודה שהתארחתם!');
+      .toBe('בוקר טוב! היום יום העזיבה מטוסקנה 1. העזיבה עד 11:00. אפשר גם לכתוב לנו בוואטסאפ: https://wa.me/972515262612?text=%D7%A6%D7%B3%D7%A7-%D7%90%D7%90%D7%95%D7%98 תודה שהתארחתם!');
   });
 });
 
 describe('report', () => {
   it('splits out / not yet, ignores non-guests', () => {
-    const items = [classifyForDate(g({ id: 'a', booking_status: 'CHECKED_OUT' }), D), classifyForDate(g({ id: 'b' }), D), classifyForDate(g({ id: 'c', guest_name: 'לא זמין' }), D)];
+    const items = [classifyForDate(g({ id: 'a', checked_out_at: '2026-10-22T08:00:00Z' }), D), classifyForDate(g({ id: 'b' }), D), classifyForDate(g({ id: 'c', guest_name: 'לא זמין' }), D)];
     const t = formatReport(D, items, (u) => u);
     expect(t).toContain('עזבו: 1'); expect(t).toContain('עוד לא עזבו: 1');
   });
@@ -117,4 +119,38 @@ describe('sms unit name (Ran 2026-10-21)', () => {
     expect(m).toContain('מבקתות מאיה 1.');
     expect(m).not.toMatch(/בקתה בקתות|מבקתה/);
   });
+});
+
+describe('real departures (Ran 2026-10-22)', () => {
+  it('today + CHECKED_OUT only → not departed, SMS IS sent (Ran 2026-10-29)', () => {
+    const b = g({ booking_status: 'CHECKED_OUT' });
+    expect(isCheckedOut(b, { date: D })).toBe(false);
+    expect(classifyForDate(b, D).send).toBe(true);
+  });
+  it('earlier check-out + CHECKED_OUT is not reminded today', () => {
+    expect(classifyForDate(g({ booking_status: 'CHECKED_OUT', check_out_date: '2026-10-21' }), D)).toBeNull();
+  });
+  it('today + checked_out_at → departed', () => {
+    expect(isCheckedOut(g({ booking_status: 'CHECKED_OUT', checked_out_at: '2026-10-22T08:00:00Z' }), { date: D })).toBe(true);
+  });
+  it('earlier check-out date + CHECKED_OUT → departed', () => {
+    expect(isCheckedOut(g({ booking_status: 'CHECKED_OUT', check_out_date: '2026-10-21' }), { date: D })).toBe(true);
+  });
+  it('report: CHECKED_OUT-only today is "not yet", תפוס ignored', () => {
+    const items = [classifyForDate(g({ id: 'a', booking_status: 'CHECKED_OUT' }), D), classifyForDate(g({ id: 'b', stay: { self_checked_out_at: '2026-10-22T07:00:00Z' } }), D), classifyForDate(g({ id: 'c', guest_name: "טאג' מאהל 4 – תפוס" }), D)];
+    const t = formatReport(D, items, (u) => u);
+    expect(t).toContain('עזבו: 1'); expect(t).toContain('עוד לא עזבו: 1'); expect(t).not.toContain('תפוס');
+  });
+});
+
+describe('Saturday 13:00 rule (Ran 2026-10-31)', async () => {
+  const m = await import('./checkoutReminder.js');
+  it('Saturday departure → 13:00', () => expect(m.checkoutTimeFor({ check_out_date: '2026-10-31' })).toBe('13:00'));
+  it('weekday departure → 11:00', () => expect(m.checkoutTimeFor({ check_out_date: '2026-11-02' })).toBe('11:00'));
+  it('motzash note → מוצ״ש text', () => {
+    const t = m.checkoutTimeFor({ check_out_date: '2026-10-31', special_requests: 'out:motzash|in:15:00' });
+    expect(t).toBe('מוצ״ש');
+    expect(m.buildCheckoutReminder({ guestName: 'ישי', unitName: 'x', checkoutTime: t })).toContain('העזיבה במוצ״ש');
+  });
+  it('out:15:00 default ignored', () => expect(m.checkoutTimeFor({ check_out_date: '2026-10-31', special_requests: 'out:15:00' })).toBe('13:00'));
 });

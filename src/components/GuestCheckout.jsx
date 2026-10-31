@@ -11,8 +11,12 @@ import {
   FileText,
   Banknote,
   Building2,
+<<<<<<< HEAD
   Receipt,
   Ticket,
+=======
+  UploadCloud,
+>>>>>>> dfa7ace (WIP preserve: live uncommitted tracked changes before real-departure deploy (2026-10-31))
   X,
   AlertCircle
 } from 'lucide-react';
@@ -31,6 +35,7 @@ import {
 import { cleanGuestCabinName, localizedUnitName } from '../lib/units';
 import { applyStayCabin } from '../lib/cabinParty';
 import { applyPaySplitView } from '../lib/paySplit';
+import { skipPaymentChoiceAfterId } from '../lib/stayAccess';
 import GuestStay from './GuestStay';
 import HypPayFrame from './HypPayFrame';
 import GuestChrome from './GuestChrome';
@@ -121,7 +126,7 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
   const stayReady =
     isSubmitted ||
     paidReturn ||
-    guestShouldSeeStayPortal(activeBooking);
+    (Boolean(activeBooking?.stay?.id_photo_received_at || activeBooking?.stay?.id_scan) && (Boolean(activeBooking?.balance_payment_preference || activeBooking?.payment_mode === 'CASH_TRUST') || skipPaymentChoiceAfterId(activeBooking)));
 
   useEffect(() => {
     if (previewBooking || !token || typeof window === 'undefined') return;
@@ -331,6 +336,25 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
       } finally {
         setPaying(false);
       }
+    }
+    if (skipPaymentChoiceAfterId(activeBooking)) {
+      // Already paid: save details (no payment change) and open the guest page for check-in.
+      setPaying(true);
+      try {
+        const next = await confirmGuestCheckout(token, {
+          guest_name: guestName || usableGuestName(activeBooking?.guest_name) || 'נטשה',
+          guest_email: guestEmail,
+          special_requests: specialRequests,
+          pay: false
+        });
+        if (next) setFreshBooking(next);
+        setIsSubmitted(true);
+      } catch (_) {
+        window.alert(t('GUEST_CONFIRM_FAILED'));
+      } finally {
+        setPaying(false);
+      }
+      return;
     }
     setStep(3);
   };

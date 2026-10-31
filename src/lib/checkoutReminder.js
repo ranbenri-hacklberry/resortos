@@ -6,6 +6,8 @@
 import { guestStayUrl } from './guestStayUrl.js';
 
 export const DEFAULT_CHECKOUT_TIME = '11:00';
+// Ran 2026-10-29: WhatsApp link to Chloe's line with 'צ׳ק-אאוט' prefilled.
+export const CHLOE_WA_CHECKOUT_URL = `https://wa.me/972515262612?text=${encodeURIComponent('צ׳ק-אאוט')}`;
 const STAFF_UNIT_IDS = new Set(['k678', 'k679']);
 
 export function addDaysIso(iso, days) {
@@ -26,11 +28,37 @@ export function effectiveDepartureDate(booking) {
   return isNextDayLate(booking?.stay) ? addDaysIso(out, 1) : out;
 }
 
-export function checkoutTimeFor(booking, fallback = DEFAULT_CHECKOUT_TIME) {
+export const SATURDAY_CHECKOUT_TIME = '13:00';
+export const MOTZASH = 'מוצ״ש';
+
+export function isSaturdayIso(iso) {
+  return Boolean(iso) && new Date(`${iso}T12:00:00Z`).getUTCDay() === 6;
+}
+
+/** Ran 2026-10-31: Saturday departure 13:00, other days 11:00. */
+export function defaultCheckoutTimeFor(dateIso) {
+  return isSaturdayIso(dateIso) ? SATURDAY_CHECKOUT_TIME : DEFAULT_CHECKOUT_TIME;
+}
+
+/** Agreed departure on the booking (stay overlay or Kinorot note out:motzash / out:HH:MM ≠ form default 15:00). */
+export function bookingCheckoutOverride(booking) {
   const stay = booking?.stay || {};
   const raw = String(stay.checkout_time || stay.late_until || '').replace('+1', '').trim();
-  if (/^\d{1,2}:\d{2}$/.test(raw)) return raw.padStart(5, '0');
-  return fallback;
+  const notes = String(booking?.special_requests || '');
+  if (/out:\s*(motzash|מוצ)/i.test(notes) || /motzash|מוצ/i.test(raw)) return MOTZASH;
+  if (/^\d{1,2}:\d{2}$/.test(raw) && raw.padStart(5, '0') !== DEFAULT_CHECKOUT_TIME) return raw.padStart(5, '0');
+  const m = notes.match(/out:\s*(\d{1,2}:\d{2})/i);
+  if (m && m[1].padStart(5, '0') !== '15:00') return m[1].padStart(5, '0');
+  return null;
+}
+
+export function checkoutTimeFor(booking, fallback) {
+  const stay = booking?.stay || {};
+  const ov = bookingCheckoutOverride(booking);
+  if (ov) return ov;
+  const raw = String(stay.checkout_time || stay.late_until || '').replace('+1', '').trim();
+  if (/^\d{1,2}:\d{2}$/.test(raw) && raw.padStart(5, '0') !== DEFAULT_CHECKOUT_TIME) return raw.padStart(5, '0');
+  return fallback || defaultCheckoutTimeFor(effectiveDepartureDate(booking));
 }
 
 /** Israeli mobile → 9725XXXXXXXX, else null. */
@@ -76,14 +104,15 @@ export function fromUnit(name) {
 export function buildCheckoutReminder({ guestName, unitName, checkoutTime, stayUrl } = {}) {
   const name = firstName(guestName);
   const lines = [
-    `בוקר טוב${name ? ` ${name}` : ''}! היום יום העזיבה ${fromUnit(unitName)}. העזיבה עד ${checkoutTime || DEFAULT_CHECKOUT_TIME}.`
+    `בוקר טוב${name ? ` ${name}` : ''}! היום יום העזיבה ${fromUnit(unitName)}. העזיבה ${checkoutTime === MOTZASH ? 'במוצ״ש' : `עד ${checkoutTime || DEFAULT_CHECKOUT_TIME}`}.`
   ];
   if (stayUrl) lines.push(`אפשר לסמן צ׳ק-אאוט או לבקש צ׳ק-אאוט מאוחר בדף האירוח: ${stayUrl}.`);
+  lines.push(`אפשר גם לכתוב לנו בוואטסאפ: ${CHLOE_WA_CHECKOUT_URL}`);
   lines.push('תודה שהתארחתם!');
   return lines.join(' ');
 }
 
-const BLOCK_RE = /לא זמין|מתחם סגור|חסימה|חסום|תחזוקה|maintenance|blocked?|out of order/i;
+const BLOCK_RE = /לא זמין|מתחם סגור|חסימה|חסום|תחזוקה|תפוס[הים]?|תפוסות|maintenance|blocked?|out of order/i;
 const SIESTA_RE = /siesta|סיאסטה/i;
 
 function wifiQuietlyLeft(booking, now) {
@@ -95,10 +124,18 @@ function wifiQuietlyLeft(booking, now) {
   return Number.isFinite(ms) && ms >= 30 * 60 * 1000;
 }
 
-export function isCheckedOut(booking) {
+/**
+ * Real departure evidence. Kinorot sync sets booking_status=CHECKED_OUT as soon as
+ * check_out_date <= today, so on the departure day itself (check_out_date === date)
+ * that status alone is NOT evidence. Pass { date } for the day being evaluated;
+ * for earlier check-out dates (e.g. next-day late checkout) CHECKED_OUT still counts.
+ */
+export function isCheckedOut(booking, { date = null } = {}) {
   const s = booking?.stay || {};
+  const statusCounts = booking?.booking_status === 'CHECKED_OUT'
+    && !(date && booking?.check_out_date && booking.check_out_date >= date);
   return Boolean(
-    booking?.booking_status === 'CHECKED_OUT'
+    statusCounts
     || booking?.checked_out_at
     || s.self_checked_out_at || s.auto_checked_out_at || s.manager_checked_out_at
     || ['self_departed', 'auto_departed'].includes(booking?.checkout_status)
@@ -124,7 +161,7 @@ export function nonGuestReason(booking, unit) {
 export function classifyForDate(booking, date, { now = new Date(), unit = null, alreadySent = false, checkoutTime = DEFAULT_CHECKOUT_TIME } = {}) {
   const dep = effectiveDepartureDate(booking);
   const late = isNextDayLate(booking?.stay);
-  const base = { booking, date, late, checkoutTime: checkoutTimeFor(booking, checkoutTime), phone: null };
+  const base = { booking, date, late, checkoutTime: checkoutTimeFor(booking, checkoutTime === DEFAULT_CHECKOUT_TIME ? undefined : checkoutTime), phone: null };
   if (booking?.check_out_date === date && late) {
     const r = nonGuestReason(booking, unit);
     if (r) return { ...base, send: false, reason: r, nonGuest: true };
@@ -133,7 +170,9 @@ export function classifyForDate(booking, date, { now = new Date(), unit = null, 
   if (dep !== date) return null;
   const ng = nonGuestReason(booking, unit);
   if (ng) return { ...base, send: false, reason: ng, nonGuest: true };
-  if (isCheckedOut(booking)) return { ...base, send: false, reason: 'כבר עזב' };
+  if (isCheckedOut(booking, { date })) return { ...base, send: false, reason: 'כבר עזב' };
+  // Ran 2026-10-29: Kinorot CHECKED_OUT on the departure day itself is NOT departure
+  // evidence (sync sets it every morning), so it no longer skips the SMS.
   if (wifiQuietlyLeft(booking, now)) return { ...base, send: false, reason: 'עזב בשקט (WiFi)' };
   const phone = normalizeIsraeliMobile(booking?.guest_phone);
   if (!phone) return { ...base, send: false, reason: booking?.guest_phone ? 'טלפון לא תקין' : 'אין טלפון' };
@@ -171,8 +210,8 @@ export function formatPlan(date, items, unitNameOf, { dryRun = true } = {}) {
 
 export function formatReport(date, items, unitNameOf) {
   const guests = items.filter((i) => !i.nonGuest && !i.deferred);
-  const out = guests.filter((i) => isCheckedOut(i.booking));
-  const stay = guests.filter((i) => !isCheckedOut(i.booking));
+  const out = guests.filter((i) => isCheckedOut(i.booking, { date }));
+  const stay = guests.filter((i) => !isCheckedOut(i.booking, { date }));
   const lines = [`🧹 מצב עזיבות ${date} (11:30)`, `עזבו: ${out.length}`];
   for (const i of out) lines.push(`✅ ${unitNameOf(i.booking.unit_id)} – ${i.booking.guest_name || 'ללא שם'}`);
   lines.push(`עוד לא עזבו: ${stay.length}`);

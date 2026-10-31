@@ -133,7 +133,24 @@ function BookingCard({ booking, busy, onPay }) {
   );
 }
 
-function IdPhotoPanel({ token, sessionToken }) {
+const ID_SCAN_LABEL = { accept: '✅ אומתה מול ההזמנה', manual_review: '⚠️ לבדיקה ידנית', reject: '❌ נדחתה' };
+const ID_REASON_LABEL = {
+  name_mismatch_with_booking: 'השם לא תואם להזמנה', name_partial_match: 'התאמת שם חלקית', israeli_id_checksum_failed: 'ספרת ביקורת שגויה',
+  document_expired: 'התעודה פגה', low_confidence: 'קריאה לא ודאית', image_quality: 'איכות תמונה', not_an_official_id: 'לא תעודה מזהה',
+  id_number_missing: 'מספר לא נקרא', name_missing: 'שם לא נקרא', unsupported_document_type: 'סוג תעודה לא נתמך', grok_not_configured: 'סריקה לא מוגדרת'
+};
+
+function IdScanSummary({ scan }) {
+  if (!scan?.decision) return null;
+  const reasons = (scan.reasons || []).map((r) => ID_REASON_LABEL[r] || (r.startsWith('issue:') ? 'חשד לבעיה בתעודה' : r.startsWith('grok_') ? 'שגיאת סריקה' : r));
+  return (
+    <p className={scan.decision === 'accept' ? 'desk-muted' : 'desk-error'}>
+      {ID_SCAN_LABEL[scan.decision] || scan.decision}{scan.name ? ` · ${scan.name}` : ''}{reasons.length ? ` · ${[...new Set(reasons)].join(', ')}` : ''}
+    </p>
+  );
+}
+
+function IdPhotoPanel({ token, sessionToken, scan }) {
   const [src, setSrc] = useState('');
   const [state, setState] = useState('idle');
 
@@ -175,6 +192,7 @@ function IdPhotoPanel({ token, sessionToken }) {
   return (
     <div className="desk-voucher">
       <p className="desk-label">תעודת זהות</p>
+      <IdScanSummary scan={scan} />
       {state === 'open' && src ? (
         <img src={src} alt="תעודת זהות" style={{ width: '100%', maxHeight: 420, objectFit: 'contain', borderRadius: 12, background: '#111' }} />
       ) : (
@@ -264,7 +282,7 @@ function PaymentSheet({ booking, busy, hyp, error, payUrl, sessionToken, onClose
           )}
         </div>
         <p className="desk-muted">שולם ₪{paid} · נשאר ₪{fullyPaid ? 0 : Math.max(0, Math.round((totalIls - paid) * 100) / 100)}</p>
-        <IdPhotoPanel token={booking.checkout_token} sessionToken={sessionToken} />
+        <IdPhotoPanel token={booking.checkout_token} sessionToken={sessionToken} scan={booking.id_scan} />
 
         {payments.length ? (
           <ul className="desk-pay-list">

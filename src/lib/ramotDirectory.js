@@ -40,7 +40,7 @@ const COMPLEXES = [
     name: 'בתי נורית',
     query: 'בתי נורית מושב רמות',
     waze: 'https://waze.com/ul/hsvc6gs4p2',
-    wifi: [{ ssid: 'MIALEES RESORT', password: 'Mial2026' }],
+    wifi: [{ ssid: 'MIALEES RESORT', password: 'MIAL2026' }],
     units: [
       { id: 'k671', name: 'בתי נורית 1' },
       { id: 'k673', name: 'בתי נורית 2' },
@@ -56,8 +56,8 @@ const COMPLEXES = [
     id: 'taj',
     name: 'טאג׳ מאהל',
     query: "טאג' מאהל מושב רמות",
-    waze: 'https://waze.com/ul?q=Taj+Mahal+Ramot&navigate=yes',
-    wifi: [{ ssid: 'lotus', password: '12345678' }],
+    waze: 'https://waze.com/ul/hsvc6gsskp',
+    wifi: [{ ssid: 'LUTUS', password: '12345678' }],
     units: [
       { id: 'k808', name: "טאג' מאהל · בקתה 1" },
       { id: 'k809', name: "טאג' מאהל · בקתה 2" },
@@ -83,8 +83,8 @@ const COMPLEXES = [
     id: 'nofim',
     name: 'נופים בלבן',
     query: 'נופים בלבן מושב רמות',
-    waze: 'https://waze.com/ul?q=Nofim+Belavan+Ramot&navigate=yes',
-    wifi: [{ ssid: 'TP-Link_FA30_5G', password: '15107312' }],
+    waze: 'https://waze.com/ul/hsvc6gt4ct',
+    wifi: [{ ssid: 'TP-LINK_FA30', password: '15107312' }],
     units: [
       { id: 'k685', name: 'נופים בלבן · בקתה 1' },
       { id: 'k686', name: 'נופים בלבן · בקתה 2', wifi: [] }
@@ -94,7 +94,7 @@ const COMPLEXES = [
     id: 'toscana',
     name: 'בקתות טוסקנה',
     query: 'בקתות טוסקנה מושב רמות',
-    waze: 'https://waze.com/ul/hsvc6gsux5',
+    waze: 'https://waze.com/ul/hsvc6gsutg',
     wifi: [{ ssid: 'Toscana', password: '12345678' }],
     units: [
       { id: 'k687', name: 'טוסקנה · 1' },

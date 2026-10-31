@@ -135,6 +135,8 @@ const DEFAULT_FALLBACK_CHECKS = [
   { id: '3650131', check_number: '3650131', amount: 2445, due_date: '2026-11-11', bank: 'mizrahi', payee: 'יהושוע סליטרניק', description: 'ביטוח בתי נורית', confirmed: true }
 ];
 
+const CATEGORY_LABELS = { check: 'שיק', transfer: 'העברה בנקאית', card_debit: 'חיוב כרטיס', settlement: 'זיכוי סליקה' };
+
 export default function FinancialCommandCenter({
   theme = 'dark',
   setTheme = null,
@@ -220,6 +222,7 @@ export default function FinancialCommandCenter({
   const [scenarioMode, setScenarioMode] = useState('baseline'); // 'baseline' | 'scenario'
   const [selectedBankFilter, setSelectedBankFilter] = useState('all'); // 'all' | 'mizrahi' | 'discount' | 'beinleumi'
   const [selectedDate, setSelectedDate] = useState(today);
+  const [payMethodFilter, setPayMethodFilter] = useState('all');
   const [activeTab, setActiveTab] = useState('chart'); // 'chart' | 'events' | 'alerts' | 'capture'
 
   // Backend state
@@ -1685,7 +1688,7 @@ export default function FinancialCommandCenter({
                         </span>
                       )}
                       <span>בנק: <b style={{ color: mBrand.text }}>{BANK_CONFIG[e.bank]?.name || e.bank}</b></span>
-                      <span>· {e.category}</span>
+                      <span>· {CATEGORY_LABELS[e.category] || e.category}</span>
                     </div>
                   </div>
                 ))
@@ -1769,13 +1772,29 @@ export default function FinancialCommandCenter({
               תנועות קרובות לאורך {horizonDays} הימים הבאים (ממוין לפי תאריך)
             </span>
             <span style={{ fontSize: '0.72rem', color: mBrand.textMuted }}>
-              כולל שיקים עתידיים, חיובי כרטיסים, זיכויי בוקינג והנחות
+              {[
+                ['all', 'הכל'],
+                ['check', `שיקים (${calculation.baseline.events.filter((e) => e.category === 'check').length})`],
+                ['transfer', `העברות (${calculation.baseline.events.filter((e) => e.category === 'transfer').length})`]
+              ].map(([key, text], i) => (
+                <span key={key}>
+                  {i > 0 && ' · '}
+                  <button
+                    type="button"
+                    onClick={() => setPayMethodFilter(key)}
+                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', color: payMethodFilter === key ? mBrand.gold : mBrand.textMuted, fontWeight: payMethodFilter === key ? 800 : 400 }}
+                  >
+                    {text}
+                  </button>
+                </span>
+              ))}
             </span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             {calculation.baseline.events
               .filter((e) => selectedBankFilter === 'all' || e.bank === selectedBankFilter)
+              .filter((e) => payMethodFilter === 'all' || e.category === payMethodFilter)
               .slice(0, 25)
               .map((evt) => (
                 <div
@@ -2113,7 +2132,7 @@ export default function FinancialCommandCenter({
                         </span>
                       )}
                       <span>בנק: <b style={{ color: mBrand.text }}>{BANK_CONFIG[e.bank]?.name || e.bank}</b></span>
-                      <span>· {e.category}</span>
+                      <span>· {CATEGORY_LABELS[e.category] || e.category}</span>
                     </div>
                   </div>
                 ))

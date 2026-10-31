@@ -163,7 +163,11 @@ function publicStay(row, units) {
     is_voucher: mode === 'VOUCHER' || Boolean(stay.voucher_photo),
     voucher_photo: stay.voucher_photo || '',
     voucher_company_redeemed: Boolean(stay.voucher_company_redeemed),
-    bank_photo: stay.payment_proof || ''
+    bank_photo: stay.payment_proof || '',
+    id_received: Boolean(stay.id_photo_received_at),
+    id_scan: stay.id_scan && typeof stay.id_scan === 'object'
+      ? { decision: stay.id_scan.decision || '', name: stay.id_scan.name || '', reasons: Array.isArray(stay.id_scan.reasons) ? stay.id_scan.reasons.slice(0, 8) : [], name_match: stay.id_scan.name_match || '' }
+      : null
   };
 }
 

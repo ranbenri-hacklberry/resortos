@@ -11,7 +11,7 @@ import {
 
 const DIAL_GATE = { mode: 'dial', code: '#2580', nightCall: true };
 const RAMOT_GATE = { mode: 'code', code: '#2464' };
-const NIGHT_CALL_GATE = { mode: 'call', nightCall: true };
+const NIGHT_CALL_GATE = { mode: 'call', nightCall: true, shabbatClose: true }; // קאסה נובה: מושב דתי, השער נסגר בכניסת שבת (Ran 2026-10-24)
 const MAYA_WIFI = [{ ssid: 'maya', password: '12345678' }];
 
 function property(id, name, village, cluster, sort_order, extra = {}) {
@@ -54,7 +54,7 @@ export const PROPERTY_SEED = {
     access: { gate: RAMOT_GATE, wifi: [{ ssid: 'MIALEES RESORT', password: 'Mial2026' }] }
   }),
   taj: property('taj', "טאג' מאהל", 'מושב רמות', 'ramot', 11, {
-    content: { nav: { query: "טאג' מאהל מושב רמות" } },
+    content: { nav: { query: "טאג' מאהל מושב רמות", waze: 'https://waze.com/ul/hsvc6gsskp' } },
     access: { gate: RAMOT_GATE, wifi: [{ ssid: 'lotus', password: '12345678' }] }
   }),
   mool: property('mool', 'מול הנוף', 'מושב רמות', 'ramot', 12, {
@@ -62,11 +62,11 @@ export const PROPERTY_SEED = {
     access: { gate: RAMOT_GATE, wifi: [{ ssid: 'Mol_hanof', password: '12345678' }] }
   }),
   nofim: property('nofim', 'נופים בלבן', 'מושב רמות', 'ramot', 13, {
-    content: { nav: { query: 'נופים בלבן מושב רמות' } },
+    content: { nav: { query: 'נופים בלבן מושב רמות', waze: 'https://waze.com/ul/hsvc6gt4ct' } },
     access: { gate: RAMOT_GATE, wifi: [{ ssid: 'TP-Link_FA30_5G', password: '15107312' }] }
   }),
   toscana: property('toscana', 'בקתות טוסקנה', 'מושב רמות', 'ramot', 14, {
-    content: { nav: { query: 'בקתות טוסקנה מושב רמות', waze: 'https://waze.com/ul/hsvc6gsux5' } },
+    content: { nav: { query: 'בקתות טוסקנה מושב רמות', waze: 'https://waze.com/ul/hsvc6gsutg' } },
     access: {
       gate: RAMOT_GATE,
       wifi: [{ ssid: 'Toscana', password: '12345678' }]
@@ -81,7 +81,7 @@ export const PROPERTY_SEED = {
     access: { gate: RAMOT_GATE, wifi: MAYA_WIFI }
   }),
   'casa-nova': property('casa-nova', 'קאסה נובה', 'מושב נוב', 'nov', 20, {
-    content: { nav: { query: 'קאסה נובה נוב' } },
+    content: { nav: { unavailable: true } },
     access: { gate: NIGHT_CALL_GATE, wifi: [{ ssid: 'MIALEES', password: 'AD654321' }] }
   })
 };
@@ -476,6 +476,35 @@ export function seedUnitOverride(unitId) {
 }
 
 /** Key-safe code for field staff — unit override, then printed welcome-sheet list. */
+/** Calendar: prefer the instructions-sheet code; fall back to the unit record. */
+export function calendarLockboxForUnit(unit) {
+  const sheet = LOCKBOX_BY_UNIT[String(unit?.id || '')];
+  if (sheet) return sheet;
+  const fromUnit = String(unit?.access?.lockbox || '').trim();
+  return fromUnit && fromUnit !== '0000' ? fromUnit : '';
+}
+
+function lockboxComplexKey(unit) {
+  if (unit?.property_id) return String(unit.property_id);
+  const name = String(unit?.name || '');
+  return name.split('·')[0].replace(/\s*\d+\s*$/, '').trim() || String(unit?.id || '');
+}
+
+/** Unit ids whose calendar code is shared with another room in the same complex. */
+export function duplicateLockboxUnitIds(units = [], codeFor = calendarLockboxForUnit) {
+  const seen = new Map();
+  for (const unit of units || []) {
+    const code = codeFor(unit);
+    if (!code) continue;
+    const key = `${lockboxComplexKey(unit)}|${code}`;
+    if (!seen.has(key)) seen.set(key, []);
+    seen.get(key).push(String(unit.id));
+  }
+  const dup = new Set();
+  for (const ids of seen.values()) if (ids.length > 1) ids.forEach((id) => dup.add(id));
+  return dup;
+}
+
 export function lockboxCodeForUnit(unit) {
   const fromUnit = String(unit?.access?.lockbox || '').trim();
   if (fromUnit && fromUnit !== '0000') return fromUnit;

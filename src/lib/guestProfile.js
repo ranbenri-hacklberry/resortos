@@ -70,7 +70,8 @@ function normalizeGate(gate) {
     mode,
     code: gate.code || gate.value || null,
     phone: gate.phone || null,
-    nightCall: Boolean(gate.nightCall)
+    nightCall: Boolean(gate.nightCall),
+    shabbatClose: Boolean(gate.shabbatClose)
   };
 }
 

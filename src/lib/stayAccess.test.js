@@ -88,3 +88,26 @@ describe('auto guest check-in', () => {
     expect(applyPaidArrivalCheckin(inStay)).toBe(null);
   });
 });
+
+import { skipPaymentChoiceAfterId } from './stayAccess.js';
+
+describe('skipPaymentChoiceAfterId (Ran 2026-10-30)', () => {
+  const base = { check_in_date: '2026-10-30', check_out_date: '2026-10-31', total_price: 2390, booking_status: 'CONFIRMED' };
+  it('paid Booking.com booking skips payment step after ID', () => {
+    expect(skipPaymentChoiceAfterId({ ...base, channel_source: 'booking_com', payment_status: 'PAID' })).toBe(true);
+  });
+  it('already self-checked-in skips payment step', () => {
+    expect(skipPaymentChoiceAfterId({ ...base, payment_status: 'UNPAID', stay: { guest_checked_in_at: '2026-10-30T12:41:00Z' } })).toBe(true);
+  });
+  it('PAID flag without any receipt (non-channel) is not treated as paid', () => {
+    expect(skipPaymentChoiceAfterId({ ...base, payment_status: 'PAID' })).toBe(false);
+  });
+
+  it('unpaid booking still goes to payment choice', () => {
+    expect(skipPaymentChoiceAfterId({ ...base, payment_status: 'UNPAID' })).toBe(false);
+  });
+  it('canceled / empty never skips', () => {
+    expect(skipPaymentChoiceAfterId({ ...base, booking_status: 'CANCELED', payment_status: 'PAID' })).toBe(false);
+    expect(skipPaymentChoiceAfterId(null)).toBe(false);
+  });
+});

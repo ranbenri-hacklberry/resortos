@@ -101,18 +101,24 @@ export const FIELD_PROPERTIES = {
     id: 'mialis',
     he: 'מיאליס ריזורט',
     th: 'มีอาลีส',
-    aliases: ['מיאליס', 'מיהליס', 'mialees', 'mialis', 'וילה']
+    letter: 'A',
+    circled: 'Ⓐ',
+    aliases: ['נאות גולן', 'naot golan', 'מיאליס', 'מיהליס', 'mialees', 'mialis', 'וילה']
   },
   hill: {
     id: 'hill',
     he: 'צימר בגבעה',
     th: 'เนินเขา',
+    letter: 'C',
+    circled: 'Ⓒ',
     aliases: ['בגבעה', 'גבעה', 'צימר בגבעה', 'bagiva', 'hill']
   },
   kipat: {
     id: 'kipat',
     he: 'כיפת שמיים',
     th: 'โดม',
+    letter: 'D',
+    circled: 'Ⓓ',
     aliases: ['כיפה', 'כיפת שמיים', 'kipat', 'dome', 'דום']
   },
   nurit: {
@@ -182,22 +188,24 @@ export const FIELD_PROPERTIES = {
     id: 'casa-nova',
     he: 'קאסה נובה',
     th: 'คาซาโนวา',
+    letter: 'B',
+    circled: 'Ⓑ',
     aliases: ['קאסה', 'קאסה נובה', 'casa', 'casa nova', 'casanova']
   }
 };
 
 /** Visual / Thai signs Thai housekeepers already use on site. */
 export const FIELD_UNIT_SIGNS = {
-  'hill-1': { sign: '1️⃣', th: 'เนิน 1', he: 'גבעה 1', localNum: 1, aliases: ['גבעה 1', 'בגבעה 1'] },
-  'hill-2': { sign: '2️⃣', th: 'เนิน 2', he: 'גבעה 2', localNum: 2, aliases: ['גבעה 2', 'בגבעה 2'] },
-  'hill-3': { sign: '3️⃣', th: 'เนิน 3', he: 'גבעה 3', localNum: 3, aliases: ['גבעה 3', 'בגבעה 3'] },
-  'hill-4': { sign: '4️⃣', th: 'เนิน 4', he: 'גבעה 4', localNum: 4, aliases: ['גבעה 4', 'בגבעה 4'] },
-  'dome-blue': { sign: '🔵', th: 'โดมสีน้ำเงิน', he: 'כיפה כחול', localNum: null, aliases: ['כחול', 'כיפה כחול', 'dome blue'] },
-  'dome-red': { sign: '🔴', th: 'โดมสีแดง', he: 'כיפה אדום', localNum: null, aliases: ['אדום', 'כיפה אדום', 'dome red'] },
-  'dome-green': { sign: '🟢', th: 'โดมสีเขียว', he: 'כיפה ירוק', localNum: null, aliases: ['ירוק', 'כיפה ירוק', 'dome green'] },
-  'mialis-villa': { sign: '🏡', th: 'วิลล่ามีอาลีส', he: 'וילה', localNum: null, aliases: ['וילה', 'וילה מיאליס', 'villa'] },
-  'suite-1': { sign: '🟢', th: 'สวีทสีเขียว', he: 'סוויטה ירוקה', localNum: 1, aliases: ['סוויטה 1', 'ירוקה', 'הירוקה', 'suite 1'] },
-  'suite-2': { sign: '🩷', th: 'สวีทสีชมพู', he: 'סוויטה ורודה', localNum: 2, aliases: ['סוויטה 2', 'ורודה', 'הורודה', 'suite 2'] },
+  'hill-1': { sign: '1️⃣', th: 'เนิน 1', he: 'גבעה 1', localNum: 1, aliases: ['גבעה 1', 'בגבעה 1', 'גבעה c1', 'c1 גבעה', 'בגבעה c1'] },
+  'hill-2': { sign: '2️⃣', th: 'เนิน 2', he: 'גבעה 2', localNum: 2, aliases: ['גבעה 2', 'בגבעה 2', 'גבעה c2', 'c2 גבעה', 'בגבעה c2'] },
+  'hill-3': { sign: '3️⃣', th: 'เนิน 3', he: 'גבעה 3', localNum: 3, aliases: ['גבעה 3', 'בגבעה 3', 'גבעה c3', 'c3 גבעה', 'בגבעה c3'] },
+  'hill-4': { sign: '4️⃣', th: 'เนิน 4', he: 'גבעה 4', localNum: 4, aliases: ['גבעה 4', 'בגבעה 4', 'גבעה c4', 'c4 גבעה', 'בגבעה c4'] },
+  'dome-blue': { sign: '🔵', th: 'โดมสีน้ำเงิน', he: 'כיפה כחול', localNum: null, aliases: ['כחול', 'כיפה כחול', 'כיפה d1', 'd1 כיפה', 'כיפת שמיים d1', 'כיפת שמיים 1', 'dome blue'] },
+  'dome-red': { sign: '🔴', th: 'โดมสีแดง', he: 'כיפה אדום', localNum: null, aliases: ['אדום', 'כיפה אדום', 'כיפה d2', 'd2 כיפה', 'כיפת שמיים d2', 'כיפת שמיים 2', 'dome red'] },
+  'dome-green': { sign: '🟢', th: 'โดมสีเขียว', he: 'כיפה ירוק', localNum: null, aliases: ['ירוק', 'כיפה ירוק', 'כיפה d3', 'd3 כיפה', 'כיפת שמיים d3', 'כיפת שמיים 3', 'dome green'] },
+  'mialis-villa': { sign: '🏡', th: 'วิลล่ามีอาลีส', he: 'וילה', localNum: null, aliases: ['וילה', 'וילה מיאליס', 'villa', 'נאות גולן a3', 'a3 נאות גולן', 'מיאליס a3', 'וילה a3'] },
+  'suite-1': { sign: '🟢', th: 'สวีทสีเขียว', he: 'סוויטה ירוקה', localNum: 1, aliases: ['סוויטה 1', 'ירוקה', 'הירוקה', 'suite 1', 'נאות גולן a1', 'a1 נאות גולן', 'מיאליס a1', 'סוויטה a1'] },
+  'suite-2': { sign: '🩷', th: 'สวีทสีชมพู', he: 'סוויטה ורודה', localNum: 2, aliases: ['סוויטה 2', 'ורודה', 'הורודה', 'suite 2', 'נאות גולן a2', 'a2 נאות גולן', 'מיאליס a2', 'סוויטה a2'] },
   k671: { sign: 'Ⓖ', th: 'Ⓖ23 นูริต 1', he: 'נורית 1', localNum: 1, aliases: ['נורית 1', 'g1', '23g'] },
   k673: { sign: 'Ⓖ', th: 'Ⓖ23 นูริต 2', he: 'נורית 2', localNum: 2, aliases: ['נורית 2', 'g2'] },
   k674: { sign: 'Ⓖ', th: 'Ⓖ23 นูริต 3', he: 'נורית 3', localNum: 3, aliases: ['נורית 3', 'g3'] },
@@ -206,10 +214,10 @@ export const FIELD_UNIT_SIGNS = {
   k677: { sign: 'Ⓖ', th: 'Ⓖ23 นูริต 6', he: 'נורית 6', localNum: 6, aliases: ['נורית 6', 'g6'] },
   k678: { sign: 'Ⓖ', th: 'Ⓖ23 นูริต 7', he: 'נורית 7', localNum: 7, aliases: ['נורית 7', 'g7'] },
   k679: { sign: 'Ⓖ', th: 'Ⓖ23 นูริต 8', he: 'נורית 8', localNum: 8, aliases: ['נורית 8', 'g8'] },
-  k808: { sign: 'Ⓔ', th: 'Ⓔ27 ทัช 1', he: "טאג' 1", localNum: 1, aliases: ['טאג 1', "טאג' 1", 'e1'] },
-  k809: { sign: 'Ⓔ', th: 'Ⓔ27 ทัช 2', he: "טאג' 2", localNum: 2, aliases: ['טאג 2', "טאג' 2", 'e2'] },
-  k810: { sign: 'Ⓔ', th: 'Ⓔ27 ทัช 3', he: "טאג' 3", localNum: 3, aliases: ['טאג 3', "טאג' 3", 'e3'] },
-  k811: { sign: 'Ⓔ', th: 'Ⓔ27 ทัช 4', he: "טאג' 4", localNum: 4, aliases: ['טאג 4', "טאג' 4", 'e4'] },
+  k808: { sign: 'Ⓔ', th: 'Ⓔ25 ทัช 1', he: "טאג' 1", localNum: 1, aliases: ['טאג 1', "טאג' 1", 'e1'] },
+  k809: { sign: 'Ⓔ', th: 'Ⓔ25 ทัช 2', he: "טאג' 2", localNum: 2, aliases: ['טאג 2', "טאג' 2", 'e2'] },
+  k810: { sign: 'Ⓔ', th: 'Ⓔ25 ทัช 3', he: "טאג' 3", localNum: 3, aliases: ['טאג 3', "טאג' 3", 'e3'] },
+  k811: { sign: 'Ⓔ', th: 'Ⓔ25 ทัช 4', he: "טאג' 4", localNum: 4, aliases: ['טאג 4', "טאג' 4", 'e4'] },
   k680: { sign: 'Ⓐ', th: 'Ⓐ29 มูล 1', he: 'מול הנוף 1', localNum: 1, aliases: ['מול הנוף 1', 'מול 1', 'a1', '29a'] },
   k681: { sign: 'Ⓐ', th: 'Ⓐ29 มูล 2', he: 'מול הנוף 2', localNum: 2, aliases: ['מול הנוף 2', 'מול 2', 'a2'] },
   k682: { sign: 'Ⓐ', th: 'Ⓐ29 มูล 3', he: 'מול הנוף 3', localNum: 3, aliases: ['מול הנוף 3', 'מול 3', 'a3'] },
