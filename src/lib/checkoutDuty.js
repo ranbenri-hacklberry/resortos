@@ -50,21 +50,7 @@ export function listOverdueCheckouts(bookings, now = new Date()) {
   });
 }
 
-export function applyAutoCheckout(booking, now = new Date()) {
-  if (!listOverdueCheckouts([booking], now).length) return null;
-  const nowIso = now.toISOString();
-  const stay = booking.stay && typeof booking.stay === 'object' ? booking.stay : {};
-  return {
-    ...booking,
-    booking_status: 'CHECKED_OUT',
-    stay: {
-      ...stay,
-      manager_checked_out_at: stay.manager_checked_out_at || nowIso,
-      auto_checked_out_at: nowIso
-    },
-    updated_at: nowIso
-  };
-}
+// applyAutoCheckout removed (Ran 2026-10-31): nothing marks a stay CHECKED_OUT by the clock.
 
 export function bookingsNeedingCheckoutRollForward(bookings, today = israelToday()) {
   return (bookings || []).filter((booking) => (

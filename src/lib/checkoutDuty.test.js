@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { applyAutoCheckout, CHECKOUT_HOUR, listOverdueCheckouts } from './checkoutDuty.js';
+import { readFileSync } from 'node:fs';
+import * as duty from './checkoutDuty.js';
+import { CHECKOUT_HOUR, listOverdueCheckouts } from './checkoutDuty.js';
 
 const stay = {
   id: 'b1',
@@ -18,14 +20,16 @@ describe('auto checkout at 11', () => {
   it('does not close stays before 11 Israel time', () => {
     const now = atHour(CHECKOUT_HOUR - 1);
     expect(listOverdueCheckouts([stay], now)).toEqual([]);
-    expect(applyAutoCheckout(stay, now)).toBeNull();
   });
 
-  it('marks due stays checked out from 11', () => {
+  // Changed 2026-10-31 by Ran's explicit decision ("לוח השנה: להסיר את הסימון האוטומטי"):
+  // the previous test asserted auto CHECKED_OUT from 11:00; that behaviour was removed on purpose.
+  it('from 11 lists overdue stays for the duty panel but never auto-marks CHECKED_OUT', () => {
     const now = atHour(CHECKOUT_HOUR);
     expect(listOverdueCheckouts([stay], now).map((row) => row.id)).toEqual(['b1']);
-    const next = applyAutoCheckout(stay, now);
-    expect(next.booking_status).toBe('CHECKED_OUT');
-    expect(next.stay.auto_checked_out_at).toBeTruthy();
+    expect(stay.booking_status).toBe('CHECKED_IN');
+    expect('applyAutoCheckout' in duty).toBe(false);
+    const cal = readFileSync(new URL('../components/ResortOSCalendar.jsx', import.meta.url), 'utf8');
+    expect(cal).not.toMatch(/applyAutoCheckout|autoCheckoutRef/);
   });
 });
