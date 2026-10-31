@@ -378,7 +378,8 @@ export const GATE_GUIDE =
 export const checkoutGuide = (time: string = defaultCheckoutTime()) =>
   `ℹ️ *צ׳ק-אאוט:*\n` +
   `• שעת צ׳ק-אאוט רשמית: עד ${time}.\n` +
-  `• החל מהשעה 08:00 בבוקר ניתן לבצע צ׳ק-אאוט עצמי בלחיצה אחת דרך דף האורח הדיגיטלי שלכם.`;
+  `• החל מהשעה 08:00 בבוקר ניתן לבצע צ׳ק-אאוט עצמי בלחיצה אחת דרך דף האורח הדיגיטלי שלכם.\n` +
+  `• 🔑 בסיום מחזירים את המפתח לתיבת המפתחות, סוגרים ומסובבים גלגל אחד למספר אחר.`;
 
 /** Back-compat: weekday text. Use checkoutGuide() for date-aware text. */
 export const CHECKOUT_GUIDE = checkoutGuide('11:00');
@@ -860,8 +861,22 @@ function answerInfoKind(kind: InfoKind, q: string, question: string, ctx: GuestC
  * Intelligent deterministic matching for fast responses,
  * with context attachment and stay URL link.
  */
+/** Ran 2026-10-31: "להשאיר את המפתח בדלת?" / what to do with the key when leaving. */
+export function isKeyReturnQuestion(text?: string | null): boolean {
+  const t = String(text || '').toLowerCase();
+  if (/מפתח/.test(t) && /(להשאיר|משאירים|נשאיר|מה עושים|מה לעשות|איפה|לאן|להחזיר|מחזירים|בדלת|לשים|שמים)/.test(t)
+      && (/(להשאיר|משאירים|נשאיר|להחזיר|מחזירים|בדלת)/.test(t) || CHECKOUT_RE.test(t) || /(עוזבים|יוצאים|בסיום|כשאנחנו|ביציאה)/.test(t))) return true;
+  if (/\bkeys?\b/.test(t) && /(leave|leaving|return|where|what (?:do|should) we do|in the door|check.?out)/.test(t)) return true;
+  if (/ключ/.test(t) && /(оставить|оставлять|вернуть|куда|где|двер|выезд)/.test(t)) return true;
+  if (/مفتاح|مفاتيح/.test(t) && /(أترك|نترك|اترك|نعيد|أعيد|أين|وين|الباب|مغادرة)/.test(t)) return true;
+  return false;
+}
+
 export function answerGuestQuestion(question: string, ctx: GuestContext): string | null {
   const q = question.toLowerCase().trim();
+
+  // Key return at checkout: direct answer, never the lockbox code (Ran 2026-10-31).
+  if (isKeyReturnQuestion(question)) return T.keyReturn(detectGuestLang(question));
 
   // 0. Late check-out (before the generic checkout FAQ). Never confirms; manager approval required.
   if (isLateCheckoutQuestion(question)) {
