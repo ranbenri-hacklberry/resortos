@@ -209,8 +209,22 @@ export async function onRequest(context) {
     // Fallback to replica units or DEFAULT_UNITS
     if (!Array.isArray(units) || units.length === 0) {
       const replica = await loadCalendarReplica(env);
-      if (Array.isArray(replica?.units) && replica.units.length > 0) {
-        units = replica.units;
+      if (Array.isArray(replica?.unitOps) && replica.unitOps.length > 0) {
+        units = replica.unitOps.map((u, idx) => ({
+          id: u.id || u.cabin_id,
+          name: u.name || u.cabin_name || u.id || u.cabin_id,
+          sort_order: u.sort_order ?? idx,
+          operational_status: u.operational_status || 'READY',
+          assigned_staff: u.assigned_staff || ''
+        }));
+      } else if (Array.isArray(replica?.units) && replica.units.length > 0) {
+        units = replica.units.map((u, idx) => ({
+          id: u.id || u.cabin_id,
+          name: u.name || u.cabin_name || u.id || u.cabin_id,
+          sort_order: u.sort_order ?? idx,
+          operational_status: u.operational_status || 'READY',
+          assigned_staff: u.assigned_staff || ''
+        }));
       } else {
         units = DEFAULT_UNITS;
       }
