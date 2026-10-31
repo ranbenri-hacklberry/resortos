@@ -81,6 +81,40 @@ function getDefaultBookings(today) {
       deposit_agorot: 0,
       payment_status: 'UNPAID',
       special_requests: 'צ׳ק אין מאוחר ב-18:00, ללא כרטיס אשראי רשום'
+    },
+    {
+      id: 'book-checkout-001',
+      guest_name: 'יוסי אלבז',
+      guest_phone: '054-3321987',
+      guest_email: 'yossi.elbaz@gmail.com',
+      unit_id: 'dome-red',
+      check_in_date: '2026-10-29',
+      check_out_date: today,
+      adults_count: 2,
+      children_count: 0,
+      total_price_agorot: 190000,
+      deposit_agorot: 190000,
+      payment_status: 'PAID',
+      booking_status: 'CHECKED_OUT',
+      checked_out_at: '2026-10-31T09:45:00Z',
+      special_requests: 'החזיר מפתחות ב-09:45'
+    },
+    {
+      id: 'book-checkout-002',
+      guest_name: 'מיכל קליין',
+      guest_phone: '052-8877665',
+      guest_email: 'michal.k@gmail.com',
+      unit_id: 'k827',
+      check_in_date: '2026-10-29',
+      check_out_date: today,
+      adults_count: 2,
+      children_count: 0,
+      total_price_agorot: 210000,
+      deposit_agorot: 210000,
+      payment_status: 'PAID',
+      booking_status: 'CONFIRMED',
+      checkout_time: '11:00',
+      special_requests: 'מפנה ב-11:00'
     }
   ];
 }
@@ -469,22 +503,68 @@ export async function onRequest(context) {
 
     // 5. Cleaning & Housekeeping Intent
     if (isCleaningIntent) {
-      const unitItems = units.map((u) => ({
-        id: u.id,
-        name: u.name,
-        status: u.operational_status || 'READY',
-        assigned_staff: u.assigned_staff || ''
-      }));
+      const unitItems = units.map((u) => {
+        const checkoutBooking = bookings.find((b) => (
+          b.unit_id === u.id &&
+          b.check_out_date === today &&
+          b.booking_status !== 'CANCELED'
+        ));
 
+        const hasCheckoutToday = Boolean(checkoutBooking);
+        const isDeparted = Boolean(
+          checkoutBooking && (
+            checkoutBooking.booking_status === 'CHECKED_OUT' ||
+            checkoutBooking.checked_out_at ||
+            u.staff_occupancy === 'VACANT'
+          )
+        );
+        const isStillInHouse = Boolean(hasCheckoutToday && !isDeparted && u.staff_occupancy !== 'VACANT');
+        const canCleanNow = Boolean(!hasCheckoutToday || isDeparted);
+        const checkoutTime = checkoutBooking?.stay?.checkout_time || checkoutBooking?.checkout_time || '11:00';
+
+        return {
+          id: u.id,
+          name: u.name,
+          status: u.operational_status || 'READY',
+          assigned_staff: u.assigned_staff || '',
+          has_checkout_today: hasCheckoutToday,
+          is_departed: isDeparted,
+          can_clean_now: canCleanNow,
+          is_still_in_house: isStillInHouse,
+          checkout_time: checkoutTime,
+          checkout_guest: checkoutBooking?.guest_name || ''
+        };
+      });
+
+      // Sort: Units where guest checked out TODAY appear at the very top of the cleaning queue!
+      unitItems.sort((a, b) => {
+        if (a.is_departed && !b.is_departed) return -1;
+        if (!a.is_departed && b.is_departed) return 1;
+        if (a.status === 'IN_PROGRESS' && b.status !== 'IN_PROGRESS') return -1;
+        if (a.status !== 'IN_PROGRESS' && b.status === 'IN_PROGRESS') return 1;
+        if (a.status === 'DIRTY' && b.status === 'READY') return -1;
+        if (a.status === 'READY' && b.status === 'DIRTY') return 1;
+        return 0;
+      });
+
+      const departedCount = unitItems.filter((u) => u.is_departed).length;
+      const canCleanCount = unitItems.filter((u) => u.can_clean_now && u.status !== 'READY').length;
+      const stillInHouseCount = unitItems.filter((u) => u.is_still_in_house).length;
       const readyCount = unitItems.filter((u) => u.status === 'READY').length;
-      const inProgressCount = unitItems.filter((u) => u.status === 'IN_PROGRESS').length;
-      const dirtyCount = unitItems.filter((u) => u.status === 'DIRTY' || (!u.status && u.status !== 'READY')).length;
 
-      let reply = `תמונת מצב ניקיון ותפעול יחידות להיום:\n`;
-      reply += `• **${readyCount} יחידות מוכנות ונקיות** לקליטת אורחים ✨\n`;
-      if (inProgressCount > 0) reply += `• **${inProgressCount} יחידות בניקיון כרגע** ⏳\n`;
-      if (dirtyCount > 0) reply += `• **${dirtyCount} יחידות ממתינות לניקיון** 🧹\n`;
-      reply += `למטה מוצג פירוט היחידות לפי סטטוס:`;
+      let reply = `תמונת מצב ניקיון יחידות להיום:\n\n`;
+      reply += `✨ **עכשיו כבר אפשר לנקות (${canCleanCount} יחידות):**\n`;
+      if (departedCount > 0) {
+        reply += `• בראש התור: **${departedCount} יחידות שבהן האורח ביצע צ'ק-אאוט ויצא** (מסומנות ב-🚪).\n`;
+      }
+      reply += `• כל שאר היחידות בקטגוריה זו פנויות ומוכנות לכניסת צוות הניקיון.\n\n`;
+
+      if (stillInHouseCount > 0) {
+        reply += `⏳ **עוד בשהייה · יוצאים היום (${stillInHouseCount} יחידות):**\n`;
+        reply += `• אורחים שעדיין בחדר (שעת עזיבה רשומה: 11:00) — אין להיכנס לפני אישור עזיבה.\n\n`;
+      }
+
+      reply += `🟢 **מוכנות ונקיות לקליטה:** ${readyCount} מתוך ${units.length} יחידות.`;
 
       return json({
         ok: true,
@@ -492,7 +572,7 @@ export async function onRequest(context) {
         widget: {
           type: 'UnitStatusCards',
           data: {
-            title: `סטטוס ניקיון ותפעול (${units.length} יחידות)`,
+            title: `סטטוס ניקיון ותעדוף (${units.length} יחידות)`,
             items: unitItems
           }
         }

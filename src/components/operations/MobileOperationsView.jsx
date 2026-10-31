@@ -141,6 +141,25 @@ export default function MobileOperationsView({
   // Selected Room Details Modal State
   const [selectedRoomModal, setSelectedRoomModal] = useState(null);
 
+  // Track units where guest has checked out today
+  const [departedRoomIds, setDepartedRoomIds] = useState(() => new Set());
+
+  const handleMarkGuestDeparted = useCallback((unitId) => {
+    setDepartedRoomIds((prev) => {
+      const next = new Set(prev);
+      next.add(unitId);
+      return next;
+    });
+    if (pushUnitToCloud) {
+      pushUnitToCloud({
+        id: unitId,
+        tenant_id: tenantId,
+        staff_occupancy: 'VACANT',
+        updated_at: new Date().toISOString()
+      });
+    }
+  }, [pushUnitToCloud, tenantId]);
+
   // New Maintenance Ticket inline modal trigger
   const [showNewMaintenanceModal, setShowNewMaintenanceModal] = useState(false);
   const [newFaultUnitId, setNewFaultUnitId] = useState('');
@@ -267,6 +286,18 @@ export default function MobileOperationsView({
       ));
       const isSameDayTurnover = Boolean(checkoutBooking && checkinBooking);
 
+      const hasCheckoutToday = Boolean(checkoutBooking);
+      const isGuestCheckedOut = Boolean(
+        departedRoomIds.has(unit.id) ||
+        checkoutBooking?.booking_status === 'CHECKED_OUT' ||
+        checkoutBooking?.checked_out_at ||
+        unit.staff_occupancy === 'VACANT'
+      );
+      const isDepartedToday = Boolean(hasCheckoutToday && isGuestCheckedOut);
+      const canCleanNow = Boolean(!hasCheckoutToday || isGuestCheckedOut);
+      const isStillInHouse = Boolean(hasCheckoutToday && !isGuestCheckedOut);
+      const checkoutTime = checkoutBooking?.stay?.checkout_time || checkoutBooking?.checkout_time || '11:00';
+
       return {
         unit,
         id: unit.id,
@@ -274,6 +305,11 @@ export default function MobileOperationsView({
         status: unit.operational_status || 'DIRTY',
         lockbox: lockboxCodeForUnit(unit),
         isSameDayTurnover,
+        hasCheckoutToday,
+        isDepartedToday,
+        canCleanNow,
+        isStillInHouse,
+        checkoutTime,
         checkoutGuest: checkoutBooking?.guest_name,
         checkinGuest: checkinBooking?.guest_name,
         checkinEta: checkinBooking?.stay?.estimated_arrival_time || checkinBooking?.eta || null,
@@ -281,7 +317,30 @@ export default function MobileOperationsView({
         assignedStaff: unit.assigned_staff || 'צוות משק בית'
       };
     });
-  }, [effectiveUnits, effectiveBookings, todayStr]);
+  }, [effectiveUnits, effectiveBookings, todayStr, departedRoomIds]);
+
+  // 1. עכשיו כבר אפשר לנקות: יחידות שהאורח יצא מהן היום (בראש התור!) + יחידות פנויות לניקיון
+  const canCleanNowRooms = useMemo(() => {
+    return cleaningRooms
+      .filter((r) => r.canCleanNow)
+      .sort((a, b) => {
+        // מציגים בראש התור יחידות שהאורח ביצע צ'ק אאוט היום!
+        if (a.isDepartedToday && !b.isDepartedToday) return -1;
+        if (!a.isDepartedToday && b.isDepartedToday) return 1;
+        if (a.status === 'IN_PROGRESS' && b.status !== 'IN_PROGRESS') return -1;
+        if (a.status !== 'IN_PROGRESS' && b.status === 'IN_PROGRESS') return 1;
+        if (a.isSameDayTurnover && !b.isSameDayTurnover) return -1;
+        if (!a.isSameDayTurnover && b.isSameDayTurnover) return 1;
+        return 0;
+      });
+  }, [cleaningRooms]);
+
+  // 2. עוד בשהייה אבל יוצאים היום: אורחים שטרם יצאו
+  const stillInHouseRooms = useMemo(() => {
+    return cleaningRooms
+      .filter((r) => r.isStillInHouse)
+      .sort((a, b) => (a.checkoutTime || '').localeCompare(b.checkoutTime || ''));
+  }, [cleaningRooms]);
 
   // Urgent Turnover Callout Units
   const urgentTurnovers = useMemo(() => {
@@ -1146,129 +1205,293 @@ export default function MobileOperationsView({
                 ✓ כל החדרים נקיים ומסודרים לחלוטין!
               </div>
             ) : (
-              cleaningRooms.map((room) => {
-                const isInProgress = room.status === 'IN_PROGRESS';
-                const isCompletions = room.status === 'NEEDS_COMPLETIONS';
-
-                return (
-                  <div
-                    key={room.id}
-                    style={{
-                      border: `1px solid ${room.isSameDayTurnover ? brand.urgentBorder : brand.border}`,
-                      borderRadius: brand.radius,
-                      padding: '0.65rem 0.75rem',
-                      background: room.isSameDayTurnover ? (isDark ? 'rgba(197, 160, 89, 0.08)' : '#FFFDF7') : (isDark ? '#2B1612' : '#FFFFFF'),
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '0.45rem'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <span style={{ fontSize: '0.9rem', fontWeight: 900, color: brand.text }}>
-                          {room.unitName}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+                {/* 1. עכשיו כבר אפשר לנקות (צ'ק אאוט בוצע או יחידה פנויה) */}
+                {canCleanNowRooms.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.2rem 0.3rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                        <Sparkles size={15} color="#059669" />
+                        <span style={{ fontSize: '0.86rem', fontWeight: 900, color: '#059669' }}>
+                          עכשיו כבר אפשר לנקות ({canCleanNowRooms.length})
                         </span>
-                        {room.lockbox && (
-                          <span style={{ fontSize: '0.72rem', fontWeight: 900, color: brand.gold }}>
-                            · כספת {room.lockbox}
-                          </span>
-                        )}
                       </div>
-
-                      <div
-                        style={{
-                          fontSize: '0.72rem',
-                          fontWeight: 800,
-                          padding: '0.15rem 0.45rem',
-                          borderRadius: brand.radius,
-                          border: `1px solid ${isInProgress ? '#F59E0B' : (isCompletions ? '#0D9488' : '#EF4444')}`,
-                          background: isInProgress
-                            ? (isDark ? 'rgba(245, 158, 11, 0.18)' : '#FEF3C7')
-                            : (isCompletions ? 'rgba(13, 148, 136, 0.12)' : (isDark ? 'rgba(239, 68, 68, 0.18)' : '#FEE2E2')),
-                          color: isInProgress ? '#D97706' : (isCompletions ? '#0D9488' : '#DC2626')
-                        }}
-                      >
-                        {isInProgress ? `בנקיון${room.staff ? ` | ${room.staff}` : ''}` : (isCompletions ? '📦 חסרות השלמות' : 'לניקוי')}
-                      </div>
+                      <span style={{ fontSize: '0.7rem', color: brand.textMuted, fontWeight: 700 }}>
+                        האורח יצא / יחידה פנויה לניקיון
+                      </span>
                     </div>
 
+                    {canCleanNowRooms.map((room) => {
+                      const isInProgress = room.status === 'IN_PROGRESS';
+                      const isCompletions = room.status === 'NEEDS_COMPLETIONS';
 
-                    {/* Guest Turnover Context */}
-                    <div style={{ fontSize: '0.74rem', color: brand.textMuted }}>
-                      {room.checkoutGuest ? `יציאה היום: ${room.checkoutGuest}` : 'ניקוי והכנה'}
-                      {room.checkinGuest ? ` ➔ כניסה היום: ${room.checkinGuest} (משוער: ${room.checkinEta})` : ''}
-                    </div>
-
-                    {/* Action buttons */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.2rem' }}>
-                      {!isInProgress ? (
-                        <button
-                          type="button"
-                          onClick={() => onStartTask && onStartTask(room.id)}
+                      return (
+                        <div
+                          key={room.id}
                           style={{
-                            flex: 1,
-                            padding: '0.45rem',
+                            border: `1.5px solid ${room.isDepartedToday ? '#10B981' : room.isSameDayTurnover ? brand.urgentBorder : brand.border}`,
                             borderRadius: brand.radius,
-                            border: `1px solid ${brand.goldBorder}`,
-                            background: brand.goldSoft,
-                            color: brand.gold,
-                            fontSize: '0.78rem',
-                            fontWeight: 800,
-                            cursor: 'pointer',
+                            padding: '0.65rem 0.75rem',
+                            background: room.isDepartedToday 
+                              ? (isDark ? 'rgba(16, 185, 129, 0.08)' : '#F0FDF4') 
+                              : room.isSameDayTurnover 
+                              ? (isDark ? 'rgba(197, 160, 89, 0.08)' : '#FFFDF7') 
+                              : (isDark ? '#2B1612' : '#FFFFFF'),
                             display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '0.3rem'
+                            flexDirection: 'column',
+                            gap: '0.45rem',
+                            boxShadow: room.isDepartedToday ? '0 2px 10px rgba(16, 185, 129, 0.12)' : 'none'
                           }}
                         >
-                          <Play size={13} />
-                          <span>התחל ניקיון</span>
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => onFinishTask && onFinishTask(room.id)}
-                          style={{
-                            flex: 1,
-                            padding: '0.45rem',
-                            borderRadius: brand.radius,
-                            border: `1px solid ${brand.readyBorder}`,
-                            background: brand.readyBg,
-                            color: brand.readyText,
-                            fontSize: '0.78rem',
-                            fontWeight: 800,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '0.3rem'
-                          }}
-                        >
-                          <Check size={14} />
-                          <span>סמן כנקי ומוכן</span>
-                        </button>
-                      )}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              <span style={{ fontSize: '0.9rem', fontWeight: 900, color: brand.text }}>
+                                {room.unitName}
+                              </span>
+                              {room.lockbox && (
+                                <span style={{ fontSize: '0.72rem', fontWeight: 900, color: brand.gold }}>
+                                  · כספת {room.lockbox}
+                                </span>
+                              )}
+                            </div>
 
-                      <button
-                        type="button"
-                        onClick={() => onOpenTaskDetail && onOpenTaskDetail(room.unit)}
-                        style={{
-                          padding: '0.45rem 0.65rem',
-                          borderRadius: brand.radius,
-                          border: `1px solid ${brand.border}`,
-                          background: isDark ? '#3D221C' : '#FFFFFF',
-                          color: brand.textMuted,
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        פרטים
-                      </button>
-                    </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              {room.isDepartedToday && (
+                                <div
+                                  style={{
+                                    fontSize: '0.72rem',
+                                    fontWeight: 900,
+                                    padding: '0.15rem 0.5rem',
+                                    borderRadius: brand.radiusPill,
+                                    border: '1px solid #10B981',
+                                    background: '#ECFDF5',
+                                    color: '#047857',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.2rem'
+                                  }}
+                                >
+                                  <span>🚪 האורח יצא</span>
+                                </div>
+                              )}
+
+                              <div
+                                style={{
+                                  fontSize: '0.72rem',
+                                  fontWeight: 800,
+                                  padding: '0.15rem 0.45rem',
+                                  borderRadius: brand.radius,
+                                  border: `1px solid ${isInProgress ? '#F59E0B' : (isCompletions ? '#0D9488' : '#EF4444')}`,
+                                  background: isInProgress
+                                    ? (isDark ? 'rgba(245, 158, 11, 0.18)' : '#FEF3C7')
+                                    : (isCompletions ? 'rgba(13, 148, 136, 0.12)' : (isDark ? 'rgba(239, 68, 68, 0.18)' : '#FEE2E2')),
+                                  color: isInProgress ? '#D97706' : (isCompletions ? '#0D9488' : '#DC2626')
+                                }}
+                              >
+                                {isInProgress ? `בנקיון${room.staff ? ` | ${room.staff}` : ''}` : (isCompletions ? '📦 חסרות השלמות' : 'לניקוי')}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Guest Turnover Context */}
+                          <div style={{ fontSize: '0.74rem', color: brand.textMuted }}>
+                            {room.checkoutGuest ? `יציאה: ${room.checkoutGuest} (צ'ק-אאוט הושלם)` : 'יחידה פנויה לניקיון והכנה'}
+                            {room.checkinGuest ? ` ➔ כניסה היום: ${room.checkinGuest} (משוער: ${room.checkinEta})` : ''}
+                          </div>
+
+                          {/* Action buttons */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.2rem' }}>
+                            {!isInProgress ? (
+                              <button
+                                type="button"
+                                onClick={() => onStartTask && onStartTask(room.id)}
+                                style={{
+                                  flex: 1,
+                                  padding: '0.45rem',
+                                  borderRadius: brand.radius,
+                                  border: `1px solid ${brand.goldBorder}`,
+                                  background: brand.goldSoft,
+                                  color: brand.gold,
+                                  fontSize: '0.78rem',
+                                  fontWeight: 800,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '0.3rem'
+                                }}
+                              >
+                                <Play size={13} />
+                                <span>התחל ניקיון</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => onFinishTask && onFinishTask(room.id)}
+                                style={{
+                                  flex: 1,
+                                  padding: '0.45rem',
+                                  borderRadius: brand.radius,
+                                  border: `1px solid ${brand.readyBorder}`,
+                                  background: brand.readyBg,
+                                  color: brand.readyText,
+                                  fontSize: '0.78rem',
+                                  fontWeight: 800,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '0.3rem'
+                                }}
+                              >
+                                <Check size={14} />
+                                <span>סמן כנקי ומוכן</span>
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => onOpenTaskDetail && onOpenTaskDetail(room.unit)}
+                              style={{
+                                padding: '0.45rem 0.65rem',
+                                borderRadius: brand.radius,
+                                border: `1px solid ${brand.border}`,
+                                background: isDark ? '#3D221C' : '#FFFFFF',
+                                color: brand.textMuted,
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              פרטים
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })
+                )}
+
+                {/* 2. עוד בשהייה · יוצאים היום (אורח טרם פינה) */}
+                {stillInHouseRooms.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginTop: canCleanNowRooms.length > 0 ? '0.4rem' : '0' }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '0.4rem 0.3rem 0.2rem',
+                      borderTop: canCleanNowRooms.length > 0 ? `1px dashed ${brand.border}` : 'none'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                        <Clock size={15} color="#D97706" />
+                        <span style={{ fontSize: '0.86rem', fontWeight: 900, color: '#D97706' }}>
+                          עוד בשהייה · יוצאים היום ({stillInHouseRooms.length})
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '0.7rem', color: brand.textMuted, fontWeight: 700 }}>
+                        אין להיכנס לניקיון לפני עזיבת האורח
+                      </span>
+                    </div>
+
+                    {stillInHouseRooms.map((room) => {
+                      return (
+                        <div
+                          key={room.id}
+                          style={{
+                            border: `1.5px solid #F59E0B`,
+                            borderRadius: brand.radius,
+                            padding: '0.65rem 0.75rem',
+                            background: isDark ? 'rgba(245, 158, 11, 0.08)' : '#FFFBEB',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '0.45rem'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              <span style={{ fontSize: '0.9rem', fontWeight: 900, color: brand.text }}>
+                                {room.unitName}
+                              </span>
+                              {room.lockbox && (
+                                <span style={{ fontSize: '0.72rem', fontWeight: 900, color: brand.gold }}>
+                                  · כספת {room.lockbox}
+                                </span>
+                              )}
+                            </div>
+
+                            <div
+                              style={{
+                                fontSize: '0.72rem',
+                                fontWeight: 900,
+                                padding: '0.15rem 0.5rem',
+                                borderRadius: brand.radiusPill,
+                                border: '1px solid #F59E0B',
+                                background: '#FEF3C7',
+                                color: '#B45309',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.25rem'
+                              }}
+                            >
+                              <Clock size={12} />
+                              <span>⏳ בשהייה · שעת יציאה: {room.checkoutTime}</span>
+                            </div>
+                          </div>
+
+                          {/* Guest Turnover Context */}
+                          <div style={{ fontSize: '0.74rem', color: brand.textMuted }}>
+                            אורח בחדר: <strong>{room.checkoutGuest || 'אורח'}</strong> · שעת עזיבה רשומה: <strong>{room.checkoutTime}</strong>
+                            {room.checkinGuest ? ` ➔ כניסה היום: ${room.checkinGuest}` : ''}
+                          </div>
+
+                          {/* Action button to mark departed */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.2rem' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleMarkGuestDeparted(room.id)}
+                              style={{
+                                flex: 1,
+                                padding: '0.45rem',
+                                borderRadius: brand.radius,
+                                border: '1px solid rgba(16, 185, 129, 0.5)',
+                                background: '#ECFDF5',
+                                color: '#047857',
+                                fontSize: '0.78rem',
+                                fontWeight: 900,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '0.35rem'
+                              }}
+                            >
+                              <CheckCircle2 size={14} color="#10B981" />
+                              <span>סמן שהאורח יצא (צ'ק-אאוט) ✓</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => onOpenTaskDetail && onOpenTaskDetail(room.unit)}
+                              style={{
+                                padding: '0.45rem 0.65rem',
+                                borderRadius: brand.radius,
+                                border: `1px solid ${brand.border}`,
+                                background: isDark ? '#3D221C' : '#FFFFFF',
+                                color: brand.textMuted,
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              פרטים
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}
