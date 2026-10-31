@@ -50,6 +50,22 @@ function writeShoppingList(items) {
   } catch (_) {}
 }
 
+function safeText(val, fallback = '') {
+  if (val == null) return fallback;
+  if (typeof val === 'string') return val;
+  if (typeof val === 'number') return String(val);
+  if (Array.isArray(val)) {
+    return val
+      .map((x) => (typeof x === 'object' ? (x?.text || x?.note || x?.label || JSON.stringify(x)) : String(x)))
+      .filter(Boolean)
+      .join(', ');
+  }
+  if (typeof val === 'object') {
+    return val.text || val.note || val.label || val.message || JSON.stringify(val);
+  }
+  return String(val);
+}
+
 export default function MobileOperationsView({
   units = [],
   bookings = [],
@@ -225,14 +241,14 @@ export default function MobileOperationsView({
         id: unit.id,
         booking,
         unit,
-        unitName: fieldUnitDisplayName(unit),
-        guestName: booking.guest_name || 'אורח',
-        phone: booking.guest_phone || booking.phone || '',
-        eta: booking.stay?.estimated_arrival_time || booking.eta || null,
+        unitName: safeText(fieldUnitDisplayName(unit), 'יחידה'),
+        guestName: safeText(booking.guest_name, 'אורח'),
+        phone: safeText(booking.guest_phone || booking.phone || ''),
+        eta: safeText(booking.stay?.estimated_arrival_time || booking.eta || ''),
         adults: booking.adults_count ?? booking.adults ?? null,
         kids: booking.children_count ?? booking.children ?? 0,
-        specialRequests: booking.special_requests || booking.notes || booking.guest_notes || '',
-        lockbox: lockboxCodeForUnit(unit),
+        specialRequests: safeText(booking.special_requests || booking.notes || booking.guest_notes || ''),
+        lockbox: safeText(lockboxCodeForUnit(unit)),
         status: unit?.operational_status || (sameDayTurnover ? 'DIRTY' : 'READY'),
         isReady,
         isOccupied,
@@ -587,7 +603,7 @@ export default function MobileOperationsView({
 
   // Safe WhatsApp & Phone links
   const waLink = (phone, text = '') => {
-    const raw = String(phone || '').replace(/[^0-9]/g, '');
+    const raw = safeText(phone).replace(/[^0-9]/g, '');
     const clean = raw.startsWith('0') ? `972${raw.slice(1)}` : raw;
     return `https://wa.me/${clean}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
   };
@@ -2455,7 +2471,7 @@ export default function MobileOperationsView({
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: `1px solid ${brand.border}`, paddingBottom: '0.5rem' }}>
               <div>
                 <div style={{ fontSize: '1rem', fontWeight: 900, color: brand.text }}>
-                  {selectedRoomModal.unitName}
+                  {safeText(selectedRoomModal.unitName)}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: brand.gold }}>
                   פרטי הזמנה וכניסה
@@ -2471,30 +2487,30 @@ export default function MobileOperationsView({
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', fontSize: '0.82rem' }}>
-              <div><strong>אורח:</strong> {selectedRoomModal.guestName}</div>
+              <div><strong>אורח:</strong> {safeText(selectedRoomModal.guestName)}</div>
               {selectedRoomModal.phone && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                  <strong>טלפון:</strong> <span>{selectedRoomModal.phone}</span>
+                  <strong>טלפון:</strong> <span>{safeText(selectedRoomModal.phone)}</span>
                   <a href={waLink(selectedRoomModal.phone)} target="_blank" rel="noreferrer" style={{ color: '#25D366' }} title="וואטסאפ">
                     <MessageCircle size={18} />
                   </a>
-                  <a href={`tel:${selectedRoomModal.phone}`} style={{ color: brand.gold }} title="חייג">
+                  <a href={`tel:${safeText(selectedRoomModal.phone)}`} style={{ color: brand.gold }} title="חייג">
                     <Phone size={18} />
                   </a>
                 </div>
               )}
               <div>
-                <strong>הרכב:</strong> {selectedRoomModal.adults != null ? `${selectedRoomModal.adults} מבוגרים ${selectedRoomModal.kids > 0 ? `+ ${selectedRoomModal.kids} ילדים` : ''}` : 'לא צוין'}
+                <strong>הרכב:</strong> {selectedRoomModal.adults != null ? `${safeText(selectedRoomModal.adults)} מבוגרים ${selectedRoomModal.kids > 0 ? `+ ${safeText(selectedRoomModal.kids)} ילדים` : ''}` : 'לא צוין'}
               </div>
               <div>
-                <strong>שעת הגעה משוערת:</strong> {selectedRoomModal.eta ? selectedRoomModal.eta : 'לא צוינה'}
+                <strong>שעת הגעה משוערת:</strong> {safeText(selectedRoomModal.eta) || 'לא צוינה'}
               </div>
               {selectedRoomModal.lockbox && (
-                <div><strong>קוד כספת מפתח:</strong> <span style={{ color: brand.gold, fontWeight: 900 }}>{selectedRoomModal.lockbox}</span></div>
+                <div><strong>קוד כספת מפתח:</strong> <span style={{ color: brand.gold, fontWeight: 900 }}>{safeText(selectedRoomModal.lockbox)}</span></div>
               )}
               {selectedRoomModal.specialRequests && (
                 <div style={{ background: isDark ? '#1C0F0C' : '#F7F3EE', padding: '0.6rem', borderRadius: brand.radiusMd, marginTop: '0.2rem' }}>
-                  <strong>בקשות מיוחדות:</strong> {selectedRoomModal.specialRequests}
+                  <strong>בקשות מיוחדות:</strong> {safeText(selectedRoomModal.specialRequests)}
                 </div>
               )}
             </div>

@@ -7,6 +7,56 @@ import { ReservationCards } from './ReservationCards';
 import { ConfirmationCard } from './ConfirmationCard';
 import { UnitStatusCards } from './UnitStatusCards';
 
+class WidgetErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(err, info) {
+    console.error('[CHLOE WIDGET ERROR]', err, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          marginTop: '0.5rem',
+          padding: '0.65rem 0.85rem',
+          borderRadius: '10px',
+          background: 'rgba(239, 68, 68, 0.08)',
+          border: '1px solid rgba(239, 68, 68, 0.25)',
+          fontSize: '0.76rem',
+          color: '#DC2626',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <span>חלה שגיאה בטעינת הכרטיסייה.</span>
+          <button
+            type="button"
+            onClick={() => this.setState({ hasError: false })}
+            style={{
+              background: '#DC2626',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '0.2rem 0.5rem',
+              fontSize: '0.7rem',
+              cursor: 'pointer',
+              fontWeight: 800
+            }}
+          >
+            נסה שוב
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const INITIAL_MESSAGES = [
   {
     id: 'chloe-welcome',
@@ -362,20 +412,26 @@ export default function ChloeDashboardChat({ sessionUser, theme = 'light' }) {
 
                 {/* Generative UI Widgets */}
                 {msg.widget && msg.widget.type === 'ReservationCards' && (
-                  <ReservationCards data={msg.widget.data} />
+                  <WidgetErrorBoundary>
+                    <ReservationCards data={msg.widget.data} />
+                  </WidgetErrorBoundary>
                 )}
 
                 {msg.widget && msg.widget.type === 'UnitStatusCards' && (
-                  <UnitStatusCards data={msg.widget.data} />
+                  <WidgetErrorBoundary>
+                    <UnitStatusCards data={msg.widget.data} />
+                  </WidgetErrorBoundary>
                 )}
 
                 {msg.widget && msg.widget.type === 'ConfirmationCard' && (
-                  <ConfirmationCard 
-                    data={msg.widget.data} 
-                    onConfirm={handleConfirmAction}
-                    onCancel={handleCancelAction}
-                    isExecuting={isExecutingAction}
-                  />
+                  <WidgetErrorBoundary>
+                    <ConfirmationCard 
+                      data={msg.widget.data} 
+                      onConfirm={handleConfirmAction}
+                      onCancel={handleCancelAction}
+                      isExecuting={isExecutingAction}
+                    />
+                  </WidgetErrorBoundary>
                 )}
 
                 {/* Timestamp */}
