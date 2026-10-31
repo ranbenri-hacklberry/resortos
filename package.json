@@ -32,7 +32,7 @@
     "sync:banks": "node server/syncBanks.js",
     "sync:hyp": "node server/syncHyp.js",
     "sync:channex": "node -e \"import('./server/channexService.js').then(m => m.syncChannexOffice())\"",
-    "test": "vitest run && node --test functions/lib/hypPay.test.js functions/lib/guestContext.test.js functions/lib/demoCheckout.test.js functions/lib/edgeAgentStore.test.js functions/lib/idPhoto.test.js server/agentConnections.test.js server/mcpRead.test.js server/mcpAuth.test.js server/mcpOtp.test.js server/mcpHttp.test.js server/mcpGuestPage.test.js server/googleContactsPlan.test.js server/googleContactsAuto.test.js server/routerStatus.test.js server/assetBeacons.test.js server/roomCheckoutLog.test.js server/channexService.test.js",
+    "test": "vitest run && node --test functions/api/availability.test.js functions/lib/hypPay.test.js functions/lib/guestContext.test.js functions/lib/demoCheckout.test.js functions/lib/edgeAgentStore.test.js functions/lib/idPhoto.test.js server/agentConnections.test.js server/mcpRead.test.js server/mcpAuth.test.js server/mcpOtp.test.js server/mcpHttp.test.js server/mcpGuestPage.test.js server/googleContactsPlan.test.js server/googleContactsAuto.test.js server/routerStatus.test.js server/assetBeacons.test.js server/roomCheckoutLog.test.js server/channexService.test.js",
     "test:hyp": "node --test functions/lib/hypPay.test.js"
   },
   "dependencies": {
