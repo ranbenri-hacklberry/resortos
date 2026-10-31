@@ -447,8 +447,13 @@ async function enrichGuestContacts(rows, jar) {
   return jar;
 }
 
+/**
+ * Real-departure rule (Ran 2026-10-31): the sync never marks a stay CHECKED_OUT by date on its own.
+ * New rows start CONFIRMED; stays whose checkout date has fully passed are closed by closePast
+ * (check_out_date < today, checkout_status='auto_closed'). Checkout day itself stays open
+ * ("due_out") until the guest self-checks-out, tells Chloe they left, or staff confirm.
+ */
 function bookingStatus(st, cin, cout, today, paymentStatus) {
-  if (cout <= today) return 'CHECKED_OUT';
   return 'CONFIRMED';
 }
 
@@ -663,8 +668,7 @@ ON CONFLICT (id) DO UPDATE SET
   adults_count = ${row.keepParty ? 'public.hotelos_bookings.adults_count' : 'EXCLUDED.adults_count'},
   children_count = ${row.keepParty ? 'public.hotelos_bookings.children_count' : 'EXCLUDED.children_count'},
   booking_status = CASE
-    WHEN public.hotelos_bookings.booking_status = 'CHECKED_OUT' THEN public.hotelos_bookings.booking_status
-    WHEN EXCLUDED.check_out_date <= ${sqlString(today)}::date THEN 'CHECKED_OUT'
+    WHEN public.hotelos_bookings.booking_status IN ('CHECKED_OUT', 'CHECKED_IN') THEN public.hotelos_bookings.booking_status
     ELSE EXCLUDED.booking_status
   END,
   channel_source = EXCLUDED.channel_source,
@@ -761,10 +765,13 @@ WHERE id LIKE 'kin\\_%' ESCAPE '\\'
 
   const closePast = `
 UPDATE public.hotelos_bookings
-SET booking_status = 'CHECKED_OUT', updated_at = now()
+SET booking_status = 'CHECKED_OUT',
+    checkout_status = 'auto_closed',
+    checked_out_at = COALESCE(checked_out_at, now()),
+    updated_at = now()
 WHERE id LIKE 'kin\\_%' ESCAPE '\\'
   AND deleted_at IS NULL
-  AND check_out_date <= ${sqlString(today)}
+  AND check_out_date < ${sqlString(today)}
   AND booking_status IN ('CHECKED_IN', 'CONFIRMED', 'PENDING');
 `;
 
@@ -1108,6 +1115,9 @@ export async function main() {
 }
 
 export {
+  bookingStatus as kinorotBookingStatus,
+  bookingRow as kinorotBookingRow,
+  buildSql as kinorotBuildSql,
   request as kinorotRequest,
   login as kinorotLogin,
   loadJar as loadKinorotJar,

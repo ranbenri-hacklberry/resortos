@@ -176,3 +176,69 @@ export const EXTENSION_RE = kw([
 export const PAYMENT_INTL_RE = kw(['payment', 'pay', 'paid', 'price', 'cost', 'balance', 'fee', 'invoice', 'receipt', 'how much',
   'оплат*', 'оплач*', 'заплатить', 'доплат*', 'остаток', 'сколько платить', 'долг', 'счёт', 'счет',
   '(?:ال)?دفع', 'ندفع', '(?:ال)?مبلغ', '(?:ال)?متبقي', '(?:ال)?حساب', '(?:ال)?فاتورة', 'كم علي', 'كم باقي']);
+
+/** Guest reports they already left (Ran 2026-10-24, Musical Courtyard 1+3 "יצאנו" got the generic fallback). */
+export const GUEST_LEFT_RE = /(?:כבר\s+)?(?:יצאנו|עזבנו)(?:\s+מה?חדר|\s+מהצימר|\s+מהיחידה)?|סיימנו\s+ויצאנו|השארנו\s+(?:את\s+ה)?מפתח|\bwe(?:'ve|\s+have)?\s+(?:already\s+)?(?:left|checked\s*out)\b|^\s*(?:just\s+)?checked\s*out\b|мы\s+(?:уже\s+)?(?:уехали|выехали)|^\s*(?:уже\s+)?выехали/i;
+/** Chloe bug 2026-10-31: "צ׳ק-אאוט בוצע השארנו גם נקי תודה..." got the checkout FAQ. Completed-checkout statements. */
+const CHECKOUT_DONE_RE = /(?:צ['׳"]?ק[- ]?אאוט|צק\s+אאוט|check-?\s?out)\s+(?:כבר\s+)?(?:בוצע|נעשה|הושלם|done|completed)|(?:עשינו|ביצענו|סיימנו)\s+(?:כבר\s+)?(?:את\s+)?(?:ה)?(?:צ['׳"]?ק[- ]?אאוט|צק\s+אאוט)|השארנו\s+(?:גם\s+)?(?:(?:את\s+)?(?:ה)?(?:חדר|צימר|יחידה|בקתה)\s+)?נקי|\b(?:we\s+)?(?:just\s+)?checked\s*out\b|\bwe(?:'re|\s+are)\s+(?:all\s+)?checked\s*out\b|\bcheck-?\s?out\s+(?:is\s+)?(?:done|complete)/i;
+const GUEST_LEFT_NEG_RE = /(?:עוד\s+)?לא\s+(?:כבר\s+)?(?:יצאנו|עזבנו|עשינו|ביצענו|סיימנו)|(?:צ['׳"]?ק[- ]?אאוט|צק\s+אאוט)\s+לא\s+בוצע|עדיין\s+לא|\bnot\s+(?:yet\s+)?(?:left|checked)|haven'?t\s+(?:left|checked)|не\s+(?:уехали|выехали)|\?/i;
+/** True for "יצאנו" / "we left" / "мы уехали" — but not for negations or questions. */
+export function isGuestLeftMessage(text?: string | null): boolean {
+  const t = String(text || '').trim();
+  if (!t || t.length > 120) return false;
+  return (GUEST_LEFT_RE.test(t) || CHECKOUT_DONE_RE.test(t)) && !GUEST_LEFT_NEG_RE.test(t);
+}
+export const GUEST_LEFT_THANKS: Record<'he' | 'en' | 'ru', string> = {
+  he: 'תודה שעדכנתם! נסיעה טובה 🌿',
+  en: 'Thanks for letting us know! Have a safe trip 🌿',
+  ru: 'Спасибо, что сообщили! Счастливого пути 🌿',
+};
+
+/** Departure message that also thanks / praises the stay → warmer farewell (2026-10-31). */
+const GUEST_THANKS_RE = /תוד[הו]|נהנ(?:ינו|נו)|חוויה|מושלם|מדהים|thank|thx|enjoy|loved|great|amazing|спасибо|понравил/i;
+export function isGuestLeftWithThanks(text?: string | null): boolean {
+  return isGuestLeftMessage(text) && GUEST_THANKS_RE.test(String(text || ''));
+}
+export const GUEST_LEFT_WARM_THANKS: Record<'he' | 'en' | 'ru', string> = {
+  he: 'תודה רבה לכם, וכיף לשמוע שנהניתם! 🫶 שמחנו לארח אתכם, נסיעה טובה ומחכים לראות אתכם שוב 🌿',
+  en: 'Thank you so much, so glad you enjoyed your stay! 🫶 It was a pleasure hosting you. Safe travels, and hope to see you again 🌿',
+  ru: 'Большое спасибо, очень рады, что вам понравилось! 🫶 Счастливого пути, будем рады видеть вас снова 🌿',
+};
+
+// ---- Chloe bugs 2026-10-28 (log review 26–28/10) ----
+/** QR deep-link tokens (START_F1) appended to pre-filled WhatsApp texts. */
+export function stripQrTokens(text?: string | null): string {
+  return String(text || '').replace(/\bSTART_[A-Z]\d{1,2}\b/gi, '').replace(/\s+/g, ' ').trim();
+}
+/** Pre-filled self-introduction from the stay page: "שלום, כאן X לגבי ההזמנה ב..." — not a question. */
+export function isIntroMessage(text?: string | null): boolean {
+  const t = stripQrTokens(text);
+  if (!t || t.length > 160 || /\?/.test(t)) return false;
+  return /^(?:שלום|היי|הי|אהלן)?[\s,!.]*כאן\s+.{1,40}?\s+(?:לגבי|בנוגע\s+ל)\s*ה?הזמנה/u.test(t)
+    || /^(?:hi|hello)?[\s,!.]*this\s+is\s+.{1,40}?\s+(?:about|regarding)\s+(?:the|my|our)\s+booking/i.test(t);
+}
+/** "Send me the digital guide / stay page link". */
+export function isGuideLinkRequest(text?: string | null): boolean {
+  const t = stripQrTokens(text);
+  if (!t || t.length > 200) return false;
+  return /מדריך\s*(?:ה)?דיגיטלי|(?:ה)?קישור\s+ל(?:מדריך|דף)|דף\s*(?:ה)?(?:אורח|שהות)|לינק\s+ל(?:מדריך|דף)|(?:digital\s+)?guide\s+link|stay\s+(?:page|link)/iu.test(t);
+}
+/** "OK we found it" / "never mind" — a closing message, not a question. */
+export function isFoundItMessage(text?: string | null): boolean {
+  const t = stripQrTokens(text);
+  if (!t || t.length > 80 || /\?/.test(t)) return false;
+  return /(?:^|\s)(?:מצאנו|מצאתי|הסתדרנו|הסתדרתי|זה\s+בסדר\s+עכשיו|לא\s+צריך\s+כבר|עזבו\s+זה)(?:\s|$|[.!,])|\bfound\s+it\b|\bnever\s*mind\b|\ball\s+good\b/iu.test(t);
+}
+/** A guest reporting something that did not work (needs a staff flag), e.g. "לא הצלחנו לפתוח את הכספת". */
+export function isProblemReport(text?: string | null): boolean {
+  const t = stripQrTokens(text);
+  if (!t) return false;
+  if (/לא\s+(?:היו?\s+)?(?:בעיות|בעיה)/u.test(t)) return false;
+  return /לא\s+(?:הצלחנו|הצלחתי|מצליח(?:ים|ה)?|עובד(?:ת|ים|ות)?|נפתח(?:ה|ת)?|נדלק(?:ת|ים)?|נסגר(?:ת)?)|תקלה|תקוע(?:ה)?|נתקע(?:ה|נו)?|שבור(?:ה)?|נשבר(?:ה)?|דולף|דליפה|אין\s+(?:מים|חשמל|מים\s+חמים)|\bbroken\b|not\s+working|couldn'?t\s+open|can'?t\s+open|doesn'?t\s+work/iu.test(t);
+}
+
+/** Ran 2026-10-31: "❤️" / "👍🙏" / "🫶" — no letters or digits at all → a reaction, not a question. */
+export function isEmojiOnlyMessage(text?: string | null): boolean {
+  const t = String(text || '').trim();
+  return t.length > 0 && t.length <= 40 && !/[\p{L}\p{N}]/u.test(t);
+}

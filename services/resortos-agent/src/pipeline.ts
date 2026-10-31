@@ -70,6 +70,21 @@ import {
 } from './manager/guestLink.js';
 import { normalizeOutgoingText } from './whatsapp/textSpacing.js';
 import { logConversation } from './conversationLog.js';
+import {
+  TV_RE,
+  isEmojiOnlyMessage,
+  isGuestLeftMessage,
+  isGuestLeftWithThanks,
+  GUEST_LEFT_WARM_THANKS,
+  GUEST_LEFT_THANKS,
+  stripQrTokens,
+  isIntroMessage,
+  isGuideLinkRequest,
+  isFoundItMessage,
+  isProblemReport,
+} from './guest/keywords.js';
+import { tvStepsForUnit, CALL_OFFER } from './guest/guestKnowledge.js';
+import { isDueOut } from './guest/dueOut.js';
 import { isStaffOpsQuestion, STAFF_OPS_ONLY_REPLY } from './manager/opsQuestion.js';
 import {
   groundById,
@@ -138,6 +153,8 @@ export interface PipelineDeps {
   downloadMedia?: (m: WAMessage) => Promise<InvoiceMedia | null>;
   send: (jid: string, text: string, channelId?: ChannelId) => Promise<unknown>;
   notifyManagerSms?: (message: string) => Promise<unknown> | void;
+  /** Ran 2026-10-31: real departure signal → Studio marks CHECKED_OUT (checkout_status=guest_message). */
+  markGuestDeparted?: (p: { bookingId: string; unitId?: string | null; at?: string }) => Promise<unknown>;
   sendImage?: (jid: string, buffer: Buffer, caption?: string, channelId?: ChannelId) => Promise<unknown>;
   isAudio: (m: WAMessage) => boolean;
   extractText: (m: WAMessage) => string | null;
@@ -294,6 +311,12 @@ const GREETING_PHRASE: Record<string, string> = {
   'good morning': 'בוקר טוב',
 };
 
+const GUEST_LEFT_PROBLEM_REPLY: Record<'he' | 'en' | 'ru', string> = {
+  he: 'תודה שעדכנתם, ומצטערים על אי הנוחות 🙏 העברנו את זה לצוות כדי שיבדקו. נסיעה טובה 🌿',
+  en: 'Thanks for letting us know, and sorry for the trouble 🙏 We passed it to the team to check. Have a safe trip 🌿',
+  ru: 'Спасибо, что сообщили, и простите за неудобство 🙏 Мы передали это команде. Счастливого пути 🌿',
+};
+
 /** A greeting by itself is answered in the same words, then an offer to help. */
 export function greetingReply(text: string, fullName?: string | null): string | null {
   const who = firstName(fullName);
@@ -392,6 +415,16 @@ export function createPipeline(deps: PipelineDeps) {
   /** Bug A: a bare number answers the room menu shown in the last 10 minutes. */
   const ROOM_MENU_TTL_MS = 10 * 60 * 1000;
   const roomMenuShownAt = new Map<string, number>();
+  const problemFlagged = new Map<string, number>();
+  function flagGuestProblem(booking: any, roomName: string | undefined, text: string, when: string): void {
+    const key = String(booking?.id || booking?.unit_id || '');
+    const now = Date.now();
+    if (now - (problemFlagged.get(key) || 0) < 30 * 60 * 1000) return;
+    problemFlagged.set(key, now);
+    if (!deps.notifyManagerSms) return;
+    const sms = `⚠️ תלונה/תקלה מאורח (${when}): ${booking?.guest_name || ''} (${roomName || ''}). הודעה: "${String(text || '').slice(0, 100)}"`;
+    void Promise.resolve(deps.notifyManagerSms(sms)).catch(() => undefined);
+  }
 
   const rawSend = deps.send;
   const wrappedSend = async (jid: string, text: string, channelId?: ChannelId) => {
@@ -605,6 +638,12 @@ export function createPipeline(deps: PipelineDeps) {
     const isWorker = Boolean(cleaner && !isManager);
 
     let text = d.extractText(msg);
+    // Ran 2026-10-31: emoji/reaction-only from a guest (or unknown sender) → no reply at all, just log.
+    // Never starts verify_ask_booking or the "want us to call?" fallback. Staff flows are untouched.
+    if (!cleaner && !msg.key.fromMe && isEmojiOnlyMessage(text)) {
+      d.log.info({ jid, text: String(text).slice(0, 20) }, 'guest emoji-only message: no reply');
+      return { handled: true, reason: 'emoji_only_no_reply' };
+    }
     // Guest was asked once for the booking phone: retry the lookup with a typed number; anything else falls through (name+dates as before).
     if (!cleaner && currentSession?.role === 'GUEST' && currentSession.state === 'AWAITING_BOOKING_PHONE' && text?.trim()) {
       const typed = extractTypedPhone(text);
@@ -2140,6 +2179,11 @@ export function createPipeline(deps: PipelineDeps) {
         } else if (inProg.length === 0) {
           reply += `✨ אין כרגע חדרים שממתינים לניקיון! כל החדרים נקיים או מוכנים.`;
         }
+        // due_out (Ran 2026-10-31): leaving today but no real departure signal yet — still on the cleaning list above.
+        const dueOutIds = [...new Set(checkOuts.filter((b) => isDueOut(b, today)).map((b) => b.unit_id))].filter((id) => !cleanScope || cleanScope.includes(id));
+        if (dueOutIds.length) {
+          reply += `\n\n🚪 *יוצאים היום, טרם אישרו יציאה (${dueOutIds.length}):*\n` + dueOutIds.map((id) => `• ${formatRoomDisplay(id, d.rooms())}`).join('\n');
+        }
 
 
         await d.send(jid, reply.trim());
@@ -2548,6 +2592,35 @@ export function createPipeline(deps: PipelineDeps) {
             guestName: booking.guest_name,
           };
 
+          // Guest left (Ran 2026-10-24): "יצאנו" on checkout day (or the day after) → thank + SMS Ran. No room/lock/payment changes.
+          {
+            const cout = String(booking.check_out_date || '').slice(0, 10);
+            const yest = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date(Date.now() - 86400000));
+            if (cout && (cout === today || cout === yest) && isGuestLeftMessage(text)) {
+              const lang = detectGuestLang(text || '');
+              const leftProblem = isProblemReport(text);
+              const leftReply = leftProblem
+                ? GUEST_LEFT_PROBLEM_REPLY[lang === 'en' || lang === 'ru' ? lang : 'he']
+                : (isGuestLeftWithThanks(text) ? GUEST_LEFT_WARM_THANKS : GUEST_LEFT_THANKS)[lang === 'en' || lang === 'ru' ? lang : 'he'];
+              if (leftProblem) flagGuestProblem(booking, ctx.roomName, text || '', 'אחרי עזיבה');
+              void logGuestWhatsAppExchange(booking, text || '', leftReply);
+              if (d.notifyManagerSms) {
+                const sms = `🚪 אורח עדכן שיצא: ${booking.guest_name || ''} (${ctx.roomName || ''}), צ׳ק־אאוט ${cout}. הודעה: "${String(text || '').slice(0, 80)}"`;
+                void Promise.resolve(d.notifyManagerSms(sms)).then(
+                  () => d.log.info({ bookingId: booking.id, unitId: booking.unit_id }, 'guest-left manager SMS sent'),
+                  (err: unknown) => d.log.warn({ bookingId: booking.id, err: String((err as any)?.message || err) }, 'guest-left manager SMS failed'),
+                );
+              }
+              await d.send(jid, leftReply);
+              if (d.markGuestDeparted && String(booking.booking_status || '').toUpperCase() !== 'CHECKED_OUT') {
+                void Promise.resolve(d.markGuestDeparted({ bookingId: booking.id, unitId: booking.unit_id, at: new Date().toISOString() })).then(
+                  () => d.log.info({ bookingId: booking.id }, 'guest-left: marked CHECKED_OUT (guest_message)'),
+                  (err: unknown) => d.log.warn({ bookingId: booking.id, err: String((err as any)?.message || err) }, 'guest-left: mark departed failed'),
+                );
+              }
+              return { handled: true, transcript, reason: 'guest_left' };
+            }
+          }
           // Bug 2 (Ran 2026-10-20): occupancy / arrivals questions are staff questions, never the guest fallback.
           if (isStaffOpsQuestion(text)) {
             void logGuestWhatsAppExchange(booking, text, STAFF_OPS_ONLY_REPLY);

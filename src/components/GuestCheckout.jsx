@@ -11,12 +11,9 @@ import {
   FileText,
   Banknote,
   Building2,
-<<<<<<< HEAD
   Receipt,
   Ticket,
-=======
   UploadCloud,
->>>>>>> dfa7ace (WIP preserve: live uncommitted tracked changes before real-departure deploy (2026-10-31))
   X,
   AlertCircle
 } from 'lucide-react';

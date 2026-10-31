@@ -265,13 +265,19 @@ export async function insertGuestComm(row) {
   return Array.isArray(rows) ? rows[0] : rows;
 }
 
-export async function markBookingSelfDeparted(bookingId, at = new Date().toISOString()) {
+/** Real-departure sources allowed to close a stay (Ran 2026-10-31). */
+export const DEPARTURE_SOURCES = new Set(['self_departed', 'guest_message']);
+
+export async function markBookingSelfDeparted(bookingId, at = new Date().toISOString(), checkoutStatus = 'self_departed') {
   if (!bookingId) return null;
-  const rows = await rest(`${BOOKING_TABLE}?id=eq.${encodeURIComponent(bookingId)}`, {
+  const status = DEPARTURE_SOURCES.has(checkoutStatus) ? checkoutStatus : 'self_departed';
+  // A Chloe "we left" message never overwrites an existing checkout (e.g. a self-checkout's self_departed).
+  const guard = status === 'guest_message' ? '&booking_status=neq.CHECKED_OUT' : '';
+  const rows = await rest(`${BOOKING_TABLE}?id=eq.${encodeURIComponent(bookingId)}${guard}`, {
     method: 'PATCH',
     body: JSON.stringify({
       booking_status: 'CHECKED_OUT',
-      checkout_status: 'self_departed',
+      checkout_status: status,
       checked_out_at: at,
       updated_at: at
     })
@@ -618,8 +624,10 @@ export async function handleStayStatus(req, res) {
 
 export async function handleSelfCheckoutSideEffects(booking) {
   const at = booking.checked_out_at || new Date().toISOString();
+  // guest_message = Chloe heard "יצאנו/צ׳ק-אאוט בוצע" and already replied with a farewell → no farewell SMS.
+  const viaChloe = booking.checkout_source === 'guest_message';
   try {
-    await markBookingSelfDeparted(booking.id, at);
+    await markBookingSelfDeparted(booking.id, at, viaChloe ? 'guest_message' : 'self_departed');
   } catch (err) {
     console.warn('[self checkout mark]', err.message);
   }
@@ -638,7 +646,7 @@ export async function handleSelfCheckoutSideEffects(booking) {
     }
   }
 
-  try {
+  if (!viaChloe) try {
     await sendFarewellForBooking({ ...booking, checked_out_at: at });
   } catch (err) {
     console.warn('[farewell sms]', err.message);
@@ -650,7 +658,7 @@ export async function handleSelfCheckoutSideEffects(booking) {
       const rows = await rest(`${BOOKING_TABLE}?id=eq.${encodeURIComponent(booking.id)}&select=id,unit_id,guest_name,channel_source,stay,checkout_status,checked_out_at,updated_at`);
       if (Array.isArray(rows) && rows[0]) full = { ...rows[0], ...booking, guest_name: rows[0].guest_name, stay: rows[0].stay };
     } catch {}
-    await logCheckoutToRoom({ ...full, unit_id: full.unit_id || booking.unit_id, checked_out_at: at }, { source: 'guest' });
+    await logCheckoutToRoom({ ...full, unit_id: full.unit_id || booking.unit_id, checked_out_at: at }, { source: viaChloe ? 'guest_message' : 'guest' });
   } catch (err) {
     console.warn('[checkout room-log]', err.message);
   }
