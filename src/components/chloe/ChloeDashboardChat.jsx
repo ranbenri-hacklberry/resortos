@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { ReservationCards } from './ReservationCards';
 import { ConfirmationCard } from './ConfirmationCard';
+import { UnitStatusCards } from './UnitStatusCards';
 
 const INITIAL_MESSAGES = [
   {
@@ -362,6 +363,10 @@ export default function ChloeDashboardChat({ sessionUser, theme = 'light' }) {
                 {/* Generative UI Widgets */}
                 {msg.widget && msg.widget.type === 'ReservationCards' && (
                   <ReservationCards data={msg.widget.data} />
+                )}
+
+                {msg.widget && msg.widget.type === 'UnitStatusCards' && (
+                  <UnitStatusCards data={msg.widget.data} />
                 )}
 
                 {msg.widget && msg.widget.type === 'ConfirmationCard' && (

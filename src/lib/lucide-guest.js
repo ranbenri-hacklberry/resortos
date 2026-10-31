@@ -86,4 +86,4 @@ export { default as Mic } from '../../node_modules/lucide-react/dist/esm/icons/m
 export { default as MicOff } from '../../node_modules/lucide-react/dist/esm/icons/mic-off.js';
 export { default as Bot } from '../../node_modules/lucide-react/dist/esm/icons/bot.js';
 export { default as User } from '../../node_modules/lucide-react/dist/esm/icons/user.js';
-
+export { default as UserCheck } from '../../node_modules/lucide-react/dist/esm/icons/user-check.js';
