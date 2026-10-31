@@ -79,7 +79,7 @@ async function sendWhatsApp(phone, text) {
     const response = await fetch(`${AGENT_URL}/api/messages/send`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: digits, text }),
+      body: JSON.stringify({ phone: digits, text, keep_auto: true }),
       signal: AbortSignal.timeout(8000)
     });
     if (response.ok) return true;
