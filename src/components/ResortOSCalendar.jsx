@@ -50,7 +50,6 @@ import { sendStaffSms } from '../lib/staffSmsApi';
 import { applyPaidArrivalCheckin, stayExpiresAt } from '../lib/stayAccess';
 import { defaultHypTerminal, HYP_TERMINAL_A, HYP_TERMINAL_B, hypTerminalLabel, normalizeHypTerminal } from '../lib/hypTerminal';
 import {
-  applyAutoCheckout,
   bookingsNeedingCheckoutRollForward,
   canExtendStay,
   checkoutDutyRollKey,
@@ -772,7 +771,6 @@ export default function ResortOSCalendar({
   const nowLineRight = `${Math.round(nowQuarter * 100)}%`;
   const nowLineLabel = nowLineTitle(dutyNow);
   const autoCheckinRef = useRef(false);
-  const autoCheckoutRef = useRef(false);
 
   useEffect(() => {
     if (autoCheckinRef.current) return;
@@ -833,29 +831,8 @@ export default function ResortOSCalendar({
     };
   }, [mailboxWatchKey]);
 
-  useEffect(() => {
-    if (autoCheckoutRef.current || !tenantId) return;
-    const due = listOverdueCheckouts(rawBookings, dutyNow);
-    if (!due.length) return;
-    const nexts = due.map((booking) => applyAutoCheckout(booking, dutyNow)).filter(Boolean);
-    if (!nexts.length) return;
-    autoCheckoutRef.current = true;
-    (async () => {
-      try {
-        await db.bookings.bulkPut(nexts);
-        await pushBookingsToCloud(nexts, { allowOverlap: true });
-        const unitIds = [...new Set(nexts.map((booking) => booking.unit_id).filter(Boolean))];
-        await Promise.all(unitIds.map(async (unitId) => {
-          const unit = rawUnits.find((row) => row.id === unitId) || await db.units.get(unitId);
-          await openTurnoverAfterCheckout({ tenantId, unit, pushUnitToCloud, skipStayPublish: true });
-        }));
-      } catch (_) {
-        /* next tick can retry */
-      } finally {
-        autoCheckoutRef.current = false;
-      }
-    })();
-  }, [rawBookings, dutyNow, tenantId, rawUnits]);
+  // Ran 2026-10-31: no automatic checkout from the calendar. Overdue stays only show in the duty panel;
+  // CHECKED_OUT comes from a real departure (guest self-checkout, Chloe guest message, or a manager action).
 
   useEffect(() => {
     const timer = setInterval(() => setDutyNow(new Date()), 15000);
