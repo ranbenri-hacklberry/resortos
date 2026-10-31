@@ -1,8 +1,25 @@
-import { isPaintedStay, stayYmd } from './calendarOccupancy';
+import { isPaintedStay, shiftYmd, stayYmd } from './calendarOccupancy';
 import { coveringUnavailableHold, unavailableHoldLabel } from './unavailableHold';
 import { isBookingEligible, isInventoryUnit } from './units';
 
 export const ARRIVAL_TODAY_LABEL = 'צ׳ק-אין היום';
+
+/** Same booking window Priority pulls: 21 days back, 120 days ahead. */
+export function priorityBoardRange(today) {
+  const day = stayYmd(today);
+  if (!day) return { from: '', to: '' };
+  return { from: shiftYmd(day, -21), to: shiftYmd(day, 120) };
+}
+
+/** One incoming guest per inventory unit, the same row Priority shows as אורח נכנס. */
+export function priorityIncomingToday(units, bookings, today) {
+  return (units || []).flatMap((unit) => {
+    if (!isInventoryUnit(unit)) return [];
+    const desk = priorityDeskGuests(bookings, unit.id, today);
+    if (!desk.arriving) return [];
+    return [{ unit, booking: desk.arriving, sameDayTurnover: Boolean(desk.departing) }];
+  });
+}
 
 function paintedOnUnit(bookings, unitId) {
   return (bookings || []).filter((row) => row?.unit_id === unitId && isPaintedStay(row));

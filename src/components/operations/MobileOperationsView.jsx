@@ -24,6 +24,7 @@ import {
 import { NorthStarIcon } from '../mialees/MialeesBrandAssets';
 import { fieldUnitDisplayName, stripLegendPlotNumber } from '../../lib/fieldUnitCatalog';
 import { lockboxCodeForUnit } from '../../lib/guestProfileSeed';
+import { priorityIncomingToday } from '../../lib/priorityStay';
 import { israelToday } from '../../lib/cabinAccess';
 import { isUnavailableHoldBooking } from '../../lib/unavailableHold';
 import { completionsFromUnit, toggleCompletion, addCompletion } from '../../lib/roomCompletions';
@@ -192,45 +193,29 @@ export default function MobileOperationsView({
 
   const openProcurementCount = allProcurementItems.filter((i) => !i.done).length;
 
-  // 1. ARRIVING TODAY (חדרים נכנסים)
+  // 1. ARRIVING TODAY (חדרים נכנסים) — same incoming guest Priority shows.
   const arrivingRooms = useMemo(() => {
-    const arrivals = (effectiveBookings || []).filter((b) => (
-      b.check_in_date === todayStr &&
-      !b.deleted_at &&
-      b.booking_status !== 'CANCELED' &&
-      !isUnavailableHoldBooking(b)
-    ));
-
-    return arrivals.map((booking) => {
-      const unit = (effectiveUnits || []).find((u) => u.id === booking.unit_id);
+    return priorityIncomingToday(effectiveUnits, effectiveBookings, todayStr).map(({ unit, booking, sameDayTurnover }) => {
       const isReady = unit?.operational_status === 'READY';
-      const lockbox = lockboxCodeForUnit(unit);
-      const sameDayTurnover = (effectiveBookings || []).some((b) => (
-        b.unit_id === booking.unit_id &&
-        b.check_out_date === todayStr &&
-        b.id !== booking.id &&
-        !b.deleted_at &&
-        b.booking_status !== 'CANCELED' &&
-        !isUnavailableHoldBooking(b)
-      ));
-
+      const isOccupied = unit?.staff_occupancy === 'OCCUPIED';
       return {
-        id: unit?.id || booking.unit_id || booking.id,
+        id: unit.id,
         booking,
         unit,
-        unitName: unit ? fieldUnitDisplayName(unit) : (booking.room_number || 'יחידה לא משובצת'),
+        unitName: fieldUnitDisplayName(unit),
         guestName: booking.guest_name || 'אורח',
         phone: booking.guest_phone || booking.phone || '',
         eta: booking.stay?.estimated_arrival_time || booking.eta || null,
         adults: booking.adults_count ?? booking.adults ?? null,
         kids: booking.children_count ?? booking.children ?? 0,
         specialRequests: booking.special_requests || booking.notes || booking.guest_notes || '',
-        lockbox,
+        lockbox: lockboxCodeForUnit(unit),
         status: unit?.operational_status || (sameDayTurnover ? 'DIRTY' : 'READY'),
         isReady,
+        isOccupied,
         sameDayTurnover
       };
-    }).filter((room) => !(room.unit?.staff_occupancy === 'OCCUPIED' && !room.sameDayTurnover));
+    });
   }, [effectiveBookings, effectiveUnits, todayStr]);
 
   const arrivingCleanCount = arrivingRooms.filter((r) => r.isReady).length;

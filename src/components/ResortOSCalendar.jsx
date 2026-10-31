@@ -64,7 +64,7 @@ import {
 import { israelToday } from '../lib/cabinAccess';
 import { calendarInventory, unitCalendarLines, unitMaxOccupancy, whatsAppUnitName } from '../lib/units';
 import { fieldUnitDisplayName } from '../lib/fieldUnitCatalog';
-import { lockboxCodeForUnit } from '../lib/guestProfileSeed';
+import { calendarLockboxForUnit, duplicateLockboxUnitIds } from '../lib/guestProfileSeed';
 import { applyCalendarOccupancy, applyCalendarUnitStatus, applyAssignedStaff, ensureTurnoverCleaning, openTurnoverAfterCheckout, persistRoomCompletions } from '../lib/housekeepingCycle';
 import { guestNotes, printGuestFile } from '../lib/guestFile';
 import { coveringUnavailableHold, isUnavailableHoldBooking, unavailableHoldLabel } from '../lib/unavailableHold';
@@ -2785,7 +2785,7 @@ export default function ResortOSCalendar({
           </div>
 
           {/* UNIT ROWS & BOOKING CARDS */}
-          {boardUnits.map(unit => {
+          {(() => { const lockboxDupIds = duplicateLockboxUnitIds(boardUnits); return boardUnits.map(unit => {
             const fullUnitName = fieldUnitDisplayName(unit, t(unit.id + '_name', unit.name));
             const { primary: unitPrefix, secondary: unitDetail } = unitCalendarLines(fullUnitName);
             const ops = unitDisplayStatus(unit, rawBookings, todayStr, dutyNow);
@@ -2805,7 +2805,8 @@ export default function ResortOSCalendar({
                         : 'READY');
             const cube = unitNameFrame(frameKey, isLight);
 
-            const lockbox = lockboxCodeForUnit(unit);
+            const lockbox = calendarLockboxForUnit(unit);
+            const lockboxDup = lockboxDupIds.has(String(unit.id));
 
             return (
               <div
@@ -2831,7 +2832,7 @@ export default function ResortOSCalendar({
                 <div
                   role="button"
                   tabIndex={0}
-                  title={lockbox ? `${fullUnitName} · ${room.label} · כספת ${lockbox}` : `${fullUnitName} · ${room.label}`}
+                  title={lockbox ? `${fullUnitName} · ${room.label} · כספת ${lockbox}${lockboxDup ? ' · ⚠ אותו קוד בחדר אחר במתחם' : ''}` : `${fullUnitName} · ${room.label}`}
                   onClick={(event) => {
                     event.stopPropagation();
                     openOpsSheet(unit.id);
@@ -2907,7 +2908,7 @@ export default function ResortOSCalendar({
                       overflow: 'hidden',
                       textOverflow: 'ellipsis'
                     }}>
-                      {lockbox}
+                      {lockboxDup ? <span style={{ color: '#DC2626' }} aria-label="אותו קוד כספת בחדר אחר במתחם">⚠</span> : null}{lockbox}
                     </div>
                   ) : null}
                 </div>
@@ -2996,7 +2997,7 @@ export default function ResortOSCalendar({
                 </div>
               </div>
             );
-          })}
+          }); })()}
           <div
             className="hotelos-calendar-stay-layer"
             style={{

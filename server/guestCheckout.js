@@ -377,6 +377,8 @@ export async function confirmGuestCheckout(req, res) {
   const guestName = String(req.body?.guest_name || '').trim();
   const guestEmail = String(req.body?.guest_email || '').trim();
   const specialRequests = String(req.body?.special_requests || '').trim();
+  const balancePref = req.body?.balance_payment_preference || 'CREDIT_CARD';
+  const paymentMode = balancePref === 'CASH' ? 'CASH_TRUST' : (req.body?.payment_mode || 'CREDIT_DEPOSIT');
 
   if (!guestName) {
     return res.status(400).json({ error: 'MISSING_GUEST_FIELDS' });
@@ -386,7 +388,10 @@ export async function confirmGuestCheckout(req, res) {
     const payload = {
       guest_name: guestName,
       guest_email: guestEmail,
-      special_requests: specialRequests
+      special_requests: specialRequests,
+      balance_payment_preference: balancePref,
+      payment_mode: paymentMode,
+      pay: false
     };
     let saved = null;
     if (isMailboxConfigured()) {
@@ -394,9 +399,14 @@ export async function confirmGuestCheckout(req, res) {
     }
     const row = await findByToken(token);
     if (row) {
+      const stayMerged = {
+        ...(row.stay || {}),
+        balance_payment_preference: balancePref
+      };
       const updated = {
         ...row,
         ...payload,
+        stay: stayMerged,
         booking_status: row.booking_status === 'PENDING' ? 'CONFIRMED' : row.booking_status,
         payment_status: row.payment_status && row.payment_status !== 'UNPAID' ? row.payment_status : 'UNPAID',
         expires_at: stayExpiresAt({ ...row, ...payload }),
@@ -410,6 +420,9 @@ export async function confirmGuestCheckout(req, res) {
             guest_name: guestName,
             guest_email: guestEmail,
             special_requests: specialRequests,
+            balance_payment_preference: balancePref,
+            payment_mode: paymentMode,
+            stay: stayMerged,
             booking_status: row.booking_status === 'PENDING' ? 'CONFIRMED' : row.booking_status,
             payment_status: row.payment_status && row.payment_status !== 'UNPAID' ? row.payment_status : 'UNPAID',
             expires_at: stayExpiresAt(updated),
@@ -470,7 +483,7 @@ export async function publishGuestMailbox(req, res) {
 
 async function syncPendingTokensFromMailbox() {
   const pending = await rest(
-    `${BOOKING_TABLE}?booking_status=eq.PENDING&deleted_at=is.null&select=id,checkout_token,booking_status,payment_status,payment_mode,check_in_date&order=check_in_date.asc&limit=20`
+    `${BOOKING_TABLE}?booking_status=eq.PENDING&deleted_at=is.null&select=*&order=check_in_date.asc&limit=20`
   );
   const rows = Array.isArray(pending) ? pending : [];
   for (const row of rows) {
@@ -516,7 +529,7 @@ async function syncInHouseMailboxUpdates() {
   const from = shiftIsoDate(today, -1);
   const to = shiftIsoDate(today, 3);
   const open = await rest(
-    `${BOOKING_TABLE}?deleted_at=is.null&checkout_token=not.is.null&booking_status=neq.CANCELED&booking_status=neq.CHECKED_OUT&payment_status=neq.PAID&check_in_date=gte.${from}&check_in_date=lte.${to}&select=id,checkout_token,booking_status,payment_status,payment_mode,check_in_date,special_requests,clearing_payments,stay&order=check_in_date.asc&limit=40`
+    `${BOOKING_TABLE}?deleted_at=is.null&checkout_token=not.is.null&booking_status=neq.CANCELED&booking_status=neq.CHECKED_OUT&payment_status=neq.PAID&check_in_date=gte.${from}&check_in_date=lte.${to}&select=*&order=check_in_date.asc&limit=40`
   );
   const rows = Array.isArray(open) ? open : [];
   for (const row of rows) {
@@ -552,7 +565,8 @@ export function startCheckoutMailboxPoller() {
     if (Date.now() < pausedUntil) return;
     ticking = true;
     try {
-      // Known tokens only. Never hit /inbox (that used KV.list and burned the free quota).
+      // One pass every 2 minutes. /api/checkout/inbox is read only here,
+      // inside this same pass, not on a tighter loop.
       await syncPendingTokensFromMailbox();
       await syncInHouseMailboxUpdates();
       await syncAgentBookingsFromMailbox();
@@ -563,7 +577,7 @@ export function startCheckoutMailboxPoller() {
       ticking = false;
     }
   }
-  setInterval(tick, 7000);
+  setInterval(tick, 2 * 60 * 1000);
 }
 
 export function allowPublicCheckoutCors(req, res, next) {

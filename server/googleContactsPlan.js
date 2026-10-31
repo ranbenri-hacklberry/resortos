@@ -3,6 +3,42 @@ import { UNIT_DISPLAY_NAMES } from '../functions/lib/unitNames.js';
 import { normalizeStaffPhone } from '../src/lib/staffPhones.js';
 
 const ELIGIBLE = new Set(['CONFIRMED', 'CHECKED_IN', 'CHECKED_OUT']);
+const NON_GUEST_UNITS = new Set(['k678', 'k679', 'pilot-office']);
+const NON_GUEST_NAME = /מתחם סגור|מגורי צוות|מגורי עובדים/;
+export const AUTO_SYNC_INTERVAL_MS = 15 * 60 * 1000;
+export const AUTO_SYNC_FIRST_DELAY_MS = 60 * 1000;
+
+export function isNonGuestBooking(booking) {
+  if (!booking) return false;
+  if (NON_GUEST_UNITS.has(String(booking.unit_id || ''))) return true;
+  return NON_GUEST_NAME.test(String(booking.guest_name || ''));
+}
+
+export function googleContactsAutoSyncEnabled(env = process.env) {
+  const raw = String(env.GOOGLE_CONTACTS_AUTO_SYNC ?? '1').trim().toLowerCase();
+  return !['0', 'false', 'off', 'no'].includes(raw);
+}
+
+export function nextBackoffMs(previous, status) {
+  const code = Number(status) || 0;
+  if (code !== 429 && code < 500) return 0;
+  const next = previous > 0 ? previous * 2 : AUTO_SYNC_INTERVAL_MS;
+  return Math.min(next, 2 * 60 * 60 * 1000);
+}
+
+export function createSyncLock() {
+  let running = false;
+  return {
+    tryEnter() {
+      if (running) return false;
+      running = true;
+      return true;
+    },
+    leave() {
+      running = false;
+    }
+  };
+}
 
 export function toE164(raw) {
   const local = normalizeStaffPhone(raw);
@@ -117,6 +153,7 @@ function byPhone(bookings, today) {
   const groups = new Map();
   const skipped = [];
   for (const booking of bookings) {
+    if (isNonGuestBooking(booking)) continue;
     if (!isEligibleBooking(booking, today)) continue;
     const e164 = toE164(booking.guest_phone);
     if (!e164) {
@@ -140,9 +177,16 @@ export function planContacts({
   googleContacts = [],
   today,
   scanComplete = false,
-  googleRead = false
+  googleRead = false,
+  pins = {}
 } = {}) {
   const { groups, skipped } = byPhone(bookings, today);
+  const protectedPhones = new Set();
+  for (const booking of bookings) {
+    if (!isNonGuestBooking(booking)) continue;
+    const e164 = toE164(booking.guest_phone);
+    if (e164) protectedPhones.add(e164);
+  }
   const mapped = new Map(mappings.map((row) => [row.phone_e164, row]));
   const found = new Map(googleContacts.map((row) => [row.phone_e164, row]));
   const actions = [];
@@ -150,8 +194,15 @@ export function planContacts({
 
   for (const [e164, stays] of groups) {
     wanted.add(e164);
-    const primary = chooseStay(stays, today);
-    const extras = stays.filter((row) => row.id !== primary.id);
+    // Manual pin (google-contacts-pins.json): force the primary stay and drop wrongly-attached bookings.
+    const pin = pins && pins[e164];
+    let pool = stays;
+    if (pin && Array.isArray(pin.exclude) && pin.exclude.length) {
+      const kept = stays.filter((row) => !pin.exclude.includes(row.id));
+      if (kept.length) pool = kept;
+    }
+    const primary = (pin?.primary && pool.find((row) => row.id === pin.primary)) || chooseStay(pool, today);
+    const extras = pool.filter((row) => row.id !== primary.id);
     const draft = contactDraft(primary, extras);
     const hash = contentHash(draft, e164);
     const mapping = mapped.get(e164);
@@ -191,7 +242,7 @@ export function planContacts({
   const blockedRemoves = [];
   for (const mapping of mappings) {
     if (!mapping.managed || !mapping.google_resource_name) continue;
-    if (wanted.has(mapping.phone_e164)) continue;
+    if (wanted.has(mapping.phone_e164) || protectedPhones.has(mapping.phone_e164)) continue;
     const item = {
       action: 'remove',
       phone_e164: mapping.phone_e164,

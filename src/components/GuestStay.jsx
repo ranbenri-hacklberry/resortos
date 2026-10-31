@@ -17,6 +17,7 @@ import GuestInStay from './GuestInStay';
 import CheckinDrawer, { tabFromPreference } from './CheckinDrawer';
 import GuestReach from './GuestReach';
 import { listenHypParentBreakout } from '../lib/guestPayBrowser';
+import '../guest.css';
 
 function displayDate(iso) {
   if (!iso) return '—';
@@ -384,19 +385,36 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-      {justConfirmed ? (
+      {justConfirmed || (Boolean(stay?.id_photo_received_at || stay?.id_scan) && !paidForCheckin) ? (
         <div
           style={{
             background: themeStyles.accentSoft,
             border: `1px solid ${themeStyles.accent}`,
-            color: themeStyles.accent,
-            borderRadius: 12,
-            padding: '0.7rem 0.9rem',
-            fontWeight: 800,
-            fontSize: '0.88rem'
+            borderRadius: 14,
+            padding: '1rem 1.15rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10
           }}
         >
-          {t('GUEST_STAY_CONFIRMED')}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 900, color: themeStyles.accent, fontSize: '1rem' }}>
+            <span>✓</span>
+            <span>{t('GUEST_ID_RECEIVED_TITLE')}</span>
+          </div>
+          <p style={{ margin: 0, color: themeStyles.textMuted, fontSize: '0.86rem', lineHeight: 1.55, fontWeight: 600 }}>
+            {t('GUEST_ID_RECEIVED_BODY')}
+          </p>
+          <div style={{ marginTop: 4, paddingTop: 8, borderTop: `1px dashed ${themeStyles.accent}44` }}>
+            <GuestReach
+              token={booking.checkout_token}
+              unitId={booking.unit_id}
+              cabin={unitName}
+              guestName={booking.guest_name}
+              dates={`${booking.check_in_date || ''}–${booking.check_out_date || ''}`}
+              themeStyles={themeStyles}
+              t={t}
+            />
+          </div>
         </div>
       ) : null}
 
@@ -540,14 +558,20 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
         ) : null}
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 14 }}>
-          <ActionBtn href={wazeUrl(booking.unit_id)} bg="#D7EAF2" color="#1E3A4C">
-            <Navigation size={15} />
-            {t('GUEST_WAZE')}
-          </ActionBtn>
-          <ActionBtn href={googleMapsUrl(booking.unit_id)} bg="#E4E0D6" color="#3F3A33">
-            <Map size={15} />
-            {t('GUEST_MAPS')}
-          </ActionBtn>
+          {wazeUrl(booking.unit_id) || googleMapsUrl(booking.unit_id) ? (
+            <>
+              <ActionBtn href={wazeUrl(booking.unit_id)} bg="#D7EAF2" color="#1E3A4C">
+                <Navigation size={15} />
+                {t('GUEST_WAZE')}
+              </ActionBtn>
+              <ActionBtn href={googleMapsUrl(booking.unit_id)} bg="#E4E0D6" color="#3F3A33">
+                <Map size={15} />
+                {t('GUEST_MAPS')}
+              </ActionBtn>
+            </>
+          ) : (
+            <div style={{ gridColumn: '1 / -1', textAlign: 'center', fontSize: '0.78rem', fontWeight: 700, opacity: 0.55, padding: '0.5rem 0' }}>ניווט לא זמין כרגע</div>
+          )}
           <div style={{ gridColumn: '1 / -1' }}>
             <GuestReach
               token={booking.checkout_token}

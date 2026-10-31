@@ -4,8 +4,10 @@ import {
   clearGoogleToken,
   finishConnect,
   googleContactsStatus,
+  googleContactsSyncLock,
   runGoogleContactsSync,
-  setGoogleContactsLive
+  setGoogleContactsLive,
+  startGoogleContactsAutoSync
 } from './googleContacts.js';
 
 function originOf(req) {
@@ -75,8 +77,16 @@ export async function tryHandleGoogleContacts(req, res) {
       return true;
     }
     if (req.method === 'POST' && path === '/api/google-contacts/sync') {
-      const live = Boolean(req.body?.live);
-      send(res, 200, await runGoogleContactsSync(user, { live }));
+      if (!googleContactsSyncLock.tryEnter()) {
+        send(res, 409, { error: 'SYNC_BUSY' });
+        return true;
+      }
+      try {
+        const live = Boolean(req.body?.live);
+        send(res, 200, await runGoogleContactsSync(user, { live }));
+      } finally {
+        googleContactsSyncLock.leave();
+      }
       return true;
     }
     if (req.method === 'POST' && path === '/api/google-contacts/live') {
@@ -91,3 +101,5 @@ export async function tryHandleGoogleContacts(req, res) {
   }
   return true;
 }
+
+if (!process.env.NODE_TEST_CONTEXT) startGoogleContactsAutoSync();

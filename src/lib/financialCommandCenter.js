@@ -215,7 +215,15 @@ function normalizeBankKey(name) {
  * Checks for duplicate checks in existing checks or bank records.
  * Duplicate criteria: same check number, same bank, and same amount.
  */
+export function getPaymentMethod(item) {
+  const m = String(item?.method || '').trim().toLowerCase();
+  if (m === 'transfer' || m === 'העברה') return 'transfer';
+  if (m === 'check' || m === 'cheque' || m === 'שיק' || m === 'צ׳ק') return 'check';
+  return String(item?.check_number || '').trim() ? 'check' : 'transfer';
+}
+
 export function findCheckDuplicates(candidate, existingChecks = []) {
+  if (candidate?.method && getPaymentMethod(candidate) !== 'check') return [];
   const checkNum = String(candidate?.check_number || candidate?.id || '').trim();
   const amount = Math.abs(Number(candidate?.amount) || 0);
   const bank = normalizeBankKey(candidate?.bank);
@@ -223,6 +231,7 @@ export function findCheckDuplicates(candidate, existingChecks = []) {
   if (!checkNum) return [];
 
   return existingChecks.filter((c) => {
+    if (c?.method && getPaymentMethod(c) !== 'check') return false;
     const cNum = String(c.check_number || c.id || '').trim();
     const cAmount = Math.abs(Number(c.amount) || 0);
     const cBank = normalizeBankKey(c.bank);
@@ -348,21 +357,27 @@ export function computeFinancialCommandCenter({
     const bKey = normalizeBankKey(c.bank);
     const bank = BANK_IDS.includes(bKey) ? bKey : 'mizrahi';
     const payee = c.payee || c.description || 'ספק';
-    const checkNum = c.check_number || c.id || '';
+    const method = getPaymentMethod(c);
+    const isCheck = method === 'check';
+    const checkNum = isCheck ? String(c.check_number || '').trim() : '';
+    const delayNote = rawDue !== due ? ` (נדחה מ-${rawDue})` : '';
 
     baselineEvents.push({
-      id: `check-${c.id || checkNum}-${due}`,
+      id: `${isCheck ? 'check' : 'transfer'}-${c.id || checkNum}-${due}`,
       date: due,
       originalDate: rawDue,
       amount: -amount,
       bank,
       type: 'debit',
-      category: 'check',
-      label: `שיק מס׳ ${checkNum} · ${payee}${rawDue !== due ? ` (נדחה מ-${rawDue})` : ''}`,
+      category: isCheck ? 'check' : 'transfer',
+      paymentMethod: method,
+      label: isCheck
+        ? `שיק מס׳ ${checkNum || '—'} · ${payee}${delayNote}`
+        : `העברה בנקאית · ${payee}${delayNote}`,
       checkNumber: checkNum,
       payee,
       isConfirmed: true,
-      source: 'check_register'
+      source: isCheck ? 'check_register' : 'transfer_schedule'
     });
   }
 

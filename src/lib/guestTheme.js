@@ -69,17 +69,12 @@ export function usableGuestName(raw) {
   return name;
 }
 
-/** Same /stay/:token link. Unpaid card bookings stay on the agreement, even if the desk already marked them confirmed. */
 export function guestShouldSeeStayPortal(booking) {
   if (!booking) return false;
+  if (booking.is_cabin_portal) return true;
   const status = booking.booking_status;
   if (status === 'CHECKED_IN' || status === 'CHECKED_OUT') return true;
-  const pay = booking.payment_status;
-  if (pay === 'DEPOSIT_PAID' || pay === 'PAID' || pay === 'PARTIAL' || pay === 'PENDING_CASH' || pay === 'PENDING_BANK') return true;
-  if (booking.stay?.hyp_deposit?.paid || booking.stay?.hyp?.paid) return true;
-  if (booking.stay?.hyp_intent?.status === 'paid') return true;
-  const mode = booking.payment_mode;
-  if (mode === 'CASH_TRUST' || mode === 'VOUCHER' || mode === 'COMP' || mode === 'BOOKING') return status === 'CONFIRMED';
+  if (booking.stay?.id_photo_received_at || booking.stay?.id_scan) return true;
   return false;
 }
 

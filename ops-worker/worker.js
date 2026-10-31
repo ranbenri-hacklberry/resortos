@@ -1,4 +1,4 @@
-const ORIGIN = 'https://building-counsel-latitude-throws.trycloudflare.com';
+const ORIGIN = 'https://mcp.resortos.app';
 
 export default {
   async fetch(request) {

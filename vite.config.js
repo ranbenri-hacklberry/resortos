@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react-swc';
 import tailwindcss from '@tailwindcss/vite';
 import fs from 'fs';
+import http from 'node:http';
 import crypto from 'crypto';
 import path from 'path';
 import { pathToFileURL } from 'url';
@@ -9,6 +10,7 @@ import { createHypPaymentPage } from './functions/lib/hypPay.js';
 import { UNIT_DISPLAY_NAMES, UNIT_PROPERTY } from './functions/lib/unitNames.js';
 import { readSharedTracker, writeSharedTracker } from './server/sharedTracker.js';
 import { tryHandleOps } from './server/opsGateway.js';
+import { tryHandleMcp } from './server/mcpHttp.js';
 import { tryHandleClimate } from './server/climateGateway.js';
 import { tryHandleNetwork } from './server/routerGateway.js';
 import { tryHandleAssetBeacons } from './server/assetBeaconWatch.js';
@@ -120,6 +122,32 @@ function staffAuthPlugin(env) {
       console.log('[hotelos-auth] middleware attached');
       server.middlewares.use(async (req, res, next) => {
         try {
+          if (String(req.url || '').startsWith('/api/google-contacts')) {
+            const target = new URL(req.url, process.env.HOTELOS_BRIDGE_URL || 'http://127.0.0.1:4038');
+            const headers = { ...req.headers };
+            headers['x-forwarded-host'] = req.headers['x-forwarded-host'] || req.headers.host || '';
+            headers['x-forwarded-proto'] = req.headers['x-forwarded-proto'] || 'http';
+            const preq = http.request({
+              hostname: target.hostname,
+              port: target.port,
+              path: `${target.pathname}${target.search}`,
+              method: req.method,
+              headers
+            }, (pres) => {
+              res.writeHead(pres.statusCode || 502, pres.headers);
+              pres.pipe(res);
+            });
+            preq.on('error', () => {
+              if (!res.headersSent) {
+                res.statusCode = 502;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: 'BRIDGE_DOWN' }));
+              }
+            });
+            req.pipe(preq);
+            return;
+          }
+          if (await tryHandleMcp(req, res)) return;
           if (await tryHandleClimate(req, res)) return;
           if (await tryHandleNetwork(req, res)) return;
           if (await tryHandleAssetBeacons(req, res)) return;

@@ -80,6 +80,7 @@ export function buildStaySnapshot(booking, unit, bookings, property) {
     gate_mode: gate?.mode || null,
     gate_code: ready ? (gate?.code || null) : null,
     gate_night_call: Boolean(gate?.nightCall),
+    gate_shabbat_close: Boolean(gate?.shabbatClose),
     wifi_networks: networks,
     wifi_ssid: networks[0]?.ssid || null,
     wifi_password: networks[0]?.password || null,

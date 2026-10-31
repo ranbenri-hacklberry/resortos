@@ -72,3 +72,6 @@ server/data/*.json
 data/priority-docs.json
 data/grounds-status.json
 logs/
+
+public/finance/
+config/fridayGateSms.json

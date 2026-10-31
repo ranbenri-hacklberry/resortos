@@ -67,37 +67,37 @@ const DEFAULT_ACCOUNTS = [
 
 // Real Priority Cash Flow & Checks Register (from data/checks.json)
 const DEFAULT_CHECKS = [
-  { id: 'vat-2026-2026-10-30', check_number: '', amount: 57000, due_date: '2026-10-30', bank: 'mizrahi', payee: 'מע״מ', description: 'אוקטובר 2026', confirmed: true },
-  { id: '3650133', check_number: '3650133', amount: 82600, due_date: '2026-11-01', bank: 'mizrahi', payee: 'כינורות', description: 'שכירות / תשלום חודשי', confirmed: true },
-  { id: 'booking-monthly-2026-11-01', check_number: '', amount: 5900, due_date: '2026-11-01', bank: 'mizrahi', payee: 'בוקינג', description: 'נובמבר 2026', confirmed: true },
-  { id: 'fuel-delek-monthly-2026-11-01', check_number: '', amount: 2700, due_date: '2026-11-01', bank: 'mizrahi', payee: 'דלקן', description: 'נובמבר 2026', confirmed: true },
-  { id: 'alex-calendar-monthly-2026-11-01', check_number: '', amount: 8500, due_date: '2026-11-01', bank: 'mizrahi', payee: 'יומן אלכס', description: 'נובמבר 2026', confirmed: true },
-  { id: 'zimmer-ads-monthly-2026-11-01', check_number: '', amount: 2832, due_date: '2026-11-01', bank: 'mizrahi', payee: 'צימר — פרסום', description: 'נובמבר 2026', confirmed: true },
-  { id: 'fuel-shukrun-monthly-2026-11-01', check_number: '', amount: 1500, due_date: '2026-11-01', bank: 'mizrahi', payee: 'שוקרון', description: 'נובמבר 2026', confirmed: true },
-  { id: 'mas-hachnasa-monthly-2026-11-04', check_number: '', amount: 10000, due_date: '2026-11-04', bank: 'mizrahi', payee: 'מס הכנסה עובדים', description: 'נובמבר 2026', confirmed: true },
-  { id: 'bituach-leumi-monthly-2026-11-05', check_number: '', amount: 12000, due_date: '2026-11-05', bank: 'mizrahi', payee: 'ביטוח לאומי עובדים', description: 'נובמבר 2026', confirmed: true },
-  { id: 'car-jacoo-monthly-2026-11-05', check_number: '', amount: 3900, due_date: '2026-11-05', bank: 'mizrahi', payee: 'רכב ג׳אקו', description: 'נובמבר 2026', confirmed: true },
-  { id: 'car-chery-monthly-2026-11-05', check_number: '', amount: 2900, due_date: '2026-11-05', bank: 'mizrahi', payee: 'רכב צ׳רי', description: 'נובמבר 2026', confirmed: true },
-  { id: 'car-chery-costa-monthly-2026-11-08', check_number: '', amount: 2600, due_date: '2026-11-08', bank: 'mizrahi', payee: 'צ׳רי קוסטה', description: 'נובמבר 2026', confirmed: true },
-  { id: 'salaries-monthly-2026-11-09', check_number: '', amount: 110000, due_date: '2026-11-09', bank: 'mizrahi', payee: 'משכורות', description: 'נובמבר 2026', confirmed: true },
-  { id: '3650110', check_number: '3650110', amount: 14160, due_date: '2026-11-10', bank: 'mizrahi', payee: 'ג\'ימי ג\'יפ', description: 'שכירות נובמבר 2026', confirmed: true },
-  { id: 'nurit-2026-11-10', check_number: '', amount: 29390, due_date: '2026-11-10', bank: 'mizrahi', payee: 'בתי נורית', description: 'שכירות נובמבר 2026', confirmed: true },
-  { id: 'maya-monthly-2026-11-10', check_number: '', amount: 15270, due_date: '2026-11-10', bank: 'mizrahi', payee: 'בקתות מאיה', description: 'נובמבר 2026', confirmed: true },
-  { id: 'bagiva-staff-monthly-2026-11-10', check_number: '', amount: 3245, due_date: '2026-11-10', bank: 'mizrahi', payee: 'דירת עובדים צימר בגבעה', description: 'נובמבר 2026', confirmed: true },
-  { id: 'musical-monthly-2026-11-10', check_number: '', amount: 15370, due_date: '2026-11-10', bank: 'mizrahi', payee: 'החצר המוסיקלית', description: 'נובמבר 2026', confirmed: true },
-  { id: 'taj-monthly-2026-11-10', check_number: '', amount: 19160, due_date: '2026-11-10', bank: 'mizrahi', payee: 'טאג׳ מאהל', description: 'נובמבר 2026', confirmed: true },
-  { id: 'toscana-monthly-2026-11-10', check_number: '', amount: 15000, due_date: '2026-11-10', bank: 'mizrahi', payee: 'טוסקנה', description: 'נובמבר 2026', confirmed: true },
-  { id: 'kipat-monthly-2026-11-10', check_number: '', amount: 14440, due_date: '2026-11-10', bank: 'mizrahi', payee: 'כיפת שמיים', description: 'נובמבר 2026', confirmed: true },
-  { id: 'car-mercedes-monthly-2026-11-10', check_number: '', amount: 4600, due_date: '2026-11-10', bank: 'mizrahi', payee: 'מרצדס', description: 'נובמבר 2026', confirmed: true },
-  { id: 'nofim-monthly-2026-11-10', check_number: '', amount: 12670, due_date: '2026-11-10', bank: 'mizrahi', payee: 'נופים בלבן', description: 'נובמבר 2026', confirmed: true },
-  { id: 'bagiva-util-monthly-2026-11-10', check_number: '', amount: 5000, due_date: '2026-11-10', bank: 'mizrahi', payee: 'צימר בגבעה', description: 'נובמבר 2026', confirmed: true },
-  { id: '3650131', check_number: '3650131', amount: 2445, due_date: '2026-11-11', bank: 'mizrahi', payee: 'יהושוע סליטרניק', description: 'ביטוח בתי נורית', confirmed: true }
+  { id: 'vat-2026-2026-10-30', check_number: '', amount: 57000, due_date: '2026-10-30', bank: 'mizrahi', payee: 'מע״מ', description: 'אוקטובר 2026', method: 'transfer', confirmed: true },
+  { id: '3650133', check_number: '3650133', amount: 82600, due_date: '2026-11-01', bank: 'mizrahi', payee: 'כינורות', description: 'שכירות / תשלום חודשי', method: 'check', confirmed: true },
+  { id: 'booking-monthly-2026-11-01', check_number: '', amount: 5900, due_date: '2026-11-01', bank: 'mizrahi', payee: 'בוקינג', description: 'נובמבר 2026', method: 'transfer', confirmed: true },
+  { id: 'fuel-delek-monthly-2026-11-01', check_number: '', amount: 2700, due_date: '2026-11-01', bank: 'mizrahi', payee: 'דלקן', description: 'נובמבר 2026', method: 'transfer', confirmed: true },
+  { id: 'alex-calendar-monthly-2026-11-01', check_number: '', amount: 8500, due_date: '2026-11-01', bank: 'mizrahi', payee: 'יומן אלכס', description: 'נובמבר 2026', method: 'transfer', confirmed: true },
+  { id: 'zimmer-ads-monthly-2026-11-01', check_number: '', amount: 2832, due_date: '2026-11-01', bank: 'mizrahi', payee: 'צימר — פרסום', description: 'נובמבר 2026', method: 'transfer', confirmed: true },
+  { id: 'fuel-shukrun-monthly-2026-11-01', check_number: '', amount: 1500, due_date: '2026-11-01', bank: 'mizrahi', payee: 'שוקרון', description: 'נובמבר 2026', method: 'transfer', confirmed: true },
+  { id: 'mas-hachnasa-monthly-2026-11-04', check_number: '', amount: 10000, due_date: '2026-11-04', bank: 'mizrahi', payee: 'מס הכנסה עובדים', description: 'נובמבר 2026', method: 'transfer', confirmed: true },
+  { id: 'bituach-leumi-monthly-2026-11-05', check_number: '', amount: 12000, due_date: '2026-11-05', bank: 'mizrahi', payee: 'ביטוח לאומי עובדים', description: 'נובמבר 2026', method: 'transfer', confirmed: true },
+  { id: 'car-jacoo-monthly-2026-11-05', check_number: '', amount: 3900, due_date: '2026-11-05', bank: 'mizrahi', payee: 'רכב ג׳אקו', description: 'נובמבר 2026', method: 'transfer', confirmed: true },
+  { id: 'car-chery-monthly-2026-11-05', check_number: '', amount: 2900, due_date: '2026-11-05', bank: 'mizrahi', payee: 'רכב צ׳רי', description: 'נובמבר 2026', method: 'transfer', confirmed: true },
+  { id: 'car-chery-costa-monthly-2026-11-08', check_number: '', amount: 2600, due_date: '2026-11-08', bank: 'mizrahi', payee: 'צ׳רי קוסטה', description: 'נובמבר 2026', method: 'transfer', confirmed: true },
+  { id: 'salaries-monthly-2026-11-09', check_number: '', amount: 110000, due_date: '2026-11-09', bank: 'mizrahi', payee: 'משכורות', description: 'נובמבר 2026', method: 'transfer', confirmed: true },
+  { id: '3650110', check_number: '3650110', amount: 14160, due_date: '2026-11-10', bank: 'mizrahi', payee: 'ג\'ימי ג\'יפ', description: 'שכירות נובמבר 2026', method: 'check', confirmed: true },
+  { id: 'nurit-2026-11-10', check_number: '', amount: 29390, due_date: '2026-11-10', bank: 'mizrahi', payee: 'בתי נורית', description: 'שכירות נובמבר 2026', method: 'transfer', confirmed: true },
+  { id: 'maya-monthly-2026-11-10', check_number: '', amount: 15270, due_date: '2026-11-10', bank: 'mizrahi', payee: 'בקתות מאיה', description: 'נובמבר 2026', method: 'transfer', confirmed: true },
+  { id: 'bagiva-staff-monthly-2026-11-10', check_number: '', amount: 3245, due_date: '2026-11-10', bank: 'mizrahi', payee: 'דירת עובדים צימר בגבעה', description: 'נובמבר 2026', method: 'transfer', confirmed: true },
+  { id: 'musical-monthly-2026-11-10', check_number: '', amount: 15370, due_date: '2026-11-10', bank: 'mizrahi', payee: 'החצר המוסיקלית', description: 'נובמבר 2026', method: 'transfer', confirmed: true },
+  { id: 'taj-monthly-2026-11-10', check_number: '', amount: 19160, due_date: '2026-11-10', bank: 'mizrahi', payee: 'טאג׳ מאהל', description: 'נובמבר 2026', method: 'transfer', confirmed: true },
+  { id: 'toscana-monthly-2026-11-10', check_number: '', amount: 15000, due_date: '2026-11-10', bank: 'mizrahi', payee: 'טוסקנה', description: 'נובמבר 2026', method: 'transfer', confirmed: true },
+  { id: 'kipat-monthly-2026-11-10', check_number: '', amount: 14440, due_date: '2026-11-10', bank: 'mizrahi', payee: 'כיפת שמיים', description: 'נובמבר 2026', method: 'transfer', confirmed: true },
+  { id: 'car-mercedes-monthly-2026-11-10', check_number: '', amount: 4600, due_date: '2026-11-10', bank: 'mizrahi', payee: 'מרצדס', description: 'נובמבר 2026', method: 'transfer', confirmed: true },
+  { id: 'nofim-monthly-2026-11-10', check_number: '', amount: 12670, due_date: '2026-11-10', bank: 'mizrahi', payee: 'נופים בלבן', description: 'נובמבר 2026', method: 'transfer', confirmed: true },
+  { id: 'bagiva-util-monthly-2026-11-10', check_number: '', amount: 5000, due_date: '2026-11-10', bank: 'mizrahi', payee: 'צימר בגבעה', description: 'נובמבר 2026', method: 'transfer', confirmed: true },
+  { id: '3650131', check_number: '3650131', amount: 2445, due_date: '2026-11-11', bank: 'mizrahi', payee: 'יהושוע סליטרניק', description: 'ביטוח בתי נורית', method: 'check', confirmed: true }
 ];
 
 async function getLiveAccountsIfPossible(env) {
-  const clientId = env?.OPEN_FINANCE_CLIENT_ID || 'e8FLKTe4vZ3SoBCFNj76uGfUJoGhjf0y';
-  const clientSecret = env?.OPEN_FINANCE_CLIENT_SECRET || 'i-k8BZhQQ5N63amH2-7BoWlbdU8QGqGx8y3ewiZ5iko8D-f1Rp_zemoFVnmgAhhf';
-  const userId = env?.OPEN_FINANCE_USER_ID || 'mialisran@gmail.com';
+  const clientId = env?.OPEN_FINANCE_CLIENT_ID || '';
+  const clientSecret = env?.OPEN_FINANCE_CLIENT_SECRET || '';
+  const userId = env?.OPEN_FINANCE_USER_ID || '';
   if (!clientId || !clientSecret || !userId) return DEFAULT_ACCOUNTS;
 
   try {

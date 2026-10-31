@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { bookingsWindowQuery, contactDraft, contentRangeTotal, isEligibleBooking, isScanComplete, planContacts, toE164, writesFor } from './googleContactsPlan.js';
+import { bookingsWindowQuery, contactDraft, contentRangeTotal, createSyncLock, googleContactsAutoSyncEnabled, isEligibleBooking, isScanComplete, planContacts, toE164, writesFor } from './googleContactsPlan.js';
 
 const today = '2026-10-24';
 
@@ -78,6 +78,55 @@ test('unchanged hash is not sent again', () => {
   assert.equal(again.counts.unchanged, 1);
   assert.equal(again.counts.update, 0);
   assert.equal(again.counts.create, 0);
+  assert.equal(writesFor(again, { liveEnabled: true, connected: true }).length, 0);
+});
+
+test('a new booking plans one create and a unit change plans one update', () => {
+  const created = planContacts({ today, scanComplete: true, googleRead: true, bookings: [stay({})] });
+  const writes = writesFor(created, { liveEnabled: true, connected: true });
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].action, 'create');
+  const moved = planContacts({
+    today,
+    scanComplete: true,
+    googleRead: true,
+    bookings: [stay({ unit_id: 'k687' })],
+    mappings: [{
+      phone_e164: writes[0].phone_e164,
+      google_resource_name: 'people/1',
+      content_hash: writes[0].content_hash,
+      managed: true
+    }]
+  });
+  const update = writesFor(moved, { liveEnabled: true, connected: true });
+  assert.equal(update.length, 1);
+  assert.equal(update[0].action, 'update');
+  assert.match(update[0].display_name, /טוסקנה · 1/);
+});
+
+test('staff housing, the office, and a closed complex are not written or deleted', () => {
+  const phone = '+972521234567';
+  const mappings = [{ phone_e164: phone, google_resource_name: 'people/staff', managed: true, booking_id: 'b1' }];
+  for (const booking of [
+    stay({ unit_id: 'k678' }),
+    stay({ unit_id: 'k679' }),
+    stay({ unit_id: 'pilot-office' }),
+    stay({ guest_name: 'מתחם סגור לא לבצע' })
+  ]) {
+    const plan = planContacts({ today, scanComplete: true, googleRead: true, bookings: [booking], mappings });
+    assert.equal(plan.counts.create + plan.counts.update + plan.counts.remove, 0);
+    assert.equal(writesFor(plan, { liveEnabled: true, connected: true }).length, 0);
+  }
+});
+
+test('the sync lock rejects an overlapping run', () => {
+  const lock = createSyncLock();
+  assert.equal(lock.tryEnter(), true);
+  assert.equal(lock.tryEnter(), false);
+  lock.leave();
+  assert.equal(lock.tryEnter(), true);
+  assert.equal(googleContactsAutoSyncEnabled({}), true);
+  assert.equal(googleContactsAutoSyncEnabled({ GOOGLE_CONTACTS_AUTO_SYNC: '0' }), false);
 });
 
 test('a foreign Google contact is a conflict and is not overwritten', () => {

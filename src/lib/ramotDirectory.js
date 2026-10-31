@@ -56,7 +56,7 @@ const COMPLEXES = [
     id: 'taj',
     name: 'טאג׳ מאהל',
     query: "טאג' מאהל מושב רמות",
-    waze: 'https://waze.com/ul?q=Taj+Mahal+Ramot&navigate=yes',
+    waze: 'https://waze.com/ul/hsvc6gsskp',
     wifi: [{ ssid: 'LUTUS', password: '12345678' }],
     units: [
       { id: 'k808', name: "טאג' מאהל · בקתה 1" },
@@ -83,7 +83,7 @@ const COMPLEXES = [
     id: 'nofim',
     name: 'נופים בלבן',
     query: 'נופים בלבן מושב רמות',
-    waze: 'https://waze.com/ul?q=Nofim+Belavan+Ramot&navigate=yes',
+    waze: 'https://waze.com/ul/hsvc6gt4ct',
     wifi: [{ ssid: 'TP-LINK_FA30', password: '15107312' }],
     units: [
       { id: 'k685', name: 'נופים בלבן · בקתה 1' },
@@ -94,7 +94,7 @@ const COMPLEXES = [
     id: 'toscana',
     name: 'בקתות טוסקנה',
     query: 'בקתות טוסקנה מושב רמות',
-    waze: 'https://waze.com/ul/hsvc6gsux5',
+    waze: 'https://waze.com/ul/hsvc6gsutg',
     wifi: [{ ssid: 'Toscana', password: '12345678' }],
     units: [
       { id: 'k687', name: 'טוסקנה · 1' },

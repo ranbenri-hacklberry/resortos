@@ -34,7 +34,6 @@ describe('skips', () => {
     [{ guest_name: 'מתחם סגור לא להזמין' }, 'חסימה / לא זמין'],
     [{ guest_name: 'תחזוקה' }, 'חסימה / לא זמין'],
     [{ channel_source: 'Siesta' }, 'סיאסטה'],
-    [{ booking_status: 'CHECKED_OUT' }, 'לא נשלח – מסומן CHECKED_OUT בקינרות (עזיבה לא אומתה)'],
     [{ checked_out_at: '2026-10-22T08:00:00Z' }, 'כבר עזב'],
     [{ guest_name: "טאג' מאהל 4 – תפוס" }, 'חסימה / לא זמין'],
     [{ guest_name: 'תפוסה' }, 'חסימה / לא זמין'],
@@ -80,11 +79,11 @@ describe('late checkout', () => {
 describe('template', () => {
   it('full', () => {
     expect(buildCheckoutReminder({ guestName: 'יובל כהן', unitName: 'מול הנוף 2', checkoutTime: '11:00', stayUrl: 'https://resortos.app/stay/tok' }))
-      .toBe('בוקר טוב יובל! היום יום העזיבה ממול הנוף 2. העזיבה עד 11:00. אפשר לסמן צ׳ק-אאוט או לבקש צ׳ק-אאוט מאוחר בדף האירוח: https://resortos.app/stay/tok. תודה שהתארחתם!');
+      .toBe('בוקר טוב יובל! היום יום העזיבה ממול הנוף 2. העזיבה עד 11:00. אפשר לסמן צ׳ק-אאוט או לבקש צ׳ק-אאוט מאוחר בדף האירוח: https://resortos.app/stay/tok. אפשר גם לכתוב לנו בוואטסאפ: https://wa.me/972515262612?text=%D7%A6%D7%B3%D7%A7-%D7%90%D7%90%D7%95%D7%98 תודה שהתארחתם!');
   });
   it('no name, no link, default time', () => {
     expect(buildCheckoutReminder({ unitName: 'טוסקנה 1' }))
-      .toBe('בוקר טוב! היום יום העזיבה מטוסקנה 1. העזיבה עד 11:00. תודה שהתארחתם!');
+      .toBe('בוקר טוב! היום יום העזיבה מטוסקנה 1. העזיבה עד 11:00. אפשר גם לכתוב לנו בוואטסאפ: https://wa.me/972515262612?text=%D7%A6%D7%B3%D7%A7-%D7%90%D7%90%D7%95%D7%98 תודה שהתארחתם!');
   });
 });
 
@@ -123,18 +122,13 @@ describe('sms unit name (Ran 2026-10-21)', () => {
 });
 
 describe('real departures (Ran 2026-10-22)', () => {
-  it('today + CHECKED_OUT only → not departed, SMS still skipped (unchanged)', () => {
+  it('today + CHECKED_OUT only → not departed, SMS IS sent (Ran 2026-10-29)', () => {
     const b = g({ booking_status: 'CHECKED_OUT' });
     expect(isCheckedOut(b, { date: D })).toBe(false);
-    expect(classifyForDate(b, D).send).toBe(false);
+    expect(classifyForDate(b, D).send).toBe(true);
   });
-  it('SMS recipient set identical to legacy rule', () => {
-    const legacy = (b) => b.booking_status === 'CHECKED_OUT' || Boolean(b.checked_out_at || b.stay?.self_checked_out_at);
-    const rows = [g({ id: '1', booking_status: 'CHECKED_OUT' }), g({ id: '2' }), g({ id: '3', checked_out_at: 'x' }),
-      g({ id: '4', booking_status: 'CHECKED_OUT', check_out_date: '2026-10-21' }), g({ id: '5', stay: { self_checked_out_at: 'x' } }), g({ id: '6', guest_phone: '052-1234567' })];
-    const now = rows.map((b) => classifyForDate(b, D)).filter((i) => i?.send).map((i) => i.booking.id);
-    const old = rows.filter((b) => b.check_out_date === D && !legacy(b)).map((b) => b.id);
-    expect(now).toEqual(old);
+  it('earlier check-out + CHECKED_OUT is not reminded today', () => {
+    expect(classifyForDate(g({ booking_status: 'CHECKED_OUT', check_out_date: '2026-10-21' }), D)).toBeNull();
   });
   it('today + checked_out_at → departed', () => {
     expect(isCheckedOut(g({ booking_status: 'CHECKED_OUT', checked_out_at: '2026-10-22T08:00:00Z' }), { date: D })).toBe(true);

@@ -62,6 +62,18 @@ export function isPaidForGuestCheckin(booking) {
   return false;
 }
 
+/**
+ * Ran 2026-10-30: after the guest uploads the ID, a booking that is already paid
+ * (e.g. Booking.com prepaid) must NOT be sent to the payment-choice step — open the
+ * guest stay page directly so check-in happens there. Unpaid bookings keep step 3.
+ */
+export function skipPaymentChoiceAfterId(booking) {
+  if (!booking || booking.deleted_at) return false;
+  if (booking.booking_status === 'CANCELED') return false;
+  if (booking.booking_status === 'CHECKED_IN' || booking.stay?.guest_checked_in_at) return true;
+  return isPaidForGuestCheckin(booking);
+}
+
 export function shouldAutoGuestCheckin(booking, now = new Date()) {
   if (!booking || booking.deleted_at) return false;
   if (booking.booking_status === 'CANCELED' || booking.booking_status === 'CHECKED_OUT') return false;

@@ -442,5 +442,5 @@ export function startGuestCallPoller() {
     }
   };
   tick();
-  setInterval(tick, 4000);
+  setInterval(tick, 60 * 1000);
 }

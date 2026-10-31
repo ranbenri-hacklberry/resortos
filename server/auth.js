@@ -123,6 +123,35 @@ export async function loginStaff(req, res) {
   }
 }
 
+export async function verifyStaffCredentials(username, password, req = {}) {
+  const name = String(username || '').trim();
+  const secret = String(password || '');
+  if (!name || !secret) {
+    const err = new Error('INVALID');
+    err.status = 400;
+    throw err;
+  }
+  const key = clientKey(req, name);
+  if (!allowLoginAttempt(key)) {
+    const err = new Error('RATE_LIMIT');
+    err.status = 429;
+    throw err;
+  }
+  const result = await rpc('hotelos_login', { p_username: name, p_password: secret });
+  if (!result?.token || !result?.user) {
+    const err = new Error('INVALID_CREDENTIALS');
+    err.status = 401;
+    throw err;
+  }
+  loginAttempts.delete(key);
+  try {
+    await rpc('hotelos_logout', { p_token: result.token });
+  } catch {
+    /* the desk session is best-effort; the password check already succeeded */
+  }
+  return result.user;
+}
+
 export async function getStaffMe(req, res) {
   try {
     const token = bearerToken(req);

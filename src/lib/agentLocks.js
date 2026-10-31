@@ -34,12 +34,13 @@ export function agentLockLabel(lock, now = Date.now()) {
   return `נעול ע״י ${name} · ממתין לתשלום · ${minutes} דק׳`;
 }
 
-export function useAgentLocks(pollMs = 8000) {
+export function useAgentLocks(pollMs = 60000) {
   const [locks, setLocks] = useState([]);
   const [error, setError] = useState(false);
   useEffect(() => {
     let stop = false;
     async function pull() {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       try {
         const response = await fetch('/api/agent-locks', { signal: AbortSignal.timeout(9000) });
         if (!response.ok) throw new Error('LOCKS_FAILED');
@@ -57,9 +58,14 @@ export function useAgentLocks(pollMs = 8000) {
     }
     pull();
     const id = setInterval(pull, pollMs);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') pull();
+    };
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
       stop = true;
       clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, [pollMs]);
   return { locks, error };

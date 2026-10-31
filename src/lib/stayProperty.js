@@ -10,6 +10,7 @@ function unitPlace(unitId) {
   const id = String(unitId || '');
   const propertyId = SEED_UNIT_PROPERTY[id];
   const nav = PROPERTY_SEED[propertyId]?.content?.nav || {};
+  if (nav.unavailable) return { query: '', placeId: '', waze: '', unavailable: true };
   if (nav.query || nav.placeId || nav.waze) {
     return {
       query: String(nav.query || '').trim(),
@@ -23,7 +24,7 @@ function unitPlace(unitId) {
     return { query: 'כיפת השמיים גבעת יואב', placeId: 'ChIJowoxPLsRHBURo64q7zHS1pk', waze: '' };
   }
   if (id === 'k826' || id === 'k827') {
-    return { query: 'קאסה נובה נוב', placeId: '', waze: '' };
+    return { query: '', placeId: '', waze: '', unavailable: true };
   }
   return { query: 'צימר בגבעה גבעת יואב', placeId: 'ChIJ19h0kHsRHBURwfbIlIF6slA', waze: '' };
 }
@@ -39,14 +40,15 @@ export function unitNav(unitId) {
 /** Prefer saved Waze deep-link when we have one; otherwise search the same listing query. */
 export function wazeUrl(unitId) {
   const place = unitPlace(unitId);
+  if (place.unavailable) return null;
   if (place.waze) return place.waze;
-  if (!place.query) return '';
+  if (!place.query) return null;
   return `https://waze.com/ul?q=${encodeURIComponent(place.query)}&navigate=yes`;
 }
 
 export function googleMapsUrl(unitId) {
   const place = unitPlace(unitId);
-  if (!place.query && !place.placeId) return '';
+  if (place.unavailable || (!place.query && !place.placeId)) return null;
   const params = new URLSearchParams({
     api: '1',
     destination: place.query || place.placeId,

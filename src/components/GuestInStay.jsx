@@ -8,8 +8,10 @@ import {
   Flame,
   KeyRound,
   LogOut,
+  Map,
   MapPin,
   Minus,
+  Navigation,
   Plus,
   Receipt,
   Shirt,
@@ -33,11 +35,13 @@ import { guidesFromContent } from '../lib/guestProfile';
 import { guestCabinStoreEnabled } from '../lib/guestFeatures';
 import { stayAction } from '../lib/guestCheckoutApi';
 import { selfCheckoutWindow } from '../lib/guestComms';
-import { googleReviewUrl } from '../lib/stayProperty';
+import { googleMapsUrl, googleReviewUrl, wazeUrl } from '../lib/stayProperty';
 import { cleanGuestCabinName } from '../lib/units';
 import { LOCKBOX_BY_UNIT, PROPERTY_SEED, UNIT_OVERRIDES, UNIT_PROPERTY } from '../lib/guestProfileSeed';
 import GuestAreaGuide from './GuestAreaGuide';
 import GuestReach from './GuestReach';
+import { GUEST_RULES, GUEST_RULES_TITLE } from '../lib/guestRules';
+import { isFridayIL, shabbatEntryHHMM } from '../lib/shabbatTime';
 
 function LiveText({ text }) {
   const translated = useDynamicText(text, null, 'he');
@@ -145,7 +149,11 @@ export default function GuestInStay({ booking, unitName, stay, themeStyles, onSt
   const networks = wifiNetworks(stay, booking);
   const guides = Array.isArray(stay?.guides) && stay.guides.length ? stay.guides : guidesFromContent({});
   const doorPin = stay?.door_pin || LOCKBOX_BY_UNIT[booking?.unit_id || stay?.unit_id];
-  const gateCode = stay?.gate_code || (String(booking?.unit_id || '').startsWith('k') ? '#2464' : null);
+  const CASA_NOVA_UNITS = new Set(['k826', 'k827']);
+  const isCasaNova = CASA_NOVA_UNITS.has(String(booking?.unit_id || ''));
+  // Ramot fallback code only for Ramot units (Casa Nova k826/k827 must not get it).
+  const gateCode = stay?.gate_code || (String(booking?.unit_id || '').startsWith('k') && !isCasaNova ? '#2464' : null);
+  const shabbatGateNotice = (Boolean(stay?.gate_shabbat_close) || isCasaNova) && isFridayIL();
   const nightCallGate = Boolean(stay?.gate_night_call) && isVillageGateNight();
   const hasGate = stay?.gate_mode === 'code' || stay?.gate_mode === 'dial' || (stay?.gate_mode === 'call' && nightCallGate) || nightCallGate || Boolean(gateCode);
   async function copy(key, value) {
@@ -292,6 +300,14 @@ export default function GuestInStay({ booking, unitName, stay, themeStyles, onSt
       </div>
       ) : null}
 
+      {shabbatGateNotice ? (
+        <div style={{ ...card, borderColor: '#F59E0B' }} role="alert">
+          <div style={{ fontSize: '0.92rem', fontWeight: 800, lineHeight: 1.45 }}>
+            🕯️ שער המושב נסגר אוטומטית בכניסת השבת (היום בערך ב־{shabbatEntryHHMM()}). כדאי להיכנס ולהחנות את הרכב לפני כן. לא ניתן לצאת או להיכנס ברכב עד צאת השבת.
+          </div>
+        </div>
+      ) : null}
+
       <div style={{ display: 'grid', gridTemplateColumns: hasGate ? '1fr 1fr' : '1fr', gap: 10 }}>
         {hasGate ? (
         <div style={card}>
@@ -355,6 +371,25 @@ export default function GuestInStay({ booking, unitName, stay, themeStyles, onSt
           t={t}
         />
       </div>
+
+      {wazeUrl(booking.unit_id) || googleMapsUrl(booking.unit_id) ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          {[[wazeUrl(booking.unit_id), Navigation, t('GUEST_WAZE'), '#D7EAF2', '#1E3A4C'],
+            [googleMapsUrl(booking.unit_id), Map, t('GUEST_MAPS'), '#E4E0D6', '#3F3A33']]
+            .filter(([href]) => href)
+            .map(([href, Icon, label, bg, color]) => (
+              <a key={label} href={href} target="_blank" rel="noopener noreferrer"
+                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                          textDecoration: 'none', background: bg, color, borderRadius: 12,
+                          padding: '0.7rem 0.4rem', fontWeight: 800, fontSize: '0.78rem',
+                          border: '1px solid rgba(38,19,15,0.08)' }}>
+                <Icon size={15} /> {label}
+              </a>
+            ))}
+        </div>
+      ) : (
+        <div style={{ textAlign: 'center', fontSize: '0.78rem', fontWeight: 700, opacity: 0.55, padding: '0.5rem 0' }}>ניווט לא זמין כרגע</div>
+      )}
 
       <section>
         <div style={{ fontWeight: 900, fontSize: '1.05rem', marginBottom: 8 }}>{t('INSTAY_GUIDES')}</div>
@@ -513,6 +548,15 @@ export default function GuestInStay({ booking, unitName, stay, themeStyles, onSt
         <div style={{ fontSize: '0.8rem', color: themeStyles.textMuted, marginBottom: 12 }}>{t('INSTAY_GUIDE_HINT')}</div>
         <GuestAreaGuide themeStyles={themeStyles} unitId={booking.unit_id} />
       </section>
+
+      {GUEST_RULES.length ? (
+        <details style={card} dir="rtl">
+          <summary style={{ fontWeight: 900, cursor: 'pointer' }}>{GUEST_RULES_TITLE}</summary>
+          <ul style={{ margin: '8px 0 0', paddingInlineStart: 18, fontSize: '0.82rem', color: themeStyles.textMuted, lineHeight: 1.5 }}>
+            {GUEST_RULES.map((rule) => <li key={rule}>{rule}</li>)}
+          </ul>
+        </details>
+      ) : null}
 
       {lateOpen ? (
         <section style={card}>

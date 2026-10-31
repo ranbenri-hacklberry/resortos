@@ -156,10 +156,21 @@ async function listBookings(user, query) {
   if (from && to) {
     filter += `&check_in_date=lt.${encodeURIComponent(to)}&check_out_date=gte.${encodeURIComponent(from)}`;
   }
-  filter += '&limit=2000';
-  const rows = await rest('GET', filter);
-  const list = Array.isArray(rows) ? rows : [];
-  return list.filter((row) => unitAllowed(user, row.unit_id));
+  if (!(from && to)) {
+    const rows = await rest('GET', `${filter}&limit=2000`);
+    const list = Array.isArray(rows) ? rows : [];
+    return list.filter((row) => unitAllowed(user, row.unit_id));
+  }
+  filter += '&order=id.asc';
+  const pageSize = 1000;
+  const rows = [];
+  for (let offset = 0; offset < 20000; offset += pageSize) {
+    const page = await rest('GET', `${filter}&limit=${pageSize}&offset=${offset}`);
+    const list = Array.isArray(page) ? page : [];
+    rows.push(...list);
+    if (list.length < pageSize) break;
+  }
+  return rows.filter((row) => unitAllowed(user, row.unit_id));
 }
 
 async function listCatalog(user) {

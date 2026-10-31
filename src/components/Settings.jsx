@@ -14,6 +14,7 @@ import { agentPortalUrl, normalizeGuestOrigin } from '../lib/guestStayUrl';
 import { fetchSmsCredit } from '../lib/staffSmsApi';
 import BookingRestrictionsSettings from './BookingRestrictionsSettings';
 import ConnectedAgentsSettings from './ConnectedAgentsSettings';
+import GoogleContactsSettings from './GoogleContactsSettings';
 
 const LANGUAGES = FIELD_UI_LANGUAGES;
 
@@ -554,7 +555,8 @@ export default function Settings({ theme, setTheme, sessionUser, onSessionUserUp
                     { id: 'sop', label: t('SETTINGS_TAB_SOP', 'משימות') },
                     { id: 'holidays', label: t('SETTINGS_TAB_HOLIDAYS', 'חגים') }
                   ] : []),
-                  ...(canOpenAgents ? [{ id: 'agents-connected', label: 'סוכנים מחוברים' }] : [])
+                  ...(canOpenAgents ? [{ id: 'agents-connected', label: 'סוכנים מחוברים' }] : []),
+                  ...(isManager ? [{ id: 'google-contacts', label: 'אנשי קשר' }] : [])
                 ].map((item) => (
                   <button
                     key={item.id}
@@ -705,6 +707,8 @@ export default function Settings({ theme, setTheme, sessionUser, onSessionUserUp
                 <BookingRestrictionsSettings tenantId={tenantId} isLight={isLight} t={t} />
               ) : tab === 'agents-connected' ? (
                 <ConnectedAgentsSettings isLight={isLight} />
+              ) : tab === 'google-contacts' ? (
+                <GoogleContactsSettings isLight={isLight} />
               ) : (
                 <StaffTab
                   isLight={isLight}

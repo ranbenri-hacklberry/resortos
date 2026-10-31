@@ -36,6 +36,7 @@ import {
   sniffIdPhoto,
   stripIdPhoto
 } from '../../lib/idPhoto.js';
+import { scanGuestId } from '../../lib/idScan.js';
 import { allCabinsPaid, applyPaySplitView, resolveStayUnitId } from '../../lib/paySplit.js';
 import { verifyStaffPin } from '../../lib/staffPin.js';
 import { normalizeBalancePreference } from '../../lib/balancePref.js';
@@ -49,6 +50,7 @@ import {
   RAMOT_GATE_CODE,
   UNIT_PROPERTY
 } from '../../lib/unitNames.js';
+import { loadCalendarReplica } from '../../lib/calendarReplica.js';
 
 const TOKEN_RE = /^tok_[A-Za-z0-9_-]+$/;
 const BOOKING_PREFIX = 'booking:';
@@ -319,6 +321,7 @@ function publicBooking(row) {
     id: row.id,
     tenant_id: row.tenant_id,
     unit_id: row.unit_id,
+    is_cabin_portal: Boolean(row.is_cabin_portal),
     guest_name: inStay ? firstName : row.guest_name,
     guest_email: inStay ? null : row.guest_email,
     guest_phone: inStay ? null : row.guest_phone,
@@ -686,7 +689,7 @@ async function readIdPhotoUpload(request) {
   return new Uint8Array(await file.arrayBuffer());
 }
 
-export async function saveGuestIdPhoto(env, token, row, bytes) {
+export async function saveGuestIdPhoto(env, token, row, bytes, waitUntil) {
   const mime = sniffIdPhoto(bytes);
   if (!mime) return { error: 'BAD_IMAGE', status: 400 };
   const key = idPhotoKeyBytes(env?.ID_PHOTO_KEY);
@@ -707,7 +710,22 @@ export async function saveGuestIdPhoto(env, token, row, bytes) {
     updated_at: receivedAt
   };
   await persistGuestRow(env, token, stored);
+  // Ran 2026-10-24: scan with Grok in the background; store only decision + name + reasons on the stay.
+  const scanJob = runGuestIdScan(env, token, bytes, mime, row?.guest_name, receivedAt);
+  if (typeof waitUntil === 'function') waitUntil(scanJob); else await scanJob;
   return { ok: true, received_at: receivedAt };
+}
+
+export async function runGuestIdScan(env, token, bytes, mime, guestName, receivedAt, scan = scanGuestId) {
+  try {
+    const summary = await scan(env, bytes, mime, guestName);
+    const fresh = (await readBooking(env, token)) || null;
+    if (!fresh || fresh.stay?.id_photo_received_at !== receivedAt) return summary; // newer upload wins
+    await persistGuestRow(env, token, { ...fresh, stay: stripIdPhoto({ ...(fresh.stay || {}), id_scan: summary }), updated_at: new Date().toISOString() });
+    return summary;
+  } catch {
+    return null;
+  }
 }
 
 export async function loadGuestIdPhoto(env, token) {
@@ -722,7 +740,114 @@ export async function loadGuestIdPhoto(env, token) {
   }
 }
 
+function israelTodayIso() {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date());
+  } catch (_) {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
+function buildCabinPortalBooking(unitId, today = israelTodayIso()) {
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const prop = UNIT_PROPERTY[unitId] || '';
+  const wifiList = (UNIT_WIFI[unitId] && UNIT_WIFI[unitId].length)
+    ? UNIT_WIFI[unitId]
+    : (CATALOG_WIFI[prop] || []);
+  const wifi = wifiList[0] || null;
+  const lockbox = CATALOG_LOCKBOX[unitId] || '';
+  return {
+    id: `cabin_${unitId}`,
+    unit_id: unitId,
+    guest_name: 'אורחי הסוויטה',
+    guest_phone: '',
+    check_in_date: today,
+    check_out_date: tomorrow,
+    booking_status: 'CHECKED_IN',
+    payment_status: 'PAID',
+    payment_mode: 'CASH_TRUST',
+    is_cabin_portal: true,
+    total_price_agorot: 0,
+    deposit_agorot: 0,
+    checkout_token: `tok_unit_${unitId}`,
+    stay: {
+      cabin_ready: true,
+      guest_checked_in_at: new Date().toISOString(),
+      wifi_ssid: wifi?.ssid || null,
+      wifi_password: wifi?.password || null,
+      wifi_networks: wifiList,
+      lockbox_code: lockbox,
+      door_pin: lockbox,
+      gate_code: RAMOT_GATE_CODE,
+      checkout_time: '11:00',
+      folio: []
+    }
+  };
+}
+
+function isHoldBlock(name, notes) {
+  const text = `${name || ''} ${notes || ''}`;
+  return /סגור|תפוס|שיפוצ|חסום|לא למכיר|לא להשכר|לא זמין|לא פנוי|לא נקי|מקולקל|תחזוק|מגורי צוות/i.test(text);
+}
+
+async function findActiveBookingForUnit(env, unitId) {
+  if (!unitId) return null;
+  const today = israelTodayIso();
+  if (env.STAY_DB) {
+    try {
+      await ensureGuestBookingTable(env);
+      const rows = await env.STAY_DB.prepare(
+        `SELECT booking_json FROM guest_bookings 
+         WHERE json_extract(booking_json, '$.unit_id') = ?1 
+           AND json_extract(booking_json, '$.check_in_date') <= ?2 
+           AND json_extract(booking_json, '$.check_out_date') >= ?2 
+           AND json_extract(booking_json, '$.booking_status') != 'CANCELED' 
+         ORDER BY 
+           (json_extract(booking_json, '$.booking_status') = 'CHECKED_IN') DESC,
+           (json_extract(booking_json, '$.check_in_date') = ?2) DESC,
+           json_extract(booking_json, '$.check_in_date') DESC
+         LIMIT 5`
+      ).bind(unitId, today).all();
+      for (const row of (rows?.results || [])) {
+        if (!row?.booking_json) continue;
+        const parsed = JSON.parse(row.booking_json);
+        if (isHoldBlock(parsed.guest_name, parsed.special_requests)) continue;
+        const overlay = await readStayOverlay(env, parsed.checkout_token);
+        if (overlay) parsed.stay = mergeStay(parsed.stay, overlay);
+        return parsed;
+      }
+    } catch (err) {
+      console.warn('[findActiveBookingForUnit DB error]', err);
+    }
+  }
+
+  try {
+    const replica = await loadCalendarReplica(env);
+    const stays = Array.isArray(replica?.stays) ? replica.stays : [];
+    const active = stays.find((s) => (
+      s.unit_id === unitId &&
+      s.check_in_date <= today &&
+      s.check_out_date >= today &&
+      s.booking_status !== 'CANCELED' &&
+      !isHoldBlock(s.guest_name, s.special_requests)
+    ));
+    if (active?.checkout_token) {
+      const full = await readBooking(env, active.checkout_token);
+      if (full && !isHoldBlock(full.guest_name, full.special_requests)) return full;
+      if (!isHoldBlock(active.guest_name, active.special_requests)) return active;
+    }
+  } catch (err) {
+    console.warn('[findActiveBookingForUnit replica error]', err);
+  }
+
+  return null;
+}
+
 export async function readBooking(env, token) {
+  if (token && token.startsWith('tok_unit_')) {
+    const unitId = token.replace('tok_unit_', '');
+    return buildCabinPortalBooking(unitId);
+  }
   const raw = await readGuestBooking(env, token);
   if (!raw) return null;
   const overlay = await readStayOverlay(env, token);
@@ -774,9 +899,12 @@ export async function onRequest(context) {
 
 async function handleCheckout(context) {
   const { request, env, params } = context;
-  const segments = [].concat(params.path || []).filter(Boolean);
+  const rawPath = Array.isArray(params.path) ? params.path.join('/') : String(params.path || '');
+  const segments = rawPath.split('/').filter(Boolean);
   const method = request.method.toUpperCase();
   const head = segments[0] || '';
+  const urlObj = new URL(request.url);
+  const queryUnit = urlObj.searchParams.get('unit') || '';
 
   if (method === 'OPTIONS') {
     return new Response(null, {
@@ -813,6 +941,21 @@ async function handleCheckout(context) {
     const saved = await persistGuestRow(env, row.checkout_token, row);
     if (!saved) return json({ error: 'MAILBOX_WRITE_FAILED' }, 503);
     return json(publicBooking(row));
+  }
+
+  if (((head === 'unit' && segments[1]) || (!head && queryUnit)) && method === 'GET') {
+    const unitId = segments[1] || queryUnit;
+    let row = await findActiveBookingForUnit(env, unitId);
+    if (!row) {
+      row = buildCabinPortalBooking(unitId, israelTodayIso());
+    } else {
+      const autoIn = applyPaidArrivalCheckin(row);
+      if (autoIn) {
+        await persistGuestRow(env, row.checkout_token, autoIn);
+        row = autoIn;
+      }
+    }
+    return json(publicView(row, unitId));
   }
 
   if (head === 'hyp' && (method === 'GET' || method === 'POST')) {
@@ -980,7 +1123,7 @@ async function handleCheckout(context) {
     }
     if (method !== 'POST') return json({ error: 'METHOD' }, 405);
     const bytes = await readIdPhotoUpload(request);
-    const saved = await saveGuestIdPhoto(env, token, row, bytes || new Uint8Array());
+    const saved = await saveGuestIdPhoto(env, token, row, bytes || new Uint8Array(), context.waitUntil?.bind(context));
     if (saved.error) return json({ error: saved.error }, saved.status);
     return json({ ok: true, received_at: saved.received_at });
   }
@@ -1394,6 +1537,7 @@ async function handleCheckout(context) {
     const keepStatus = row.booking_status === 'CHECKED_IN' || row.booking_status === 'CHECKED_OUT'
       ? row.booking_status
       : (hypAlreadyPaid(row) || hypDepositPaid(row) ? 'CONFIRMED' : row.booking_status);
+    const payMode = pref === 'CASH' ? 'CASH_TRUST' : (body.payment_mode || row.payment_mode || 'CREDIT_DEPOSIT');
     const stored = {
       ...row,
       guest_name: guestName,
@@ -1402,6 +1546,7 @@ async function handleCheckout(context) {
       booking_status: keepStatus,
       payment_status: row.payment_status || 'UNPAID',
       balance_payment_preference: pref,
+      payment_mode: payMode,
       expires_at: stayExpiresAt({ ...row, booking_status: keepStatus === 'PENDING' ? 'CONFIRMED' : keepStatus }),
       stay: {
         ...(row.stay || { cabin_ready: false, folio: [], checkout_time: '11:00' }),

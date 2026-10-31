@@ -5,6 +5,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createStaff, deactivateAgent, deactivateStaff, getAttendanceSettings, getSharedTrackerDoc, getStaffMe, listAgents, listStaff, listStaffDirectory, loginStaff, logoutStaff, requireManagerStaff, requireStaff, revealStaffPassword, saveSharedTrackerDoc, setAttendanceSettings, updateStaff, upsertAgent } from './auth.js';
 import { tryHandleOps } from './opsGateway.js';
+import { tryHandleMcp } from './mcpHttp.js';
+import { tryHandleGoogleContacts } from './googleContactsHttp.js';
 import { tryHandleClimate } from './climateGateway.js';
 import { tryHandleNetwork } from './routerGateway.js';
 import { tryHandleAssetBeacons } from './assetBeaconWatch.js';
@@ -91,6 +93,8 @@ app.post(
 app.use(express.json());
 app.use(async (req, res, next) => {
     try {
+        if (await tryHandleMcp(req, res)) return;
+        if (await tryHandleGoogleContacts(req, res)) return;
         if (await tryHandleClimate(req, res)) return;
         if (await tryHandleNetwork(req, res)) return;
         if (await tryHandleAssetBeacons(req, res)) return;

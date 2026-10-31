@@ -6,6 +6,8 @@
 import { guestStayUrl } from './guestStayUrl.js';
 
 export const DEFAULT_CHECKOUT_TIME = '11:00';
+// Ran 2026-10-29: WhatsApp link to Chloe's line with 'צ׳ק-אאוט' prefilled.
+export const CHLOE_WA_CHECKOUT_URL = `https://wa.me/972515262612?text=${encodeURIComponent('צ׳ק-אאוט')}`;
 const STAFF_UNIT_IDS = new Set(['k678', 'k679']);
 
 export function addDaysIso(iso, days) {
@@ -105,6 +107,7 @@ export function buildCheckoutReminder({ guestName, unitName, checkoutTime, stayU
     `בוקר טוב${name ? ` ${name}` : ''}! היום יום העזיבה ${fromUnit(unitName)}. העזיבה ${checkoutTime === MOTZASH ? 'במוצ״ש' : `עד ${checkoutTime || DEFAULT_CHECKOUT_TIME}`}.`
   ];
   if (stayUrl) lines.push(`אפשר לסמן צ׳ק-אאוט או לבקש צ׳ק-אאוט מאוחר בדף האירוח: ${stayUrl}.`);
+  lines.push(`אפשר גם לכתוב לנו בוואטסאפ: ${CHLOE_WA_CHECKOUT_URL}`);
   lines.push('תודה שהתארחתם!');
   return lines.join(' ');
 }
@@ -168,9 +171,8 @@ export function classifyForDate(booking, date, { now = new Date(), unit = null, 
   const ng = nonGuestReason(booking, unit);
   if (ng) return { ...base, send: false, reason: ng, nonGuest: true };
   if (isCheckedOut(booking, { date })) return { ...base, send: false, reason: 'כבר עזב' };
-  // SMS targeting unchanged (Ran 2026-10-22): legacy CHECKED_OUT still skips the SMS,
-  // but it is not shown as a real departure.
-  if (isCheckedOut(booking)) return { ...base, send: false, reason: 'לא נשלח – מסומן CHECKED_OUT בקינרות (עזיבה לא אומתה)', legacyCheckedOut: true };
+  // Ran 2026-10-29: Kinorot CHECKED_OUT on the departure day itself is NOT departure
+  // evidence (sync sets it every morning), so it no longer skips the SMS.
   if (wifiQuietlyLeft(booking, now)) return { ...base, send: false, reason: 'עזב בשקט (WiFi)' };
   const phone = normalizeIsraeliMobile(booking?.guest_phone);
   if (!phone) return { ...base, send: false, reason: booking?.guest_phone ? 'טלפון לא תקין' : 'אין טלפון' };
