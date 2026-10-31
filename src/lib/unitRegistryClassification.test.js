@@ -21,9 +21,13 @@ import {
 import { cabinCatalog } from './cabinCatalog.js';
 import { isFullBuyoutAvailable, PROPERTY_THEMES } from './multiPropertyCatalog.js';
 import { LOCKBOX_BY_UNIT, PROPERTY_SEED, UNIT_PROPERTY } from './guestProfileSeed.js';
-import { answerGuestQuestion } from '../../services/resortos-agent/src/guest/guestKnowledge.js';
+import { answerGuestQuestion } from '../../services/resortos-agent/src/guest/guestKnowledge.ts';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 describe('Unit Registry Cleanup & Classification — Safety & Regression Suite', () => {
   // TEST A: Exact canonical unit ID set

@@ -452,9 +452,8 @@ describe('pipeline: guards & dispatch', () => {
         guest_name: 'דניאל כהן',
         guest_phone: '052-9876543',
         check_in_date: today,
-        check_out_date: '2099-12-31',
+        check_out_date: '2026-10-18',
         booking_status: 'CONFIRMED',
-        payment_status: 'PAID',
         checkout_token: 'tok_guest_777',
       },
     ]);
@@ -492,9 +491,8 @@ describe('pipeline: guards & dispatch', () => {
         guest_name: 'דניאל כהן',
         guest_phone: '052-9876543',
         check_in_date: today,
-        check_out_date: '2099-12-31',
+        check_out_date: '2026-10-18',
         booking_status: 'CONFIRMED',
-        payment_status: 'PAID',
         checkout_token: 'tok_guest_777',
       },
     ]);
@@ -507,8 +505,8 @@ describe('pipeline: guards & dispatch', () => {
     const r = await createPipeline(deps).handleInbound(msg);
     expect(r.handled).toBe(true);
     const reply = deps.sent[0][1];
-    expect(reply).toContain('בהכנה');
-    expect(reply).not.toContain('15:00'); // No rigid 15:00 barrier per Natasha policy
+    expect(reply).toContain('עדיין בהכנה');
+    expect(reply).toContain('15:00');
     expect(reply).not.toContain('2810'); // Must NOT leak key code yet!
     expect(reply).toContain('https://resortos.app/stay/tok_guest_777');
   });
@@ -529,7 +527,6 @@ describe('pipeline: guards & dispatch', () => {
         check_in_date: '2026-10-15',
         check_out_date: '2026-10-18',
         booking_status: 'CONFIRMED',
-        payment_status: 'PAID',
         checkout_token: 'tok_guest_777',
       },
     ]);
@@ -543,9 +540,10 @@ describe('pipeline: guards & dispatch', () => {
     const r = await createPipeline(deps).handleInbound(msg);
     expect(r.handled).toBe(true);
     const reply = deps.sent[0][1];
-    expect(reply).toContain('שאינה תואמת להזמנה');
-    expect(reply).toContain('מטעמי ביטחון ופרטיות');
-    expect(reply).not.toContain('2810'); // Security: Never leak lockbox code
+    // Ran 2026-10-22: wrong-room QR must not reveal the assigned room or any code (was: room name + 2810 + stay link).
+    expect(reply).toContain('לא תואם להזמנה');
+    expect(reply).not.toContain('נופים בלבן 1');
+    expect(reply).not.toContain('2810');
     expect(reply).not.toContain('2820');
   });
 
@@ -561,8 +559,8 @@ describe('pipeline: guards & dispatch', () => {
     const r = await createPipeline(deps).handleInbound(msg);
     expect(r.handled).toBe(true);
     const reply = deps.sent[0][1];
-    expect(reply).toContain('רגע, אני בודקת את ההזמנה שלך');
-    expect(reply).toContain('שם מלא ותאריכי הגעה');
+    // Ran 2026-10-22 verification flow: first ask whether they have a booking for this cabin today (was: ask booking phone / name+dates).
+    expect(reply).toContain('יש לכם הזמנה ל');
     expect(reply).not.toContain('לא זוהתה הזמנה');
     expect(reply).not.toContain('054-831-7887');
   });
@@ -694,8 +692,8 @@ describe('cleaner exit state machine & numeric fast-path', () => {
     expect(deps.sent).toHaveLength(1);
     expect(deps.sent[0][0]).toBe('66812345678@s.whatsapp.net');
     expect(deps.sent[0][1]).toContain('1 - เรียบร้อยสมบูรณ์ ปิดไฟ/แอร์แล้ว 🟢');
-    expect(deps.sent[0][1]).toContain('2 - ขาดของ / ผ้าปู / ผ้าเช็ดตัว 🟡');
-    expect(deps.sent[0][1]).toContain('3 - มีจุดชำรุดเสียหายต้องซ่อม 🔴');
+    expect(deps.sent[0][1]).toContain('3 - ขาดของ / ผ้าปู / ผ้าเช็ดตัว 🟡');
+    expect(deps.sent[0][1]).toContain('2 - มีจุดชำรุดเสียหายต้องซ่อม 🔴');
     expect(pipeline.getSession('66812345678')).toEqual({
       role: 'CLEANER',
       state: 'AWAITING_STATUS',
@@ -741,16 +739,16 @@ describe('cleaner exit state machine & numeric fast-path', () => {
     expect(pipeline.getSession('66812345678')).toBeUndefined();
   });
 
-  it('cleaner option 2: transitions to AWAITING_SUPPLIES, prompts for details, reports supplies upon response', async () => {
+  it('cleaner option 3: transitions to AWAITING_SUPPLIES, prompts for details, reports supplies upon response', async () => {
     const deps = makeDeps();
     const pipeline = createPipeline(deps);
     await pipeline.triggerRoomExit({ cleanerPhone: '66812345678', roomId: 'k680' });
     deps.sent.length = 0;
 
-    // Cleaner presses 2
+    // Cleaner presses 3 (missing; numbering changed 2026-10-29)
     const msg2 = {
       key: { remoteJid: '66812345678@s.whatsapp.net', fromMe: false },
-      message: { conversation: '2' },
+      message: { conversation: '3' },
     } as any;
     const r2 = await pipeline.handleInbound(msg2);
     expect(r2.handled).toBe(true);
@@ -778,16 +776,16 @@ describe('cleaner exit state machine & numeric fast-path', () => {
     expect(pipeline.getSession('66812345678')).toBeUndefined();
   });
 
-  it('cleaner option 3: transitions to AWAITING_MAINTENANCE, prompts for details, reports maintenance upon response', async () => {
+  it('cleaner option 2: transitions to AWAITING_MAINTENANCE, prompts for details, reports maintenance upon response', async () => {
     const deps = makeDeps();
     const pipeline = createPipeline(deps);
     await pipeline.triggerRoomExit({ cleanerPhone: '962791234567', roomId: 'k681' });
     deps.sent.length = 0;
 
-    // Arabic cleaner Khaled presses 3
+    // Arabic cleaner Khaled presses 2 (repair; numbering changed 2026-10-29)
     const msg3 = {
       key: { remoteJid: '962791234567@s.whatsapp.net', fromMe: false },
-      message: { conversation: '3' },
+      message: { conversation: '2' },
     } as any;
     const r3 = await pipeline.handleInbound(msg3);
     expect(r3.handled).toBe(true);
@@ -890,8 +888,8 @@ describe('manager short status & numeric action menu', () => {
     const reply = deps.sent[0][1];
     expect(reply).toContain('נופים בלבן 1');
     expect(reply).toContain('2810');
-    expect(reply).toContain('סטטוס ניקיון: ממתין לניקיון 🔴');
-    expect(reply).toContain('סטטוס תפוסה: פנוי ⚪');
+    expect(reply).toContain('סטטוס: ממתין לניקיון 🔴');
+    expect(reply).not.toContain('סטטוס תפוסה');
     expect(reply).toContain('1 - שנה סטטוס');
     expect(reply).toContain('2 - הוסף הערה');
     expect(reply).toContain('3 - דווח אחזקה או חוסר');
@@ -1336,7 +1334,7 @@ describe('guest knowledge & digital stay Q&A', () => {
     expect(res.handled).toBe(true);
     expect(deps.sent).toHaveLength(1);
     const reply = deps.sent[0][1];
-    expect(reply).toContain('TP-Link_FA30_5G');
+    expect(reply).toContain('TP-LINK_FA30');
     expect(reply).toContain('15107312');
     expect(reply).toContain('https://resortos.app/stay/token-dan-123');
   });
@@ -1390,7 +1388,12 @@ describe('guest knowledge & digital stay Q&A', () => {
   });
 
   it('answers checkout inquiry with 11:00 and digital self check-out', async () => {
+    // Weekday rule (Saturday is 13:00 since Ran 2026-10-31) — pin to a Wednesday.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-04T09:00:00+02:00'));
+    try {
     const deps = setupGuestDeps();
+    deps.resortos.listBookings = vi.fn(async () => [{ ...mockGuestBooking, check_in_date: '2026-11-03', check_out_date: '2026-11-04' } as any]);
     const pipeline = createPipeline(deps);
     const msg = {
       key: { remoteJid: guestJid, fromMe: false },
@@ -1403,6 +1406,21 @@ describe('guest knowledge & digital stay Q&A', () => {
     expect(reply).toContain('11:00');
     expect(reply).toContain('08:00');
     expect(reply).toContain('https://resortos.app/stay/token-dan-123');
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('answers checkout inquiry with 13:00 on Saturday', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-31T09:00:00+02:00'));
+    try {
+      const deps = setupGuestDeps();
+      deps.resortos.listBookings = vi.fn(async () => [{ ...mockGuestBooking, check_in_date: '2026-10-30', check_out_date: '2026-10-31' } as any]);
+      const pipeline = createPipeline(deps);
+      const res = await pipeline.handleInbound({ key: { remoteJid: guestJid, fromMe: false }, message: { conversation: 'מתי שעת העזיבה והצ׳ק אאוט?' } } as any);
+      expect(res.handled).toBe(true);
+      expect(deps.sent[0][1]).toContain('13:00');
+      expect(deps.sent[0][1]).not.toContain('11:00');
+    } finally { vi.useRealTimers(); }
   });
 
   it('handles general question with polite greeting and link to digital stay card', async () => {
@@ -2617,30 +2635,27 @@ describe('S03/S04: late check-out policy, checkout FAQ, office as guest room', (
     return { reply: deps.sent[0][1], deps };
   }
 
-  it('late check-out, room free: policy (manager approval, first hour free then 125 ₪/hour, availability), no confirmation', async () => {
+  // Ran 2026-10-22: late check-out always goes to the manager; never approve/deny, no fee, no availability verdict.
+  it('late check-out, room free: hands the request to the manager, no fee, no confirmation', async () => {
     const { reply } = await ask("אפשר לעשות צ'ק אאוט מאוחר מחר?", [nofim], [mkBooking()]);
-    expect(reply).toContain('מנהל המתחם');
-    expect(reply).toContain('125 ₪');
-    expect(reply).toContain('זמינות');
-    expect(reply).toContain('נחזור אליכם');
+    expect(reply).toMatch(/קיבלתי את הבקשה לצ׳ק־אאוט מאוחר.*(?:אני מעבירה אותה עכשיו למנהל|העברתי אותה למנהל, ונחזור אליכם מחר בבוקר)/);
+    expect(reply).not.toContain('125 ₪');
     expect(reply).not.toContain('15:00');
     expect(reply).not.toMatch(/מאושר|אושר|confirmed/);
-    expect(reply).not.toContain('לפי ההזמנה שלכם'); // asked for tomorrow = actual checkout
   });
 
-  it('late check-out, next booking starts on the checkout day: politely not possible', async () => {
+  it('late check-out, next booking starts on the checkout day: still handed to the manager, guest not told it is taken', async () => {
     const next = mkBooking({ id: 'book-next', guest_name: 'אחר', guest_phone: '0501111111', check_in_date: ymd(1), check_out_date: ymd(3) });
     const { reply } = await ask('late checkout tomorrow please', [nofim], [mkBooking(), next]);
-    expect(reply).toContain('already booked'); // English message → English reply (S17)
-    expect(reply).toContain(dm(ymd(1)));
-    expect(reply).not.toContain('125 ₪');
+    expect(reply).toMatch(/late check-out request.*(?:passing it to the manager now|passed it to the manager)/); // English → English (S17)
+    expect(reply).not.toMatch(/already booked|not possible|125/);
     expect(reply).not.toContain('אחר'); // no other guest's details
   });
 
-  it('late check-out on a different day than the booking: states the real checkout date', async () => {
+  it('late check-out on a different day than the booking: handed to the manager, SMS notes the requested day', async () => {
     const { reply } = await ask('אפשר להישאר עוד קצת מחר?', [nofim], [mkBooking({ check_out_date: ymd(5) })]);
-    expect(reply).toContain(`הצ׳ק-אאוט הוא ב־${dm(ymd(5))}`);
-    expect(reply).toContain('125 ₪');
+    expect(reply).toMatch(/קיבלתי את הבקשה לצ׳ק־אאוט מאוחר.*(?:אני מעבירה אותה עכשיו למנהל|העברתי אותה למנהל, ונחזור אליכם מחר בבוקר)/);
+    expect(reply).not.toContain('125 ₪');
   });
 
   it('generic checkout answer never mentions the check-in time', async () => {
@@ -2698,31 +2713,31 @@ describe('S03 alert + S05 fault priority and word-boundary keywords', () => {
     return { deps, say };
   }
 
-  it('late check-out with a free room sends ONE manager SMS (deduped per booking/day), with no codes or phones', async () => {
+  it('late check-out sends a manager SMS on every request (Ran 2026-10-22), with no codes; wa.me link to the guest', async () => {
     const { deps, say } = mk([mkBooking()]);
     await say("אפשר לעשות צ'ק אאוט מאוחר מחר?");
     await say('late checkout please');
     await new Promise((r) => setTimeout(r, 0));
-    expect(deps.notifyManagerSms).toHaveBeenCalledTimes(1);
+    expect(deps.notifyManagerSms).toHaveBeenCalledTimes(2);
     const sms = (deps.notifyManagerSms as any).mock.calls[0][0] as string;
     expect(sms).toContain('דניאל כהן');
     expect(sms).toContain('נופים בלבן 1');
     expect(sms).toContain(`${ymd(1).slice(8, 10)}/${ymd(1).slice(5, 7)}`);
     expect(sms).toContain('צ׳ק-אאוט מאוחר');
-    expect(sms).toContain('פנוי');
     expect(sms).not.toContain('2810');
     expect(sms).not.toContain('#2464');
-    expect(sms).not.toMatch(/05\d[- ]?\d{7}|9725\d{8}/);
+    expect(sms).not.toContain('125');
+    expect(sms).toContain('wa.me/972529876543');
     expect(deps.send).toHaveBeenCalledTimes(2); // guest replies only; no WhatsApp to staff
     expect(deps.sent.every(([jid]) => jid === guestJid)).toBe(true);
   });
 
-  it('late check-out with the room taken sends no manager SMS', async () => {
+  it('late check-out with the room taken still sends the manager SMS (Ran 2026-10-22)', async () => {
     const next = mkBooking({ id: 'book-next', guest_phone: '0501111111', check_in_date: ymd(1), check_out_date: ymd(2) });
     const { deps, say } = mk([mkBooking(), next]);
     await say("אפשר צ'ק אאוט מאוחר?");
     await new Promise((r) => setTimeout(r, 0));
-    expect(deps.notifyManagerSms).not.toHaveBeenCalled();
+    expect(deps.notifyManagerSms).toHaveBeenCalledTimes(1);
   });
 
   it('"הטלוויזיה לא נדלקת" is a TV fault (unit TV steps + call offer), not the fuel list', async () => {
@@ -2763,7 +2778,7 @@ describe('S03 alert + S05 fault priority and word-boundary keywords', () => {
     expect(answerGuestQuestion('זה דחוף', ctx)).toBeNull();
     expect(answerGuestQuestion('המיטות מתאימות? אנחנו מתאימים', ctx)).toBeNull();
     // real keywords with Hebrew prefixes still match
-    expect(answerGuestQuestion('מה הסיסמה לווייפי?', ctx)).toContain('TP-Link_FA30_5G');
+    expect(answerGuestQuestion('מה הסיסמה לווייפי?', ctx)).toContain('TP-LINK_FA30');
     expect(answerGuestQuestion('יש חוף קרוב?', ctx)).toContain('חופי כנרת');
     expect((await placeMenuFor('איפה יש סופר?'))?.text).toContain('איפה קונים');
     expect((await placeMenuFor('בא לנו יין טוב'))?.text).toContain('אטרקציות');
@@ -2835,7 +2850,7 @@ describe('S08: broader fault intent, groceries need shopping words', () => {
     }
     const { answerGuestQuestion } = await import('./guest/guestKnowledge.js');
     const ctx = { booking: { id: 'x' } as any, unitId: 'k685', roomName: 'נופים בלבן 1', room: nofim };
-    expect(answerGuestQuestion('האינטרנט לא עובד', ctx)).toContain('TP-Link_FA30_5G');
+    expect(answerGuestQuestion('האינטרנט לא עובד', ctx)).toContain('TP-LINK_FA30');
     expect(answerGuestQuestion('הכספת לא נפתחת', ctx)).toContain('2810');
   });
 });

@@ -1,7 +1,6 @@
 import { createHypReportFinder, startPayLinkWatch } from './manager/payLinkWatch.js';
 import { createGuestDepartedMarker } from './integration/guestDeparted.js';
 import { shouldTakeoverOnManualSend } from './integration/manualSendTakeover.js';
-import { logConversation } from './conversationLog.js';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import pino from 'pino';
 import { sendManagerSms } from './integration/managerSms.js';
@@ -12,6 +11,7 @@ import { Transcriber, transcribeVoiceNote, isAudioMessage, extractText } from '.
 import { OllamaClient } from './llm/client.js';
 import { ResortOSClient } from './integration/resortos.js';
 import { createPipeline } from './pipeline.js';
+import { logConversation } from './conversationLog.js';
 import { generateRoomQrPng } from './whatsapp/qrGenerator.js';
 import { resolveRoomByAlias } from './llm/client.js';
 import { gmailStatus } from './gmail/mailbox.js';
@@ -79,6 +79,9 @@ const pipeline = createPipeline({
 
 // Central inbound ingress:
 // ChannelRouter already handles deduplication, human-takeover detection, and FIFO chat queues.
+// Ran 2026-10-28: paid payment-link watcher (off unless HYP_PAYLINK_WATCH_ENABLED=true; manager-only notice).
+startPayLinkWatch({ finder: createHypReportFinder(), notifyManager: async (jid, text) => { await router.sendText('resortos', jid, text, { isBot: true }); } });
+
 router.on('inbound', async (envelope) => {
   try {
     await refreshStaff();

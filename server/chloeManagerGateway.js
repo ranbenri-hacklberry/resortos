@@ -176,20 +176,53 @@ function formatPayment(status, totalPriceAgorot = 0, depositAgorot = 0) {
   };
 }
 
-function extractCheckoutTime(booking) {
+export function isSaturdayIso(iso) {
+  return Boolean(iso) && new Date(`${String(iso).slice(0, 10)}T12:00:00Z`).getUTCDay() === 6;
+}
+
+export function extractCheckoutTime(booking) {
   if (!booking) return '11:00';
+  const coutDate = booking.check_out_date;
+  const isSat = isSaturdayIso(coutDate);
+  const defaultTime = isSat ? '13:00' : '11:00';
+
   const req = String(booking.special_requests || '');
-  const outMatch = req.match(/\|out:([^|]+)/) || req.match(/out:([^|]+)/);
+  const stay = booking.stay || {};
+  const rawStay = String(stay.checkout_time || stay.late_until || booking.checkout_time || '').replace('+1', '').trim();
+
+  // 1. motzash override
+  if (/motzash|מוצ/i.test(req) || /motzash|מוצ/i.test(rawStay)) {
+    return 'מוצ״ש';
+  }
+
+  // 2. out: token in special_requests (out:15:00 is form default, not agreement -> ignore)
+  const outMatch = req.match(/\|out:([^|]+)/) || req.match(/out:\s*([^|\s]+)/);
   if (outMatch) {
     const raw = outMatch[1].trim();
     if (raw === 'motzash' || raw === 'מוצש' || raw === 'מוצ״ש') return 'מוצ״ש';
-    return raw;
+    const m = raw.match(/^(\d{1,2}:\d{2})$/);
+    if (m) {
+      const padded = m[1].padStart(5, '0');
+      if (padded !== '15:00') return padded;
+    } else if (raw && raw !== '15:00') {
+      return raw;
+    }
   }
+
+  // 3. Free text notes (excluding 15:00)
   const noteMatch = req.match(/(?:יציאה|checkout)\s*(?:עד|בשעה|ב)?\s*(\d{1,2}(?::\d{2})?)/i);
-  if (noteMatch) return noteMatch[1].includes(':') ? noteMatch[1] : `${noteMatch[1]}:00`;
-  if (booking.checkout_time) return booking.checkout_time;
-  if (booking.stay?.checkout_time) return booking.stay.checkout_time;
-  return '11:00';
+  if (noteMatch) {
+    const time = noteMatch[1].includes(':') ? noteMatch[1].padStart(5, '0') : `${noteMatch[1].padStart(2, '0')}:00`;
+    if (time !== '15:00') return time;
+  }
+
+  // 4. Stay checkout time (excluding 15:00)
+  if (/^\d{1,2}:\d{2}$/.test(rawStay)) {
+    const padded = rawStay.padStart(5, '0');
+    if (padded !== '15:00' && padded !== '11:00') return padded;
+  }
+
+  return defaultTime;
 }
 
 function findUnitFromQuery(query, units) {
@@ -618,6 +651,7 @@ export async function handleChloeManagerChat(user, body, { listUnits, listBookin
         can_clean_now: canCleanNow,
         is_still_in_house: isStillInHouse,
         checkout_time: checkoutTime,
+        checkout_date: checkoutBooking?.check_out_date || '',
         checkout_guest: checkoutBooking?.guest_name || ''
       };
     });
@@ -642,7 +676,7 @@ export async function handleChloeManagerChat(user, body, { listUnits, listBookin
 
     if (stillInHouseCount > 0) {
       reply += `⏳ **עוד בשהייה · יוצאים היום (${stillInHouseCount} יחידות):**\n`;
-      reply += `• אורחים שעדיין בחדר (כגון מאיה 3 עם יציאה ב-15:00) — אין להיכנס לפני אישור עזיבה.\n\n`;
+      reply += `• אורחים שעדיין בחדר — אין להיכנס לפני אישור עזיבה.\n\n`;
     }
 
     reply += `✨ **עכשיו כבר אפשר לנקות (${canCleanCount} יחידות):**\n`;

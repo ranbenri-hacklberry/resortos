@@ -45,34 +45,21 @@ export interface BookingRow {
   total_price_agorot?: number | null;
   deposit_agorot?: number | null;
   deleted_at?: string | null;
-  is_birthday?: boolean | null;
-  birthday_note?: string | null;
-  upsell_description?: string | null;
-  upsell_price?: number | null;
   [k: string]: unknown;
 }
 
 export type ReadyResult = { ok: true } | { ok: false; skipped: 'maintenance_open' | 'unit_not_found' };
 
-/**
- * Authoritative check if reservation is fully paid.
- * ResortOS policy requires full payment confirmation before access is authorized.
- */
-export function isBookingPaid(b?: BookingRow | null): boolean {
-  if (!b) return false;
-  if (b.payment_status === 'PAID' || b.financial_status === 'PAID') return true;
-  const total = Number(b.total_price_agorot);
-  const deposit = Number(b.deposit_agorot);
-  if (Number.isFinite(total) && Number.isFinite(deposit) && total > 0 && deposit >= total) {
-    return true;
-  }
-  return false;
-}
-
 export class ResortOSError extends Error {
   constructor(public status: number, public code: string, path: string) {
     super(`ResortOS ${path} -> HTTP ${status} ${code}`);
   }
+}
+
+function shiftYmd(ymd: string, days: number): string {
+  const d = new Date(`${ymd}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }
 
 export class ResortOSClient {
@@ -143,6 +130,17 @@ export class ResortOSClient {
   }
 
   async listBookings(params?: { from?: string; to?: string }): Promise<BookingRow[]> {
+    // Ran 2026-10-22 (D1 / עמית מלכה): the server filters check_in_date < to, so {from: today, to: today}
+    // dropped today's check-ins, and no params returned only the oldest 1000 rows. Always ask for a window
+    // (default yesterday..today+30), extend `to` by one day, then keep check_in <= to client-side.
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date());
+    const from = params?.from || shiftYmd(today, -1);
+    const to = params?.to || shiftYmd(today, 30);
+    const rows = await this.listBookingsRaw({ from, to: shiftYmd(to, 1) });
+    return rows.filter((b) => !b.check_in_date || b.check_in_date <= to);
+  }
+
+  private async listBookingsRaw(params?: { from?: string; to?: string }): Promise<BookingRow[]> {
     const q = new URLSearchParams();
     if (params?.from) q.set('from', params.from);
     if (params?.to) q.set('to', params.to);

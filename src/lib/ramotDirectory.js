@@ -57,7 +57,7 @@ const COMPLEXES = [
     name: 'טאג׳ מאהל',
     query: "טאג' מאהל מושב רמות",
     waze: 'https://waze.com/ul/hsvc6gsskp',
-    wifi: [{ ssid: 'LUTUS', password: '12345678' }],
+    wifi: [{ ssid: 'lotus', password: '12345678' }],
     units: [
       { id: 'k808', name: "טאג' מאהל · בקתה 1" },
       { id: 'k809', name: "טאג' מאהל · בקתה 2" },

@@ -57,17 +57,8 @@ export function isArrivalAfterCheckin(booking, today = israelToday(), now = new 
 
 export function isPaidForGuestCheckin(booking) {
   if (!booking) return false;
-  if (booking.payment_status === 'PAID') return true;
-  if (booking.balance_paid || booking.stay?.balance_paid) return true;
-  if (booking.payment_mode === 'BOOKING' || booking.payment_mode === 'VOUCHER') return true;
-  if (booking.stay?.payment_choice === 'ALREADY_PAID' || booking.payment_mode === 'ALREADY_PAID' || booking.stay?.payment_choice === 'VOUCHER') return true;
-  const total = Math.round((booking.total_price_agorot || 0) / 100);
-  const deposit = Math.round((booking.deposit_agorot || 0) / 100);
-  const payNow = booking.payment_mode === 'CASH_TRUST' ? 0 : booking.payment_mode === 'CREDIT_FULL' ? total : deposit;
-  const balance = Math.max(0, total - payNow);
-  if (total > 0 && balance <= 0.5) return true;
   if (isFullyPaid(booking)) return true;
-  if (booking.stay?.hyp?.paid || booking.stay?.hyp_intent?.status === 'paid') return true;
+  if (booking.stay?.hyp?.paid || booking.stay?.balance_paid || booking.balance_paid) return true;
   return false;
 }
 

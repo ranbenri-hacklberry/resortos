@@ -143,14 +143,39 @@ describe('real departures (Ran 2026-10-22)', () => {
   });
 });
 
-describe('Saturday 13:00 rule (Ran 2026-10-31)', async () => {
+describe('Saturday 13:00 rule & out: parsing (Ran 2026-10-31)', async () => {
   const m = await import('./checkoutReminder.js');
-  it('Saturday departure → 13:00', () => expect(m.checkoutTimeFor({ check_out_date: '2026-10-31' })).toBe('13:00'));
-  it('weekday departure → 11:00', () => expect(m.checkoutTimeFor({ check_out_date: '2026-11-02' })).toBe('11:00'));
-  it('motzash note → מוצ״ש text', () => {
-    const t = m.checkoutTimeFor({ check_out_date: '2026-10-31', special_requests: 'out:motzash|in:15:00' });
-    expect(t).toBe('מוצ״ש');
-    expect(m.buildCheckoutReminder({ guestName: 'ישי', unitName: 'x', checkoutTime: t })).toContain('העזיבה במוצ״ש');
+  const gw = await import('../../server/chloeManagerGateway.js');
+
+  it('out:15:00 בשבת מחזיר 13:00', () => {
+    expect(m.checkoutTimeFor({ check_out_date: '2026-10-31', special_requests: 'out:15:00' })).toBe('13:00');
+    expect(gw.extractCheckoutTime({ check_out_date: '2026-10-31', special_requests: 'out:15:00' })).toBe('13:00');
   });
-  it('out:15:00 default ignored', () => expect(m.checkoutTimeFor({ check_out_date: '2026-10-31', special_requests: 'out:15:00' })).toBe('13:00'));
+
+  it('out:15:00 ביום חול מחזיר 11:00', () => {
+    expect(m.checkoutTimeFor({ check_out_date: '2026-11-02', special_requests: 'out:15:00' })).toBe('11:00');
+    expect(gw.extractCheckoutTime({ check_out_date: '2026-11-02', special_requests: 'out:15:00' })).toBe('11:00');
+  });
+
+  it('out:motzash מחזיר מוצ״ש', () => {
+    expect(m.checkoutTimeFor({ check_out_date: '2026-10-31', special_requests: 'out:motzash|in:15:00' })).toBe('מוצ״ש');
+    expect(gw.extractCheckoutTime({ check_out_date: '2026-10-31', special_requests: 'out:motzash' })).toBe('מוצ״ש');
+    expect(gw.extractCheckoutTime({ check_out_date: '2026-10-31', special_requests: 'out:מוצש' })).toBe('מוצ״ש');
+    expect(gw.extractCheckoutTime({ check_out_date: '2026-10-31', special_requests: 'מוצ״ש' })).toBe('מוצ״ש');
+  });
+
+  it('out:14:00 מחזיר 14:00', () => {
+    expect(m.checkoutTimeFor({ check_out_date: '2026-10-28', special_requests: 'out:14:00' })).toBe('14:00');
+    expect(gw.extractCheckoutTime({ check_out_date: '2026-10-28', special_requests: 'out:14:00' })).toBe('14:00');
+  });
+
+  it('Saturday departure without override → 13:00', () => {
+    expect(m.checkoutTimeFor({ check_out_date: '2026-10-31' })).toBe('13:00');
+    expect(gw.extractCheckoutTime({ check_out_date: '2026-10-31' })).toBe('13:00');
+  });
+
+  it('weekday departure without override → 11:00', () => {
+    expect(m.checkoutTimeFor({ check_out_date: '2026-11-02' })).toBe('11:00');
+    expect(gw.extractCheckoutTime({ check_out_date: '2026-11-02' })).toBe('11:00');
+  });
 });

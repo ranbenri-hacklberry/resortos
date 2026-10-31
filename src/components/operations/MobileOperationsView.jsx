@@ -320,8 +320,13 @@ export default function MobileOperationsView({
 
       const hours = stayHoursFromBooking(checkoutBooking);
       const parsedNotes = !hours.checkout ? parseStayHoursFromNotes(checkoutBooking?.special_requests) : {};
-      const rawOut = hours.checkout || parsedNotes.checkout || checkoutBooking?.stay?.checkout_time || checkoutBooking?.checkout_time;
-      const checkoutTime = formatStayHourLabel(rawOut) || '11:00';
+      const rawOutCandidate = (hours.checkout && hours.checkout !== '15:00' ? hours.checkout : null)
+        || (parsedNotes.checkout && parsedNotes.checkout !== '15:00' ? parsedNotes.checkout : null)
+        || (checkoutBooking?.stay?.checkout_time && checkoutBooking.stay.checkout_time !== '15:00' ? checkoutBooking.stay.checkout_time : null)
+        || (checkoutBooking?.checkout_time && checkoutBooking.checkout_time !== '15:00' ? checkoutBooking.checkout_time : null);
+      const isSat = Boolean(checkoutBooking?.check_out_date) && new Date(`${String(checkoutBooking.check_out_date).slice(0, 10)}T12:00:00Z`).getUTCDay() === 6;
+      const defaultTime = isSat ? '13:00' : '11:00';
+      const checkoutTime = formatStayHourLabel(rawOutCandidate) || defaultTime;
 
       return {
         unit,

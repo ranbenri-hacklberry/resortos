@@ -33,8 +33,8 @@ describe('manager room card', () => {
       id: 'k693',
       operational_status: 'READY',
     }, occupancy, room as any);
-    expect(card).toContain('סטטוס ניקיון: מוכן לאורח 🟢');
-    expect(card).toContain('סטטוס תפוסה: פנוי ⚪');
+    expect(card).toContain('סטטוס: מוכן לאורח 🟢');
+    expect(card).not.toContain('סטטוס תפוסה');
   });
 
   it('answers פרטי לקוח with the guest on the room, including a turnover', () => {
@@ -118,11 +118,9 @@ describe('Bug 9: complex weekend check-ins query', () => {
     expect(reply).toBeTruthy();
     expect(reply).toContain('📋 *כניסות בבתי נורית (23-24/10):*');
     expect(reply).toContain('• בתי נורית 1: כניסה 23/10, 2 לילות, 4 אורחים');
-    expect(reply).toContain('• בתי נורית 2: אין כניסה');
     expect(reply).toContain('• בתי נורית 3: כניסה 24/10, לילה, לא ידוע');
-    expect(reply).toContain('• בתי נורית 4: אין כניסה');
-    expect(reply).toContain('• בתי נורית 5: אין כניסה');
-    expect(reply).toContain('• בתי נורית 6: אין כניסה');
+    // Ran 2026-10-28: rooms without arrivals are omitted.
+    expect(reply).not.toContain('אין כניסה');
     // Must NOT contain any guest/demo links
     expect(reply).not.toContain('resortos.app/stay');
     expect(reply).not.toContain('stay/');

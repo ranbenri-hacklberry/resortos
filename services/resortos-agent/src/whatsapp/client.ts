@@ -170,7 +170,6 @@ export class WhatsAppClient extends EventEmitter {
 }
 
 export const KNOWN_STAFF_LIDS: Record<string, string> = {
-  '208190587302068': '972503934696', // ברק
   '170626836910125': '972548317887', // רני
   '249438949924982': '972543387383', // אדם
   '250947087413293': '972557778344', // טופ

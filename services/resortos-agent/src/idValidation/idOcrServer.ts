@@ -275,7 +275,8 @@ const HTML_UI = `<!DOCTYPE html>
               <span id="engineBadge" style="color: var(--success); font-size: 0.75rem;">Neural Engine Active (~50ms)</span>
             </label>
             <select id="engineSelect" style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text); padding: 8px 10px; border-radius: 6px; font-family: inherit; font-size: 0.9rem;" onchange="toggleEngineFields()">
-              <option value="auto" selected>⚡ Auto (Apple Silicon Vision + Fallback) — מומלץ, מיידי ודטרמיניסטי</option>
+              <option value="grok" selected>🧠 Grok Vision (xAI) — JSON קשיח, המערכת מחליטה</option>
+              <option value="auto">⚡ Auto (Apple Silicon Vision + Fallback) — מומלץ, מיידי ודטרמיניסטי</option>
               <option value="apple-vision">🍎 Apple Silicon Vision (Native OCR ~50ms, Offline, No GPU needed)</option>
               <option value="qwen">🤖 Qwen 3.8 / OpenAI Vision API (Mac Studio / Local LAN)</option>
             </select>
@@ -651,7 +652,8 @@ export function startIdOcrServer(port = PORT) {
           {
             endpointUrl: body.endpointUrl || DEFAULT_URL,
             modelName: body.modelName || DEFAULT_MODEL,
-            engine: body.engine || 'auto',
+            engine: body.engine || 'grok',
+            bookingGuestName: typeof body.bookingGuestName === 'string' ? body.bookingGuestName : undefined,
           }
         );
 

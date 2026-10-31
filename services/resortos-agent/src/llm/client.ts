@@ -145,6 +145,9 @@ export function normalizeIntent(raw: unknown, rooms: RoomEntry[]): InboundIntent
   const room_raw = typeof o.room_raw === 'string' ? o.room_raw : '';
   let room_id = typeof o.room_id === 'string' && rooms.some((r) => r.id === o.room_id) ? (o.room_id as string) : null;
   if (!room_id && room_raw) room_id = resolveRoomByAlias(room_raw, rooms);
+  // An explicit letter code (e.g. G7, E4, จี7) in room_raw is authoritative: the LLM sometimes shifts IDs by position.
+  const coded = room_raw ? resolveLetterCode(room_raw) : null;
+  if (coded && rooms.some((r) => r.id === coded)) room_id = coded;
   const desc = typeof o.issue_description_hebrew === 'string' && o.issue_description_hebrew.trim() ? o.issue_description_hebrew : null;
   const ack = typeof o.acknowledgement_reply_cleaner_language === 'string' ? o.acknowledgement_reply_cleaner_language : '';
   return { action, room_raw, room_id, issue_description_hebrew: desc, acknowledgement_reply_cleaner_language: ack };
@@ -171,6 +174,22 @@ const THAI_LETTER_PHONETIC: Record<string, string> = {
   'เอฟ': 'f',
   'จี': 'g',
 };
+
+/** Letter-code only (A1..G8, Thai phonetic), no alias catalog. */
+export function resolveLetterCode(raw: string): string | null {
+  const n = norm(raw);
+  const m = n.match(/(?:^|[^a-z])([a-g])([1-8])(?![0-9])/) || n.match(/^([a-g])([1-8])$/);
+  let letter: string | null = null; let num = 0;
+  if (m) { letter = m[1]; num = parseInt(m[2], 10); }
+  else {
+    for (const [th, eng] of Object.entries(THAI_LETTER_PHONETIC).sort((a, b) => b[0].length - a[0].length)) {
+      const t = raw.match(new RegExp(`${th}\\s*([1-8])`));
+      if (t) { letter = eng; num = parseInt(t[1], 10); break; }
+    }
+  }
+  const list = letter ? LETTER_COMPLEX_MAP[letter] : undefined;
+  return list && num >= 1 && num <= list.length ? list[num - 1] : null;
+}
 
 /** Deterministic fallback: exact alias match or letter-code pattern (e.g. B1, บี1). */
 export function resolveRoomByAlias(raw: string, rooms: RoomEntry[]): string | null {

@@ -193,8 +193,11 @@ export function UnitStatusCards({ data }) {
     const isInProgress = u.status === 'IN_PROGRESS';
     const isMaint = u.status === 'MAINTENANCE_ALERT' || u.status === 'MAINTENANCE';
     const isDeparted = Boolean(u.is_departed);
-    const isStillInHouse = Boolean(u.is_still_in_house);
-    const checkoutTime = safeString(u.checkout_time, '11:00');
+    const isSat = Boolean(u.checkout_date) && new Date(`${String(u.checkout_date).slice(0, 10)}T12:00:00Z`).getUTCDay() === 6;
+    const defaultTime = isSat ? '13:00' : '11:00';
+    let rawTime = safeString(u.checkout_time, '');
+    if (rawTime === '15:00') rawTime = '';
+    const checkoutTime = rawTime || defaultTime;
     const isExpanded = expandedUnitId === u.id;
     const feedback = statusFeedback[u.id];
 

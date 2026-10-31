@@ -1,3 +1,4 @@
+import { defaultCheckoutTime } from '../guest/checkoutTime.js';
 import { formatFullPriceList } from './priceList.js';
 
 export type ExactKind = 'price' | 'inspection' | 'cleaning' | 'daily' | 'gate' | 'checkin' | 'checkout';
@@ -39,10 +40,10 @@ const STATIC: Partial<Record<ExactKind, string>> = {
   price: '',
   gate: 'קוד שער מושב רמות: *#2464*',
   checkin: 'שעת צ׳ק-אין: *15:00*',
-  checkout: 'שעת צ׳ק-אאוט: *11:00*',
 };
 
 export function exactStaticReply(kind: ExactKind): string | null {
   if (kind === 'price') return formatFullPriceList();
+  if (kind === 'checkout') return `שעת צ׳ק-אאוט: *${defaultCheckoutTime()}*`;
   return STATIC[kind] ?? null;
 }

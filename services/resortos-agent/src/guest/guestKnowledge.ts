@@ -1,9 +1,11 @@
+import { checkoutTimeForBooking, defaultCheckoutTime } from './checkoutTime.js';
+import { shabbatEntryHHMM } from './shabbatTime.js';
 import type { BookingRow } from '../integration/resortos.js';
 import type { RoomEntry } from '../config.js';
 import { readFileSync } from 'node:fs';
 import {
   ATTRACTIONS_RE, CHECKOUT_RE, FOOD_RE, FUEL_RE, GATE_RE, GROCERY_RE, JACUZZI_RE, LOCKBOX_RE, NATURE_RE, TV_RE, WIFI_RE,
-  kw, isFaultReport, isCheckinQuestion, isComplaint, isThanksOnly, isVagueProblem,
+  kw, isFaultReport, isCheckinQuestion, isComplaint, isThanksOnly, isVagueProblem, isGuestLeftMessage,
   PARKING_RE, PET_RE, CLEANING_RE, EXTENSION_RE, PAYMENT_INTL_RE,
 } from './keywords.js';
 import { T, detectGuestLang, guestLink, type GuestLang } from './i18n.js';
@@ -48,6 +50,8 @@ export function faultReply(question: string, ctx: { unitId?: string; roomName?: 
 }
 
 export interface GuestContext {
+  /** Clock (injectable for tests); late-checkout reply depends on Israel time. */
+  now?: Date;
   booking: BookingRow;
   room?: RoomEntry;
   unitId: string;
@@ -113,7 +117,7 @@ export const GUEST_UNIT_OVERRIDES = new Set<string>(['pilot-office']);
 export const LATE_CHECKOUT_FEE_PER_HOUR = 125;
 
 const LATE_CHECKOUT_RE =
-  /late\s*check[- ]?out|check[- ]?out\s*(?:later|late)|leave\s*later|stay\s*(?:longer|later)|(?:צ['׳"]?ק|צק)[- ]?אאוט\s*(?:\S+\s*)?(?:מאוחר|מאוחרת|יותר מאוחר)|(?:לעזוב|לצאת|לפנות|לעשות\s*צ['׳]?ק[- ]?אאוט)\s*(?:\S+\s*)?(?:מאוחר|יותר מאוחר|מאוחר יותר)|להישאר\s*(?:עוד|יותר|קצת|עד)|להשאר\s*(?:עוד|יותר|קצת|עד)/i;
+  /late\s*check[- ]?out|check[- ]?out\s*(?:later|late)|leave\s*later|stay\s*(?:longer|later)|(?:צ['׳"]?ק|צק)[- ]?אאוט\s*(?:\S+\s*){0,4}(?:מאוחר|מאוחרת|יותר מאוחר)|(?:לעזוב|לצאת|לפנות|לעשות\s*צ['׳]?ק[- ]?אאוט)\s*(?:\S+\s*){0,4}(?:מאוחר|יותר מאוחר|מאוחר יותר)|להישאר\s*(?:עוד|יותר|קצת|עד)|להשאר\s*(?:עוד|יותר|קצת|עד)/i;
 
 /** Manager-SMS trigger: HE/EN/RU/AR late check-out phrasing (RU/AR approved by Ran 2026-10-19 13:31). */
 export function isLateCheckoutSmsTrigger(text?: string | null): boolean {
@@ -217,30 +221,89 @@ export function lateCheckoutStatus(ctx: GuestContext): 'free' | 'taken' | 'unkno
   return unitTakenOnDate(ctx.bookings, ctx.unitId, checkout, booking.id) ? 'taken' : 'free';
 }
 
-/** Short Hebrew SMS for the manager. No codes, no phone numbers. */
-export function lateCheckoutManagerSms(question: string, ctx: GuestContext): string {
-  const booking = ctx.booking as BookingRow;
-  const checkout = booking.check_out_date || '';
-  const asked = mentionedDate(question, ctx.today || israelToday());
-  return `בקשת צ׳ק-אאוט מאוחר: ${booking.guest_name || 'אורח/ת'} · ${ctx.roomName} · צ׳ק-אאוט ${ddmm(checkout)}` +
-    (asked && asked !== checkout ? ` (ביקש/ה ל־${ddmm(asked)})` : '') +
-    ` · החדר פנוי בתאריך הזה. ממתין לאישורך (גם לשעה הראשונה ללא חיוב; מהשעה השנייה 125 ₪ לשעה).`;
+/** Israel wall clock: hour/minute/day-of-week (0=Sunday). */
+export function israelClock(now: Date = new Date()): { hour: number; minute: number; dow: number; hhmm: string } {
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit', weekday: 'short', hour12: false }).formatToParts(now);
+  const get = (t: string) => parts.find((x) => x.type === t)?.value || '';
+  const hour = Number(get('hour')) % 24;
+  const minute = Number(get('minute'));
+  const dow = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(get('weekday'));
+  return { hour, minute, dow, hhmm: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}` };
 }
 
+/** Ran 2026-10-22: 19:00–07:59 Israel time → "we'll get back to you tomorrow morning". */
+export function isAfterHoursIL(now: Date = new Date()): boolean {
+  const { hour } = israelClock(now);
+  return hour >= 19 || hour < 8;
+}
+
+/** Ran 2026-10-22: "ב12:00 אפשרי?" right after a check-out question is a late check-out request (12:00–16:00). */
+export function isLateCheckoutFollowUp(text?: string | null): boolean {
+  const t = String(text || '').trim();
+  if (!t || /\d{1,2}[./]\d{1,2}/.test(t)) return false;
+  const m = t.match(/(?:^|\s|ב-?|עד\s*|at\s*|until\s*)(1[2-6])(?::(\d{2}))?(?!\d)/i);
+  return Boolean(m);
+}
+
+function requestedHourText(question: string): string | null {
+  const m = String(question || '').match(/(?:^|\s|ב-?|עד\s*|בשעה\s*|at\s*|until\s*)(1[2-9]|20)(?::(\d{2}))?(?!\d)/i);
+  if (m) return `${m[1]}:${m[2] || '00'}`;
+  const h = mentionedHour(String(question || ''));
+  return h !== null && h >= 12 && h <= 20 ? `${h}:00` : null;
+}
+
+/**
+ * Late check-out (Ran 2026-10-22): Chloe never approves/denies and never quotes a fee.
+ * Before 19:00: the manager will update; 19:00–07:59: answer tomorrow morning.
+ */
 export function answerLateCheckout(question: string, ctx: GuestContext): string {
   const lang = detectGuestLang(question);
-  const policy = T.lateCheckoutPolicy(lang, LATE_CHECKOUT_FEE_PER_HOUR);
-  const booking = ctx.booking as BookingRow | undefined;
-  const checkout = booking?.check_out_date || '';
-  if (!ctx.unitId || !booking?.id || !checkout) return T.lateCheckoutNeedBooking(lang, policy);
-  const today = ctx.today || israelToday();
-  const asked = mentionedDate(question, today);
-  const dateNote = asked && asked !== checkout ? T.lateCheckoutDateNote(lang, checkout, asked) : '';
-  const url = ctx.stayUrl ? `\n\n📱 ${ctx.stayUrl}` : '';
-  if (unitTakenOnDate(ctx.bookings, ctx.unitId, checkout, booking.id)) {
-    return dateNote + T.lateCheckoutTaken(lang, ctx.roomName, checkout) + url;
+  const hour = requestedHourText(question);
+  const afterHours = isAfterHoursIL(ctx.now || new Date());
+  const name = ctx.guestName ? `${ctx.guestName}, ` : '';
+  if (lang === 'he') {
+    const until = hour ? ` עד השעה ${hour}` : '';
+    return afterHours
+      ? `${name}קיבלתי את הבקשה לצ׳ק־אאוט מאוחר${until} 🙏 העברתי אותה למנהל, ונחזור אליכם מחר בבוקר עם תשובה.`
+      : `${name}קיבלתי את הבקשה לצ׳ק־אאוט מאוחר${until} 🙏 אני מעבירה אותה עכשיו למנהל, והוא יעדכן אתכם בהקדם.`;
   }
-  return dateNote + T.lateCheckoutFree(lang, policy) + url;
+  if (lang === 'ru') {
+    const until = hour ? ` до ${hour}` : '';
+    return afterHours
+      ? `${name}я получила вашу просьбу о позднем выезде${until} 🙏 Я передала её менеджеру, и завтра утром мы ответим вам.`
+      : `${name}я получила вашу просьбу о позднем выезде${until} 🙏 Сейчас передаю её менеджеру, он скоро с вами свяжется.`;
+  }
+  if (lang === 'ar') {
+    const until = hour ? ` حتى الساعة ${hour}` : '';
+    return afterHours
+      ? `${name}استلمت طلبكم لتسجيل خروج متأخر${until} 🙏 حوّلته إلى المدير، وسنعود إليكم غدًا صباحًا بالإجابة.`
+      : `${name}استلمت طلبكم لتسجيل خروج متأخر${until} 🙏 أحوّله الآن إلى المدير، وسيُبلغكم قريبًا.`;
+  }
+  const until = hour ? ` until ${hour}` : '';
+  return afterHours
+    ? `${name}I got your late check-out request${until} 🙏 I've passed it to the manager, and we'll get back to you tomorrow morning with an answer.`
+    : `${name}I got your late check-out request${until} 🙏 I'm passing it to the manager now, and he'll update you shortly.`;
+}
+
+/** Manager SMS to Ran: guest, unit, checkout date, requested time, quote, wa.me link. No codes. */
+/** "We'll get back to you here on WhatsApp" (guest asked not to be called), per language. */
+export function whatsappCallbackReply(lang: GuestLang): string {
+  if (lang === 'ru') return 'С радостью! Мы передали просьбу команде и ответим вам здесь, в WhatsApp, как можно скорее. 💬';
+  if (lang === 'ar') return 'بكل سرور! حوّلنا الطلب إلى فريق المجمع وسنرد عليكم هنا عبر واتساب في أقرب وقت. 💬';
+  if (lang === 'en' || lang === 'th') return "Sure! We've passed your request to the team and will get back to you here on WhatsApp shortly. 💬";
+  return 'בשמחה! העברנו את הבקשה לצוות המתחם ונחזור אליכם כאן בוואטסאפ בהקדם. 💬';
+}
+
+export function lateCheckoutManagerSms(question: string, ctx: GuestContext, guestPhone?: string | null): string {
+  const booking = ctx.booking as BookingRow | undefined;
+  const checkout = booking?.check_out_date ? ddmm(booking.check_out_date) : 'לא ידוע';
+  const hour = requestedHourText(question) || 'לא צוין';
+  const digits = String(guestPhone || booking?.guest_phone || '').replace(/\D/g, '');
+  const intl = digits.startsWith('972') ? digits : digits.startsWith('0') ? `972${digits.slice(1)}` : digits;
+  const quote = String(question || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+  const asked = booking?.check_out_date ? mentionedDate(question, ctx.today || israelToday()) : null;
+  return `בקשת צ׳ק-אאוט מאוחר: ${booking?.guest_name || ctx.guestName || 'אורח/ת'} · ${ctx.roomName || 'יחידה לא זוהתה'} · יציאה ${checkout}${asked && asked !== booking?.check_out_date ? ` (ביקש/ה ל־${ddmm(asked)})` : ''} · מבוקש: ${hour} · "${quote}"` +
+    (intl ? ` · wa.me/${intl}` : '');
 }
 
 export interface WifiInfo {
@@ -253,9 +316,9 @@ export interface WifiInfo {
  */
 export const PROPERTY_WIFI: Record<string, WifiInfo> = {
   // Taj Mahal (k808..k811)
-  taj: { ssid: 'lotus', password: '12345678' },
+  taj: { ssid: 'LUTUS', password: '12345678' },
   // Nofim Belavan (k685, k686)
-  nofim: { ssid: 'TP-Link_FA30_5G', password: '15107312' },
+  nofim: { ssid: 'TP-LINK_FA30', password: '15107312' },
   // Mool Hanof (k680..k684)
   mool: { ssid: 'Mol_hanof', password: '12345678' },
   // Batei Nurit (k671..k679)
@@ -285,7 +348,7 @@ export const UNIT_TO_PROPERTY: Record<string, string> = {
   'mialis-villa': 'mialis', 'suite-1': 'mialis', 'suite-2': 'mialis',
   'k826': 'casa-nova', 'k827': 'casa-nova',
   'hill-1': 'hill', 'hill-2': 'hill', 'hill-3': 'hill', 'hill-4': 'hill',
-  'dome-blue': 'kipat', 'dome-green': 'kipat', 'dome-red': 'kipat',
+  'dome-red': 'kipat', 'dome-blue': 'kipat', 'dome-green': 'kipat',
   'pilot-office': 'office',
 };
 
@@ -312,10 +375,13 @@ export const GATE_GUIDE =
   `🚪 *קוד השער למושב רמות:*\n` +
   `הקוד לפתיחת שער הרכב הוא: *#2464* (כולל סולמית בהתחלה).`;
 
-export const CHECKOUT_GUIDE =
+export const checkoutGuide = (time: string = defaultCheckoutTime()) =>
   `ℹ️ *צ׳ק-אאוט:*\n` +
-  `• שעת צ׳ק-אאוט רשמית: עד 11:00 בבוקר.\n` +
+  `• שעת צ׳ק-אאוט רשמית: עד ${time}.\n` +
   `• החל מהשעה 08:00 בבוקר ניתן לבצע צ׳ק-אאוט עצמי בלחיצה אחת דרך דף האורח הדיגיטלי שלכם.`;
+
+/** Back-compat: weekday text. Use checkoutGuide() for date-aware text. */
+export const CHECKOUT_GUIDE = checkoutGuide('11:00');
 
 export const FOOD_GUIDE =
   `🍽️ *מסעדות ואוכל מומלץ באזור:*\n\n` +
@@ -357,14 +423,65 @@ const CABIN_INSIDE: Record<string, string> = {
   nurit: 'ג׳קוזי ספא, פינת קפה ותה, מנגל ו-Wi-Fi. במתחם יש בריכה וסאונה.',
   toscana: 'ג׳קוזי, מטבחון, פינת קפה ותה, מנגל ו-Wi-Fi. במתחם יש בריכה מחוממת.',
   musical: 'ג׳קוזי פנימי, פינת קפה ותה, מנגל ו-Wi-Fi. במתחם יש בריכה מחוממת.',
-  maya: 'ג׳קוזי פנימי, פינת קפה ותה, מנגל ו-Wi-Fi.',
+  maya: 'ג׳קוזי פנימי, פינת קפה ותה, מנגל ו-Wi-Fi. אין כירה חשמלית ואסור לבשל בבקתה.',
   mialis: 'בריכה פרטית, ג׳קוזי ספא, מטבחון, פינת קפה ותה, מנגל.',
   'casa-nova': 'בריכה פרטית, ג׳קוזי ספא, מטבחון, פינת קפה ותה, מנגל ו-Wi-Fi.',
 };
 
+/**
+ * Gate access per site (Ran 2026-10-24). 'contacts' = gate opens only for phones saved as contacts,
+ * so the guest calls the contact person. contactPhone left empty until Ran fills it — never invented.
+ */
+export type SiteGate = { mode: 'code' | 'contacts' | 'shabbat'; contactName?: string; contactPhone?: string };
+/** Ran 2026-10-24: נאות גולן + גבעת יואב gates open only for saved contacts → guest calls אדם.
+ *  קאסה נובה (religious moshav): gate closes automatically at Shabbat entry. No automatic alerts to אדם. */
+const ADAM_GATE = { mode: 'contacts' as const, contactName: 'אדם', contactPhone: '054-338-7383' };
+export const SITE_GATE_INFO: Record<string, SiteGate> = {
+  mialis: ADAM_GATE, // נאות גולן
+  hill: ADAM_GATE,   // צימר בגבעה
+  kipat: ADAM_GATE,  // כיפת שמיים
+  'casa-nova': { mode: 'shabbat', contactName: '', contactPhone: '' }, // TODO Ran: who to call if stuck
+};
+
+export function casaNovaShabbatLine(now: Date = new Date()): string {
+  return `🕯️ *שימו לב:* קאסה נובה נמצאת במושב דתי, ושער המושב נסגר אוטומטית בכניסת השבת (ביום שישי בערך ב־${shabbatEntryHHMM(now)}). ` +
+    `כדאי להיכנס ולהחנות את הרכב לפני כן. לא ניתן לצאת או להיכנס ברכב עד צאת השבת.`;
+}
+
+function gateOverviewLine(unitId: string, now: Date = new Date()): string | null {
+  const prop = UNIT_TO_PROPERTY[unitId];
+  if (!prop) return null;
+  const site = SITE_GATE_INFO[prop];
+  if (!site) {
+    return GATE_PROPS_RAMOT.has(prop) ? `🚪 *שער הישוב:* קוד ${GATE_CODE} (כולל סולמית בהתחלה)` : null;
+  }
+  if (site.mode === 'contacts') {
+    return site.contactPhone
+      ? `🚪 *שער:* נפתח רק לטלפונים שמורים. התקשרו ל${site.contactName} ${site.contactPhone} והוא יפתח לכם.`
+      : `🚪 *שער:* נפתח רק לטלפונים שמורים. כתבו לנו כשאתם מגיעים ונדאג שיפתחו לכם.`;
+  }
+  if (site.mode === 'shabbat') return casaNovaShabbatLine(now);
+  return null;
+}
+
+const GATE_PROPS_RAMOT = new Set(['nurit', 'taj', 'mool', 'nofim', 'toscana', 'musical', 'maya']);
+
+/** Room overview (identified guest only): what's inside + lockbox + Wi-Fi + gate. */
+export function roomOverviewLines(ctx: GuestContext, matched: boolean): string[] {
+  const out: string[] = [];
+  if (!ctx.unitId || !(matched || ctx.isStaff)) return out;
+  const lockbox = ctx.room?.lockbox;
+  if (lockbox) out.push(`🔑 *קוד כספת המפתח:* ${lockbox}`);
+  const wifi = getWifiForUnit(ctx.unitId);
+  if (wifi) out.push(`📶 *WiFi:* ${wifi.ssid} · סיסמה: ${wifi.password}`);
+  const gate = gateOverviewLine(ctx.unitId);
+  if (gate) out.push(gate);
+  return out;
+}
+
 function cabinInsideLine(unitId: string): string | null {
-  if (unitId === 'k693' || unitId === 'k695') return 'בריכה פרטית מחוממת, ג׳קוזי פנימי, פינת קפה ותה, מנגל ו-Wi-Fi.';
-  if (unitId === 'k694') return 'ג׳קוזי פנימי, בלי בריכה פרטית, פינת קפה ותה, מנגל ו-Wi-Fi.';
+  if (unitId === 'k693' || unitId === 'k695') return 'בריכה פרטית מחוממת, ג׳קוזי פנימי, פינת קפה ותה, מנגל ו-Wi-Fi. אין כירה חשמלית ואסור לבשל בבקתה.';
+  if (unitId === 'k694') return 'ג׳קוזי פנימי, בלי בריכה פרטית, פינת קפה ותה, מנגל ו-Wi-Fi. אין כירה חשמלית ואסור לבשל בבקתה.';
   if (unitId === 'k689') return 'סאונה יבשה, ג׳קוזי ספא, מטבחון, פינת קפה ותה, מנגל ו-Wi-Fi.';
   const prop = UNIT_TO_PROPERTY[unitId];
   return (prop && CABIN_INSIDE[prop]) || null;
@@ -614,14 +731,14 @@ export function infoKinds(question: string): InfoKind[] {
     indoor_jacuzzi: isIndoorJacuzzi,
     unknown_amenity: isUnknown,
     checkin: isCheckinQuestion(question),
-    checkout: CHECKOUT_RE.test(q),
+    checkout: CHECKOUT_RE.test(q) && !isGuestLeftMessage(question),
     wifi: WIFI_RE.test(q),
     lockbox: LOCKBOX_RE.test(q) || /תכספת/.test(q),
     gate: GATE_RE.test(q),
     jacuzzi: isJacuzziGuide,
     parking: PARKING_RE.test(q),
     pets: PET_RE.test(q),
-    cleaning: CLEANING_RE.test(q),
+    cleaning: CLEANING_RE.test(q) && !isGuestLeftMessage(question),
   };
   return INFO_ORDER.filter((k) => hit[k]);
 }
@@ -670,11 +787,6 @@ function answerInfoKind(kind: InfoKind, q: string, question: string, ctx: GuestC
     case 'wifi': {
       // No booking matched: ask for the booking phone. Matched but unit has no known Wi-Fi: null → existing fallback.
       if (!ctx.unitId) return lang === 'he' ? WIFI_NEED_BOOKING_REPLY : T.wifiNeedBooking(lang);
-      const prop = UNIT_TO_PROPERTY[ctx.unitId];
-      if (prop === 'hill' || prop === 'kipat') {
-        if (lang !== 'he') return 'Currently there is no Wi-Fi / internet connection at this complex.';
-        return `📶 במתחם ${ctx.roomName} (גבעת יואב) אין חיבור לאינטרנט / Wi-Fi כרגע.`;
-      }
       const wifi = getWifiForUnit(ctx.unitId);
       if (!wifi) return null;
       if (lang !== 'he') return T.wifi(lang, ctx.roomName, wifi.ssid, wifi.password, ctx.stayUrl);
@@ -728,8 +840,9 @@ function answerInfoKind(kind: InfoKind, q: string, question: string, ctx: GuestC
     }
     case 'checkout': {
       // Check-out answers never mention check-in (Ran 2026-10-19).
-      if (lang !== 'he') return T.checkout(lang, ctx.stayUrl);
-      let reply = CHECKOUT_GUIDE;
+      const coTime = checkoutTimeForBooking(ctx.booking as any, ctx.today || israelToday());
+      if (lang !== 'he') return T.checkout(lang, ctx.stayUrl, coTime);
+      let reply = checkoutGuide(coTime);
       if (ctx.stayUrl) reply += `\n\n📱 לצ׳ק-אאוט עצמי בדף האורח:\n${ctx.stayUrl}`;
       return reply;
     }
@@ -826,10 +939,12 @@ export function answerGuestQuestion(question: string, ctx: GuestContext): string
     return reply;
   }
 
-  if (/בתוך ה?צימר|בתוך ה?בקתה|בתוך החדר|מה יש ב|מה בבקתה|מה בצימר|מה יש כאן|מה יש בחדר/i.test(q)) {
+  if (/בתוך ה?צימר|בתוך ה?בקתה|בתוך החדר|מה יש ב|מה בבקתה|מה בצימר|מה יש כאן|מה יש בחדר|סקירה על ה?(?:חדר|בקתה|צימר)|פרטי ה?(?:חדר|בקתה|צימר)/i.test(q)) {
     const line = cabinInsideLine(ctx.unitId);
-    if (line) {
-      let reply = `בתוך *${ctx.roomName}*:\n${line}`;
+    const extra = roomOverviewLines(ctx, matched);
+    if (line || extra.length) {
+      let reply = line ? `בתוך *${ctx.roomName}*:\n${line}` : `*${ctx.roomName}*:`;
+      if (extra.length) reply += `\n\n${extra.join('\n')}`;
       if (ctx.stayUrl) reply += `\n\n📱 ${ctx.stayUrl}`;
       return reply;
     }

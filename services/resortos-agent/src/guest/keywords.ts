@@ -56,7 +56,7 @@ export const NATURE_RE = kw(['מעיין', 'מעיינות', 'מעין', 'שמו
 export const ATTRACTIONS_RE = kw(['אטרקצי*', 'קייק*', 'קיאק*', 'רפטינג', "ג['׳]יפ*", 'ספא', 'חמת גדר', 'מה לעשות', 'פעילות', 'פעילויות', 'יקב*', 'יין', 'יינות', 'attractions?', 'kayak*', 'activities']);
 
 // ---- Fault reports (S05): take priority over amenity FAQs / place menus ----
-export const TV_RE = kw(['טלוויזי*', 'טלויזי*', 'tv', 'שלט', 'ממיר', 'netflix']);
+export const TV_RE = kw(['טלוויזי*', 'טלויזי*', 'tv', 'שלט', 'ממיר', 'netflix', 'מסך*', 'screen']);
 /** Explicit problem words: a fault on their own. */
 export const FAULT_RE = kw([
   'לא נדלק*', 'לא דולק*', 'לא עובד*', 'לא מגיב*', 'לא מתחבר*', 'לא נפתח*', 'הפסיק(?:ה|ו)? לעבוד',

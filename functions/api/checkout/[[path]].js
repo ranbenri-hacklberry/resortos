@@ -1542,7 +1542,6 @@ async function handleCheckout(context) {
     const keepStatus = row.booking_status === 'CHECKED_IN' || row.booking_status === 'CHECKED_OUT'
       ? row.booking_status
       : (hypAlreadyPaid(row) || hypDepositPaid(row) ? 'CONFIRMED' : row.booking_status);
-    const payMode = pref === 'CASH' ? 'CASH_TRUST' : (body.payment_mode || row.payment_mode || 'CREDIT_DEPOSIT');
     const stored = {
       ...row,
       guest_name: guestName,

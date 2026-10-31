@@ -2,12 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { canonicalJid, resolveStaffPhone } from './client.js';
 
 describe('canonicalJid', () => {
-  it('routes Barak LID and phone numbers to his unified @lid JID', () => {
-    expect(canonicalJid('208190587302068')).toBe('208190587302068@lid');
-    expect(canonicalJid('208190587302068@lid')).toBe('208190587302068@lid');
-    expect(canonicalJid('208190587302068:0@lid')).toBe('208190587302068@lid');
-    expect(canonicalJid('972503934696@s.whatsapp.net')).toBe('208190587302068@lid');
-    expect(canonicalJid('0503934696')).toBe('208190587302068@lid');
+  it('Barak old LID/phone mapping is gone (Ran 2026-10-28: new number)', () => {
+    expect(canonicalJid('972503934696')).toBe('972503934696@s.whatsapp.net');
+    expect(canonicalJid('972515262609')).toBe('972515262609@s.whatsapp.net');
   });
 
   it('routes Rani and Adam LIDs and phone numbers to their unified @lid JIDs', () => {
@@ -24,7 +21,6 @@ describe('canonicalJid', () => {
 
   it('resolves staff LIDs back to canonical phone digits via resolveStaffPhone', () => {
     expect(resolveStaffPhone('170626836910125@lid')).toBe('972548317887');
-    expect(resolveStaffPhone('208190587302068@lid')).toBe('972503934696');
   });
 
   it('preserves group JIDs', () => {

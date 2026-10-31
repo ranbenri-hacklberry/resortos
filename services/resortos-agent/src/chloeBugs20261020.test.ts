@@ -82,12 +82,12 @@ describe('bug 2: ops / occupancy questions', () => {
 
 describe('bug 3: late check-out, same policy in all languages', () => {
   const phrasings = ['Можно ли поздно выехать?', 'Можно выехать в 13:00?', 'Can we leave at 1pm?', 'Can we check out at 2pm?', 'Is a late checkout possible?', 'ممكن نطلع الساعة 1؟', 'ممكن خروج متأخر؟', 'אפשר לצאת ב-13:00?', 'אפשר צ׳ק אאוט מאוחר?'];
-  it.each(phrasings)('"%s" hits the deterministic late-checkout path with the 125 ₪ from-the-2nd-hour policy', (q) => {
+  // Ran 2026-10-22: same hand-to-manager reply in every language; no fee, never approve/deny.
+  it.each(phrasings)('"%s" hits the deterministic late-checkout path and hands it to the manager (no fee)', (q) => {
     expect(isLateCheckoutQuestion(q)).toBe(true);
     const a = answerGuestQuestion(q, ctx)!;
-    expect(a).toMatch(/125/);
-    expect(a).toMatch(/первый час бесплатно|first hour is free|الساعة الأولى بدون رسوم|השעה הראשונה ללא חיוב/);
-    expect(a).not.toMatch(/125 ₪ за каждый час|125 ₪ в час за каждый/);
+    expect(a).not.toMatch(/125|₪/);
+    expect(a).toMatch(/למנהל|manager|менеджеру|المدير/);
   });
   it('does not treat ordinary questions as late check-out', () => {
     for (const q of ['Can 2 people leave luggage?', 'When is check out?', 'Is check-out at 11?', 'מתי הצ׳ק אאוט?']) expect(isLateCheckoutQuestion(q)).toBe(false);

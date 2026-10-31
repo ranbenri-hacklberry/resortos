@@ -1,8 +1,10 @@
+import { bookingCheckoutOverride, defaultCheckoutTime } from '../guest/checkoutTime.js';
 import { stayUrlOf } from './guestLink.js';
 import { COMPLEXES, type ComplexDefinition } from './managerFuzzyMatcher.js';
 import { readFileSync } from 'node:fs';
 import type { RoomEntry } from '../config.js';
 import type { BookingRow, UnitRow } from '../integration/resortos.js';
+import { getWifiForUnit } from '../guest/guestKnowledge.js';
 
 let ROOM_CONFIGURATIONS: Record<string, any> = {};
 try {
@@ -75,6 +77,20 @@ export function unitShortStatus(unit: UnitRow | undefined, occupancy: RoomOccupa
   return clean;
 }
 
+/** Ran 2026-10-22: vacant-room status from the real ResortOS operational_status values. */
+export function roomStatusLabel(unit: UnitRow | undefined): string {
+  const st = unit?.operational_status;
+  const reason = unit?.custom_reason || '';
+  if (st === 'OUT_OF_ORDER' || st === 'CLOSED' || st === 'UNAVAILABLE' || st === 'BLOCKED') return 'לא זמין ⛔';
+  if (st === 'MAINTENANCE_ALERT') return 'תקלה ⚠️';
+  if (st === 'GARDENING') return 'עבודת גינון 🌿';
+  if (st === 'IN_PROGRESS') return `בנקיון 🟡${unit?.assigned_staff ? ` | ${unit.assigned_staff}` : ''}`;
+  if (st === 'NEEDS_COMPLETIONS' || (st === 'READY' && /ביקורת|בדיקה/.test(reason))) return 'ממתין לבדיקה 🔍';
+  if (st === 'READY') return 'מוכן לאורח 🟢';
+  if (st === 'DIRTY') return 'ממתין לניקיון 🔴';
+  return st ? `${st} ❔` : 'לא ידוע ❔';
+}
+
 function guestLabel(booking?: BookingRow): string {
   return booking?.guest_name || 'ללא שם';
 }
@@ -91,10 +107,6 @@ export function formatManagerInitialCard(
   occupancy: RoomOccupancyInfo,
   room?: RoomEntry
 ): string {
-  const baseCleaning = getCleaningStatusLabel(unit?.operational_status, unit?.custom_reason);
-  const cleaningLabel = unit?.operational_status === 'IN_PROGRESS' && unit?.assigned_staff
-    ? `${baseCleaning} | ${unit.assigned_staff}`
-    : baseCleaning;
   let card = `📋 *${roomLabel}*\n`;
 
 
@@ -105,24 +117,28 @@ export function formatManagerInitialCard(
   }
   card += `🔑 קוד כספת: *${lockbox}*\n`;
 
-  const guestInside = Boolean(occupancy.outBooking || occupancy.stayingBooking);
-  if (guestInside) {
-    if (occupancy.outBooking) {
-      card += `🟠 צ׳ק אאוט היום (${guestLabel(occupancy.outBooking)})\n`;
-    } else {
-      card += `בשהייה (${guestLabel(occupancy.stayingBooking)})\n`;
-      card += `אין יציאה היום\n`;
-    }
-    card += occupancy.inBooking
-      ? `🟢 צ׳ק אין היום (${guestLabel(occupancy.inBooking)})`
-      : 'אין כניסה היום';
-    return card;
-  }
+  // Ran 2026-10-22: one "סטטוס:" line. Precedence: occupied → unavailable / fault → cleaning flow. Unknown → raw value.
+  const staffOcc = (unit as any)?.staff_occupancy;
+  const occupiedBooking = occupancy.stayingBooking
+    || (staffOcc === 'OCCUPIED' ? (occupancy.inBooking || occupancy.outBooking) : undefined)
+    || (occupancy.outBooking && staffOcc !== 'VACANT' ? occupancy.outBooking : undefined);
+  const occupied = staffOcc === 'OCCUPIED' || Boolean(occupancy.stayingBooking) || Boolean(occupancy.outBooking && staffOcc !== 'VACANT');
+  const status = occupied
+    ? `🏠 מאוכלס${occupiedBooking ? ` (${guestLabel(occupiedBooking)})` : ''}`
+    : roomStatusLabel(unit);
+  card += `סטטוס: ${status}\n`;
 
-  card += `🧹 סטטוס ניקיון: ${cleaningLabel}\n`;
-  card += occupancy.inBooking
-    ? `🟢 צ׳ק אין היום (${guestLabel(occupancy.inBooking)})`
-    : `👥 סטטוס תפוסה: ${occupancy.statusSummary}`;
+  if (occupancy.outBooking) {
+    card += `🟠 צ׳ק אאוט היום (${guestLabel(occupancy.outBooking)})\n`;
+  } else if (occupied) {
+    card += `אין יציאה היום\n`;
+  }
+  if (occupancy.inBooking && occupiedBooking !== occupancy.inBooking) {
+    card += `🟢 צ׳ק אין היום (${guestLabel(occupancy.inBooking)})`;
+  } else if (occupied && !occupancy.inBooking) {
+    card += 'אין כניסה היום';
+  }
+  card = card.replace(/\n$/, '');
   if (unit?.operational_status === 'READY' && (unit?.custom_reason === 'ממתין לביקורת מנהל' || unit?.custom_reason?.includes('ביקורת'))) {
     card += `\n\n💡 _לאישור החדר לאחר בדיקה, השב: *מוכן*_`;
   }
@@ -345,7 +361,9 @@ export function answerManagerRoomQuestion(
 
   // 7. Departure hour / Checkout time
   if (/שעת עזיבה|מתי יוצא|מתי עוזב|שעת פינוי|שעת יציאה/i.test(q)) {
-    let reply = `🕚 *שעת צ'ק-אאוט רשמית היא עד 11:00 בבוקר.*`;
+    let reply = `🕚 *שעת צ'ק-אאוט רשמית היא עד ${defaultCheckoutTime()}* (שבת 13:00, שאר הימים 11:00).`;
+    const ov = bookingCheckoutOverride(occupancy.outBooking as any);
+    if (ov) reply += `\n• בהזמנה סוכם: יציאה ${ov}`;
     if (occupancy.outBooking) {
       reply += `\n• אורח יוצא: *${occupancy.outBooking.guest_name || 'ללא שם'}* (${occupancy.outBooking.guest_phone || 'ללא טלפון'})`;
     }
@@ -545,8 +563,9 @@ export function answerComplexCheckinsQuestion(
         b.check_in_date <= dateRange.to
     );
 
+    // Ran 2026-10-28 ("מה שאין כניסה שלא תרשום"): rooms without arrivals are omitted.
     if (unitBookings.length === 0) {
-      lines.push(`• ${r.name}: אין כניסה`);
+      continue;
     } else {
       const bDesc = unitBookings
         .map((b) => {
@@ -567,5 +586,47 @@ export function answerComplexCheckinsQuestion(
     }
   }
 
+  if (lines.length === 0) return `אין כניסות ב${complex.officialName} ${dateRange.label}.`;
   return `📋 *כניסות ב${complex.officialName} (${dateRange.label}):*\n${lines.join('\n')}`;
+}
+
+/** Manager menu option 6 (Ran 2026-10-22): WiFi of the room on screen only. Never invents credentials. */
+export function formatRoomWifi(roomLabel: string, unitId?: string | null): string {
+  const w = unitId ? getWifiForUnit(unitId) : null;
+  if (!w) return `📶 אין אצלי פרטי וויפי שמורים ל*${roomLabel}*.`;
+  return `📶 *פרטי רשת WiFi · ${roomLabel}*\n• רשת: *${w.ssid}*\n• סיסמה: *${w.password}*`;
+}
+
+/** Words that pick menu option 5 / 6 while a room is on screen. */
+export function roomMenuPick(text: string): 'guest' | 'wifi' | null {
+  const t = String(text || '').trim();
+  if (/^5\.?$/.test(t)) return 'guest';
+  if (/^6\.?$/.test(t)) return 'wifi';
+  if (/^(?:ה)?(?:וויפי|ווייפי|ויפי|וייפי|wi-?fi|ไวไฟ|วายฟาย)\??$|פרטי\s*(?:ה)?רשת|סיסמ[אה]\s*(?:ל|של\s*)?(?:ה)?(?:רשת|וויפי|ויפי|wi-?fi|אינטרנט)|(?:מה|מה ה)\s*(?:וויפי|ויפי|wi-?fi)|רשת\s*wi-?fi/i.test(t)) return 'wifi';
+  return null;
+}
+
+/** Ran 2026-10-28 ("כולם"): manager answered "על איזה מתחם?" with all complexes. */
+export function isAllComplexesReply(text: string): boolean {
+  return /^\s*(?:ב?כולם|ה?כל|ב?כל\s+ה?מתחמים|ב?כל\s+ה?מקומות|את\s+כולם)\s*[.!?]*\s*$/.test(String(text || ''));
+}
+
+export function answerAllComplexesCheckins(
+  question: string,
+  allRooms: RoomEntry[],
+  bookings: BookingRow[],
+  today: string
+): string | null {
+  const parts: string[] = [];
+  let anyComplex = false;
+  for (const c of COMPLEXES) {
+    const a = answerComplexCheckinsQuestion(`${question} ${c.officialName}`, allRooms, bookings, today);
+    if (!a) continue;
+    anyComplex = true;
+    if (a.startsWith('📋')) parts.push(a);
+  }
+  if (parts.length) return parts.join('\n\n');
+  if (!anyComplex) return null;
+  const range = extractDateRange(String(question || '').toLowerCase(), today);
+  return `אין כניסות ${range?.label || ''}.`.replace(/\s+\./, '.');
 }
