@@ -171,6 +171,90 @@ function formatPayment(status, totalPriceAgorot = 0, depositAgorot = 0) {
   };
 }
 
+function extractCheckoutTime(booking) {
+  if (!booking) return '11:00';
+  const req = String(booking.special_requests || '');
+  const outMatch = req.match(/\|out:([^|]+)/) || req.match(/out:([^|]+)/);
+  if (outMatch) {
+    const raw = outMatch[1].trim();
+    if (raw === 'motzash' || raw === 'מוצש' || raw === 'מוצ״ש') return 'מוצ״ש';
+    return raw;
+  }
+  const noteMatch = req.match(/(?:יציאה|checkout)\s*(?:עד|בשעה|ב)?\s*(\d{1,2}(?::\d{2})?)/i);
+  if (noteMatch) return noteMatch[1].includes(':') ? noteMatch[1] : `${noteMatch[1]}:00`;
+  if (booking.checkout_time) return booking.checkout_time;
+  if (booking.stay?.checkout_time) return booking.stay.checkout_time;
+  return '11:00';
+}
+
+function findUnitFromQuery(query, units) {
+  const norm = (query || '').toLowerCase().trim();
+  if (!norm) return null;
+
+  for (const u of units) {
+    if (u.id && norm.includes(u.id.toLowerCase())) return u;
+  }
+
+  const aliasMap = [
+    { patterns: [/מאיה\s*3/i, /בקתות\s*מאיה\s*3/i, /f3/i], id: 'k695' },
+    { patterns: [/מאיה\s*2/i, /בקתות\s*מאיה\s*2/i, /f2/i], id: 'k694' },
+    { patterns: [/מאיה\s*1/i, /בקתות\s*מאיה\s*1/i, /f1/i], id: 'k693' },
+    { patterns: [/טוסקנה\s*1/i, /פירנצה\s*1/i], id: 'k687' },
+    { patterns: [/טוסקנה\s*2/i, /פירנצה\s*2/i], id: 'k688' },
+    { patterns: [/שאטו/i, /טוסקנה\s*שאטו/i], id: 'k689' },
+    { patterns: [/אאורה/i, /קאסה\s*נובה\s*אאורה/i, /aura/i], id: 'k826' },
+    { patterns: [/בלום/i, /קאסה\s*נובה\s*בלום/i, /bloom/i], id: 'k827' },
+    { patterns: [/מיאליס/i, /וילה\s*מיאליס/i], id: 'mialis-villa' },
+    { patterns: [/סוויטה\s*1/i, /הירוקה/i], id: 'suite-1' },
+    { patterns: [/סוויטה\s*2/i, /הורודה/i], id: 'suite-2' },
+    { patterns: [/דום\s*אדום/i, /כיפת\s*שמיים\s*אדום/i], id: 'dome-red' },
+    { patterns: [/דום\s*כחול/i, /כיפת\s*שמיים\s*כחול/i], id: 'dome-blue' },
+    { patterns: [/דום\s*ירוק/i, /כיפת\s*שמיים\s*ירוק/i], id: 'dome-green' }
+  ];
+
+  const nuritMap = { '1': 'k671', '2': 'k673', '3': 'k674', '4': 'k675', '5': 'k676', '6': 'k677', '7': 'k678', '8': 'k679' };
+  const nuritMatch = norm.match(/נורית\s*(\d)/);
+  if (nuritMatch && nuritMap[nuritMatch[1]]) {
+    const found = units.find(u => u.id === nuritMap[nuritMatch[1]]);
+    if (found) return found;
+  }
+
+  const nofMap = { '1': 'k680', '2': 'k681', '3': 'k682', '4': 'k683', '5': 'k684' };
+  const nofMatch = norm.match(/מול\s*הנוף\s*(\d)/);
+  if (nofMatch && nofMap[nofMatch[1]]) {
+    const found = units.find(u => u.id === nofMap[nofMatch[1]]);
+    if (found) return found;
+  }
+
+  const musicMap = { '1': 'k690', '2': 'k691', '3': 'k692' };
+  const musicMatch = norm.match(/חצר\s*מוסיקלית\s*(\d)/);
+  if (musicMatch && musicMap[musicMatch[1]]) {
+    const found = units.find(u => u.id === musicMap[musicMatch[1]]);
+    if (found) return found;
+  }
+
+  const hillMatch = norm.match(/גבעה\s*(\d)/);
+  if (hillMatch && ['1','2','3','4'].includes(hillMatch[1])) {
+    const found = units.find(u => u.id === `hill-${hillMatch[1]}`);
+    if (found) return found;
+  }
+
+  for (const alias of aliasMap) {
+    if (alias.patterns.some(p => p.test(norm))) {
+      const found = units.find(u => u.id === alias.id);
+      if (found) return found;
+    }
+  }
+
+  for (const u of units) {
+    const cleanName = (u.name || '').replace(/[ⒻⒶⒷⒸⒹⒺⒼ·]/g, '').trim().toLowerCase();
+    if (cleanName && norm.includes(cleanName)) return u;
+    if (u.name && norm.includes(u.name.toLowerCase())) return u;
+  }
+
+  return null;
+}
+
 function mapBookingToCardItem(b, unitsMap) {
   const unit = unitsMap.get(b.unit_id);
   const unitName = unit?.name || b.unit_name || b.unit_id;
@@ -249,7 +333,8 @@ export async function onRequest(context) {
           name: u.name || u.cabin_name || u.id || u.cabin_id,
           sort_order: u.sort_order ?? idx,
           operational_status: u.operational_status || 'READY',
-          assigned_staff: u.assigned_staff || ''
+          assigned_staff: u.assigned_staff || '',
+          staff_occupancy: u.staff_occupancy || ''
         }));
       } else if (Array.isArray(replica?.units) && replica.units.length > 0) {
         units = replica.units.map((u, idx) => ({
@@ -257,7 +342,8 @@ export async function onRequest(context) {
           name: u.name || u.cabin_name || u.id || u.cabin_id,
           sort_order: u.sort_order ?? idx,
           operational_status: u.operational_status || 'READY',
-          assigned_staff: u.assigned_staff || ''
+          assigned_staff: u.assigned_staff || '',
+          staff_occupancy: u.staff_occupancy || ''
         }));
       } else {
         units = DEFAULT_UNITS;
@@ -349,25 +435,22 @@ export async function onRequest(context) {
     const matchedGuest = bookings
       .map((b) => {
         const name = (b.guest_name || '').toLowerCase().trim();
-        if (!name) return { b, score: 0 };
+        if (!name || name.length < 3) return { b, score: 0 };
         if (normalized.includes(name)) return { b, score: 100 };
         const words = name.split(/\s+/).filter((w) => w.length >= 3);
-        const matchCount = words.filter((w) => normalized.includes(w)).length;
-        if (matchCount === words.length && words.length > 1) return { b, score: 80 };
-        if (matchCount > 0) return { b, score: matchCount * 20 };
+        if (words.length < 2) return { b, score: 0 };
+        const matchedWords = words.filter((w) => {
+          const re = new RegExp('(?:^|[\\s,.;!?])' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?=[\\s,.;!?]|$)');
+          return re.test(normalized);
+        });
+        if (matchedWords.length === words.length) return { b, score: 90 };
+        if (matchedWords.length > 0 && matchedWords.length >= words.length - 1) return { b, score: 50 };
         return { b, score: 0 };
       })
-      .filter((entry) => entry.score >= 20)
+      .filter((entry) => entry.score >= 50)
       .sort((a, b) => b.score - a.score)[0]?.b || null;
 
-    const matchedUnit = units.find((u) => {
-      const name = (u.name || '').toLowerCase();
-      const id = (u.id || '').toLowerCase();
-      return (name && normalized.includes(name)) || (id && normalized.includes(id)) ||
-        (name.includes('אאורה') && (normalized.includes('אאורה') || normalized.includes('aura'))) ||
-        (name.includes('בלום') && (normalized.includes('בלום') || normalized.includes('bloom'))) ||
-        (name.includes('מיאליס') && normalized.includes('מיאליס'));
-    });
+    const matchedUnit = findUnitFromQuery(normalized, units);
 
     const isFinanceIntent = (
       normalized.includes('פיננסים') ||
@@ -401,31 +484,45 @@ export async function onRequest(context) {
 
     // ================= EXECUTION =================
 
-    // 1. Specific Guest Match
-    if (matchedGuest && !isArrivalsIntent && !isUnpaidIntent) {
-      const cardItem = mapBookingToCardItem(matchedGuest, unitsMap);
-      return json({
-        ok: true,
-        reply: `מצאתי את ההזמנה של **${matchedGuest.guest_name}**:\nהיחידה משויכת ל-**${cardItem.unit_name}**, סטטוס תשלום: **${cardItem.payment.badge}** (${cardItem.payment.label}).`,
-        widget: {
-          type: 'ReservationCards',
-          data: {
-            title: `פרטי הזמנה · ${matchedGuest.guest_name}`,
-            items: [cardItem]
-          }
-        }
-      });
-    }
-
-    // 2. Specific Unit Match
-    if (matchedUnit && !isCleaningIntent && !isArrivalsIntent) {
-      const unitBookings = bookings.filter((b) => b.unit_id === matchedUnit.id && b.check_in_date <= today && b.check_out_date >= today);
+    // 1. Specific Unit Match
+    if (matchedUnit && !isArrivalsIntent) {
+      const unitBookings = bookings.filter((b) => b.unit_id === matchedUnit.id && b.check_in_date <= today && b.check_out_date >= today && b.booking_status !== 'CANCELED');
+      const checkoutBooking = bookings.find((b) => b.unit_id === matchedUnit.id && b.check_out_date === today && b.booking_status !== 'CANCELED');
+      const incomingBooking = bookings.find((b) => b.unit_id === matchedUnit.id && b.check_in_date === today && b.booking_status !== 'CANCELED');
+      const checkoutTime = extractCheckoutTime(checkoutBooking);
+      const isDeparted = Boolean(
+        checkoutBooking && (
+          checkoutBooking.stay?.self_checked_out_at ||
+          checkoutBooking.stay?.manager_checked_out_at ||
+          checkoutBooking.checkout_status === 'self_departed' ||
+          checkoutBooking.checkout_status === 'manager_departed'
+        )
+      );
+      const isStillInHouse = Boolean(checkoutBooking && !isDeparted);
+      const canCleanNow = Boolean(!checkoutBooking || isDeparted);
       const readiness = formatReadiness(matchedUnit.operational_status);
-      let reply = `יחידה **${matchedUnit.name}**:\n• סטטוס תפעולי: **${readiness.label}**\n`;
-      if (unitBookings.length > 0) {
-        reply += `• מאוכלסת כרגע על ידי: **${unitBookings[0].guest_name}** (עד ${unitBookings[0].check_out_date}).`;
+
+      let reply = `יחידה **${matchedUnit.name}**:\n`;
+      if (checkoutBooking) {
+        if (isStillInHouse) {
+          reply += `• **האורחים עדיין בשהייה בחדר!** (${checkoutBooking.guest_name})\n`;
+          reply += `• שעת יציאה מתוכננת להיום: **${checkoutTime}**.\n`;
+          reply += `• סטטוס תפעולי: **${readiness.label}** (היחידה ממתינה לעזיבת האורחים לפני תחילת ניקיון).\n`;
+        } else {
+          reply += `• האורח **${checkoutBooking.guest_name}** ביצע צ'ק-אאוט ויצא מהיחידה. 🚪\n`;
+          reply += `• היחידה פנויה ומוכנה כעת לניקיון! ✨\n`;
+          reply += `• סטטוס תפעולי: **${readiness.label}**.\n`;
+        }
+      } else if (unitBookings.length > 0) {
+        reply += `• מאוכלסת כרגע על ידי: **${unitBookings[0].guest_name}** (עד ${unitBookings[0].check_out_date}).\n`;
+        reply += `• סטטוס תפעולי: **${readiness.label}**.\n`;
       } else {
-        reply += `• פנויה כרגע לקבלת אורחים.`;
+        reply += `• פנויה כרגע לקבלת אורחים.\n`;
+        reply += `• סטטוס תפעולי: **${readiness.label}**.\n`;
+      }
+
+      if (incomingBooking) {
+        reply += `• כניסה צפויה היום (Turnover): **${incomingBooking.guest_name}**.\n`;
       }
 
       return json({
@@ -439,8 +536,30 @@ export async function onRequest(context) {
               id: matchedUnit.id,
               name: matchedUnit.name,
               status: matchedUnit.operational_status || 'READY',
-              assigned_staff: matchedUnit.assigned_staff || ''
+              assigned_staff: matchedUnit.assigned_staff || '',
+              has_checkout_today: Boolean(checkoutBooking),
+              is_departed: isDeparted,
+              can_clean_now: canCleanNow,
+              is_still_in_house: isStillInHouse,
+              checkout_time: checkoutTime,
+              checkout_guest: checkoutBooking?.guest_name || ''
             }]
+          }
+        }
+      });
+    }
+
+    // 2. Specific Guest Match
+    if (matchedGuest && !isArrivalsIntent && !isUnpaidIntent) {
+      const cardItem = mapBookingToCardItem(matchedGuest, unitsMap);
+      return json({
+        ok: true,
+        reply: `מצאתי את ההזמנה של **${matchedGuest.guest_name}**:\nהיחידה משויכת ל-**${cardItem.unit_name}**, סטטוס תשלום: **${cardItem.payment.badge}** (${cardItem.payment.label}).`,
+        widget: {
+          type: 'ReservationCards',
+          data: {
+            title: `פרטי הזמנה · ${matchedGuest.guest_name}`,
+            items: [cardItem]
           }
         }
       });
@@ -511,16 +630,17 @@ export async function onRequest(context) {
         ));
 
         const hasCheckoutToday = Boolean(checkoutBooking);
+        const checkoutTime = extractCheckoutTime(checkoutBooking);
         const isDeparted = Boolean(
           checkoutBooking && (
-            checkoutBooking.booking_status === 'CHECKED_OUT' ||
-            checkoutBooking.checked_out_at ||
-            u.staff_occupancy === 'VACANT'
+            checkoutBooking.stay?.self_checked_out_at ||
+            checkoutBooking.stay?.manager_checked_out_at ||
+            checkoutBooking.checkout_status === 'self_departed' ||
+            checkoutBooking.checkout_status === 'manager_departed'
           )
         );
-        const isStillInHouse = Boolean(hasCheckoutToday && !isDeparted && u.staff_occupancy !== 'VACANT');
+        const isStillInHouse = Boolean(hasCheckoutToday && !isDeparted);
         const canCleanNow = Boolean(!hasCheckoutToday || isDeparted);
-        const checkoutTime = checkoutBooking?.stay?.checkout_time || checkoutBooking?.checkout_time || '11:00';
 
         return {
           id: u.id,
@@ -548,23 +668,24 @@ export async function onRequest(context) {
       });
 
       const departedCount = unitItems.filter((u) => u.is_departed).length;
-      const canCleanCount = unitItems.filter((u) => u.can_clean_now && u.status !== 'READY').length;
+      const canCleanCount = unitItems.filter((u) => u.can_clean_now && (u.status !== 'READY' || u.is_departed)).length;
       const stillInHouseCount = unitItems.filter((u) => u.is_still_in_house).length;
-      const readyCount = unitItems.filter((u) => u.status === 'READY').length;
+      const readyCount = unitItems.filter((u) => u.status === 'READY' && !u.is_still_in_house && !u.is_departed).length;
 
       let reply = `תמונת מצב ניקיון יחידות להיום:\n\n`;
+
+      if (stillInHouseCount > 0) {
+        reply += `⏳ **עוד בשהייה · יוצאים היום (${stillInHouseCount} יחידות):**\n`;
+        reply += `• אורחים שעדיין בחדר (כגון מאיה 3 עם יציאה ב-15:00) — אין להיכנס לפני אישור עזיבה.\n\n`;
+      }
+
       reply += `✨ **עכשיו כבר אפשר לנקות (${canCleanCount} יחידות):**\n`;
       if (departedCount > 0) {
         reply += `• בראש התור: **${departedCount} יחידות שבהן האורח ביצע צ'ק-אאוט ויצא** (מסומנות ב-🚪).\n`;
       }
       reply += `• כל שאר היחידות בקטגוריה זו פנויות ומוכנות לכניסת צוות הניקיון.\n\n`;
 
-      if (stillInHouseCount > 0) {
-        reply += `⏳ **עוד בשהייה · יוצאים היום (${stillInHouseCount} יחידות):**\n`;
-        reply += `• אורחים שעדיין בחדר (שעת עזיבה רשומה: 11:00) — אין להיכנס לפני אישור עזיבה.\n\n`;
-      }
-
-      reply += `🟢 **מוכנות ונקיות לקליטה:** ${readyCount} מתוך ${units.length} יחידות.`;
+      reply += `🟢 **מוכנות ונקיות לקליטה:** ${readyCount} יחידות.`;
 
       return json({
         ok: true,

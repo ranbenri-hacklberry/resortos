@@ -53,7 +53,7 @@ export function UnitStatusCards({ data }) {
     ? readyItems
     : items;
 
-  const isGroupedView = filter === 'all' && (canCleanNowItems.length > 0 || stillInHouseItems.length > 0);
+  const isGroupedView = items.length > 1 && filter === 'all' && (canCleanNowItems.length > 0 || stillInHouseItems.length > 0);
 
   const renderUnitCard = (u) => {
     const isReady = u.status === 'READY';
@@ -219,87 +219,89 @@ export function UnitStatusCards({ data }) {
       )}
 
       {/* Filter Badges */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.35rem',
-        overflowX: 'auto',
-        paddingBottom: '0.2rem'
-      }}>
-        <button
-          type="button"
-          onClick={() => setFilter('all')}
-          style={{
-            padding: '0.25rem 0.55rem',
-            borderRadius: '999px',
-            fontSize: '0.68rem',
-            fontWeight: 800,
-            cursor: 'pointer',
-            border: filter === 'all' ? '1px solid #C5A059' : '1px solid rgba(197, 160, 89, 0.25)',
-            background: filter === 'all' ? '#C5A059' : '#FFFFFF',
-            color: filter === 'all' ? '#FFFFFF' : '#736055'
-          }}
-        >
-          הכל ({items.length})
-        </button>
-
-        {canCleanNowItems.length > 0 && (
+      {items.length > 1 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.35rem',
+          overflowX: 'auto',
+          paddingBottom: '0.2rem'
+        }}>
           <button
             type="button"
-            onClick={() => setFilter('can_clean')}
+            onClick={() => setFilter('all')}
             style={{
               padding: '0.25rem 0.55rem',
               borderRadius: '999px',
               fontSize: '0.68rem',
               fontWeight: 800,
               cursor: 'pointer',
-              border: filter === 'can_clean' ? '1px solid #10B981' : '1px solid rgba(16, 185, 129, 0.3)',
-              background: filter === 'can_clean' ? '#10B981' : '#ECFDF5',
-              color: filter === 'can_clean' ? '#FFFFFF' : '#059669'
+              border: filter === 'all' ? '1px solid #C5A059' : '1px solid rgba(197, 160, 89, 0.25)',
+              background: filter === 'all' ? '#C5A059' : '#FFFFFF',
+              color: filter === 'all' ? '#FFFFFF' : '#736055'
             }}
           >
-            ✨ אפשר לנקות עכשיו ({canCleanNowItems.length})
+            הכל ({items.length})
           </button>
-        )}
 
-        {stillInHouseItems.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setFilter('in_house')}
-            style={{
-              padding: '0.25rem 0.55rem',
-              borderRadius: '999px',
-              fontSize: '0.68rem',
-              fontWeight: 800,
-              cursor: 'pointer',
-              border: filter === 'in_house' ? '1px solid #F59E0B' : '1px solid rgba(245, 158, 11, 0.3)',
-              background: filter === 'in_house' ? '#F59E0B' : '#FFFBEB',
-              color: filter === 'in_house' ? '#FFFFFF' : '#B45309'
-            }}
-          >
-            ⏳ עוד בשהייה ({stillInHouseItems.length})
-          </button>
-        )}
+          {canCleanNowItems.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setFilter('can_clean')}
+              style={{
+                padding: '0.25rem 0.55rem',
+                borderRadius: '999px',
+                fontSize: '0.68rem',
+                fontWeight: 800,
+                cursor: 'pointer',
+                border: filter === 'can_clean' ? '1px solid #10B981' : '1px solid rgba(16, 185, 129, 0.3)',
+                background: filter === 'can_clean' ? '#10B981' : '#ECFDF5',
+                color: filter === 'can_clean' ? '#FFFFFF' : '#059669'
+              }}
+            >
+              ✨ אפשר לנקות עכשיו ({canCleanNowItems.length})
+            </button>
+          )}
 
-        {readyItems.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setFilter('ready')}
-            style={{
-              padding: '0.25rem 0.55rem',
-              borderRadius: '999px',
-              fontSize: '0.68rem',
-              fontWeight: 800,
-              cursor: 'pointer',
-              border: filter === 'ready' ? '1px solid #C5A059' : '1px solid rgba(197, 160, 89, 0.25)',
-              background: filter === 'ready' ? '#C5A059' : '#FFFFFF',
-              color: filter === 'ready' ? '#FFFFFF' : '#736055'
-            }}
-          >
-            מוכנות ({readyItems.length})
-          </button>
-        )}
-      </div>
+          {stillInHouseItems.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setFilter('in_house')}
+              style={{
+                padding: '0.25rem 0.55rem',
+                borderRadius: '999px',
+                fontSize: '0.68rem',
+                fontWeight: 800,
+                cursor: 'pointer',
+                border: filter === 'in_house' ? '1px solid #F59E0B' : '1px solid rgba(245, 158, 11, 0.3)',
+                background: filter === 'in_house' ? '#F59E0B' : '#FFFBEB',
+                color: filter === 'in_house' ? '#FFFFFF' : '#B45309'
+              }}
+            >
+              ⏳ עוד בשהייה ({stillInHouseItems.length})
+            </button>
+          )}
+
+          {readyItems.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setFilter('ready')}
+              style={{
+                padding: '0.25rem 0.55rem',
+                borderRadius: '999px',
+                fontSize: '0.68rem',
+                fontWeight: 800,
+                cursor: 'pointer',
+                border: filter === 'ready' ? '1px solid #C5A059' : '1px solid rgba(197, 160, 89, 0.25)',
+                background: filter === 'ready' ? '#C5A059' : '#FFFFFF',
+                color: filter === 'ready' ? '#FFFFFF' : '#736055'
+              }}
+            >
+              מוכנות ({readyItems.length})
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Cards Display */}
       {isGroupedView ? (

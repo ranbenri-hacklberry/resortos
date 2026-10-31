@@ -30,6 +30,7 @@ import { isUnavailableHoldBooking, coveringUnavailableHold, unavailableHoldLabel
 import { isBookingEligible, isRetiredUnitId, unitUsage } from '../../lib/units';
 import { priorityIncomingToday } from '../../lib/priorityStay';
 import { completionsFromUnit, toggleCompletion, addCompletion } from '../../lib/roomCompletions';
+import { stayHoursFromBooking, parseStayHoursFromNotes, formatStayHourLabel } from '../../lib/kinorotStayHours';
 import { db } from '../../lib/resortos-db';
 const SHOPPING_STORAGE_KEY = 'hotelos-procurement-shopping-v1';
 
@@ -287,16 +288,23 @@ export default function MobileOperationsView({
       const isSameDayTurnover = Boolean(checkoutBooking && checkinBooking);
 
       const hasCheckoutToday = Boolean(checkoutBooking);
+      // האורח יצא רק אם סומן במפורש ע"י מנהל/צוות או שיש תיעוד צ'ק-אאוט אמיתי
+      // אין להסתמך על booking_status בלבד כי הסנכרון של כינורות מסמן אוטומטית CHECKED_OUT ביום העזיבה
       const isGuestCheckedOut = Boolean(
         departedRoomIds.has(unit.id) ||
-        checkoutBooking?.booking_status === 'CHECKED_OUT' ||
-        checkoutBooking?.checked_out_at ||
-        unit.staff_occupancy === 'VACANT'
+        checkoutBooking?.stay?.self_checked_out_at ||
+        checkoutBooking?.stay?.manager_checked_out_at ||
+        checkoutBooking?.checkout_status === 'self_departed' ||
+        checkoutBooking?.checkout_status === 'manager_departed'
       );
       const isDepartedToday = Boolean(hasCheckoutToday && isGuestCheckedOut);
       const canCleanNow = Boolean(!hasCheckoutToday || isGuestCheckedOut);
       const isStillInHouse = Boolean(hasCheckoutToday && !isGuestCheckedOut);
-      const checkoutTime = checkoutBooking?.stay?.checkout_time || checkoutBooking?.checkout_time || '11:00';
+
+      const hours = stayHoursFromBooking(checkoutBooking);
+      const parsedNotes = !hours.checkout ? parseStayHoursFromNotes(checkoutBooking?.special_requests) : {};
+      const rawOut = hours.checkout || parsedNotes.checkout || checkoutBooking?.stay?.checkout_time || checkoutBooking?.checkout_time;
+      const checkoutTime = formatStayHourLabel(rawOut) || '11:00';
 
       return {
         unit,
