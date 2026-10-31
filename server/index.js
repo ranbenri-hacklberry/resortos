@@ -625,7 +625,8 @@ app.post('/api/guest/self-checkout-effects', async (req, res) => {
       guest_phone: req.body?.guest_phone,
       tenant_id: req.body?.tenant_id,
       checkout_token: req.body?.checkout_token,
-      checked_out_at: req.body?.checked_out_at
+      checked_out_at: req.body?.checked_out_at,
+      checkout_source: req.body?.source === 'guest_message' ? 'guest_message' : undefined
     };
     if (!booking.id) return res.status(400).json({ error: 'BOOKING_REQUIRED' });
     const { handleSelfCheckoutSideEffects } = await import('./guestComms.js');

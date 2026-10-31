@@ -236,3 +236,9 @@ export function isProblemReport(text?: string | null): boolean {
   if (/לא\s+(?:היו?\s+)?(?:בעיות|בעיה)/u.test(t)) return false;
   return /לא\s+(?:הצלחנו|הצלחתי|מצליח(?:ים|ה)?|עובד(?:ת|ים|ות)?|נפתח(?:ה|ת)?|נדלק(?:ת|ים)?|נסגר(?:ת)?)|תקלה|תקוע(?:ה)?|נתקע(?:ה|נו)?|שבור(?:ה)?|נשבר(?:ה)?|דולף|דליפה|אין\s+(?:מים|חשמל|מים\s+חמים)|\bbroken\b|not\s+working|couldn'?t\s+open|can'?t\s+open|doesn'?t\s+work/iu.test(t);
 }
+
+/** Ran 2026-10-31: "❤️" / "👍🙏" / "🫶" — no letters or digits at all → a reaction, not a question. */
+export function isEmojiOnlyMessage(text?: string | null): boolean {
+  const t = String(text || '').trim();
+  return t.length > 0 && t.length <= 40 && !/[\p{L}\p{N}]/u.test(t);
+}

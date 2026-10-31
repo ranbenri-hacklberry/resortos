@@ -1,4 +1,5 @@
 import { createHypReportFinder, startPayLinkWatch } from './manager/payLinkWatch.js';
+import { createGuestDepartedMarker } from './integration/guestDeparted.js';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import pino from 'pino';
 import { sendManagerSms } from './integration/managerSms.js';
@@ -63,6 +64,7 @@ const pipeline = createPipeline({
   downloadMedia: downloadInvoiceMedia,
   send: (jid, text, channelId) => router.sendText(channelId, jid, text, { isBot: true }),
   notifyManagerSms: (message: string) => sendManagerSms(message),
+  markGuestDeparted: createGuestDepartedMarker({ baseUrl: config.resortos.baseUrl, secret: process.env.CHECKOUT_MAILBOX_SECRET }),
   sendImage: (jid, buf, caption, channelId) => router.sendImage(channelId, jid, buf, caption, { isBot: true }),
   isAudio: isAudioMessage,
   extractText,

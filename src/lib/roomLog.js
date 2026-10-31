@@ -108,18 +108,19 @@ export function visibleRoomLog(events, scope = 'cycle') {
 }
 
 /* ── Checkout events (Ran 2026-10-21): one checkout = one entry, id `checkout:<bookingId>`. ── */
-export const CHECKOUT_SOURCE = { guest: 'אורח מהדף', manager: 'מנהל', sync: 'סנכרון' };
+export const CHECKOUT_SOURCE = { guest: 'אורח מהדף', guest_message: 'אורח בוואטסאפ', manager: 'מנהל', sync: 'סנכרון' };
 
 export function checkoutSourceOf(booking) {
   const s = booking?.stay || {};
   if (s.self_checked_out_at || booking?.checkout_status === 'self_departed' || s.checkout_status === 'self_departed') return 'guest';
+  if (booking?.checkout_status === 'guest_message') return 'guest_message';
   if (s.manager_checked_out_at) return 'manager';
   return 'sync';
 }
 
 export function checkoutAtOf(booking, source = checkoutSourceOf(booking)) {
   const s = booking?.stay || {};
-  if (source === 'guest') return s.self_checked_out_at || booking?.checked_out_at || booking?.updated_at || new Date().toISOString();
+  if (source === 'guest' || source === 'guest_message') return s.self_checked_out_at || booking?.checked_out_at || booking?.updated_at || new Date().toISOString();
   if (source === 'manager') return s.manager_checked_out_at || booking?.checked_out_at || booking?.updated_at || new Date().toISOString();
   // Sync rows: updated_at is bumped on every sync run, so cap at the booked checkout time (11:00 Israel).
   const candidates = [booking?.checked_out_at, booking?.updated_at].filter(Boolean);
