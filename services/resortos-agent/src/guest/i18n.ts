@@ -1,3 +1,4 @@
+import { defaultCheckoutTime } from './checkoutTime.js';
 /**
  * Guest reply templates by language (S17 + RU/AR, 2026-10-19).
  * Hebrew stays the default. Language is picked by the script of the guest's message.
@@ -50,11 +51,11 @@ const hi = (name: string | null | undefined, lang: GuestLang) => {
 };
 
 export const T = {
-  checkout: (lang: GuestLang, url?: string) => pick({
-    he: `ℹ️ *צ׳ק-אאוט:*\n• שעת צ׳ק-אאוט רשמית: עד 11:00 בבוקר.\n• החל מהשעה 08:00 בבוקר ניתן לבצע צ׳ק-אאוט עצמי בלחיצה אחת דרך דף האורח הדיגיטלי שלכם.`,
-    en: `ℹ️ *Check-out:*\n• Check-out is by 11:00 AM.\n• From 08:00 AM you can do a one-tap self check-out on your digital guest page.`,
-    ru: `ℹ️ *Выезд:*\n• Выезд до 11:00.\n• С 08:00 можно оформить выезд самостоятельно в одно нажатие на вашей странице гостя.`,
-    ar: `ℹ️ *تسجيل الخروج:*\n• تسجيل الخروج حتى الساعة 11:00 صباحًا.\n• من الساعة 08:00 صباحًا يمكنكم تسجيل الخروج الذاتي بضغطة واحدة في صفحة الضيف الرقمية.`,
+  checkout: (lang: GuestLang, url?: string, time: string = defaultCheckoutTime()) => pick({
+    he: `ℹ️ *צ׳ק-אאוט:*\n• שעת צ׳ק-אאוט רשמית: עד ${time}.\n• החל מהשעה 08:00 בבוקר ניתן לבצע צ׳ק-אאוט עצמי בלחיצה אחת דרך דף האורח הדיגיטלי שלכם.`,
+    en: `ℹ️ *Check-out:*\n• Check-out is by ${time}.\n• From 08:00 AM you can do a one-tap self check-out on your digital guest page.`,
+    ru: `ℹ️ *Выезд:*\n• Выезд до ${time}.\n• С 08:00 можно оформить выезд самостоятельно в одно нажатие на вашей странице гостя.`,
+    ar: `ℹ️ *تسجيل الخروج:*\n• تسجيل الخروج حتى الساعة ${time}.\n• من الساعة 08:00 صباحًا يمكنكم تسجيل الخروج الذاتي بضغطة واحدة في صفحة الضيف الرقمية.`,
   }, lang) + link(url, lang),
 
   /** checkInDate (YYYY-MM-DD) only when the guest's check-in is today or later. */
@@ -96,16 +97,16 @@ export const T = {
     ar: `حسب حجزكم، تسجيل الخروج في ${ddmm(checkout)} (وليس ${ddmm(asked)}).`,
   }, lang) + '\n',
   lateCheckoutTaken: (lang: GuestLang, room: string, checkout: string) => pick({
-    he: `מצטערים 🙏 ביום הצ׳ק-אאוט שלכם (${ddmm(checkout)}) ${room} כבר מוזמן לאורחים הבאים, ולכן לא נוכל להציע צ׳ק-אאוט מאוחר באותו יום. שעת הצ׳ק-אאוט היא עד 11:00.`,
-    en: `Sorry 🙏 on your check-out day (${ddmm(checkout)}) ${room} is already booked by the next guests, so we can't offer a late check-out that day. Check-out is by 11:00.`,
-    ru: `Извините 🙏 в день вашего выезда (${ddmm(checkout)}) ${room} уже забронирован следующими гостями, поэтому поздний выезд в этот день невозможен. Выезд до 11:00.`,
-    ar: `نأسف 🙏 في يوم خروجكم (${ddmm(checkout)}) ${room} محجوز للضيوف التاليين، لذلك لا يمكننا تقديم خروج متأخر في ذلك اليوم. تسجيل الخروج حتى الساعة 11:00.`,
+    he: `מצטערים 🙏 ביום הצ׳ק-אאוט שלכם (${ddmm(checkout)}) ${room} כבר מוזמן לאורחים הבאים, ולכן לא נוכל להציע צ׳ק-אאוט מאוחר באותו יום. שעת הצ׳ק-אאוט היא עד ${defaultCheckoutTime(checkout)}.`,
+    en: `Sorry 🙏 on your check-out day (${ddmm(checkout)}) ${room} is already booked by the next guests, so we can't offer a late check-out that day. Check-out is by ${defaultCheckoutTime(checkout)}.`,
+    ru: `Извините 🙏 в день вашего выезда (${ddmm(checkout)}) ${room} уже забронирован следующими гостями, поэтому поздний выезд в этот день невозможен. Выезд до ${defaultCheckoutTime(checkout)}.`,
+    ar: `نأسف 🙏 في يوم خروجكم (${ddmm(checkout)}) ${room} محجوز للضيوف التاليين، لذلك لا يمكننا تقديم خروج متأخر في ذلك اليوم. تسجيل الخروج حتى الساعة ${defaultCheckoutTime(checkout)}.`,
   }, lang),
   lateCheckoutFree: (lang: GuestLang, policy: string) => pick({
-    he: `בשמחה נבדוק עבורכם! 🌿\n${policy}\nנבדוק מול מנהל המתחם ונחזור אליכם בהקדם. עד לקבלת אישור, שעת הצ׳ק-אאוט נשארת עד 11:00.`,
-    en: `Happy to check for you! 🌿\n${policy}\nWe'll check with the site manager and get back to you soon. Until it's approved, check-out stays at 11:00.`,
-    ru: `С радостью проверим! 🌿\n${policy}\nМы уточним у менеджера комплекса и скоро ответим. До подтверждения выезд остаётся до 11:00.`,
-    ar: `يسعدنا أن نفحص لكم! 🌿\n${policy}\nسنتحقق مع مدير المجمع ونعود إليكم قريبًا. حتى الموافقة، يبقى تسجيل الخروج حتى الساعة 11:00.`,
+    he: `בשמחה נבדוק עבורכם! 🌿\n${policy}\nנבדוק מול מנהל המתחם ונחזור אליכם בהקדם. עד לקבלת אישור, שעת הצ׳ק-אאוט נשארת עד ${defaultCheckoutTime()}.`,
+    en: `Happy to check for you! 🌿\n${policy}\nWe'll check with the site manager and get back to you soon. Until it's approved, check-out stays at ${defaultCheckoutTime()}.`,
+    ru: `С радостью проверим! 🌿\n${policy}\nМы уточним у менеджера комплекса и скоро ответим. До подтверждения выезд остаётся до ${defaultCheckoutTime()}.`,
+    ar: `يسعدنا أن نفحص لكم! 🌿\n${policy}\nسنتحقق مع مدير المجمع ونعود إليكم قريبًا. حتى الموافقة، يبقى تسجيل الخروج حتى الساعة ${defaultCheckoutTime()}.`,
   }, lang),
 
   wifiNeedBooking: (lang: GuestLang) => pick({

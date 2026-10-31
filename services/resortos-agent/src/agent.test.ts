@@ -1388,7 +1388,12 @@ describe('guest knowledge & digital stay Q&A', () => {
   });
 
   it('answers checkout inquiry with 11:00 and digital self check-out', async () => {
+    // Weekday rule (Saturday is 13:00 since Ran 2026-10-31) — pin to a Wednesday.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-04T09:00:00+02:00'));
+    try {
     const deps = setupGuestDeps();
+    deps.resortos.listBookings = vi.fn(async () => [{ ...mockGuestBooking, check_in_date: '2026-11-03', check_out_date: '2026-11-04' } as any]);
     const pipeline = createPipeline(deps);
     const msg = {
       key: { remoteJid: guestJid, fromMe: false },
@@ -1401,6 +1406,21 @@ describe('guest knowledge & digital stay Q&A', () => {
     expect(reply).toContain('11:00');
     expect(reply).toContain('08:00');
     expect(reply).toContain('https://resortos.app/stay/token-dan-123');
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('answers checkout inquiry with 13:00 on Saturday', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-31T09:00:00+02:00'));
+    try {
+      const deps = setupGuestDeps();
+      deps.resortos.listBookings = vi.fn(async () => [{ ...mockGuestBooking, check_in_date: '2026-10-30', check_out_date: '2026-10-31' } as any]);
+      const pipeline = createPipeline(deps);
+      const res = await pipeline.handleInbound({ key: { remoteJid: guestJid, fromMe: false }, message: { conversation: 'מתי שעת העזיבה והצ׳ק אאוט?' } } as any);
+      expect(res.handled).toBe(true);
+      expect(deps.sent[0][1]).toContain('13:00');
+      expect(deps.sent[0][1]).not.toContain('11:00');
+    } finally { vi.useRealTimers(); }
   });
 
   it('handles general question with polite greeting and link to digital stay card', async () => {

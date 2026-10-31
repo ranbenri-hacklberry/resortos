@@ -1,3 +1,4 @@
+import { checkoutTimeForBooking, defaultCheckoutTime } from './checkoutTime.js';
 import { shabbatEntryHHMM } from './shabbatTime.js';
 import type { BookingRow } from '../integration/resortos.js';
 import type { RoomEntry } from '../config.js';
@@ -374,10 +375,13 @@ export const GATE_GUIDE =
   `🚪 *קוד השער למושב רמות:*\n` +
   `הקוד לפתיחת שער הרכב הוא: *#2464* (כולל סולמית בהתחלה).`;
 
-export const CHECKOUT_GUIDE =
+export const checkoutGuide = (time: string = defaultCheckoutTime()) =>
   `ℹ️ *צ׳ק-אאוט:*\n` +
-  `• שעת צ׳ק-אאוט רשמית: עד 11:00 בבוקר.\n` +
+  `• שעת צ׳ק-אאוט רשמית: עד ${time}.\n` +
   `• החל מהשעה 08:00 בבוקר ניתן לבצע צ׳ק-אאוט עצמי בלחיצה אחת דרך דף האורח הדיגיטלי שלכם.`;
+
+/** Back-compat: weekday text. Use checkoutGuide() for date-aware text. */
+export const CHECKOUT_GUIDE = checkoutGuide('11:00');
 
 export const FOOD_GUIDE =
   `🍽️ *מסעדות ואוכל מומלץ באזור:*\n\n` +
@@ -836,8 +840,9 @@ function answerInfoKind(kind: InfoKind, q: string, question: string, ctx: GuestC
     }
     case 'checkout': {
       // Check-out answers never mention check-in (Ran 2026-10-19).
-      if (lang !== 'he') return T.checkout(lang, ctx.stayUrl);
-      let reply = CHECKOUT_GUIDE;
+      const coTime = checkoutTimeForBooking(ctx.booking as any, ctx.today || israelToday());
+      if (lang !== 'he') return T.checkout(lang, ctx.stayUrl, coTime);
+      let reply = checkoutGuide(coTime);
       if (ctx.stayUrl) reply += `\n\n📱 לצ׳ק-אאוט עצמי בדף האורח:\n${ctx.stayUrl}`;
       return reply;
     }

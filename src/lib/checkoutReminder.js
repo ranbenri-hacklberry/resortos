@@ -26,11 +26,37 @@ export function effectiveDepartureDate(booking) {
   return isNextDayLate(booking?.stay) ? addDaysIso(out, 1) : out;
 }
 
-export function checkoutTimeFor(booking, fallback = DEFAULT_CHECKOUT_TIME) {
+export const SATURDAY_CHECKOUT_TIME = '13:00';
+export const MOTZASH = 'מוצ״ש';
+
+export function isSaturdayIso(iso) {
+  return Boolean(iso) && new Date(`${iso}T12:00:00Z`).getUTCDay() === 6;
+}
+
+/** Ran 2026-10-31: Saturday departure 13:00, other days 11:00. */
+export function defaultCheckoutTimeFor(dateIso) {
+  return isSaturdayIso(dateIso) ? SATURDAY_CHECKOUT_TIME : DEFAULT_CHECKOUT_TIME;
+}
+
+/** Agreed departure on the booking (stay overlay or Kinorot note out:motzash / out:HH:MM ≠ form default 15:00). */
+export function bookingCheckoutOverride(booking) {
   const stay = booking?.stay || {};
   const raw = String(stay.checkout_time || stay.late_until || '').replace('+1', '').trim();
-  if (/^\d{1,2}:\d{2}$/.test(raw)) return raw.padStart(5, '0');
-  return fallback;
+  const notes = String(booking?.special_requests || '');
+  if (/out:\s*(motzash|מוצ)/i.test(notes) || /motzash|מוצ/i.test(raw)) return MOTZASH;
+  if (/^\d{1,2}:\d{2}$/.test(raw) && raw.padStart(5, '0') !== DEFAULT_CHECKOUT_TIME) return raw.padStart(5, '0');
+  const m = notes.match(/out:\s*(\d{1,2}:\d{2})/i);
+  if (m && m[1].padStart(5, '0') !== '15:00') return m[1].padStart(5, '0');
+  return null;
+}
+
+export function checkoutTimeFor(booking, fallback) {
+  const stay = booking?.stay || {};
+  const ov = bookingCheckoutOverride(booking);
+  if (ov) return ov;
+  const raw = String(stay.checkout_time || stay.late_until || '').replace('+1', '').trim();
+  if (/^\d{1,2}:\d{2}$/.test(raw) && raw.padStart(5, '0') !== DEFAULT_CHECKOUT_TIME) return raw.padStart(5, '0');
+  return fallback || defaultCheckoutTimeFor(effectiveDepartureDate(booking));
 }
 
 /** Israeli mobile → 9725XXXXXXXX, else null. */
@@ -76,7 +102,7 @@ export function fromUnit(name) {
 export function buildCheckoutReminder({ guestName, unitName, checkoutTime, stayUrl } = {}) {
   const name = firstName(guestName);
   const lines = [
-    `בוקר טוב${name ? ` ${name}` : ''}! היום יום העזיבה ${fromUnit(unitName)}. העזיבה עד ${checkoutTime || DEFAULT_CHECKOUT_TIME}.`
+    `בוקר טוב${name ? ` ${name}` : ''}! היום יום העזיבה ${fromUnit(unitName)}. העזיבה ${checkoutTime === MOTZASH ? 'במוצ״ש' : `עד ${checkoutTime || DEFAULT_CHECKOUT_TIME}`}.`
   ];
   if (stayUrl) lines.push(`אפשר לסמן צ׳ק-אאוט או לבקש צ׳ק-אאוט מאוחר בדף האירוח: ${stayUrl}.`);
   lines.push('תודה שהתארחתם!');
@@ -132,7 +158,7 @@ export function nonGuestReason(booking, unit) {
 export function classifyForDate(booking, date, { now = new Date(), unit = null, alreadySent = false, checkoutTime = DEFAULT_CHECKOUT_TIME } = {}) {
   const dep = effectiveDepartureDate(booking);
   const late = isNextDayLate(booking?.stay);
-  const base = { booking, date, late, checkoutTime: checkoutTimeFor(booking, checkoutTime), phone: null };
+  const base = { booking, date, late, checkoutTime: checkoutTimeFor(booking, checkoutTime === DEFAULT_CHECKOUT_TIME ? undefined : checkoutTime), phone: null };
   if (booking?.check_out_date === date && late) {
     const r = nonGuestReason(booking, unit);
     if (r) return { ...base, send: false, reason: r, nonGuest: true };

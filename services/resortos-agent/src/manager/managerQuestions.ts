@@ -1,3 +1,4 @@
+import { bookingCheckoutOverride, defaultCheckoutTime } from '../guest/checkoutTime.js';
 import { stayUrlOf } from './guestLink.js';
 import { COMPLEXES, type ComplexDefinition } from './managerFuzzyMatcher.js';
 import { readFileSync } from 'node:fs';
@@ -360,7 +361,9 @@ export function answerManagerRoomQuestion(
 
   // 7. Departure hour / Checkout time
   if (/שעת עזיבה|מתי יוצא|מתי עוזב|שעת פינוי|שעת יציאה/i.test(q)) {
-    let reply = `🕚 *שעת צ'ק-אאוט רשמית היא עד 11:00 בבוקר.*`;
+    let reply = `🕚 *שעת צ'ק-אאוט רשמית היא עד ${defaultCheckoutTime()}* (שבת 13:00, שאר הימים 11:00).`;
+    const ov = bookingCheckoutOverride(occupancy.outBooking as any);
+    if (ov) reply += `\n• בהזמנה סוכם: יציאה ${ov}`;
     if (occupancy.outBooking) {
       reply += `\n• אורח יוצא: *${occupancy.outBooking.guest_name || 'ללא שם'}* (${occupancy.outBooking.guest_phone || 'ללא טלפון'})`;
     }

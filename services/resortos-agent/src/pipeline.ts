@@ -38,6 +38,7 @@ import {
 import { whatsappCallbackReply, isLateCheckoutQuestion, isLateCheckoutFollowUp, lateCheckoutManagerSms, answerLateCheckout, israelClock, answerGuestQuestion, answerStaffPlaceQuestion, staffPlaceNeedsRoom, type GuestContext } from './guest/guestKnowledge.js';
 import { answerRackRate } from './pricing/priceList.js';
 import { exactStaticReply, lookupExact } from './pricing/exactLookup.js';
+import { checkoutTimeForBooking } from './guest/checkoutTime.js';
 import {
   confirmAnswer,
   proposeStatusChange,
@@ -3108,7 +3109,7 @@ ${result.paymentURL}`);
                 `3. הוציאו את מפתח הבקתה.\n` +
                 `4. ערבלו את הגלגלות וסגרו את מכסה הכספת.\n\n` +
                 (stayUrl ? `📱 *דף האורח הדיגיטלי שלכם* (קוד WiFi, שירותים, אטרקציות וצ'ק-אאוט):\n${stayUrl}\n\n` : '') +
-                `ℹ️ שעת צ'ק-אאוט: 11:00\n\n` +
+                `ℹ️ שעת צ'ק-אאוט: ${checkoutTimeForBooking(roomBooking as any)}\n\n` +
                 `מאחלים לכם חופשה נפלאה ושלווה! לכל בקשה או שאלה במהלך השהות, פשוט כתבו לנו כאן בווטסאפ 🏡`;
               void logGuestWhatsAppExchange(roomBooking, text, reply);
               await d.send(jid, reply);
