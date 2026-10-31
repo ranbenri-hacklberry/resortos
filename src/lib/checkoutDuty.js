@@ -52,9 +52,16 @@ export function listOverdueCheckouts(bookings, now = new Date()) {
 
 // applyAutoCheckout removed (Ran 2026-10-31): nothing marks a stay CHECKED_OUT by the clock.
 
+// Kinorot bookings are never rolled forward: the Kinorot sync closes past stays (Ran 2026-10-31).
+export function isKinorotBooking(booking) {
+  const id = String(booking?.id || '');
+  const source = String(booking?.source || '').toLowerCase();
+  return id.startsWith('kin_') || source.startsWith('kin') || /(^|\s)kinorot:/.test(String(booking?.special_requests || ''));
+}
+
 export function bookingsNeedingCheckoutRollForward(bookings, today = israelToday()) {
   return (bookings || []).filter((booking) => (
-    isOpenStay(booking) && booking.check_out_date < today
+    isOpenStay(booking) && booking.check_out_date < today && !isKinorotBooking(booking)
   ));
 }
 
