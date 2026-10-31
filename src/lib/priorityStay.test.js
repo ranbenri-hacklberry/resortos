@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   ARRIVAL_TODAY_LABEL,
+  priorityBoardRange,
   priorityDayCell,
   priorityDayOccupancy,
   priorityDeskGuests,
+  priorityIncomingToday,
   priorityShowsGuest,
   selectPriorityStay
 } from './priorityStay';
@@ -135,6 +137,30 @@ describe('priorityDeskGuests', () => {
     expect(stay.roomStatus).toBe('בשהייה');
     expect(stay.staying.guest_name).toBe('נשאר');
     expect(stay.departing).toBeNull();
+  });
+});
+
+describe('priorityIncomingToday', () => {
+  const day = '2026-10-30';
+  const unit = (id) => ({ id, name: id, is_active: true });
+
+  it('uses the same incoming guest Priority shows, including a timestamped check-in', () => {
+    expect(priorityBoardRange(day)).toEqual({ from: '2026-10-09', to: '2027-02-27' });
+    const rows = priorityIncomingToday(
+      [unit('k682'), unit('k684'), unit('dome-blue'), { id: 'gone', deleted_at: '2026-10-01' }],
+      [
+        booking({ id: 'a', unit_id: 'k682', guest_name: 'גסטון', check_in_date: '2026-10-30T00:00:00', check_out_date: '2026-10-31' }),
+        booking({ id: 'b', unit_id: 'k684', guest_name: 'גסטון', check_in_date: '2026-10-30', check_out_date: '2026-10-31' }),
+        booking({ id: 'hold', unit_id: 'dome-blue', guest_name: 'שיפוץ', check_in_date: '2026-10-30', check_out_date: '2026-11-02' }),
+        booking({ id: 'cancel', unit_id: 'k682', guest_name: 'בוטל', check_in_date: '2026-10-30', check_out_date: '2026-10-31', booking_status: 'CANCELED' }),
+        booking({ id: 'out', unit_id: 'k684', guest_name: 'יוצא', check_in_date: '2026-10-28', check_out_date: '2026-10-30' })
+      ],
+      day
+    );
+    expect(rows.map((row) => row.booking.guest_name)).toEqual(['גסטון', 'גסטון']);
+    expect(rows.map((row) => row.unit.id)).toEqual(['k682', 'k684']);
+    expect(rows[1].sameDayTurnover).toBe(true);
+    expect(rows[0].sameDayTurnover).toBe(false);
   });
 });
 

@@ -49,9 +49,35 @@ function agentFieldsFromList(agents, staffId, phone) {
   return { agent_access: true, agent_id: row.id, agent_phone: row.phone || '', agent_pin: '' };
 }
 
-export default function Settings({ theme, setTheme, sessionUser, onSessionUserUpdate }) {
-  const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState('display');
+export default function Settings({ 
+  theme, 
+  setTheme, 
+  sessionUser, 
+  onSessionUserUpdate,
+  isOpen: externalOpen,
+  onClose: externalOnClose,
+  initialTab = 'display',
+  hideTrigger = false
+}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = typeof externalOpen === 'boolean';
+  const open = isControlled ? externalOpen : internalOpen;
+  const [tab, setTab] = useState(initialTab);
+
+  useEffect(() => {
+    if (initialTab) {
+      setTab(initialTab);
+    }
+  }, [initialTab, externalOpen]);
+
+  const setOpen = (val) => {
+    if (isControlled) {
+      if (!val && externalOnClose) externalOnClose();
+    } else {
+      setInternalOpen(val);
+    }
+  };
+
   const { i18n, t } = useTranslation();
   const isManager = isOwnerManager(sessionUser?.role);
   const canOpenAgents = isOpsLead(sessionUser?.role);
@@ -471,28 +497,30 @@ export default function Settings({ theme, setTheme, sessionUser, onSessionUserUp
 
   return (
     <div>
-      <button
-        onClick={() => {
-          setTab('display');
-          setEditingId(null);
-          setOpen(!open);
-        }}
-        title={t('SETTINGS')}
-        style={{
-          width: '34px',
-          height: '34px',
-          borderRadius: '50%',
-          border: isLight ? '1px solid rgba(0, 0, 0, 0.08)' : '1px solid rgba(255, 255, 255, 0.08)',
-          background: isLight ? 'rgba(0, 0, 0, 0.04)' : 'rgba(255, 255, 255, 0.05)',
-          color: isLight ? '#57534E' : '#94A3B8',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer'
-        }}
-      >
-        <Gear size={18} />
-      </button>
+      {!hideTrigger && (
+        <button
+          onClick={() => {
+            setTab('display');
+            setEditingId(null);
+            setOpen(!open);
+          }}
+          title={t('SETTINGS')}
+          style={{
+            width: '34px',
+            height: '34px',
+            borderRadius: '50%',
+            border: isLight ? '1px solid rgba(0, 0, 0, 0.08)' : '1px solid rgba(255, 255, 255, 0.08)',
+            background: isLight ? 'rgba(0, 0, 0, 0.04)' : 'rgba(255, 255, 255, 0.05)',
+            color: isLight ? '#57534E' : '#94A3B8',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer'
+          }}
+        >
+          <Gear size={18} />
+        </button>
+      )}
 
       <AnimatePresence>
         {open && (

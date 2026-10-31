@@ -154,6 +154,7 @@ import RoomCompletionsEditor from './RoomCompletionsEditor';
 import { unitAccessGroup, visibleInventory } from '../lib/units';
 import { operationsViewRole } from '../lib/staffRoles';
 import { israelToday } from '../lib/cabinAccess';
+import { priorityBoardRange } from '../lib/priorityStay';
 import { hideHousekeepingTaskWhileOccupied, isAwaitingManagerInspect, isEffectivelyOccupied } from '../lib/unitStatus';
 import { housekeepingTaskCopy, isGenericTurnoverReason, taskNeedsRoomLockbox } from '../lib/housekeepingTaskMeta';
 import { lockboxCodeForUnit } from '../lib/guestProfileSeed';
@@ -211,8 +212,9 @@ export default function ResortOSOperations({
   const [syncState, setSyncState] = useState({ status: 'loading', lastSyncAt: null, error: '' });
 
   const runCloudSync = useCallback(async () => {
+    const range = priorityBoardRange(israelToday());
     const [bookingsResult, unitsResult] = await Promise.all([
-      syncCloudBookingsToDexie(tenantId, { viaEdge: true }).catch((err) => ({ ok: false, error: String(err?.message || err) })),
+      syncCloudBookingsToDexie(tenantId, { viaEdge: true, from: range.from, to: range.to }).catch((err) => ({ ok: false, error: String(err?.message || err) })),
       syncUnitOpsToDexie(tenantId, { viaEdge: true }).catch((err) => ({ ok: false, error: String(err?.message || err) }))
     ]);
     const ok = Boolean(bookingsResult?.ok || unitsResult?.ok);
@@ -235,13 +237,7 @@ export default function ResortOSOperations({
     ensureCanonicalUnitCatalog().catch(() => {});
     const unsubscribe = subscribeToOpsEdgeEvents();
     const pollId = setInterval(() => {
-      syncUnitOpsToDexie(tenantId, { viaEdge: true }).then((result) => {
-        if (result?.ok) {
-          setSyncState({ status: 'ok', lastSyncAt: new Date().toISOString(), error: '' });
-        } else {
-          setSyncState((prev) => ({ ...prev, status: 'error', error: result?.error || 'SYNC_FAILED' }));
-        }
-      });
+      runCloudSync();
     }, 30000);
     return () => {
       clearInterval(pollId);

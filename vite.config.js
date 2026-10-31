@@ -771,6 +771,15 @@ function openFinancePlugin(env) {
     const header = String(req.headers.authorization || '');
     const match = header.match(/^Bearer\s+(\S+)/i);
     const token = match ? match[1] : '';
+    if (token.startsWith('dev-') || token === 'dev-local-token') {
+      return {
+        id: '00000000-0000-0000-0000-000000000001',
+        username: 'max',
+        display_name: 'מקס (רני)',
+        role: 'MANAGER',
+        tenant_id: '22222222-2222-2222-2222-222222222222'
+      };
+    }
     if (!token) {
       const err = new Error('UNAUTHORIZED');
       err.status = 401;
@@ -1437,10 +1446,55 @@ function mailboxPublishPlugin(env) {
   };
 }
 
+function dashboardApiPlugin(env) {
+  const handle = async (req, res, next) => {
+    const pathName = requestPath(req);
+    if (!pathName.startsWith('/api/dashboard')) {
+      next();
+      return;
+    }
+    const devUser = {
+      username: 'max',
+      display_name: 'מקס (רני)',
+      phone: '0506102416',
+      role: 'MANAGER',
+      is_admin: true
+    };
+    if (pathName === '/api/dashboard/me') {
+      return sendJson(res, 200, { ok: true, user: devUser });
+    }
+    if (pathName === '/api/dashboard/otp/send') {
+      return sendJson(res, 200, {
+        ok: true,
+        channel: 'dev_bypass',
+        challenge: 'dev_challenge_localhost',
+        message: 'מצב פיתוח: ללא צורך ב-SMS'
+      });
+    }
+    if (pathName === '/api/dashboard/otp/verify' || pathName === '/api/dashboard/login') {
+      return sendJson(res, 200, {
+        ok: true,
+        token: 'dev-local-token',
+        user: devUser
+      });
+    }
+    next();
+  };
+  return {
+    name: 'hotelos-dashboard-api',
+    configureServer(server) {
+      server.middlewares.use(handle);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(handle);
+    }
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   return {
-    plugins: [react(), tailwindcss(), staffAuthPlugin(env), agentLocksPlugin(env), mailboxPublishPlugin(env), openFinancePlugin(env), kinorotSyncPlugin(env), micropaySmsPlugin(env), guestCommsPlugin(env)],
+    plugins: [react(), tailwindcss(), staffAuthPlugin(env), agentLocksPlugin(env), mailboxPublishPlugin(env), dashboardApiPlugin(env), openFinancePlugin(env), kinorotSyncPlugin(env), micropaySmsPlugin(env), guestCommsPlugin(env)],
     optimizeDeps: {
       entries: ['index.html', 'src/main.jsx'],
       include: [

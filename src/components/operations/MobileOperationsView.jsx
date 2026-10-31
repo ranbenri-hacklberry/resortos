@@ -28,6 +28,7 @@ import { lockboxCodeForUnit } from '../../lib/guestProfileSeed';
 import { israelToday } from '../../lib/cabinAccess';
 import { isUnavailableHoldBooking, coveringUnavailableHold, unavailableHoldLabel } from '../../lib/unavailableHold';
 import { isBookingEligible, isRetiredUnitId, unitUsage } from '../../lib/units';
+import { priorityIncomingToday } from '../../lib/priorityStay';
 import { completionsFromUnit, toggleCompletion, addCompletion } from '../../lib/roomCompletions';
 import { db } from '../../lib/resortos-db';
 const SHOPPING_STORAGE_KEY = 'hotelos-procurement-shopping-v1';
@@ -107,11 +108,11 @@ export default function MobileOperationsView({
     }
   }, [todayStr]);
 
-  // Section Accordion State — arrivals open by default for instant operational clarity
+  // Section Accordion State — all sections closed by default on initial load
   const [sectionsOpen, setSectionsOpen] = useState({
-    arriving: true,
+    arriving: false,
     cleaning: false,
-    occupied: true,
+    occupied: false,
     held: false,
     vacant: false,
     maintenance: false,
@@ -195,41 +196,23 @@ export default function MobileOperationsView({
 
   const openProcurementCount = allProcurementItems.filter((i) => !i.done).length;
 
-  // 1. ARRIVING TODAY (חדרים נכנסים)
+  // 1. ARRIVING TODAY (חדרים נכנסים) — same incoming guest Priority shows.
   const arrivingRooms = useMemo(() => {
-    const arrivals = (effectiveBookings || []).filter((b) => (
-      b.check_in_date === todayStr &&
-      !b.deleted_at &&
-      b.booking_status !== 'CANCELED' &&
-      !isUnavailableHoldBooking(b)
-    ));
-
-    return arrivals.map((booking) => {
-      const unit = (effectiveUnits || []).find((u) => u.id === booking.unit_id);
+    return priorityIncomingToday(effectiveUnits, effectiveBookings, todayStr).map(({ unit, booking, sameDayTurnover }) => {
       const isReady = unit?.operational_status === 'READY';
       const isOccupied = unit?.staff_occupancy === 'OCCUPIED';
-      const lockbox = lockboxCodeForUnit(unit);
-      const sameDayTurnover = (effectiveBookings || []).some((b) => (
-        b.unit_id === booking.unit_id &&
-        b.check_out_date === todayStr &&
-        b.id !== booking.id &&
-        !b.deleted_at &&
-        b.booking_status !== 'CANCELED' &&
-        !isUnavailableHoldBooking(b)
-      ));
-
       return {
-        id: unit?.id || booking.unit_id || booking.id,
+        id: unit.id,
         booking,
         unit,
-        unitName: unit ? fieldUnitDisplayName(unit) : (booking.room_number || 'יחידה לא משובצת'),
+        unitName: fieldUnitDisplayName(unit),
         guestName: booking.guest_name || 'אורח',
         phone: booking.guest_phone || booking.phone || '',
         eta: booking.stay?.estimated_arrival_time || booking.eta || null,
         adults: booking.adults_count ?? booking.adults ?? null,
         kids: booking.children_count ?? booking.children ?? 0,
         specialRequests: booking.special_requests || booking.notes || booking.guest_notes || '',
-        lockbox,
+        lockbox: lockboxCodeForUnit(unit),
         status: unit?.operational_status || (sameDayTurnover ? 'DIRTY' : 'READY'),
         isReady,
         isOccupied,
@@ -638,144 +621,7 @@ export default function MobileOperationsView({
         </div>
       </div>
 
-      {/* Executive Quick KPI Overview Grid */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(2, 1fr)',
-          gap: '0.55rem'
-        }}
-      >
-        {/* KPI 1: Arrivals */}
-        <button
-          type="button"
-          onClick={() => {
-            setSectionsOpen((prev) => ({ ...prev, arriving: true }));
-            const el = document.getElementById('sec-arriving');
-            if (el) el.scrollIntoView({ behavior: 'smooth' });
-          }}
-          style={{
-            background: brand.cardBg,
-            border: `1px solid ${arrivingCleanCount === arrivingRooms.length && arrivingRooms.length > 0 ? brand.readyBorder : brand.cardBorder}`,
-            borderRadius: brand.radius,
-            padding: '0.7rem 0.85rem',
-            textAlign: 'right',
-            cursor: 'pointer',
-            boxShadow: brand.cardShadow,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.25rem',
-            position: 'relative',
-            transition: 'transform 0.15s ease'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.76rem', fontWeight: 800, color: brand.textMuted }}>🚪 כניסות היום</span>
-            <span style={{ fontSize: '1.25rem', fontWeight: 900, color: brand.gold, fontVariantNumeric: 'tabular-nums' }}>
-              {arrivingRooms.length}
-            </span>
-          </div>
-          <div style={{ fontSize: '0.72rem', fontWeight: 800, color: arrivingCleanCount === arrivingRooms.length && arrivingRooms.length > 0 ? brand.readyText : (arrivingRooms.length === 0 ? brand.textMuted : brand.urgentText) }}>
-            {arrivingRooms.length === 0 ? 'אין כניסות מתוכננות' : `${arrivingCleanCount} מתוך ${arrivingRooms.length} מוכנים`}
-          </div>
-        </button>
 
-        {/* KPI 2: Cleaning & Turnovers */}
-        <button
-          type="button"
-          onClick={() => {
-            setSectionsOpen((prev) => ({ ...prev, cleaning: true }));
-            const el = document.getElementById('sec-cleaning');
-            if (el) el.scrollIntoView({ behavior: 'smooth' });
-          }}
-          style={{
-            background: brand.cardBg,
-            border: `1px solid ${urgentTurnovers.length > 0 ? brand.urgentBorder : brand.cardBorder}`,
-            borderRadius: brand.radius,
-            padding: '0.7rem 0.85rem',
-            textAlign: 'right',
-            cursor: 'pointer',
-            boxShadow: brand.cardShadow,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.25rem'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.76rem', fontWeight: 800, color: brand.textMuted }}>🧹 לניקיון</span>
-            <span style={{ fontSize: '1.25rem', fontWeight: 900, color: urgentTurnovers.length > 0 ? brand.urgentText : brand.text, fontVariantNumeric: 'tabular-nums' }}>
-              {cleaningRooms.length}
-            </span>
-          </div>
-          <div style={{ fontSize: '0.72rem', fontWeight: 800, color: urgentTurnovers.length > 0 ? brand.urgentText : (cleaningRooms.length === 0 ? brand.readyText : brand.textMuted) }}>
-            {urgentTurnovers.length > 0 ? `⚡ ${urgentTurnovers.length} חפיפות דחופות!` : (cleaningRooms.length === 0 ? '✓ הכל נקי ומסודר' : `${cleaningRooms.length} יחידות ממתינות`)}
-          </div>
-        </button>
-
-        {/* KPI 3: Occupied */}
-        <button
-          type="button"
-          onClick={() => {
-            setSectionsOpen((prev) => ({ ...prev, occupied: true }));
-            const el = document.getElementById('sec-occupied');
-            if (el) el.scrollIntoView({ behavior: 'smooth' });
-          }}
-          style={{
-            background: brand.cardBg,
-            border: `1px solid ${brand.cardBorder}`,
-            borderRadius: brand.radius,
-            padding: '0.7rem 0.85rem',
-            textAlign: 'right',
-            cursor: 'pointer',
-            boxShadow: brand.cardShadow,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.25rem'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.76rem', fontWeight: 800, color: brand.textMuted }}>🏠 מאוכלסים</span>
-            <span style={{ fontSize: '1.25rem', fontWeight: 900, color: brand.gold, fontVariantNumeric: 'tabular-nums' }}>
-              {occupiedRooms.length}
-            </span>
-          </div>
-          <div style={{ fontSize: '0.72rem', color: brand.textMuted, fontWeight: 700 }}>
-            {occupiedRooms.length > 0 ? `${occupiedRooms.length} אורחים שוהים` : 'אין חדרים מאוכלסים'}
-          </div>
-        </button>
-
-        {/* KPI 4: Maintenance */}
-        <button
-          type="button"
-          onClick={() => {
-            setSectionsOpen((prev) => ({ ...prev, maintenance: true }));
-            const el = document.getElementById('sec-maintenance');
-            if (el) el.scrollIntoView({ behavior: 'smooth' });
-          }}
-          style={{
-            background: brand.cardBg,
-            border: `1px solid ${maintenanceTickets.length > 0 ? (maintenanceTickets.some((t) => t.urgency === 'CRITICAL') ? brand.alertBorder : brand.urgentBorder) : brand.cardBorder}`,
-            borderRadius: brand.radius,
-            padding: '0.7rem 0.85rem',
-            textAlign: 'right',
-            cursor: 'pointer',
-            boxShadow: brand.cardShadow,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.25rem'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.76rem', fontWeight: 800, color: brand.textMuted }}>🔧 תקלות</span>
-            <span style={{ fontSize: '1.25rem', fontWeight: 900, color: maintenanceTickets.length > 0 ? (maintenanceTickets.some((t) => t.urgency === 'CRITICAL') ? brand.alertText : brand.urgentText) : brand.readyText, fontVariantNumeric: 'tabular-nums' }}>
-              {maintenanceTickets.length}
-            </span>
-          </div>
-          <div style={{ fontSize: '0.72rem', fontWeight: 800, color: maintenanceTickets.length > 0 ? (maintenanceTickets.some((t) => t.urgency === 'CRITICAL') ? brand.alertText : brand.urgentText) : brand.readyText }}>
-            {maintenanceTickets.length === 0 ? '✓ אין תקלות פתוחות' : (maintenanceTickets.some((t) => t.urgency === 'CRITICAL') ? '⚠️ תקלה קריטית פתוחה' : `${maintenanceTickets.length} תקלות בטיפול`)}
-          </div>
-        </button>
-      </div>
 
       {/* Floating Undo Feedback Toast */}
       {toast && (

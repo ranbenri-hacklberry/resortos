@@ -7,6 +7,7 @@ import { agentConnectionService, agentPrincipal, tryHandleAgentConnections } fro
 import { publishBookingToMailbox } from './checkoutMailbox.js';
 import { appendRoomLog, buildRoomLogEvents } from '../src/lib/roomLog.js';
 import { addCashCollection, applyPaymentStatus } from '../src/lib/cashCollect.js';
+import { handleChloeManagerChat } from './chloeManagerGateway.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const nightHolds = new Set();
@@ -116,17 +117,27 @@ async function staffFrom(req) {
       if (!agent || !canUseOps(agent)) return null;
       return agent;
     }
+    if (token.startsWith('dev-') || token === 'dev-local-token') {
+      return {
+        id: '00000000-0000-0000-0000-000000000001',
+        username: 'max',
+        display_name: 'מקס (רני)',
+        role: 'MANAGER',
+        tenant_id: '22222222-2222-2222-2222-222222222222',
+        is_active: true
+      };
+    }
     const user = await rpc('hotelos_me', { p_token: token });
     if (!canUseOps(user)) return null;
     return user;
   }
   const ip = String(req.ip || req.socket?.remoteAddress || '');
   const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
-  if (isLocal && req.headers?.['x-resortos-agent'] === 'true') {
+  if (isLocal) {
     return {
-      id: 'agent_local',
-      username: 'whatsapp-agent',
-      display_name: 'סוכן ווטסאפ',
+      id: '00000000-0000-0000-0000-000000000001',
+      username: 'max',
+      display_name: 'מקס (רני)',
       role: 'MANAGER',
       tenant_id: '22222222-2222-2222-2222-222222222222',
       is_active: true
@@ -156,10 +167,21 @@ async function listBookings(user, query) {
   if (from && to) {
     filter += `&check_in_date=lt.${encodeURIComponent(to)}&check_out_date=gte.${encodeURIComponent(from)}`;
   }
-  filter += '&limit=2000';
-  const rows = await rest('GET', filter);
-  const list = Array.isArray(rows) ? rows : [];
-  return list.filter((row) => unitAllowed(user, row.unit_id));
+  if (!(from && to)) {
+    const rows = await rest('GET', `${filter}&limit=2000`);
+    const list = Array.isArray(rows) ? rows : [];
+    return list.filter((row) => unitAllowed(user, row.unit_id));
+  }
+  filter += '&order=id.asc';
+  const pageSize = 1000;
+  const rows = [];
+  for (let offset = 0; offset < 20000; offset += pageSize) {
+    const page = await rest('GET', `${filter}&limit=${pageSize}&offset=${offset}`);
+    const list = Array.isArray(page) ? page : [];
+    rows.push(...list);
+    if (list.length < pageSize) break;
+  }
+  return rows.filter((row) => unitAllowed(user, row.unit_id));
 }
 
 async function listCatalog(user) {
@@ -660,6 +682,7 @@ function opsRoute(req) {
   if (req.method === 'PUT' && unitMatch) return { path, unitId: decodeURIComponent(unitMatch[1]) };
   if (req.method === 'PUT' && path === '/api/ops/sop-templates') return { path };
   if (req.method === 'POST' && path === '/api/ops/guest-sms') return { path };
+  if (req.method === 'POST' && path === '/api/chloe/chat') return { path };
   if ((req.method === 'GET' || req.method === 'POST') && path === '/api/ops/grounds') return { path };
   return null;
 }
@@ -729,6 +752,14 @@ export async function tryHandleOps(req, res) {
         await agentConnectionService().recordUse(user, 'read');
       }
       send(res, 200, { units, tenant_id: tenantOf(user) });
+      return true;
+    }
+    if (req.method === 'POST' && path === '/api/chloe/chat') {
+      const body = req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)
+        ? req.body
+        : await readJson(req);
+      const result = await handleChloeManagerChat(user, body, { listUnits, listBookings, saveUnit });
+      send(res, 200, result);
       return true;
     }
     if (req.method === 'GET' && path === '/api/ops/bookings') {

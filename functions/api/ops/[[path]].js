@@ -227,15 +227,25 @@ export async function onRequest(context) {
     try {
       let query = '/hotelos_bookings?select=*';
       if (from && to) {
-        query += `&check_in_date=lt.${encodeURIComponent(to)}&check_out_date=gte.${encodeURIComponent(from)}`;
+        query += `&check_in_date=lt.${encodeURIComponent(to)}&check_out_date=gte.${encodeURIComponent(from)}&order=id.asc`;
+      } else {
+        query += '&order=check_in_date.asc';
       }
-      query += '&order=check_in_date.asc&limit=1000';
-      const res = await fetchPostgrest(query, { method: 'GET' }, env);
-      if (res && res.ok) {
-        const liveBookings = await res.json();
-        if (Array.isArray(liveBookings) && liveBookings.length > 0) {
-          return json({ ok: true, bookings: liveBookings, tenant_id: tenantId || DEMO_TENANT_ID });
-        }
+      const liveBookings = [];
+      const pageSize = 1000;
+      const maxPages = from && to ? 20 : 1;
+      let pulled = false;
+      for (let page = 0; page < maxPages; page += 1) {
+        const res = await fetchPostgrest(`${query}&limit=${pageSize}&offset=${page * pageSize}`, { method: 'GET' }, env);
+        if (!res || !res.ok) break;
+        const batch = await res.json();
+        if (!Array.isArray(batch)) break;
+        pulled = true;
+        liveBookings.push(...batch);
+        if (batch.length < pageSize) break;
+      }
+      if (pulled && liveBookings.length > 0) {
+        return json({ ok: true, bookings: liveBookings, tenant_id: tenantId || DEMO_TENANT_ID });
       }
     } catch (_) {}
 

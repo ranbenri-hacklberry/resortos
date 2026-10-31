@@ -24,6 +24,7 @@ import { applyBookingUpsell, recordedPaidAgorot } from '../../lib/bookingPaid';
 import { defaultGroundStatus, groundsBands, statusChoices, statusLabel } from '../../lib/priorityGrounds';
 import {
   ARRIVAL_TODAY_LABEL,
+  priorityBoardRange,
   priorityDayCell,
   priorityDayOccupancy,
   priorityDeskGuests,
@@ -1437,10 +1438,10 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
 
   const pullBoard = async () => {
     if (!tenantId) return { ok: false };
-    const day = israelToday();
+    const range = priorityBoardRange(israelToday());
     const pulled = await syncCloudBookingsToDexie(tenantId, {
-      from: shiftDay(day, -21),
-      to: shiftDay(day, 120),
+      from: range.from,
+      to: range.to,
       viaEdge: true
     });
     await syncUnitOpsToDexie(tenantId, { viaEdge: true });

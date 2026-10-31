@@ -74,4 +74,16 @@ export { default as DoorOpen } from '../../node_modules/lucide-react/dist/esm/ic
 export { default as Home } from '../../node_modules/lucide-react/dist/esm/icons/home.js';
 export { default as ShoppingCart } from '../../node_modules/lucide-react/dist/esm/icons/shopping-cart.js';
 export { default as MessageCircle } from '../../node_modules/lucide-react/dist/esm/icons/message-circle.js';
+export { default as EyeOff } from '../../node_modules/lucide-react/dist/esm/icons/eye-off.js';
+export { default as Users } from '../../node_modules/lucide-react/dist/esm/icons/users.js';
+export { default as ClipboardList } from '../../node_modules/lucide-react/dist/esm/icons/clipboard-list.js';
+export { default as Globe } from '../../node_modules/lucide-react/dist/esm/icons/globe.js';
+export { default as SlidersHorizontal } from '../../node_modules/lucide-react/dist/esm/icons/sliders-horizontal.js';
+export { default as CheckSquare } from '../../node_modules/lucide-react/dist/esm/icons/check-square.js';
+export { default as UserPlus } from '../../node_modules/lucide-react/dist/esm/icons/user-plus.js';
+export { default as RotateCcw } from '../../node_modules/lucide-react/dist/esm/icons/rotate-ccw.js';
+export { default as Mic } from '../../node_modules/lucide-react/dist/esm/icons/mic.js';
+export { default as MicOff } from '../../node_modules/lucide-react/dist/esm/icons/mic-off.js';
+export { default as Bot } from '../../node_modules/lucide-react/dist/esm/icons/bot.js';
+export { default as User } from '../../node_modules/lucide-react/dist/esm/icons/user.js';
 
