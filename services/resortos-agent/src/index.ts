@@ -1,5 +1,7 @@
 import { createHypReportFinder, startPayLinkWatch } from './manager/payLinkWatch.js';
 import { createGuestDepartedMarker } from './integration/guestDeparted.js';
+import { shouldTakeoverOnManualSend } from './integration/manualSendTakeover.js';
+import { logConversation } from './conversationLog.js';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import pino from 'pino';
 import { sendManagerSms } from './integration/managerSms.js';
@@ -243,6 +245,16 @@ const server = createServer(async (req, res) => {
       if (!target) return send(res, 400, { error: 'phone or jid required' });
       const targetJid = canonicalJid(target);
       await router.sendText(channelId, targetJid, text);
+      logConversation({ direction: 'outbound', jid: targetJid, text, route: 'http_send' });
+      let takeover = false;
+      if (shouldTakeoverOnManualSend({ url: String(req.url), body, targetJid, staff: currentStaff() })) {
+        router.setHumanTakeover(channelId, targetJid, {
+          reason: 'manual_send',
+          bookingId: body.booking_id ? String(body.booking_id) : undefined,
+          updatedBy: String(body.updated_by || 'http_send'),
+        });
+        takeover = true;
+      }
       if (body.booking_id) {
         void resortos.logGuestComm({
           bookingId: String(body.booking_id),
@@ -253,7 +265,7 @@ const server = createServer(async (req, res) => {
           channel: channelId,
         });
       }
-      return send(res, 200, { ok: true, sentTo: targetJid, channel: channelId });
+      return send(res, 200, { ok: true, sentTo: targetJid, channel: channelId, takeover });
     }
     send(res, 404, { error: 'not found' });
   } catch (e: any) {

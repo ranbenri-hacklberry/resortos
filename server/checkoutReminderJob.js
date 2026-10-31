@@ -106,7 +106,7 @@ async function notifyRan(text, cfg, env, { notify }) {
   if (String(wa.phone || RAN_PHONE).replace(/\D/g, '') !== RAN_PHONE) return { sent: false, reason: 'managerWhatsApp.phone is not Ran – refused' };
   const res = await fetch(wa.agentUrl || 'http://127.0.0.1:8787/api/messages/send', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone: RAN_PHONE, text }), signal: AbortSignal.timeout(15000)
+    body: JSON.stringify({ phone: RAN_PHONE, text, keep_auto: true }), signal: AbortSignal.timeout(15000)
   });
   return { sent: res.ok, status: res.status };
 }
