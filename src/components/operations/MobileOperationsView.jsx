@@ -20,7 +20,8 @@ import {
   Camera,
   Star,
   RefreshCw,
-  Lock
+  Lock,
+  CheckCircle2
 } from 'lucide-react';
 import { NorthStarIcon } from '../mialees/MialeesBrandAssets';
 import { fieldUnitDisplayName, stripLegendPlotNumber } from '../../lib/fieldUnitCatalog';
