@@ -96,7 +96,7 @@ import { normalizeOutgoingText } from './whatsapp/textSpacing.js';
 import { logConversation } from './conversationLog.js';
 import { TV_RE } from './guest/keywords.js';
 import { tvStepsForUnit, CALL_OFFER } from './guest/guestKnowledge.js';
-import { isGuestLeftMessage, GUEST_LEFT_THANKS, stripQrTokens, isIntroMessage, isGuideLinkRequest, isFoundItMessage, isProblemReport } from './guest/keywords.js';
+import { isGuestLeftMessage, isGuestLeftWithThanks, GUEST_LEFT_WARM_THANKS, GUEST_LEFT_THANKS, stripQrTokens, isIntroMessage, isGuideLinkRequest, isFoundItMessage, isProblemReport } from './guest/keywords.js';
 import { isStaffOpsQuestion, STAFF_OPS_ONLY_REPLY } from './manager/opsQuestion.js';
 import { scanIdWithGrok } from './idValidation/grokIdScan.js';
 import { guestIdEnabled, hasGuestId, saveGuestIdScan, shouldAskForId, ID_REQUEST_TEXT, idReplyFor } from './idValidation/guestIdStore.js';
@@ -3349,7 +3349,7 @@ ${result.paymentURL}`);
               const leftProblem = isProblemReport(text);
               const leftReply = leftProblem
                 ? GUEST_LEFT_PROBLEM_REPLY[lang === 'en' || lang === 'ru' ? lang : 'he']
-                : GUEST_LEFT_THANKS[lang === 'en' || lang === 'ru' ? lang : 'he'];
+                : (isGuestLeftWithThanks(text) ? GUEST_LEFT_WARM_THANKS : GUEST_LEFT_THANKS)[lang === 'en' || lang === 'ru' ? lang : 'he'];
               if (leftProblem) flagGuestProblem(booking, ctx.roomName, text || '', 'אחרי עזיבה');
               void logGuestWhatsAppExchange(booking, text || '', leftReply);
               if (d.notifyManagerSms) {

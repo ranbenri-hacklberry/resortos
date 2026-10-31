@@ -5,7 +5,7 @@ import type { RoomEntry } from '../config.js';
 import { readFileSync } from 'node:fs';
 import {
   ATTRACTIONS_RE, CHECKOUT_RE, FOOD_RE, FUEL_RE, GATE_RE, GROCERY_RE, JACUZZI_RE, LOCKBOX_RE, NATURE_RE, TV_RE, WIFI_RE,
-  kw, isFaultReport, isCheckinQuestion, isComplaint, isThanksOnly, isVagueProblem,
+  kw, isFaultReport, isCheckinQuestion, isComplaint, isThanksOnly, isVagueProblem, isGuestLeftMessage,
   PARKING_RE, PET_RE, CLEANING_RE, EXTENSION_RE, PAYMENT_INTL_RE,
 } from './keywords.js';
 import { T, detectGuestLang, guestLink, type GuestLang } from './i18n.js';
@@ -731,14 +731,14 @@ export function infoKinds(question: string): InfoKind[] {
     indoor_jacuzzi: isIndoorJacuzzi,
     unknown_amenity: isUnknown,
     checkin: isCheckinQuestion(question),
-    checkout: CHECKOUT_RE.test(q),
+    checkout: CHECKOUT_RE.test(q) && !isGuestLeftMessage(question),
     wifi: WIFI_RE.test(q),
     lockbox: LOCKBOX_RE.test(q) || /תכספת/.test(q),
     gate: GATE_RE.test(q),
     jacuzzi: isJacuzziGuide,
     parking: PARKING_RE.test(q),
     pets: PET_RE.test(q),
-    cleaning: CLEANING_RE.test(q),
+    cleaning: CLEANING_RE.test(q) && !isGuestLeftMessage(question),
   };
   return INFO_ORDER.filter((k) => hit[k]);
 }

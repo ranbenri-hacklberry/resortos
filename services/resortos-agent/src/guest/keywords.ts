@@ -179,12 +179,14 @@ export const PAYMENT_INTL_RE = kw(['payment', 'pay', 'paid', 'price', 'cost', 'b
 
 /** Guest reports they already left (Ran 2026-10-24, Musical Courtyard 1+3 "יצאנו" got the generic fallback). */
 export const GUEST_LEFT_RE = /(?:כבר\s+)?(?:יצאנו|עזבנו)(?:\s+מה?חדר|\s+מהצימר|\s+מהיחידה)?|סיימנו\s+ויצאנו|השארנו\s+(?:את\s+ה)?מפתח|\bwe(?:'ve|\s+have)?\s+(?:already\s+)?(?:left|checked\s*out)\b|^\s*(?:just\s+)?checked\s*out\b|мы\s+(?:уже\s+)?(?:уехали|выехали)|^\s*(?:уже\s+)?выехали/i;
-const GUEST_LEFT_NEG_RE = /(?:עוד\s+)?לא\s+(?:כבר\s+)?(?:יצאנו|עזבנו)|עדיין\s+לא|\bnot\s+(?:yet\s+)?(?:left|checked)|haven'?t\s+(?:left|checked)|не\s+(?:уехали|выехали)|\?/i;
+/** Chloe bug 2026-10-31: "צ׳ק-אאוט בוצע השארנו גם נקי תודה..." got the checkout FAQ. Completed-checkout statements. */
+const CHECKOUT_DONE_RE = /(?:צ['׳"]?ק[- ]?אאוט|צק\s+אאוט|check-?\s?out)\s+(?:כבר\s+)?(?:בוצע|נעשה|הושלם|done|completed)|(?:עשינו|ביצענו|סיימנו)\s+(?:כבר\s+)?(?:את\s+)?(?:ה)?(?:צ['׳"]?ק[- ]?אאוט|צק\s+אאוט)|השארנו\s+(?:גם\s+)?(?:(?:את\s+)?(?:ה)?(?:חדר|צימר|יחידה|בקתה)\s+)?נקי|\b(?:we\s+)?(?:just\s+)?checked\s*out\b|\bwe(?:'re|\s+are)\s+(?:all\s+)?checked\s*out\b|\bcheck-?\s?out\s+(?:is\s+)?(?:done|complete)/i;
+const GUEST_LEFT_NEG_RE = /(?:עוד\s+)?לא\s+(?:כבר\s+)?(?:יצאנו|עזבנו|עשינו|ביצענו|סיימנו)|(?:צ['׳"]?ק[- ]?אאוט|צק\s+אאוט)\s+לא\s+בוצע|עדיין\s+לא|\bnot\s+(?:yet\s+)?(?:left|checked)|haven'?t\s+(?:left|checked)|не\s+(?:уехали|выехали)|\?/i;
 /** True for "יצאנו" / "we left" / "мы уехали" — but not for negations or questions. */
 export function isGuestLeftMessage(text?: string | null): boolean {
   const t = String(text || '').trim();
   if (!t || t.length > 120) return false;
-  return GUEST_LEFT_RE.test(t) && !GUEST_LEFT_NEG_RE.test(t);
+  return (GUEST_LEFT_RE.test(t) || CHECKOUT_DONE_RE.test(t)) && !GUEST_LEFT_NEG_RE.test(t);
 }
 export const GUEST_LEFT_THANKS: Record<'he' | 'en' | 'ru', string> = {
   he: 'תודה שעדכנתם! נסיעה טובה 🌿',
@@ -192,6 +194,16 @@ export const GUEST_LEFT_THANKS: Record<'he' | 'en' | 'ru', string> = {
   ru: 'Спасибо, что сообщили! Счастливого пути 🌿',
 };
 
+/** Departure message that also thanks / praises the stay → warmer farewell (2026-10-31). */
+const GUEST_THANKS_RE = /תוד[הו]|נהנ(?:ינו|נו)|חוויה|מושלם|מדהים|thank|thx|enjoy|loved|great|amazing|спасибо|понравил/i;
+export function isGuestLeftWithThanks(text?: string | null): boolean {
+  return isGuestLeftMessage(text) && GUEST_THANKS_RE.test(String(text || ''));
+}
+export const GUEST_LEFT_WARM_THANKS: Record<'he' | 'en' | 'ru', string> = {
+  he: 'תודה רבה לכם, וכיף לשמוע שנהניתם! 🫶 שמחנו לארח אתכם, נסיעה טובה ומחכים לראות אתכם שוב 🌿',
+  en: 'Thank you so much, so glad you enjoyed your stay! 🫶 It was a pleasure hosting you. Safe travels, and hope to see you again 🌿',
+  ru: 'Большое спасибо, очень рады, что вам понравилось! 🫶 Счастливого пути, будем рады видеть вас снова 🌿',
+};
 
 // ---- Chloe bugs 2026-10-28 (log review 26–28/10) ----
 /** QR deep-link tokens (START_F1) appended to pre-filled WhatsApp texts. */
