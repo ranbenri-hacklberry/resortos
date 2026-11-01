@@ -1751,17 +1751,9 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         </span>
         <button type="button" className={`tb-btn${view === 'desk' && mode === 'grid' ? ' is-on' : ''}`} onClick={() => { setView('desk'); setMode((current) => (current === 'form' ? 'grid' : 'form')); }}><Table2 size={14} /> טבלה <kbd>F8</kbd></button>
         <span className="tb-sep" />
-        <button type="button" className="tb-btn" onClick={exportExcel}><FileSpreadsheet size={14} /> ייצא לאקסל</button>
-        {canEdit ? (
-          <button type="button" className={`tb-btn${dirtyCount ? ' is-dirty' : ''}`} disabled={!dirtyCount || saving} onClick={saveChanges}>
-            {saving ? 'שומר…' : `שמירה${dirtyCount ? ` (${dirtyCount})` : ''}`}
-          </button>
-        ) : null}
-        <button type="button" className="tb-btn" onClick={() => window.open('/price-list.html', '_blank', 'noopener')}><Printer size={14} /> מחירון</button>
-        <button type="button" className="tb-btn is-highlight" onClick={() => window.open('/qr-stickers.html#work-order', '_blank', 'noopener')} title="טופס הזמנת עבודה מספק A4 להדפסה"><FileText size={14} /> הזמנת עבודה</button>
         <button
           type="button"
-          className="tb-btn is-highlight"
+          className="tb-btn is-a4-guest"
           title={activeBookingForGuestFile ? `הדפסת דף אורח A4 (תיק אורח מלא) עבור ${activeBookingForGuestFile.guest_name || 'האורח הנבחר'}` : 'הדפסת דף אורח A4 (תיק אורח מלא) — לחצו לבחירת אורח'}
           onClick={() => {
             if (activeBookingForGuestFile) {
@@ -1775,7 +1767,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         </button>
         <button
           type="button"
-          className="tb-btn"
+          className="tb-btn is-a4-room"
           title="דף חדר A4 להדפסה עם קודי כספת, שער, WiFi ונהלים"
           onClick={() => {
             const unitParam = selected?.id ? `?unit=${encodeURIComponent(selected.id)}` : '';
@@ -1784,6 +1776,15 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         >
           <Printer size={14} /> דף חדר A4
         </button>
+        <span className="tb-sep" />
+        <button type="button" className="tb-btn" onClick={exportExcel}><FileSpreadsheet size={14} /> ייצא לאקסל</button>
+        {canEdit ? (
+          <button type="button" className={`tb-btn${dirtyCount ? ' is-dirty' : ''}`} disabled={!dirtyCount || saving} onClick={saveChanges}>
+            {saving ? 'שומר…' : `שמירה${dirtyCount ? ` (${dirtyCount})` : ''}`}
+          </button>
+        ) : null}
+        <button type="button" className="tb-btn" onClick={() => window.open('/price-list.html', '_blank', 'noopener')}><Printer size={14} /> מחירון</button>
+        <button type="button" className="tb-btn is-highlight" onClick={() => window.open('/qr-stickers.html#work-order', '_blank', 'noopener')} title="טופס הזמנת עבודה מספק A4 להדפסה"><FileText size={14} /> הזמנת עבודה</button>
         <button type="button" className="tb-btn" onClick={() => printDailyDutyReport({ dateStr: today, kind: 'both', area: 'all', bookings, units })}><Printer size={14} /> דוח יומי מלא</button>
         <button type="button" className="tb-btn" onClick={() => printCashDayReport(bookings, units, previousCashWeek(today))}><Printer size={14} /> דוח מזומנים</button>
         <button type="button" className="tb-btn" onClick={() => printDailyDutyReport({ dateStr: today, kind: 'morning', area: 'all', bookings, units })}><Printer size={14} /> תחילת יום</button>
@@ -1836,7 +1837,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                     <span>פרטי אורח</span>
                     <button
                       type="button"
-                      className="tb-btn is-highlight guest-file-btn"
+                      className="tb-btn is-a4-guest guest-file-btn"
                       disabled={!card.bookingId}
                       title="הדפסת דף אורח A4 (תיק אורח מלא הכולל פרטי הזמנה, תשלום וצ׳ק-אין)"
                       onClick={() => {
