@@ -265,6 +265,9 @@ export async function sweepStaleHousekeeping({ tenantId, units, bookings, pushUn
   const nowIso = new Date().toISOString();
   for (const unit of units) {
     if (!isStaleHousekeeping(unit, bookings, today)) continue;
+    // CRITICAL: A vacant dirty room awaiting cleaning must NEVER automatically jump to READY.
+    // Real departure cleaning stays DIRTY until staff actually cleans or inspects.
+    if (!isEffectivelyOccupied(unit, bookings, today)) continue;
     await pushUnitToCloud({
       id: unit.id,
       tenant_id: tenantId,
