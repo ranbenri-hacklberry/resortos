@@ -1500,8 +1500,19 @@
       renderUnit(selected);
     });
 
-    // Initial render
-    renderUnit(UNITS[0]);
+    // Initial render with URL query param support
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetUnitId = urlParams.get('unit');
+    const matchedUnit = targetUnitId ? UNITS.find(u => u.id === targetUnitId) : null;
+    const initialUnit = matchedUnit || UNITS[0];
+    select.value = initialUnit.id;
+    if (urlParams.get('friday') === '1') {
+      fridayToggle.checked = true;
+    }
+    renderUnit(initialUnit);
+    if (urlParams.get('print') === '1') {
+      setTimeout(() => window.print(), 350);
+    }
 
     // Batch Print Function (All 41 Units, strictly single page per unit)
     function printAllUnits() {

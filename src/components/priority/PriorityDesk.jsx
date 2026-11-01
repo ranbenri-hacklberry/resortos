@@ -59,6 +59,7 @@ import PriorityCashflow from './PriorityCashflow';
 import PriorityCalendar from './PriorityCalendar';
 import PriorityWord from './PriorityWord';
 import PriorityForms from './PriorityForms';
+import GuestPrintModal from './GuestPrintModal';
 import { formatManagerMeeting } from '../../lib/managerMeetings';
 import './priority.css';
 
@@ -428,7 +429,9 @@ function rowFromUnit(unit, bookings, today) {
     arrivalToday,
     holdLabel: holdLabel || '',
     roomStatus: desk.roomStatus,
-    stay: holdLabel || desk.roomStatus || (arrivalToday ? ARRIVAL_TODAY_LABEL : lodgingLabel(stay)),
+    stay: holdLabel === 'לא נקי'
+      ? 'לניקוי'
+      : (holdLabel || desk.roomStatus || (arrivalToday ? ARRIVAL_TODAY_LABEL : lodgingLabel(stay))),
     guest: primary?.guest_name || '',
     phone: primary ? displayPhone(primary.guest_phone || '') : '',
     nationalId: bookerNationalId(primary),
@@ -683,6 +686,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const [groundsState, setGroundsState] = useState({});
   const [groundDrafts, setGroundDrafts] = useState({});
   const [horizonStart, setHorizonStart] = useState(today);
+  const [showGuestPrintPicker, setShowGuestPrintPicker] = useState(false);
   const queryRef = useRef(null);
   const viewRef = useRef('desk');
   viewRef.current = view;
@@ -854,9 +858,11 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       weekLabel: (() => {
         const staffName = draft.staff != null ? draft.staff : row.staff;
         const cleanKey = draft.clean || row.cleanKey;
-        const isProgress = draft.weekMark === 'in_progress' || (!draft.weekMark && !row.holdLabel && (cleanKey === 'IN_PROGRESS' || liveWeekKey(draft.stay || row.stayKey, cleanKey, row.reason) === 'in_progress'));
+        const cleaningNamed = row.holdLabel === 'לא נקי';
+        const isProgress = draft.weekMark === 'in_progress' || (!draft.weekMark && (!row.holdLabel || cleaningNamed) && (cleanKey === 'IN_PROGRESS' || liveWeekKey(draft.stay || row.stayKey, cleanKey, row.reason) === 'in_progress'));
         if (isProgress) return staffName ? `בנקיון | ${staffName}` : 'בנקיון';
         if (draft.weekMark) return (WEEK_STATUSES.find((choice) => choice.key === draft.weekMark) || {}).label || row.clean;
+        if (row.holdLabel === 'לא נקי') return 'לניקוי';
         return row.holdLabel || (WEEK_STATUSES.find((choice) => choice.key === liveWeekKey(draft.stay || row.stayKey, clean, row.reason)) || {}).label || row.clean;
       })(),
       weekDirty: Boolean(draft.weekMark),
@@ -906,6 +912,26 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const cardCall = card ? findCallForBooking(callAlerts, cardBooking, card.id) : null;
   const cardUnreadCount = card ? getBookingUnread(cardBooking || card) : 0;
   const visibleIndex = selected ? visible.findIndex((row) => row.id === selected.id) : -1;
+
+  const activeBookingForGuestFile = useMemo(() => {
+    if (pinnedBooking && (!card || pinnedBooking.id === card.bookingId || pinnedBooking.unit_id === selected?.id)) {
+      return pinnedBooking;
+    }
+    if (card?.bookingId) {
+      const found = bookings.find((b) => b.id === card.bookingId);
+      if (found && !isUnavailableHoldBooking(found) && found.booking_status !== 'CANCELED') return found;
+    }
+    if (selected?.id) {
+      const desk = priorityDeskGuests(bookings, selected.id, today);
+      const candidate = desk.staying || desk.arriving || desk.departing;
+      if (candidate && !isUnavailableHoldBooking(candidate) && candidate.booking_status !== 'CANCELED') {
+        return candidate;
+      }
+      const found = bookings.find((b) => b.unit_id === selected.id && !isUnavailableHoldBooking(b) && b.booking_status !== 'CANCELED');
+      if (found) return found;
+    }
+    return null;
+  }, [pinnedBooking, card, selected, bookings, today]);
 
   const move = (delta) => {
     if (!visible.length) {
@@ -973,7 +999,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       setMessage(!choice || key === live
         ? ''
         : choice.hold
-          ? 'לא זמין עד מחר בכינורות. יש שינויים שטרם נשמרו'
+          ? 'לא נקי עד מחר בכינורות, בסטטוס לניקוי. יש שינויים שטרם נשמרו'
           : 'יש שינויים שטרם נשמרו');
       return;
     }
@@ -1368,33 +1394,14 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       });
       const failed = [...result.failed, ...payment.failed, ...holdFailed, ...groundFailed];
       if (held.length) {
-        const startedAt = new Date().toISOString();
-        const running = await staffJson('/api/kinorot/sync', undefined, 'GET').catch(() => ({}));
-        if (running.running) await waitForKinorotSync(running.lastAttemptAt || startedAt).catch(() => {});
-        const syncFrom = new Date().toISOString();
-        await staffJson('/api/kinorot/sync', { quick: true });
+        const savedNote = failed.length
+          ? 'חלק מהחדרים נשמרו כלא נקי'
+          : 'נשמר. החדר לניקוי';
+        setCalendarNote(savedNote);
+        setMessage(savedNote);
         setSaving(false);
-        const waitingNote = failed.length
-          ? 'חלק מהחסימות נשמרו. מחכה שהיומן יתעדכן'
-          : 'נחסם בכינורות עד מחר. מחכה שהיומן יתעדכן';
-        setCalendarNote(waitingNote);
-        setMessage(waitingNote);
-        waitForKinorotSync(syncFrom, 80)
-          .then(() => pullBoard())
-          .then(() => {
-            if (!failed.length) {
-              const caught = 'היומן עודכן והחסימה נקלטת';
-              setCalendarNote(caught);
-              setMessage(caught);
-            }
-          })
-          .catch(() => {
-            if (!failed.length) {
-              const delayed = 'החסימה נשמרה בכינורות. רענון היומן מתעכב';
-              setCalendarNote(delayed);
-              setMessage(delayed);
-            }
-          });
+        pullBoard().catch(() => {});
+        staffJson('/api/kinorot/sync', { quick: true }).catch(() => {});
       }
       if (failed.length) {
         const names = failed.map((fail) => fail.name || fail.unitId).join(', ');
@@ -1750,9 +1757,33 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
             {saving ? 'שומר…' : `שמירה${dirtyCount ? ` (${dirtyCount})` : ''}`}
           </button>
         ) : null}
-        <span className="tb-sep" />
         <button type="button" className="tb-btn" onClick={() => window.open('/price-list.html', '_blank', 'noopener')}><Printer size={14} /> מחירון</button>
         <button type="button" className="tb-btn is-highlight" onClick={() => window.open('/qr-stickers.html#work-order', '_blank', 'noopener')} title="טופס הזמנת עבודה מספק A4 להדפסה"><FileText size={14} /> הזמנת עבודה</button>
+        <button
+          type="button"
+          className="tb-btn is-highlight"
+          title={activeBookingForGuestFile ? `הדפסת דף אורח A4 (תיק אורח מלא) עבור ${activeBookingForGuestFile.guest_name || 'האורח הנבחר'}` : 'הדפסת דף אורח A4 (תיק אורח מלא) — לחצו לבחירת אורח'}
+          onClick={() => {
+            if (activeBookingForGuestFile) {
+              printGuestFile(activeBookingForGuestFile, { units, bookings });
+            } else {
+              setShowGuestPrintPicker(true);
+            }
+          }}
+        >
+          <Printer size={14} /> דף אורח A4
+        </button>
+        <button
+          type="button"
+          className="tb-btn"
+          title="דף חדר A4 להדפסה עם קודי כספת, שער, WiFi ונהלים"
+          onClick={() => {
+            const unitParam = selected?.id ? `?unit=${encodeURIComponent(selected.id)}` : '';
+            window.open(`/room-sheet-a4.html${unitParam}`, '_blank', 'noopener');
+          }}
+        >
+          <Printer size={14} /> דף חדר A4
+        </button>
         <button type="button" className="tb-btn" onClick={() => printDailyDutyReport({ dateStr: today, kind: 'both', area: 'all', bookings, units })}><Printer size={14} /> דוח יומי מלא</button>
         <button type="button" className="tb-btn" onClick={() => printCashDayReport(bookings, units, previousCashWeek(today))}><Printer size={14} /> דוח מזומנים</button>
         <button type="button" className="tb-btn" onClick={() => printDailyDutyReport({ dateStr: today, kind: 'morning', area: 'all', bookings, units })}><Printer size={14} /> תחילת יום</button>
@@ -1772,6 +1803,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
             onPrintDutyReport={() => printDailyDutyReport({ dateStr: today, kind: 'both', area: 'all', bookings, units })}
             onPrintCashReport={() => printCashDayReport(bookings, units, previousCashWeek(today))}
             onPrintMorningReport={() => printDailyDutyReport({ dateStr: today, kind: 'morning', area: 'all', bookings, units })}
+            onPrintGuestFile={() => setShowGuestPrintPicker(true)}
           />
         </div>
       ) : (
@@ -1804,8 +1836,9 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                     <span>פרטי אורח</span>
                     <button
                       type="button"
-                      className="tb-btn guest-file-btn"
+                      className="tb-btn is-highlight guest-file-btn"
                       disabled={!card.bookingId}
+                      title="הדפסת דף אורח A4 (תיק אורח מלא הכולל פרטי הזמנה, תשלום וצ׳ק-אין)"
                       onClick={() => {
                         const booking = (pinnedBooking && pinnedBooking.id === card.bookingId)
                           ? pinnedBooking
@@ -1814,7 +1847,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                         printGuestFile(booking, { units, bookings });
                       }}
                     >
-                      <Printer size={12} /> דף אורח
+                      <Printer size={13} /> הדפס דף אורח A4
                     </button>
                   </div>
                   <Field
@@ -1856,7 +1889,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                 </div>
                 <div className="master-col">
                   <div className="master-col-title">סטטוסים ותפעול</div>
-                  <Field label="סטטוס אירוח" value={card.stay} className={card.holdLabel ? 'tone-hold' : toneOf(card.stay)} />
+                  <Field label="סטטוס אירוח" value={card.stay} className={card.holdLabel === 'לא נקי' ? toneOf('לניקוי') : (card.holdLabel ? 'tone-hold' : toneOf(card.stay))} />
                   <Field label="סטטוס ניקיון" value={card.clean} className={toneOf(card.clean)} />
                   <label className="field">
                     <span>עובד משובץ</span>
@@ -1961,6 +1994,8 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
             <SplitFeedPanel
               card={card}
               booking={cardBooking}
+              bookings={bookings}
+              units={units}
               tab={tab}
               setTab={setTab}
               logScope={logScope}
@@ -2168,6 +2203,15 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       ) : null}
       </>
       )}
+      {showGuestPrintPicker ? (
+        <GuestPrintModal
+          isOpen={showGuestPrintPicker}
+          onClose={() => setShowGuestPrintPicker(false)}
+          bookings={bookings}
+          units={units}
+          today={today}
+        />
+      ) : null}
     </div>
   );
 }
@@ -2369,6 +2413,8 @@ function RoomBeaconInventory({ card }) {
 function SplitFeedPanel({
   card,
   booking = null,
+  bookings = [],
+  units = [],
   tab,
   setTab,
   logScope,
@@ -2693,6 +2739,22 @@ function SplitFeedPanel({
                 <Phone size={14} />
                 <span>חיוג</span>
               </a>
+            ) : null}
+            {card?.bookingId ? (
+              <button
+                type="button"
+                className="wa-icon-btn is-print"
+                title="הדפסת דף אורח A4 (תיק אורח מלא הכולל פרטי הזמנה, תשלום וצ׳ק-אין)"
+                onClick={() => {
+                  const b = (booking && booking.id === card.bookingId)
+                    ? booking
+                    : bookings.find((item) => item.id === card.bookingId);
+                  if (b) printGuestFile(b, { units, bookings });
+                }}
+              >
+                <Printer size={13} />
+                <span>דף אורח A4</span>
+              </button>
             ) : null}
             {onClose ? (
               <button

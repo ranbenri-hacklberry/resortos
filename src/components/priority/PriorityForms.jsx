@@ -75,7 +75,8 @@ export default function PriorityForms({
   onOpenWord,
   onPrintDutyReport,
   onPrintCashReport,
-  onPrintMorningReport
+  onPrintMorningReport,
+  onPrintGuestFile
 }) {
   const [activeCategory, setActiveCategory] = useState('all');
   const [search, setSearch] = useState('');
@@ -829,6 +830,20 @@ export default function PriorityForms({
       onRun: onPrintMorningReport,
       updatedAt: 'מתעדכן בזמן אמת',
       parties: 'משמרת בוקר ומשק בית',
+      sheetPreviewType: 'report'
+    },
+    {
+      id: 'report-guest-file',
+      category: 'reports',
+      title: 'דף אורח A4 להדפסה (תיק אורח מלא)',
+      subtitle: 'טופס קליטה רשמי לעמדת הקבלה והדלפק',
+      description: 'הדפסה מלאה של דף A4 מסודר לתיק האורח בדלפק: פרטי אורח והזמנה, יחידה משויכת, שעות הגעה/עזיבה, גבייה ויתרות, משימות בוקר ונוהל צ׳ק-אין.',
+      formatBadge: 'דוח חי להדפסה',
+      tagColor: 'green',
+      isAction: true,
+      onRun: onPrintGuestFile,
+      updatedAt: 'מתעדכן בזמן אמת',
+      parties: 'קבלה, משרד ותפעול',
       sheetPreviewType: 'report'
     },
 
