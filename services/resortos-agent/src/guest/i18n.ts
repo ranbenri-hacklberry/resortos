@@ -51,11 +51,19 @@ const hi = (name: string | null | undefined, lang: GuestLang) => {
 };
 
 export const T = {
+  /** Ran 2026-10-31: key return at checkout. Never includes the lockbox code. */
+  keyReturn: (lang: GuestLang) => pick({
+    he: `🔑 בסיום מחזירים את המפתח לתיבת המפתחות, סוגרים אותה ומסובבים גלגל אחד למספר אחר כדי לנעול. אין להשאיר את המפתח בדלת 😊`,
+    en: `🔑 When you leave, please return the key to the key box, close it and turn one wheel to a different number to lock it. Please don't leave the key in the door 😊`,
+    ru: `🔑 При выезде верните ключ в ящик для ключей, закройте его и поверните одно колёсико на другую цифру, чтобы запереть. Не оставляйте ключ в двери 😊`,
+    ar: `🔑 عند المغادرة يرجى إعادة المفتاح إلى صندوق المفاتيح، إغلاقه وإدارة عجلة واحدة إلى رقم آخر لقفله. لا تتركوا المفتاح في الباب 😊`,
+  }, lang),
+
   checkout: (lang: GuestLang, url?: string, time: string = defaultCheckoutTime()) => pick({
-    he: `ℹ️ *צ׳ק-אאוט:*\n• שעת צ׳ק-אאוט רשמית: עד ${time}.\n• החל מהשעה 08:00 בבוקר ניתן לבצע צ׳ק-אאוט עצמי בלחיצה אחת דרך דף האורח הדיגיטלי שלכם.`,
-    en: `ℹ️ *Check-out:*\n• Check-out is by ${time}.\n• From 08:00 AM you can do a one-tap self check-out on your digital guest page.`,
-    ru: `ℹ️ *Выезд:*\n• Выезд до ${time}.\n• С 08:00 можно оформить выезд самостоятельно в одно нажатие на вашей странице гостя.`,
-    ar: `ℹ️ *تسجيل الخروج:*\n• تسجيل الخروج حتى الساعة ${time}.\n• من الساعة 08:00 صباحًا يمكنكم تسجيل الخروج الذاتي بضغطة واحدة في صفحة الضيف الرقمية.`,
+    he: `ℹ️ *צ׳ק-אאוט:*\n• שעת צ׳ק-אאוט רשמית: עד ${time}.\n• החל מהשעה 08:00 בבוקר ניתן לבצע צ׳ק-אאוט עצמי בלחיצה אחת דרך דף האורח הדיגיטלי שלכם.\n• 🔑 בסיום מחזירים את המפתח לתיבת המפתחות, סוגרים ומסובבים גלגל אחד למספר אחר.`,
+    en: `ℹ️ *Check-out:*\n• Check-out is by ${time}.\n• From 08:00 AM you can do a one-tap self check-out on your digital guest page.\n• 🔑 When you leave, return the key to the key box, close it and turn one wheel to a different number.`,
+    ru: `ℹ️ *Выезд:*\n• Выезд до ${time}.\n• С 08:00 можно оформить выезд самостоятельно в одно нажатие на вашей странице гостя.\n• 🔑 При выезде верните ключ в ящик для ключей, закройте его и поверните одно колёсико на другую цифру.`,
+    ar: `ℹ️ *تسجيل الخروج:*\n• تسجيل الخروج حتى الساعة ${time}.\n• من الساعة 08:00 صباحًا يمكنكم تسجيل الخروج الذاتي بضغطة واحدة في صفحة الضيف الرقمية.\n• 🔑 عند المغادرة أعيدوا المفتاح إلى صندوق المفاتيح، أغلقوه وأديروا عجلة واحدة إلى رقم آخر.`,
   }, lang) + link(url, lang),
 
   /** checkInDate (YYYY-MM-DD) only when the guest's check-in is today or later. */
