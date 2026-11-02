@@ -9,6 +9,8 @@ import {
   formatPriorityShekels,
   parsePriorityShekels,
   paymentBreakdown,
+  chargeDisplay,
+  priorityChargeRows,
   priorityMethodKey,
   priorityMethodLabel,
   priorityPayLabel,
@@ -218,9 +220,50 @@ describe('priority payment', () => {
     expect(dueAgorotOf(booking.booking)).toBe(0);
   });
 
+  it('lists every charge with its payment type and an approval number for card or bank', () => {
+    const booking = stay({
+      id: 'kinorot_stay_9001',
+      special_requests: 'kinorot:9001|שולם מזומן 500|חויב אשראי 260',
+      clearing_payments: [
+        { source: 'HYP', accountKey: 'MAX_HYP', method: 'card', amount_agorot: 180000, ref: '445566', date: '2026-10-01', txn: 'hyp1' },
+        { source: 'BANK', accountKey: 'BANK', method: 'bank', amount_agorot: 70000, ref: 'TR-19', date: '2026-10-02', txn: 'bank1' },
+        { source: 'CASH', accountKey: 'CASH', method: 'cash', amount_agorot: 50000, date: '2026-10-03', txn: 'cash1' }
+      ],
+      stay: { hyp: { paid: true, auth: '445566', amount: 1800 } }
+    });
+    const rows = priorityChargeRows(booking);
+    expect(rows.map((row) => row.kindLabel)).toEqual(['אשראי', 'העברה בנקאית', 'מזומן', 'אשראי']);
+    expect(rows[0].needsApproval).toBe(true);
+    expect(rows[0].approval).toBe('445566');
+    expect(rows[1].approval).toBe('TR-19');
+    expect(rows[2].needsApproval).toBe(false);
+    expect(rows[2].approval).toBe('');
+    expect(rows[3].amount_agorot).toBe(26000);
+    expect(rows[3].approval).toBe('');
+    expect(chargeDisplay({ source: 'HYP', amount_agorot: 100, method: 'card' }).approval).toBe('');
+  });
+
   it('does not put a card payment into the cash report', () => {
     const card = stay({ payment_status: 'PAID', payment_mode: 'CARD' });
     expect(priorityPayLabel({ status: 'PAID', method: 'CARD', amountAgorot: 200000 })).toBe('שולם (אשראי)');
     expect(cashPaymentsOnDate([card], [], today)).toHaveLength(0);
+  });
+});
+
+describe('manual paid fallback', async () => {
+  const { priorityChargeRows: rowsOf } = await import('./priorityPayment');
+  it('shows synthetic line when marked paid without charges', () => {
+    const rows = rowsOf({ id: 'b1', payment_status: 'PAID', payment_mode: 'VOUCHER', total_price_agorot: 0, clearing_payments: [] });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].kindLabel).toBe('שובר (סומן ידנית)');
+    expect(rows[0].amount_agorot).toBe(0);
+  });
+  it('uses deposit for DEPOSIT_PAID', () => {
+    const rows = rowsOf({ id: 'b2', payment_status: 'DEPOSIT_PAID', payment_mode: 'CASH', deposit_agorot: 90000, total_price_agorot: 180000 });
+    expect(rows[0].kindLabel).toBe('מזומן (סומן ידנית)');
+    expect(rows[0].amount_agorot).toBe(90000);
+  });
+  it('no fallback for unpaid', () => {
+    expect(rowsOf({ id: 'b3', payment_status: 'UNPAID', payment_mode: 'CASH', total_price_agorot: 5 })).toHaveLength(0);
   });
 });
