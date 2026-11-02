@@ -46,15 +46,17 @@ export function receivedKinorotNotePayments(events) {
 }
 
 export function parseKinorotNotePayments(text, { todayIso } = {}) {
-  const src = String(text || '').replace(/\s+/g, ' ');
+  const src = String(text || '').replace(/[\u200e\u200f\u00a0]/g, ' ').replace(/\s+/g, ' ');
   const events = [];
   const seen = new Set();
-  const re = /(?:(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?\s*)?(?:בוצע\s+)?(?:שולם|שולמה|שילמה|שילם|חויב|חויבה|חיוב|גבה|נגבה)(?:\s+מקדמה)?(?:\s+ב?(אשראי|מזומן|העברה(?:\s+בנקאית)?))?\s+([\d,]{2,6})/g;
+  // Branch A: verb (שולם/חויב...) [method] AMOUNT. Branch B: [בוצע/בוצעה/נעשתה/התקבלה] העברה [בנקאית] [בוצעה/נוספת] [של] AMOUNT
+  const re = /(?:(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?\s*-?\s*)?(?:(?:בוצע(?:ה|ו)?\s+)?(?:שולם|שולמה|שילמה|שילם|חויב|חויבה|חיוב|גבה|נגבה)(?:\s+מקדמה)?(?:\s+ב?(אשראי|מזומן|העברה(?:\s+בנקאית)?))?|(?:(?:בוצע(?:ה)?|נעשתה|התקבלה)\s+)?(העברה(?:\s+בנקאית)?)(?:\s+(?:בוצעה|נוספת|התקבלה))?(?:\s+של)?)[\s-]+([\d,]{2,6})/g;
   let match;
   while ((match = re.exec(src))) {
-    const amount = ilsFromRaw(match[5]);
+    const amount = ilsFromRaw(match[6]);
     if (amount < 50 || amount > 80000) continue;
-    const method = normalizeKinorotPayMethod(match[4] || 'אשראי');
+    if (/(?:^|\s)(?:לא|טרם|ממתין ל|מחכה ל)\s*(?:בוצע\S*\s+)?$/.test(src.slice(Math.max(0, match.index - 15), match.index))) continue;
+    const method = normalizeKinorotPayMethod(match[4] || match[5] || 'אשראי');
     const date = match[1]
       ? kinorotNotePaymentDate(Number(match[1]), Number(match[2]), match[3], todayIso)
       : '';
