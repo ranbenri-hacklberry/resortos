@@ -1,0 +1,44 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.cardcomtap'
+version = '0.1.0'
+
+def vendorDir = new File(rootProject.projectDir, "../vendor/cardcom")
+def appLibs = new File(rootProject.projectDir, "app/libs")
+def aarFiles = []
+if (vendorDir.exists()) {
+  aarFiles.addAll(vendorDir.listFiles()?.findAll { it.name.endsWith('.aar') } ?: [])
+}
+if (appLibs.exists()) {
+  aarFiles.addAll(appLibs.listFiles()?.findAll { it.name.endsWith('.aar') } ?: [])
+}
+def aarFile = aarFiles ? aarFiles[0] : null
+def mockFlag = String.valueOf(rootProject.findProperty("CARDCOM_TAP_MOCK") ?: "true")
+def useMock = mockFlag == "true" || mockFlag == "1"
+if (!useMock && aarFile == null) {
+  throw new GradleException("CARDCOM_TAP_MOCK=false but no Cardcom AAR was found in mobile/vendor/cardcom or android/app/libs. See mobile/README.md.")
+}
+
+android {
+  namespace "expo.modules.cardcomtap"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+    buildConfigField "boolean", "CARDCOM_TAP_MOCK", useMock ? "true" : "false"
+  }
+  buildFeatures {
+    buildConfig true
+  }
+  lintOptions {
+    abortOnError false
+  }
+}
+
+dependencies {
+  if (!useMock && aarFile != null) {
+    implementation files(aarFile)
+  }
+}

@@ -62,6 +62,8 @@ native/.venv/
 *.jks
 *.keystore
 key.properties
+mobile/vendor/cardcom/*.aar
+mobile/android/app/libs/*.aar
 
 # OS Junk
 .DS_Store

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>חיוב ResortOS</title>
+  </head>
+  <body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;background:#FAF8F3;color:#26130F">
+    <main style="text-align:center;padding:24px;max-width:420px">
+      <p style="font-size:22px;font-weight:800;margin:0">פותחים את חיוב ResortOS</p>
+      <p style="margin:12px 0 0;line-height:1.5">אם האפליקציה לא נפתחה, התקינו אותה על הטלפון של הצוות.</p>
+      <p style="margin:16px 0 0"><a id="open" style="color:#8A6A2F;font-weight:800">פתיחה באפליקציה</a></p>
+    </main>
+    <script>
+      (function () {
+        var q = location.search || '';
+        var app = 'resortos://charge' + q;
+        var link = document.getElementById('open');
+        if (link) link.href = app;
+        setTimeout(function () { location.replace(app); }, 300);
+      })();
+    </script>
+  </body>
+</html>

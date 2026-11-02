@@ -1,0 +1,60 @@
+{
+  "expo": {
+    "name": "ResortOS",
+    "slug": "resortos",
+    "scheme": "resortos",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "il.mialis.resortos",
+      "infoPlist": {
+        "CFBundleDevelopmentRegion": "he"
+      }
+    },
+    "android": {
+      "package": "il.mialis.resortos",
+      "adaptiveIcon": {
+        "backgroundColor": "#FAF8F3",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "resortos.app",
+              "pathPrefix": "/charge"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 33,
+            "compileSdkVersion": 37,
+            "targetSdkVersion": 37
+          }
+        }
+      ],
+      "./plugins/withCardcomAndroid.js"
+    ],
+    "extra": {
+      "apiBase": "https://resortos.app",
+      "dashboardPath": "/dashboard"
+    }
+  }
+}

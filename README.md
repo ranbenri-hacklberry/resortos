@@ -563,6 +563,10 @@ ResortOS is an actively developed system being tested against real hospitality o
 
 The architecture is being developed from real-world operational requirements rather than from software abstractions alone.
 
+## Mobile app
+
+The staff phone app lives in [mobile/README.md](mobile/README.md). It shows this dashboard in a WebView and adds Cardcom Tap on Phone on Android. The Pages site and the web dashboard are unchanged.
+
 ## Development
 
 ```bash
