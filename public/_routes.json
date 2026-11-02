@@ -1,5 +1,5 @@
 {
   "version": 1,
-  "include": ["/api/*", "/stay", "/stay/*", "/demo", "/demo/", "/demo/form", "/checkout/*"],
+  "include": ["/api/*", "/stay", "/stay/*", "/demo", "/demo/", "/demo/form", "/checkout/*", "/.well-known/apple-app-site-association"],
   "exclude": []
 }

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>חיוב ResortOS</title>
+    <style>
+      body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #FAF8F3; color: #26130F; font-family: Heebo, Assistant, sans-serif; }
+      main { max-width: 420px; padding: 28px 20px; text-align: center; }
+      h1 { font-size: 32px; margin: 0; }
+      p { color: #6B5C53; line-height: 1.5; }
+      a { display: inline-block; margin-top: 12px; background: #10A37F; color: #fff; text-decoration: none; font-weight: 800; padding: 14px 22px; border-radius: 16px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>פותחים את החיוב באפליקציה</h1>
+      <p>הקישור מיועד לטלפון של הצוות. אם האפליקציה מותקנת, היא נפתחת עם הסכום וההזמנה.</p>
+      <a id="open" href="resortos://charge">פתיחה ב-ResortOS</a>
+    </main>
+    <script>
+      (function () {
+        var allowed = { booking: 1, amount: 1, payments: 1 };
+        var incoming = new URLSearchParams(location.search);
+        var next = new URLSearchParams();
+        incoming.forEach(function (value, key) {
+          if (allowed[key]) next.set(key, value);
+        });
+        var href = 'resortos://charge' + (next.toString() ? '?' + next.toString() : '');
+        document.getElementById('open').href = href;
+        location.replace(href);
+      })();
+    </script>
+  </body>
+</html>
