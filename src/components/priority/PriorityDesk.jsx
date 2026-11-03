@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, CheckCheck, ExternalLink, FileSpreadsheet, FileText, FolderOpen, Link2, MessageCircle, Phone, Printer, RefreshCw, Send, Table2, X } from 'lucide-react';
-import { formatIlsFromAgorot, normalizeClearingPayment, normalizeIsraeliId } from '../../lib/clearingPayments';
+import { formatIlsFromAgorot, normalizeIsraeliId } from '../../lib/clearingPayments';
 import { previousCashWeek, printCashDayReport } from '../../lib/cashDayReport';
 import { calendarPartyLabel, dutyPrintAreaOf, dutyUnitGroup, printDailyDutyReport } from '../../lib/dailyDutyReport';
 import { getUnitSign } from '../../lib/fieldUnitCatalog';
@@ -45,13 +45,16 @@ import {
   parsePriorityShekels,
   paymentBreakdown,
   paymentDraftDirty,
+  priorityChargeRows,
   priorityMethodKey,
   priorityPayTone,
   priorityShekelMark,
   priorityStatusKey,
   savePriorityPaymentDrafts
 } from '../../lib/priorityPayment';
-import { pushBookingToCloud, pushUnitToCloud, subscribeToOpsEdgeEvents, syncCloudBookingsToDexie, syncUnitOpsToDexie } from '../../lib/cloudDb';
+import { ensureCanonicalUnitCatalog, pushBookingToCloud, pushUnitToCloud, subscribeToOpsEdgeEvents, syncCloudBookingsToDexie, syncUnitOpsToDexie } from '../../lib/cloudDb';
+import { addCardSplit } from '../../lib/cardSplit';
+import { cashCollectorChoices, DEFAULT_CASH_COLLECTOR } from '../../lib/cashCollectors';
 import { getStoredToken, listAssignableStaff, staffDisplayName } from '../../lib/staffAuth';
 import { toMicropayPhone } from '../../lib/micropaySms';
 import { displayPhone, heStayDate } from '../command/liveCabins';
@@ -295,8 +298,38 @@ function guestSide(booking, today, kind) {
 }
 
 function paymentsOf(booking) {
-  const stored = Array.isArray(booking?.clearing_payments) ? booking.clearing_payments : [];
-  return stored.map(normalizeClearingPayment).filter((row) => row.amount_agorot > 0);
+  return priorityChargeRows(booking);
+}
+
+function voucherView(booking) {
+  const stay = booking?.stay && typeof booking.stay === 'object' ? booking.stay : {};
+  const photo = String(stay.voucher_photo || '');
+  const safePhoto = photo.startsWith('data:image/') || /^https?:\/\//.test(photo) || photo.startsWith('/')
+    ? photo
+    : '';
+  const number = String(stay.voucher_number || '').replace(/\D/g, '');
+  const label = String(stay.voucher_label || '').trim();
+  const rawExpires = String(stay.voucher_expires || '').slice(0, 10);
+  const expires = /^\d{4}-\d{2}-\d{2}$/.test(rawExpires)
+    ? rawExpires.split('-').reverse().join('/')
+    : '';
+  const caption = [
+    number ? `שובר ${number}` : '',
+    label,
+    expires ? `בתוקף עד ${expires}` : ''
+  ].filter(Boolean).join(' · ');
+  if (!safePhoto && !caption) return null;
+  return { photo: safePhoto, caption };
+}
+
+function VoucherFigure({ voucher }) {
+  if (!voucher?.photo && !voucher?.caption) return null;
+  return (
+    <figure className="priority-voucher">
+      {voucher.caption ? <figcaption>{voucher.caption}</figcaption> : null}
+      {voucher.photo ? <img src={voucher.photo} alt="שובר" /> : null}
+    </figure>
+  );
 }
 
 function cardFromBooking(row, booking) {
@@ -328,6 +361,7 @@ function cardFromBooking(row, booking) {
     charges: paymentsOf(booking),
     notes: booking.special_requests || '',
     notesList: Array.isArray(booking.stay?.priority_notes) ? booking.stay.priority_notes : [],
+    voucher: voucherView(booking),
     phoneRaw: booking.guest_phone || ''
   };
 }
@@ -472,6 +506,7 @@ function rowFromUnit(unit, bookings, today) {
     staff: clean === 'DIRTY' ? '' : (unit.assigned_staff || ''),
     notes: [primary?.special_requests || '', unit.custom_reason || ''].filter(Boolean).join(' · '),
     notesList: Array.isArray(primary?.stay?.priority_notes) ? primary.stay.priority_notes : [],
+    voucher: primary ? voucherView(primary) : null,
     phoneRaw: primary?.guest_phone || '',
     sort: Number(unit.sort_order ?? 999),
     tasks: tasksOf(unit, badge?.label),
@@ -638,7 +673,8 @@ function RoomLog({ entries, scope, onScope, checkIn, checkOut }) {
   );
 }
 
-export default function PriorityDesk({ tenantId = '', canEdit = false, active = true, session = null, operatorName = '', showCashflow = false }) {
+export default function PriorityDesk({ tenantId = '', canEdit = false, active = true, session = null, operatorName = '', showCashflow = false, layout = 'desk' }) {
+  const isPhone = layout === 'phone';
   const units = useLiveUnits(tenantId);
   const bookings = useLiveBookings(tenantId);
   const today = israelToday();
@@ -658,6 +694,9 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const [noteText, setNoteText] = useState('');
   const [kinorotNote, setKinorotNote] = useState({ resId: '', saved: '', draft: '', loading: false });
   const [housekeepers, setHousekeepers] = useState([]);
+  const [collectors, setCollectors] = useState([DEFAULT_CASH_COLLECTOR]);
+  const [collectorName, setCollectorName] = useState(DEFAULT_CASH_COLLECTOR);
+  const [cardSplit, setCardSplit] = useState({ amount: '', last4: '', approval: '' });
   const [refreshing, setRefreshing] = useState(false);
   const [asleep, setAsleep] = useState(false);
   const [sleepClock, setSleepClock] = useState('');
@@ -683,6 +722,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   callAlertRef.current = untransferredAlerts.length > 0;
   const [calendarNote, setCalendarNote] = useState('');
   const [view, setView] = useState('desk');
+  const [moreOpen, setMoreOpen] = useState(false);
   const [groundsState, setGroundsState] = useState({});
   const [groundDrafts, setGroundDrafts] = useState({});
   const [horizonStart, setHorizonStart] = useState(today);
@@ -733,7 +773,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   }, [active]);
 
   useEffect(() => {
-    if (!active) {
+    if (!active || isPhone) {
       asleepRef.current = false;
       setAsleep(false);
       return undefined;
@@ -772,7 +812,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       window.removeEventListener('mousemove', nudge, opts);
       window.removeEventListener('wheel', nudge, opts);
     };
-  }, [active]);
+  }, [active, isPhone]);
 
   useEffect(() => {
     if (!asleep) return undefined;
@@ -838,6 +878,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       checkOut: showGuest ? row.checkOut : '',
       nextStay: held ? '' : row.nextStay,
       notes: showGuest ? row.notes : '',
+      voucher: showGuest ? row.voucher : null,
       bookingId: showGuest ? row.bookingId : '',
       clean: cleaningLabel(clean),
       payStatus,
@@ -876,6 +917,9 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const horizon = useMemo(() => (
     Array.from({ length: HORIZON_DAYS }, (_, index) => shiftDay(horizonStart, index))
   ), [horizonStart]);
+  const boardDays = isPhone ? [horizonStart] : horizon;
+  const showGrounds = !isPhone;
+  const gridLead = (showGrounds ? 2 : 0) + 1;
 
   const dailyOccupancy = useMemo(() => {
     const inventoryList = units.filter(isInventoryUnit);
@@ -909,6 +953,9 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
     drafts[selected?.id]
   );
   const cardBooking = card ? (pinnedBooking || bookings.find((b) => b.id === card.bookingId)) : null;
+  useEffect(() => {
+    setCardSplit({ amount: '', last4: '', approval: '' });
+  }, [card?.bookingId]);
   const cardCall = card ? findCallForBooking(callAlerts, cardBooking, card.id) : null;
   const cardUnreadCount = card ? getBookingUnread(cardBooking || card) : 0;
   const visibleIndex = selected ? visible.findIndex((row) => row.id === selected.id) : -1;
@@ -1124,7 +1171,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
     try {
       const { booking: next, collectedAgorot: recorded } = collectPriorityCash(booking, {
         today,
-        collector: operator,
+        collector: collectorName,
         totalAgorot,
         collectedAgorot: collectedAgorot == null ? undefined : collectedAgorot
       });
@@ -1132,7 +1179,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       await pushBookingToCloud(next, { allowOverlap: true });
       clearPaymentDraft(row.id);
       const money = recorded > 0 ? formatPriorityShekels(recorded) : formatPriorityShekels(totalAgorot);
-      setMessage(recorded > 0 ? `${row.name}: נגבה מזומן ${money}` : `${row.name}: המזומן כבר רשום`);
+      setMessage(recorded > 0 ? `${row.name}: נגבה מזומן ${money} · ${collectorName}` : `${row.name}: המזומן כבר רשום`);
     } catch (err) {
       const text = `הגבייה נכשלה ולא נרשמה: ${err?.message || 'שגיאה'}`;
       setSaveError(text);
@@ -1142,6 +1189,47 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
     }
   };
   collectRef.current = collectCash;
+
+  const addCardCharge = async (row, bookingId = row?.bookingId) => {
+    if (!canEdit || saving) return;
+    const booking = bookings.find((item) => item.id === bookingId);
+    if (!booking) {
+      setMessage('אין אורח לחיוב');
+      return;
+    }
+    const amountAgorot = parsePriorityShekels(cardSplit.amount);
+    const last4 = String(cardSplit.last4 || '').replace(/\D/g, '');
+    if (amountAgorot == null || !(amountAgorot > 0)) {
+      setSaveError('הסכום לא תקין');
+      setMessage('הסכום לא תקין');
+      return;
+    }
+    if (last4.length !== 4) {
+      setSaveError('צריך 4 ספרות של הכרטיס');
+      setMessage('צריך 4 ספרות של הכרטיס');
+      return;
+    }
+    setSaving(true);
+    setSaveError('');
+    try {
+      const { booking: next } = addCardSplit(booking, {
+        today,
+        amountAgorot,
+        last4,
+        approval: cardSplit.approval
+      });
+      await db.bookings.put(next);
+      await pushBookingToCloud(next, { allowOverlap: true });
+      setCardSplit({ amount: '', last4: '', approval: '' });
+      setMessage(`${row.name}: נוסף כרטיס ${formatPriorityShekels(amountAgorot)}`);
+    } catch (err) {
+      const text = `הכרטיס לא נרשם: ${err?.message || 'שגיאה'}`;
+      setSaveError(text);
+      setMessage(text);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const openGuest = (unitId, booking) => {
     setSelectedId(unitId);
@@ -1323,7 +1411,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         bookings,
         drafts,
         today,
-        collector: operator
+        collector: collectorName
       });
       const result = await savePriorityStatusDrafts({
         tenantId,
@@ -1438,6 +1526,9 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
           .map(staffDisplayName)
           .filter(Boolean);
         setHousekeepers([...new Set(names)].sort((a, b) => a.localeCompare(b, 'he')));
+        const managers = cashCollectorChoices(people);
+        setCollectors(managers);
+        setCollectorName((current) => (managers.includes(current) ? current : managers[0]));
       })
       .catch(() => {});
     return () => { cancel = true; };
@@ -1446,6 +1537,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const pullBoard = async () => {
     if (!tenantId) return { ok: false };
     const range = priorityBoardRange(israelToday());
+    await ensureCanonicalUnitCatalog().catch(() => {});
     const pulled = await syncCloudBookingsToDexie(tenantId, {
       from: range.from,
       to: range.to,
@@ -1678,7 +1770,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const editorChoices = editor ? choicesFor(editor.field, housekeepers, shown.find((row) => row.id === editor.unitId)?.staff, editor.kind) : [];
 
   return (
-    <div className="priority-root" dir="rtl">
+    <div className={`priority-root${isPhone ? ' is-phone' : ''}`} dir="rtl">
       {untransferredAlerts.length ? (
         <div className="call-alert" role="alertdialog" aria-label="האורח מבקש שיחה">
           <p>המסך נשאר עד שהשיחה מועברת או מסומנת כנפתרה</p>
@@ -1701,7 +1793,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
           ))}
         </div>
       ) : null}
-      {asleep ? createPortal(
+      {!isPhone && asleep ? createPortal(
         <button type="button" className={sleepDay ? 'priority-sleep is-day' : 'priority-sleep'} onClick={() => setAsleep(false)} aria-label="חזרה לפריוריטי">
           <img className="priority-sleep-photo is-night" src="/priority/kinneret-night.jpg" alt="" />
           <img className="priority-sleep-photo is-day" src="/priority/kinneret-day.jpg" alt="" />
@@ -1716,12 +1808,14 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         </button>,
         document.body
       ) : null}
-      {session ? (
+      {!isPhone && session ? (
         <div className="priority-session">
           <span>{session.name}</span>
           <button type="button" onClick={session.onLogout}>התנתקות</button>
         </div>
       ) : null}
+      {isPhone ? null : (
+      <>
       <div className="priority-title">
         <span className="priority-brand">
           <span>פריוריטי</span>
@@ -1789,6 +1883,8 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         <button type="button" className="tb-btn" onClick={() => printCashDayReport(bookings, units, previousCashWeek(today))}><Printer size={14} /> דוח מזומנים</button>
         <button type="button" className="tb-btn" onClick={() => printDailyDutyReport({ dateStr: today, kind: 'morning', area: 'all', bookings, units })}><Printer size={14} /> תחילת יום</button>
       </div>
+      </>
+      )}
       {view === 'cashflow' && showCashflow ? (
         <div className="priority-body">
           <PriorityCashflow />
@@ -1809,6 +1905,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         </div>
       ) : (
       <>
+      {!isPhone ? (
       <div className="priority-nav">
         <div className="nav-group nav-back">
           <button type="button" className="tb-btn" onClick={() => setHorizonStart((day) => shiftDay(day, -7))}>« שבוע</button>
@@ -1820,6 +1917,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
           <button type="button" className="tb-btn" onClick={() => setHorizonStart((day) => shiftDay(day, 7))}>שבוע »</button>
         </div>
       </div>
+      ) : null}
       <div className="priority-body">
         {view === 'calendar' ? (
           <PriorityCalendar
@@ -1828,7 +1926,10 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
             onSelect={(meeting) => setMessage(formatManagerMeeting(meeting))}
           />
         ) : mode === 'form' && card ? (
-          <div className="priority-split-view">
+          <div className={`priority-split-view${isPhone ? ' is-phone-room' : ''}`}>
+            {isPhone ? (
+              <button type="button" className="phone-back" onClick={() => setMode('grid')}>חזרה ללוח</button>
+            ) : null}
             {/* צד ימין (65%): פרטי ההזמנה, סטטוסים, פיננסים ומלאי ציוד ביקונים בחדר */}
             <div className="split-details-col">
               <div className="master">
@@ -1928,6 +2029,17 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                     ) : null}
                   </div>
                   <label className="field">
+                    <span>מי גבה</span>
+                    <select
+                      aria-label="מי גבה"
+                      disabled={!canEdit}
+                      value={collectorName}
+                      onChange={(event) => setCollectorName(event.target.value)}
+                    >
+                      {collectors.map((name) => <option key={name} value={name}>{name}</option>)}
+                    </select>
+                  </label>
+                  <label className="field">
                     <span>גביית מזומן (F2)</span>
                     <span className="pay-line">
                       <input
@@ -1982,8 +2094,64 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                         {PAYMENT_METHODS.map((choice) => <option key={choice.key} value={choice.key}>{choice.label}</option>)}
                       </select>
                       {card.payBreakdown ? <small className="pay-breakdown">{card.payBreakdown}</small> : null}
+                      <VoucherFigure voucher={card.voucher} />
                     </label>
                   </div>
+                  <label className="field">
+                    <span>חלוקה לכרטיסים</span>
+                    {(card.charges || []).filter((charge) => charge.kind === 'card').map((charge) => (
+                      <span className="card-split-line" key={charge.txn || `${charge.last4}-${charge.amount_agorot}`}>
+                        <b dir="ltr">{charge.last4 ? `\u2066****${charge.last4}\u2069` : 'אשראי'}</b>
+                        <span>{formatPriorityShekels(charge.amount_agorot)}</span>
+                        {charge.approval ? <span dir="ltr">{charge.approval}</span> : null}
+                      </span>
+                    ))}
+                    <span className="pay-line card-split">
+                      <input
+                        className="cash-amount"
+                        inputMode="decimal"
+                        aria-label="סכום בכרטיס"
+                        placeholder="סכום"
+                        disabled={!canEdit || !card.bookingId}
+                        value={cardSplit.amount}
+                        onFocus={() => {
+                          if (!card.bookingId || String(cardSplit.amount || '').trim()) return;
+                          const due = Math.max(0, (Number(card.amountAgorot) || 0) - (Number(card.paidAgorot) || 0));
+                          if (!(due > 0)) return;
+                          setCardSplit((current) => ({ ...current, amount: formatPriorityShekels(due) }));
+                        }}
+                        onChange={(event) => setCardSplit((current) => ({ ...current, amount: event.target.value }))}
+                      />
+                      <input
+                        className="card-last4"
+                        inputMode="numeric"
+                        dir="ltr"
+                        maxLength={4}
+                        aria-label="4 ספרות"
+                        placeholder="4 ספרות"
+                        disabled={!canEdit || !card.bookingId}
+                        value={cardSplit.last4}
+                        onChange={(event) => setCardSplit((current) => ({ ...current, last4: event.target.value.replace(/\D/g, '').slice(0, 4) }))}
+                      />
+                      <input
+                        className="card-auth"
+                        dir="ltr"
+                        aria-label="מספר אישור"
+                        placeholder="אישור"
+                        disabled={!canEdit || !card.bookingId}
+                        value={cardSplit.approval}
+                        onChange={(event) => setCardSplit((current) => ({ ...current, approval: event.target.value }))}
+                      />
+                      <button
+                        type="button"
+                        className="cash-btn"
+                        disabled={!canEdit || !card.bookingId || saving}
+                        onClick={() => addCardCharge(card)}
+                      >
+                        הוסף
+                      </button>
+                    </span>
+                  </label>
                 </div>
               </div>
 
@@ -2023,11 +2191,11 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
             <table className="erp-table week-table">
               <thead>
                 <tr className="occupancy-row">
-                  <th className="grounds-banner" colSpan={2}>חצר ובריכה</th>
+                  {showGrounds ? <th className="grounds-banner" colSpan={2}>חצר ובריכה</th> : null}
                   <th className="unit-cell occupancy-label">
                     <span className="occupancy-title">תפוסה כוללת</span>
                   </th>
-                  {horizon.map((day) => {
+                  {boardDays.map((day) => {
                     const stats = dailyOccupancy[day] || { percent: 0, occupied: 0, total: 0 };
                     return (
                       <th
@@ -2048,11 +2216,22 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                   })}
                 </tr>
                 <tr className="label-row">
-                  <th className="grounds-col is-yard">חצר</th>
-                  <th className="grounds-col is-pool">בריכה</th>
+                  {showGrounds ? <th className="grounds-col is-yard">חצר</th> : null}
+                  {showGrounds ? <th className="grounds-col is-pool">בריכה</th> : null}
                   <th className="unit-cell">יחידה</th>
-                  {horizon.map((day) => (
-                    <th key={day} className={day === today ? 'is-today' : ''}>{horizonLabel(day, today)}</th>
+                  {boardDays.map((day) => (
+                    <th key={day} className={day === today ? 'is-today' : ''}>
+                      {isPhone ? (
+                        <span className="phone-day-switch">
+                          <button type="button" onClick={() => setHorizonStart((current) => shiftDay(current, -1))} aria-label="יום קודם">‹</button>
+                          <span className="phone-day-name">{horizonLabel(day, today)}</span>
+                          <button type="button" onClick={() => setHorizonStart((current) => shiftDay(current, 1))} aria-label="יום הבא">›</button>
+                          {day !== today ? (
+                            <button type="button" className="phone-today" onClick={() => setHorizonStart(today)}>היום</button>
+                          ) : null}
+                        </span>
+                      ) : horizonLabel(day, today)}
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -2061,11 +2240,11 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                   <React.Fragment key={row.id}>
                     {row.area !== 'ramot' && (index === 0 || visible[index - 1].area !== row.area) ? (
                       <tr className="area-break">
-                        <td colSpan={horizon.length + 3}>{priorityAreaLabel(row.area)}</td>
+                        <td colSpan={boardDays.length + gridLead}>{priorityAreaLabel(row.area)}</td>
                       </tr>
                     ) : null}
                     <tr>
-                      {grounds[index]?.yard ? (
+                      {showGrounds && grounds[index]?.yard ? (
                         <td className="grounds-cell is-yard" rowSpan={grounds[index].yard.span}>
                           <GroundPill
                             assetId={grounds[index].yard.id}
@@ -2076,7 +2255,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                           />
                         </td>
                       ) : null}
-                      {grounds[index]?.pool ? (
+                      {showGrounds && grounds[index]?.pool ? (
                         <td
                           className={`grounds-cell is-pool${grounds[index].pool.kind === 'none' ? ' is-empty' : ''}`}
                           rowSpan={grounds[index].pool.span}
@@ -2116,7 +2295,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                           );
                         })()}
                       </td>
-                      {horizon.map((day) => {
+                      {boardDays.map((day) => {
                         const cell = priorityDayCell(bookings, row.id, day);
                         const hold = cell.kind === 'empty' ? coveringUnavailableHold(bookings, row.id, day) : null;
                         const holdText = hold ? (unavailableHoldLabel(hold.guest_name) || 'לא זמין') : '';
@@ -2176,15 +2355,60 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                     </tr>
                   </React.Fragment>
                 ))}
-                {!visible.length ? <tr><td className="empty-row" colSpan={horizon.length + 3}>אין יחידות לסינון</td></tr> : null}
+                {!visible.length ? <tr><td className="empty-row" colSpan={boardDays.length + gridLead}>אין יחידות לסינון</td></tr> : null}
               </tbody>
             </table>
           </div>
         )}
       </div>
       <div className={`priority-status${saveError ? ' is-error' : ''}`}>
-        <span>{message}</span>
-        <b>{view === 'calendar' ? 'יומן · 7 ימים' : (selected ? `${selected.name} · ${visibleIndex + 1} / ${visible.length}` : 'אין יחידה')}</b>
+        {isPhone ? (
+          <>
+            <button type="button" className="tb-btn" disabled={refreshing} onClick={refreshBoard}>
+              {refreshing ? 'מרענן…' : 'רענון'}
+            </button>
+            {canEdit ? (
+              <button type="button" className={`tb-btn${dirtyCount ? ' is-dirty' : ''}`} disabled={!dirtyCount || saving} onClick={saveChanges}>
+                {saving ? 'שומר…' : `שמירה${dirtyCount ? ` (${dirtyCount})` : ''}`}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="tb-btn"
+              onClick={() => {
+                if (activeBookingForGuestFile) printGuestFile(activeBookingForGuestFile, { units, bookings });
+                else setShowGuestPrintPicker(true);
+              }}
+            >
+              דף אורח
+            </button>
+            <button type="button" className={`tb-btn${moreOpen ? ' is-on' : ''}`} onClick={() => setMoreOpen((open) => !open)}>עוד</button>
+            <b>{selected ? `${selected.name} · ${visibleIndex + 1} / ${visible.length}` : ''}</b>
+            {moreOpen ? (
+              <div className="phone-more">
+                <button type="button" className={`tb-btn${view === 'desk' ? ' is-on' : ''}`} onClick={() => { setMoreOpen(false); setView('desk'); setMode('grid'); }}>יחידות</button>
+                <button type="button" className={`tb-btn${view === 'calendar' ? ' is-on' : ''}`} onClick={() => { setMoreOpen(false); setView('calendar'); }}>יומן</button>
+                <button type="button" className={`tb-btn${view === 'forms' ? ' is-on' : ''}`} onClick={() => { setMoreOpen(false); setView('forms'); }}>טפסים ותבניות</button>
+                <button type="button" className={`tb-btn${view === 'docs' ? ' is-on' : ''}`} onClick={() => { setMoreOpen(false); setView('docs'); }}>מסמך</button>
+                {showCashflow ? (
+                  <button type="button" className={`tb-btn${view === 'cashflow' ? ' is-on' : ''}`} onClick={() => { setMoreOpen(false); setView('cashflow'); }}>הוצאות חודשיות</button>
+                ) : null}
+                <button type="button" className="tb-btn" onClick={() => { setMoreOpen(false); const unitParam = selected?.id ? `?unit=${encodeURIComponent(selected.id)}` : ''; window.open(`/room-sheet-a4.html${unitParam}`, '_blank', 'noopener'); }}>דף חדר</button>
+                <button type="button" className="tb-btn" onClick={() => { setMoreOpen(false); exportExcel(); }}>ייצא לאקסל</button>
+                <button type="button" className="tb-btn" onClick={() => window.open('/price-list.html', '_blank', 'noopener')}>מחירון</button>
+                <button type="button" className="tb-btn" onClick={() => window.open('/qr-stickers.html#work-order', '_blank', 'noopener')}>הזמנת עבודה</button>
+                <button type="button" className="tb-btn" onClick={() => { setMoreOpen(false); printDailyDutyReport({ dateStr: today, kind: 'both', area: 'all', bookings, units }); }}>דוח יומי מלא</button>
+                <button type="button" className="tb-btn" onClick={() => { setMoreOpen(false); printCashDayReport(bookings, units, previousCashWeek(today)); }}>דוח מזומנים</button>
+                <button type="button" className="tb-btn" onClick={() => { setMoreOpen(false); printDailyDutyReport({ dateStr: today, kind: 'morning', area: 'all', bookings, units }); }}>תחילת יום</button>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <span>{message}</span>
+            <b>{view === 'calendar' ? 'יומן · 7 ימים' : (selected ? `${selected.name} · ${visibleIndex + 1} / ${visible.length}` : 'אין יחידה')}</b>
+          </>
+        )}
       </div>
       {editor && menuBox ? (
         <div className="cell-menu" style={{ top: menuBox.top, right: menuBox.right, minWidth: menuBox.width }} role="listbox">
@@ -2994,21 +3218,29 @@ function SplitFeedPanel({
           </div>
         ) : (
           <div className="wa-charges-list">
+            <VoucherFigure voucher={card.voucher} />
             {card.charges.length ? card.charges.map((charge, index) => (
-              <div key={charge.txn || charge.ref || index} className="wa-charge-card">
+              <div key={charge.txn || charge.approval || index} className="wa-charge-card">
                 <div className="wa-charge-row">
-                  <strong>{charge.accountLabel}</strong>
+                  <strong>{charge.kindLabel || charge.accountLabel}</strong>
                   <span className="wa-charge-amount">{formatIlsFromAgorot(charge.amount_agorot)}</span>
                 </div>
                 <div className="wa-charge-sub">
+                  <span>סוג תשלום: {charge.kindLabel || 'לא צוין'}</span>
+                  {charge.needsApproval ? (
+                    <span className={charge.approval ? 'wa-charge-ref' : 'wa-charge-ref is-missing'}>
+                      מספר אישור / אסמכתה: {charge.approval || 'אין'}
+                    </span>
+                  ) : null}
                   <span>תאריך: {charge.date || String(charge.collected_at || '').slice(0, 10)}</span>
-                  {charge.ref ? <span>אסמכתה: {charge.ref}</span> : null}
+                  {charge.accountLabel ? <span>{charge.accountLabel}</span> : null}
+                  {charge.last4 ? <span dir="ltr">{`\u2066****${charge.last4}\u2069`}</span> : null}
                   {(charge.payer_name || charge.payer_id) ? (
                     <span>משלם: {[charge.payer_name, charge.payer_id].filter(Boolean).join(' · ')}</span>
                   ) : null}
                 </div>
               </div>
-            )) : <div className="room-empty">אין חיובים רשומים ליחידה הזו</div>}
+            )) : card.voucher ? null : <div className="room-empty">אין חיובים רשומים ליחידה הזו</div>}
           </div>
         )}
       </div>

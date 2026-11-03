@@ -220,6 +220,16 @@ describe('priority payment', () => {
     expect(dueAgorotOf(booking.booking)).toBe(0);
   });
 
+  it('lists two same-day card charges when the last four digits differ', () => {
+    const rows = priorityChargeRows(stay({
+      clearing_payments: [
+        { source: 'CARD', method: 'card', amount_agorot: 20000, last4: '1111', date: '2026-11-01', txn: 'card-a' },
+        { source: 'CARD', method: 'card', amount_agorot: 20000, last4: '2222', date: '2026-11-01', txn: 'card-b' }
+      ]
+    }));
+    expect(rows.map((row) => row.last4)).toEqual(['1111', '2222']);
+  });
+
   it('lists every charge with its payment type and an approval number for card or bank', () => {
     const booking = stay({
       id: 'kinorot_stay_9001',

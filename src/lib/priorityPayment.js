@@ -126,9 +126,11 @@ export function chargeDisplay(raw = {}) {
 
 function sameCharge(a, b) {
   if (a.txn && b.txn && a.txn === b.txn) return true;
+  if (a.last4 && b.last4 && a.last4 !== b.last4) return false;
   if (a.approval && b.approval && a.kind === b.kind && a.approval === b.approval) return true;
   return a.amount_agorot === b.amount_agorot
     && a.kind === b.kind
+    && (!a.last4 || !b.last4 || a.last4 === b.last4)
     && (!a.date || !b.date || a.date === b.date);
 }
 

@@ -1,13 +1,16 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { 
   ShieldCheck, Phone, KeyRound, LogOut, Sparkles, Building2, TrendingUp, 
-  AlertTriangle, RefreshCw, Zap, Settings as Gear, Users, Sun, Moon, 
-  ChevronDown, Check, Globe, MapPin, ClipboardList, CheckSquare, X, SlidersHorizontal
+  AlertTriangle, RefreshCw, Settings as Gear, Users, Sun, Moon, 
+  Check, Globe, MapPin, ClipboardList, CheckSquare, X, SlidersHorizontal
 } from 'lucide-react';
 import FinancialCommandCenter from '../finance/FinancialCommandCenter';
 import ResortOSOperations from '../ResortOSOperations';
 import ChloeDashboardChat from '../chloe/ChloeDashboardChat';
 import Settings from '../Settings';
+import { canEditPriorityStatuses, canSeeFinancials } from '../../lib/staffRoles';
+
+const PriorityDesk = lazy(() => import('../priority/PriorityDesk'));
 
 const DEMO_TENANT_ID = '22222222-2222-2222-2222-222222222222';
 const DASHBOARD_TOKEN_KEY = 'resortos_dashboard_token_v1';
@@ -29,6 +32,12 @@ const PRESET_STAFF_SWITCH = [
   { id: '00000000-0000-0000-0000-000000000004', username: 'barak', display_name: 'ברק', role: 'MANAGER', phone: '0503934696', tenant_id: DEMO_TENANT_ID },
   { id: '00000000-0000-0000-0000-000000000005', username: 'ops', display_name: 'צוות תפעול (אבו/טופ)', role: 'OPERATIONS', phone: '0540000000', tenant_id: DEMO_TENANT_ID }
 ];
+
+function openingTab(role) {
+  if (role === 'FINANCE') return 'financials';
+  if (role === 'OPERATIONS') return 'operations';
+  return 'priority';
+}
 
 const isLocalHost = typeof window !== 'undefined' && (
   window.location.hostname === 'localhost' ||
@@ -97,11 +106,7 @@ export default function DashboardApp() {
     }
   };
 
-  const [activeTab, setActiveTab] = useState(() => {
-    const role = user?.role;
-    if (role === 'FINANCE') return 'financials';
-    return 'operations';
-  });
+  const [activeTab, setActiveTab] = useState(() => openingTab(user?.role));
 
   // Auth form states
   const [authMode, setAuthMode] = useState('otp'); // 'otp' | 'password'
@@ -218,11 +223,7 @@ export default function DashboardApp() {
         localStorage.setItem(DASHBOARD_TOKEN_KEY, data.token);
         localStorage.setItem(DASHBOARD_USER_KEY, JSON.stringify(data.user));
       } catch {}
-      if (data.user.role === 'FINANCE') {
-        setActiveTab('financials');
-      } else {
-        setActiveTab('operations');
-      }
+      setActiveTab(openingTab(data.user.role));
     } catch (err) {
       setError(err.message || 'שגיאה באימות הקוד');
     } finally {
@@ -261,11 +262,7 @@ export default function DashboardApp() {
         localStorage.setItem(DASHBOARD_TOKEN_KEY, data.token);
         localStorage.setItem(DASHBOARD_USER_KEY, JSON.stringify(data.user));
       } catch {}
-      if (data.user.role === 'FINANCE') {
-        setActiveTab('financials');
-      } else {
-        setActiveTab('operations');
-      }
+      setActiveTab(openingTab(data.user.role));
     } catch (err) {
       setError(err.message || 'שגיאה בהתחברות');
     } finally {
@@ -686,7 +683,9 @@ export default function DashboardApp() {
     <div 
       dir="rtl"
       style={{
-        minHeight: '100dvh',
+        height: '100dvh',
+        maxHeight: '100dvh',
+        overflow: 'hidden',
         background: isDark ? '#26130F' : '#FAF8F3',
         color: isDark ? '#FDFBF7' : '#26130F',
         display: 'flex',
@@ -699,82 +698,39 @@ export default function DashboardApp() {
         style={{
           background: isDark ? '#26130F' : '#FFFFFF',
           color: isDark ? '#FDFBF7' : '#26130F',
-          padding: '0.75rem 1rem',
+          padding: '6px',
           borderBottom: isDark ? '1px solid rgba(197, 160, 89, 0.3)' : '1px solid rgba(197, 160, 89, 0.25)',
           display: 'flex',
-          flexDirection: 'column',
-          gap: '0.6rem',
-          boxShadow: isDark ? '0 4px 16px rgba(0, 0, 0, 0.25)' : '0 2px 10px rgba(0, 0, 0, 0.04)'
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: '6px'
         }}
       >
-        {/* Top row: Brand + User Pill + Logout */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '1.25rem' }}>⚡</span>
-            <div>
-              <div style={{ fontSize: '1rem', fontWeight: 900, color: isDark ? '#FDFBF7' : '#26130F', letterSpacing: '-0.02em' }}>
-                ResortOS Dashboard
-              </div>
-              <div style={{ fontSize: '0.65rem', color: isDark ? '#C5A059' : '#8C6B28', fontWeight: 700 }}>
-                {isFinanceOnly ? 'חמ״ל פיננסי בלעדי' : (isOperationsOnly ? 'לוח תפעול' : 'תפעול ופיננסים')}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ position: 'relative' }}>
+        <div style={{ display: 'contents' }}>
+          <div style={{ position: 'relative', order: 2, flex: '0 0 auto' }}>
             {/* Options Popup Trigger Button */}
             <button
               type="button"
               onClick={() => setShowOptionsMenu((prev) => !prev)}
+              aria-label="הגדרות"
               style={{
+                width: '36px',
+                height: '36px',
                 border: isDark ? '1px solid rgba(197, 160, 89, 0.45)' : '1px solid rgba(197, 160, 89, 0.35)',
-                background: showOptionsMenu 
+                background: showOptionsMenu
                   ? (isDark ? 'rgba(197, 160, 89, 0.25)' : 'rgba(197, 160, 89, 0.18)')
                   : (isDark ? 'rgba(38, 19, 15, 0.7)' : '#F5F2EB'),
-                color: isDark ? '#FDFBF7' : '#26130F',
-                padding: '0.35rem 0.65rem',
+                color: isDark ? '#C5A059' : '#8C6B28',
                 borderRadius: '8px',
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '0.45rem',
-                transition: 'all 0.15s ease',
-                boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.25)' : '0 1px 4px rgba(0,0,0,0.06)'
+                justifyContent: 'center',
+                padding: 0
               }}
-              title="תפריט אפשרויות והגדרות"
+              title="הגדרות"
             >
-              <div 
-                style={{
-                  width: '26px',
-                  height: '26px',
-                  borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #C5A059, #8C6B28)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#FFFFFF',
-                  fontWeight: 900,
-                  fontSize: '0.78rem'
-                }}
-              >
-                {user.display_name ? user.display_name[0] : (user.username ? user.username[0].toUpperCase() : '👤')}
-              </div>
-              <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontSize: '0.78rem', fontWeight: 800, color: isDark ? '#FDFBF7' : '#26130F', lineHeight: 1.2 }}>
-                  {user.display_name || user.username}
-                </span>
-                <span style={{ fontSize: '0.62rem', color: isDark ? '#C5A059' : '#8C6B28', fontWeight: 700, lineHeight: 1.1 }}>
-                  {isManager ? 'מנהל מערכת' : 'צוות'} · אפשרויות ▾
-                </span>
-              </div>
-              <ChevronDown 
-                size={14} 
-                color={isDark ? '#C5A059' : '#8C6B28'} 
-                style={{ 
-                  transform: showOptionsMenu ? 'rotate(180deg)' : 'none', 
-                  transition: 'transform 0.2s ease' 
-                }} 
-              />
+              <Gear size={16} />
             </button>
 
             {/* POPUP / POPOVER MENU */}
@@ -1142,21 +1098,56 @@ export default function DashboardApp() {
           </div>
         </div>
 
-        {/* Bottom row: Tabs Switcher (Visible to Managers) */}
         {!isFinanceOnly && !isOperationsOnly && (
           <div 
             style={{
               display: 'flex',
               alignItems: 'center',
+              order: 1,
+              flex: 1,
+              minWidth: 0,
               background: isDark ? 'rgba(0, 0, 0, 0.35)' : '#F5F2EB',
               border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid rgba(197, 160, 89, 0.28)',
               borderRadius: '9px',
               padding: '3px',
-              gap: '4px',
-              width: '100%',
+              gap: '3px',
               boxSizing: 'border-box'
             }}
           >
+            <button
+              type="button"
+              onClick={() => setActiveTab('priority')}
+              style={{
+                flex: 1,
+                border: activeTab === 'priority'
+                  ? (isDark ? '1px solid rgba(197, 160, 89, 0.45)' : '1px solid rgba(197, 160, 89, 0.35)')
+                  : '1px solid transparent',
+                borderRadius: '7px',
+                minWidth: 0,
+                height: '36px',
+                padding: '0 0.2rem',
+                fontSize: '0.78rem',
+                fontWeight: 800,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: activeTab === 'priority'
+                  ? (isDark ? 'linear-gradient(135deg, #C5A059, #8C6B28)' : 'linear-gradient(135deg, #C5A059, #9E7D3B)')
+                  : 'transparent',
+                color: activeTab === 'priority'
+                  ? '#FFFFFF'
+                  : (isDark ? '#C7B9AD' : '#736055'),
+                boxShadow: activeTab === 'priority'
+                  ? (isDark ? '0 2px 10px rgba(197, 160, 89, 0.25)' : '0 2px 8px rgba(197, 160, 89, 0.22)')
+                  : 'none',
+                transition: 'all 0.15s ease',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              <span>פריוריטי</span>
+            </button>
+
             <button
               type="button"
               onClick={() => setActiveTab('operations')}
@@ -1166,14 +1157,16 @@ export default function DashboardApp() {
                   ? (isDark ? '1px solid rgba(197, 160, 89, 0.45)' : '1px solid rgba(197, 160, 89, 0.35)') 
                   : '1px solid transparent',
                 borderRadius: '7px',
-                padding: '0.45rem 0.75rem',
-                fontSize: '0.82rem',
+                minWidth: 0,
+                height: '36px',
+                padding: '0 0.2rem',
+                fontSize: '0.78rem',
                 fontWeight: 800,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '0.4rem',
+                whiteSpace: 'nowrap',
                 background: activeTab === 'operations'
                   ? (isDark ? 'linear-gradient(135deg, #C5A059, #8C6B28)' : 'linear-gradient(135deg, #C5A059, #9E7D3B)')
                   : 'transparent',
@@ -1186,7 +1179,6 @@ export default function DashboardApp() {
                 transition: 'all 0.15s ease'
               }}
             >
-              <Zap size={14} color={activeTab === 'operations' ? '#FFFFFF' : (isDark ? '#C5A059' : '#8C6B28')} />
               <span>תפעול</span>
             </button>
 
@@ -1199,14 +1191,16 @@ export default function DashboardApp() {
                   ? (isDark ? '1px solid rgba(197, 160, 89, 0.45)' : '1px solid rgba(197, 160, 89, 0.35)') 
                   : '1px solid transparent',
                 borderRadius: '7px',
-                padding: '0.45rem 0.75rem',
-                fontSize: '0.82rem',
+                minWidth: 0,
+                height: '36px',
+                padding: '0 0.2rem',
+                fontSize: '0.78rem',
                 fontWeight: 800,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '0.4rem',
+                whiteSpace: 'nowrap',
                 background: activeTab === 'financials'
                   ? (isDark ? 'linear-gradient(135deg, #C5A059, #8C6B28)' : 'linear-gradient(135deg, #C5A059, #9E7D3B)')
                   : 'transparent',
@@ -1219,7 +1213,6 @@ export default function DashboardApp() {
                 transition: 'all 0.15s ease'
               }}
             >
-              <span style={{ fontSize: '0.85rem' }}>💰</span>
               <span>פיננסים</span>
             </button>
 
@@ -1232,14 +1225,16 @@ export default function DashboardApp() {
                   ? (isDark ? '1px solid rgba(197, 160, 89, 0.45)' : '1px solid rgba(197, 160, 89, 0.35)') 
                   : '1px solid transparent',
                 borderRadius: '7px',
-                padding: '0.45rem 0.75rem',
-                fontSize: '0.82rem',
+                minWidth: 0,
+                height: '36px',
+                padding: '0 0.2rem',
+                fontSize: '0.78rem',
                 fontWeight: 800,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '0.4rem',
+                whiteSpace: 'nowrap',
                 background: activeTab === 'chloe'
                   ? (isDark ? 'linear-gradient(135deg, #C5A059, #8C6B28)' : 'linear-gradient(135deg, #C5A059, #9E7D3B)')
                   : 'transparent',
@@ -1252,7 +1247,6 @@ export default function DashboardApp() {
                 transition: 'all 0.15s ease'
               }}
             >
-              <Sparkles size={14} color={activeTab === 'chloe' ? '#FFFFFF' : (isDark ? '#C5A059' : '#8C6B28')} />
               <span>קלואי</span>
             </button>
           </div>
@@ -1260,7 +1254,13 @@ export default function DashboardApp() {
       </header>
 
       {/* Main Content Area */}
-      <main style={{ flex: 1, overflow: activeTab === 'chloe' ? 'hidden' : 'auto' }}>
+      <main style={{
+        flex: 1,
+        minHeight: 0,
+        overflow: activeTab === 'chloe' || activeTab === 'priority' ? 'hidden' : 'auto',
+        display: activeTab === 'chloe' || activeTab === 'priority' ? 'flex' : undefined,
+        flexDirection: activeTab === 'chloe' || activeTab === 'priority' ? 'column' : undefined
+      }}>
         {activeTab === 'financials' ? (
           <FinancialCommandCenter 
             tenantId={DEMO_TENANT_ID}
@@ -1275,6 +1275,19 @@ export default function DashboardApp() {
             sessionUser={user}
             theme={theme}
           />
+        ) : activeTab === 'priority' ? (
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <Suspense fallback={<div style={{ padding: '1rem', fontWeight: 700 }}>טוען פריוריטי…</div>}>
+              <PriorityDesk
+                layout="phone"
+                tenantId={user.tenant_id || DEMO_TENANT_ID}
+                canEdit={canEditPriorityStatuses(user.role)}
+                active
+                showCashflow={canSeeFinancials(user.role, user.username, user.display_name || '')}
+                operatorName={user.display_name || user.username || ''}
+              />
+            </Suspense>
+          </div>
         ) : (
           <ResortOSOperations 
             theme={theme}
