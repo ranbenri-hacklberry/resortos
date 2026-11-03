@@ -2027,16 +2027,6 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
           </div>
         ) : (
           <div className="grid-wrap">
-            {phone && horizon[0] ? (
-              <div className="phone-day-bar">
-                <button type="button" onClick={() => setHorizonStart((current) => shiftDay(current, -1))} aria-label="יום קודם">‹</button>
-                <span className="phone-day-name">{horizonLabel(horizon[0], today)}</span>
-                <button type="button" onClick={() => setHorizonStart((current) => shiftDay(current, 1))} aria-label="יום הבא">›</button>
-                {horizon[0] !== today ? (
-                  <button type="button" className="phone-today" onClick={() => setHorizonStart(today)}>היום</button>
-                ) : null}
-              </div>
-            ) : null}
             <table className="erp-table week-table">
               <thead>
                 <tr className="occupancy-row">
@@ -2070,7 +2060,16 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                   <th className="unit-cell">יחידה</th>
                   {horizon.map((day) => (
                     <th key={day} className={day === today ? 'is-today' : ''}>
-                      {horizonLabel(day, today)}
+                      {phone ? (
+                        <div className="phone-day-switch">
+                          <button type="button" aria-label="יום אחורה" onClick={() => setHorizonStart((current) => shiftDay(current, -1))}>‹</button>
+                          <span className="phone-day-name">{horizonLabel(day, today)}</span>
+                          <button type="button" aria-label="יום קדימה" onClick={() => setHorizonStart((current) => shiftDay(current, 1))}>›</button>
+                          {day !== today ? (
+                            <button type="button" className="phone-today" onClick={() => setHorizonStart(today)}>היום</button>
+                          ) : null}
+                        </div>
+                      ) : horizonLabel(day, today)}
                     </th>
                   ))}
                 </tr>

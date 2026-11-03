@@ -3761,15 +3761,21 @@
 }
 .priority-root.is-phone .week-table tbody tr:not(.area-break) > td {
   height: auto;
-  min-height: 46px;
-  padding: 4px 3px;
+  min-height: 36px;
+  padding: 2px 3px;
   vertical-align: middle;
   box-sizing: border-box;
 }
 .priority-root.is-phone .unit-status,
 .priority-root.is-phone .week-table tbody .stay-pill {
-  min-height: 40px;
+  min-height: 32px;
   box-sizing: border-box;
+}
+.priority-root.is-phone .week-table thead tr.label-row th:not(.unit-cell) {
+  height: auto;
+  min-height: 32px;
+  overflow: visible;
+  padding: 2px;
 }
 .priority-root.is-phone .unit-name {
   display: block;
@@ -3781,39 +3787,39 @@
 .priority-root.is-phone .week-cell {
   min-width: 0 !important;
 }
-.phone-day-bar {
+.phone-day-switch {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  flex: 0 0 auto;
-  padding: 4px 6px;
-  background: #e8eef5;
-  border-bottom: 1px solid #94a3b8;
-  position: sticky;
-  top: 0;
-  z-index: 6;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
 }
-.phone-day-bar button,
+.phone-day-switch button,
 .phone-today {
+  flex: 0 0 auto;
   height: 26px;
   min-width: 28px;
-  padding: 0 8px;
+  padding: 0 6px;
   border: 1px solid #94a3b8;
   background: #f8fafc;
   color: #0f172a;
   font: 700 13px/1 Tahoma, "Segoe UI", Arial, sans-serif;
   cursor: pointer;
 }
-.phone-day-bar .phone-today {
+.phone-day-switch .phone-today {
   border-color: #0f2942;
   background: #0f2942;
   color: #f8fafc;
   font-size: 12px;
 }
 .phone-day-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-weight: 800;
-  font-size: 13px;
+  font-size: 12px;
   color: #1b365d;
   white-space: nowrap;
 }
