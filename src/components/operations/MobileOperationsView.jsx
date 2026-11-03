@@ -89,8 +89,7 @@ export default function MobileOperationsView({
   const realToday = useMemo(() => israelToday(), []);
   const isDark = theme === 'dark';
   const priorityChrome = chrome === 'priority' && !isDark;
-  const [opsDay, setOpsDay] = useState(realToday);
-  const todayStr = priorityChrome ? opsDay : realToday;
+  const todayStr = realToday;
 
   // Luxury Brand Tokens: Authentic Wine & Champagne Gold with modern soft radii and elegant depth.
   // On the phone dashboard the light theme follows the Priority screen instead.
@@ -650,23 +649,12 @@ export default function MobileOperationsView({
   if (priorityChrome) {
     return (
       <PhoneOperationsBoard
-        day={todayStr}
-        today={realToday}
-        onDay={setOpsDay}
-        arrivingRooms={arrivingRooms}
-        cleanNowRooms={canCleanNowRooms}
-        stillInRooms={stillInHouseRooms}
-        occupiedRooms={occupiedRooms}
-        heldRooms={heldRooms}
-        vacantRooms={vacantRooms}
-        maintenanceTickets={maintenanceTickets}
+        units={effectiveUnits}
+        bookings={effectiveBookings}
+        today={todayStr}
         shoppingItems={shoppingItems}
         onRetrySync={onRetrySync}
-        onStartTask={onStartTask}
-        onFinishTask={onFinishTask}
-        onMarkDeparted={handleMarkGuestDeparted}
         onToggleOccupy={handleToggleOccupy}
-        onResolveMaintenance={handleResolveMaintenance}
         onAddShopping={(text) => {
           setShoppingItems((prev) => [{
             id: `shop-${Date.now()}`,
@@ -678,7 +666,6 @@ export default function MobileOperationsView({
         }}
         onToggleShopping={handleToggleShopping}
         onDeleteShopping={handleDeleteShopping}
-        waLink={waLink}
       />
     );
   }
