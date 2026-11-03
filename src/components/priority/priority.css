@@ -3761,14 +3761,14 @@
 }
 .priority-root.is-phone .week-table tbody tr:not(.area-break) > td {
   height: auto;
-  min-height: 36px;
-  padding: 2px 3px;
+  min-height: 29px;
+  padding: 1px 3px;
   vertical-align: middle;
   box-sizing: border-box;
 }
 .priority-root.is-phone .unit-status,
 .priority-root.is-phone .week-table tbody .stay-pill {
-  min-height: 32px;
+  min-height: 26px;
   box-sizing: border-box;
 }
 .priority-root.is-phone .week-table thead tr.label-row th:not(.unit-cell) {
@@ -3822,6 +3822,34 @@
   font-size: 12px;
   color: #1b365d;
   white-space: nowrap;
+}
+
+/* Phone room panel: one column. The desk split (details 64% + feed min 310px) is the wide layout. */
+.priority-root.is-phone .priority-split-view {
+  flex-direction: column;
+  height: 100%;
+  overflow: auto;
+  gap: 8px;
+  padding: 6px;
+}
+.priority-root.is-phone .split-details-col,
+.priority-root.is-phone .split-feed-col {
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  height: auto;
+}
+.priority-root.is-phone .split-details-col {
+  overflow: visible;
+}
+.priority-root.is-phone .split-feed-col {
+  min-height: 240px;
+}
+.priority-root.is-phone .master,
+.priority-root.is-phone .finance-row,
+.priority-root.is-phone .finance-row.is-pay {
+  grid-template-columns: 1fr;
 }
 
 
