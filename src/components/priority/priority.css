@@ -364,6 +364,72 @@
   font-weight: 700;
   line-height: 1.3;
 }
+.priority-voucher {
+  margin: 8px 0 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.priority-voucher figcaption {
+  font-size: 12px;
+  font-weight: 800;
+  color: #1b365d;
+  line-height: 1.35;
+}
+.priority-voucher img,
+.priority-voucher-open img {
+  width: 100%;
+  max-height: 340px;
+  object-fit: contain;
+  background: #fffbeb;
+  border-radius: 12px;
+  border: 1px solid rgba(27, 54, 93, 0.16);
+}
+.priority-voucher-open {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+.finance-charges {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.finance-charge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 28px;
+  padding: 4px 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 12px;
+  color: #1b365d;
+}
+.card-split-line {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 11px;
+  color: #1b365d;
+}
+.pay-line.card-split { flex-wrap: wrap; }
+.pay-line .card-last4,
+.pay-line .card-auth {
+  height: 22px;
+  border: 1px solid #94a3b8;
+  padding: 0 4px;
+  background: #fff;
+  color: #0f172a;
+  font: 12px Tahoma, Arial, sans-serif;
+}
+.pay-line .card-last4 { flex: 0 0 58px; width: 58px; }
+.pay-line .card-auth { flex: 1 1 64px; min-width: 64px; }
+.wa-charge-ref { font-weight: 800; color: #0f172a; }
+.wa-charge-ref.is-missing { color: #b45309; }
 .field input.is-due {
   height: 22px;
   font-size: 13px;
@@ -3873,7 +3939,16 @@
   overflow: visible;
 }
 .priority-root.is-phone .split-feed-col {
-  min-height: 240px;
+  min-height: 0;
+  height: auto;
+  overflow: visible;
+}
+.priority-root.is-phone .wa-feed-body {
+  flex: none;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
 }
 .priority-root.is-phone .master,
 .priority-root.is-phone .finance-row,

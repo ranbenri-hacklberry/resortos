@@ -1,7 +1,10 @@
 import { hasRecordedReceipt, isFullyPaid, kinorotSettlementKind } from './bookingPaid';
 import { israelToday } from './cabinAccess';
-import { mergeClearingPayments, normalizeClearingPayment } from './clearingPayments';
+import { hypPaymentFromResult, mergeClearingPayments, normalizeClearingPayment } from './clearingPayments';
+import { clearingPaymentsFromKinorotNotes, parseKinorotNotePayments } from './kinorotNotePayments';
+import { kinorotReservationId } from './kinorotReservationNote';
 import { formatStayHourLabel, stayHoursFromBooking } from './kinorotStayHours';
+import { voucherChargeForBooking } from './voucherRates';
 import { db } from './resortos-db';
 import { pushBookingToCloud } from './cloudDb';
 
@@ -93,6 +96,107 @@ function clearingKind(raw) {
     || /_card$/.test(txn)
   ) return 'card';
   return '';
+}
+
+const CHARGE_KIND_LABEL = {
+  cash: 'מזומן',
+  card: 'אשראי',
+  bank: 'העברה בנקאית',
+  app: 'ביט',
+  check: 'שיק',
+  voucher: 'שובר',
+  booking: 'בוקינג',
+  airbnb: 'Airbnb'
+};
+
+export function chargeDisplay(raw = {}) {
+  const row = normalizeClearingPayment(raw);
+  const method = String(raw.method || '').toLowerCase();
+  const kind = method === 'app' || method === 'check' ? method : (clearingKind(raw) || method);
+  const approval = String(row.ref || row.depositApproval || raw.auth || raw.ACode || '').trim();
+  const needsApproval = kind === 'card' || kind === 'bank';
+  return {
+    ...row,
+    kind,
+    kindLabel: CHARGE_KIND_LABEL[kind] || 'לא צוין',
+    approval: needsApproval ? approval : '',
+    needsApproval
+  };
+}
+
+function sameCharge(a, b) {
+  if (a.txn && b.txn && a.txn === b.txn) return true;
+  if (a.last4 && b.last4 && a.last4 !== b.last4) return false;
+  if (a.approval && b.approval && a.kind === b.kind && a.approval === b.approval) return true;
+  return a.amount_agorot === b.amount_agorot
+    && a.kind === b.kind
+    && (!a.last4 || !b.last4 || a.last4 === b.last4)
+    && (!a.date || !b.date || a.date === b.date);
+}
+
+/** Every recorded charge for the guest, including Kinorot note lines and a Hyp receipt that was not copied into the list. */
+export function priorityChargeRows(booking) {
+  const rows = (Array.isArray(booking?.clearing_payments) ? booking.clearing_payments : [])
+    .map(chargeDisplay)
+    .filter((row) => row.amount_agorot > 0);
+  const notes = clearingPaymentsFromKinorotNotes(
+    parseKinorotNotePayments(booking?.special_requests || ''),
+    { resid: kinorotReservationId(booking) }
+  );
+  for (const raw of notes) {
+    const row = chargeDisplay(raw);
+    if (!(row.amount_agorot > 0) || rows.some((have) => sameCharge(have, row))) continue;
+    rows.push(row);
+  }
+  const hyp = booking?.stay?.hyp;
+  if (hyp?.paid || hyp?.auth || hyp?.id) {
+    const row = chargeDisplay(hypPaymentFromResult(hyp, {
+      amount: hyp.amount,
+      date: String(hyp.at || '').slice(0, 10),
+      ref: hyp.auth || hyp.ref || ''
+    }));
+    if (row.amount_agorot > 0 && !rows.some((have) => sameCharge(have, row))) rows.push(row);
+  }
+  const voucher = voucherChargeForBooking(booking);
+  if (voucher) {
+    const row = chargeDisplay(voucher);
+    if (row.amount_agorot > 0 && !rows.some((have) => have.kind === 'voucher')) rows.push(row);
+  }
+  if (!rows.length) {
+    const synthetic = manualPaidFallbackRow(booking);
+    if (synthetic) rows.push(synthetic);
+  }
+  return rows;
+}
+
+const MANUAL_MODE_LABELS = {
+  VOUCHER: 'שובר',
+  AIRBNB: 'Airbnb',
+  CASH: 'מזומן',
+  BOOKING: 'Booking'
+};
+
+// Display-only fallback: booking marked paid but no recorded charge lines.
+export function manualPaidFallbackRow(booking) {
+  const status = String(booking?.payment_status || '').toUpperCase();
+  if (status !== 'PAID' && status !== 'DEPOSIT_PAID') return null;
+  if (Array.isArray(booking?.clearing_payments) && booking.clearing_payments.length) return null;
+  const mode = String(booking?.payment_mode || '').toUpperCase();
+  const base = MANUAL_MODE_LABELS[mode] || (mode ? mode : 'תשלום');
+  const amount = status === 'DEPOSIT_PAID'
+    ? (Number(booking?.deposit_agorot) || 0)
+    : (Number(booking?.total_price_agorot) || 0);
+  const label = `${base} (סומן ידנית)`;
+  return {
+    kind: 'manual',
+    synthetic: true,
+    kindLabel: label,
+    accountLabel: label,
+    amount_agorot: amount,
+    date: String(booking?.updated_at || booking?.check_in_date || '').slice(0, 10),
+    needsApproval: false,
+    txn: `manual_${booking?.id || ''}`
+  };
 }
 
 export function paymentParts(booking) {

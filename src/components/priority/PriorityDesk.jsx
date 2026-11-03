@@ -46,12 +46,15 @@ import {
   parsePriorityShekels,
   paymentBreakdown,
   paymentDraftDirty,
+  priorityChargeRows,
   priorityMethodKey,
   priorityPayTone,
   priorityShekelMark,
   priorityStatusKey,
   savePriorityPaymentDrafts
 } from '../../lib/priorityPayment';
+import { addCardSplit } from '../../lib/cardSplit';
+import { cashCollectorChoices, DEFAULT_CASH_COLLECTOR } from '../../lib/cashCollectors';
 import { pushBookingToCloud, pushUnitToCloud, subscribeToOpsEdgeEvents, syncCloudBookingsToDexie, syncUnitOpsToDexie } from '../../lib/cloudDb';
 import { getStoredToken, listAssignableStaff, staffDisplayName } from '../../lib/staffAuth';
 import { toMicropayPhone } from '../../lib/micropaySms';
@@ -296,46 +299,44 @@ function guestSide(booking, today, kind) {
 }
 
 function paymentsOf(booking) {
-  const stored = Array.isArray(booking?.clearing_payments) ? booking.clearing_payments : [];
-  const rows = stored.map((raw) => ({ ...normalizeClearingPayment(raw), photo: '' }))
-    .filter((row) => row.amount_agorot > 0 || row.source === 'VOUCHER' || row.accountKey === 'VOUCHER');
-  const stay = booking?.stay || {};
-  const voucherPhoto = String(stay.voucher_photo || '');
-  const transferPhoto = String(stay.payment_proof || '');
-  const method = priorityMethodKey(booking);
-  const voucherRow = rows.find((row) => row.source === 'VOUCHER' || row.accountKey === 'VOUCHER');
-  if (voucherRow) {
-    voucherRow.photo = voucherPhoto;
-    voucherRow.accountLabel = 'שובר';
-  } else if (method === 'VOUCHER' || voucherPhoto) {
-    const covered = rows.reduce((sum, row) => sum + (Number(row.amount_agorot) || 0), 0);
-    rows.push({
-      source: 'VOUCHER',
-      accountKey: 'VOUCHER',
-      accountLabel: 'שובר',
-      amount_agorot: Math.max(0, (Number(booking?.total_price_agorot) || 0) - covered),
-      date: String(stay.voucher_updated_at || booking?.check_in_date || '').slice(0, 10),
-      ref: stay.voucher_company_redeemed ? 'נפדה בחברה' : '',
-      photo: voucherPhoto,
-      txn: `voucher-${booking?.id || ''}`
-    });
-  }
-  const bankRow = rows.find((row) => row.source === 'BANK' || row.accountKey === 'BANK');
-  if (bankRow) {
-    bankRow.photo = transferPhoto || bankRow.photo;
-    if (!bankRow.accountLabel || bankRow.accountLabel === 'חשבון סליקה') bankRow.accountLabel = 'העברה בנקאית';
-  } else if (transferPhoto || method === 'BANK') {
-    rows.push({
-      source: 'BANK',
-      accountKey: 'BANK',
-      accountLabel: 'העברה בנקאית',
-      amount_agorot: 0,
-      date: String(stay.payment_proof_at || booking?.check_in_date || '').slice(0, 10),
-      photo: transferPhoto,
-      txn: `transfer-${booking?.id || ''}`
-    });
-  }
-  return rows;
+  return priorityChargeRows(booking);
+}
+
+function voucherView(booking) {
+  const stay = booking?.stay && typeof booking.stay === 'object' ? booking.stay : {};
+  const photo = String(stay.voucher_photo || stay.payment_proof || '');
+  const safePhoto = photo.startsWith('data:image/') || /^https?:\/\//.test(photo) || photo.startsWith('/')
+    ? photo
+    : '';
+  const number = String(stay.voucher_number || '').replace(/\D/g, '');
+  const label = String(stay.voucher_label || '').trim();
+  const rawExpires = String(stay.voucher_expires || '').slice(0, 10);
+  const expires = /^\d{4}-\d{2}-\d{2}$/.test(rawExpires)
+    ? rawExpires.split('-').reverse().join('/')
+    : '';
+  const caption = [
+    number ? `שובר ${number}` : '',
+    label,
+    expires ? `בתוקף עד ${expires}` : ''
+  ].filter(Boolean).join(' · ');
+  if (!safePhoto && !caption) return null;
+  return { photo: safePhoto, caption };
+}
+
+function VoucherFigure({ voucher, onOpen }) {
+  if (!voucher?.photo && !voucher?.caption) return null;
+  return (
+    <figure className="priority-voucher">
+      {voucher.caption ? <figcaption>{voucher.caption}</figcaption> : null}
+      {voucher.photo ? (
+        onOpen ? (
+          <button type="button" className="priority-voucher-open" onClick={() => onOpen(voucher.photo)} aria-label="הגדלת השובר">
+            <img src={voucher.photo} alt="שובר" />
+          </button>
+        ) : <img src={voucher.photo} alt="שובר" />
+      ) : null}
+    </figure>
+  );
 }
 
 function cardFromBooking(row, booking) {
@@ -365,6 +366,7 @@ function cardFromBooking(row, booking) {
     payMethod: method,
     payBreakdown: paymentBreakdown(booking),
     charges: paymentsOf(booking),
+    voucher: voucherView(booking),
     notes: booking.special_requests || '',
     notesList: Array.isArray(booking.stay?.priority_notes) ? booking.stay.priority_notes : [],
     phoneRaw: booking.guest_phone || ''
@@ -515,6 +517,7 @@ function rowFromUnit(unit, bookings, today) {
     sort: Number(unit.sort_order ?? 999),
     tasks: tasksOf(unit, badge?.label),
     charges: primary ? paymentsOf(primary) : [],
+    voucher: primary ? voucherView(primary) : null,
     roomLog: Array.isArray(unit?.sop_progress?.roomLog) ? unit.sop_progress.roomLog : []
   };
 }
@@ -695,6 +698,9 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [proofView, setProofView] = useState('');
+  const [collectors, setCollectors] = useState([DEFAULT_CASH_COLLECTOR]);
+  const [collectorName, setCollectorName] = useState(DEFAULT_CASH_COLLECTOR);
+  const [cardSplit, setCardSplit] = useState({ amount: '', last4: '', approval: '' });
   const [taskTitle, setTaskTitle] = useState('');
   const [noteText, setNoteText] = useState('');
   const [kinorotNote, setKinorotNote] = useState({ resId: '', saved: '', draft: '', loading: false });
@@ -1165,7 +1171,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
     try {
       const { booking: next, collectedAgorot: recorded } = collectPriorityCash(booking, {
         today,
-        collector: operator,
+        collector: collectorName,
         totalAgorot,
         collectedAgorot: collectedAgorot == null ? undefined : collectedAgorot
       });
@@ -1173,7 +1179,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       await pushBookingToCloud(next, { allowOverlap: true });
       clearPaymentDraft(row.id);
       const money = recorded > 0 ? formatPriorityShekels(recorded) : formatPriorityShekels(totalAgorot);
-      setMessage(recorded > 0 ? `${row.name}: נגבה מזומן ${money}` : `${row.name}: המזומן כבר רשום`);
+      setMessage(recorded > 0 ? `${row.name}: נגבה מזומן ${money} · ${collectorName}` : `${row.name}: המזומן כבר רשום`);
     } catch (err) {
       const text = `הגבייה נכשלה ולא נרשמה: ${err?.message || 'שגיאה'}`;
       setSaveError(text);
@@ -1183,6 +1189,47 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
     }
   };
   collectRef.current = collectCash;
+
+  const addCardCharge = async (row, bookingId = row?.bookingId) => {
+    if (!canEdit || saving) return;
+    const booking = bookings.find((item) => item.id === bookingId);
+    if (!booking) {
+      setMessage('אין אורח לחיוב');
+      return;
+    }
+    const amountAgorot = parsePriorityShekels(cardSplit.amount);
+    const last4 = String(cardSplit.last4 || '').replace(/\D/g, '');
+    if (amountAgorot == null || !(amountAgorot > 0)) {
+      setSaveError('הסכום לא תקין');
+      setMessage('הסכום לא תקין');
+      return;
+    }
+    if (last4.length !== 4) {
+      setSaveError('צריך 4 ספרות של הכרטיס');
+      setMessage('צריך 4 ספרות של הכרטיס');
+      return;
+    }
+    setSaving(true);
+    setSaveError('');
+    try {
+      const { booking: next } = addCardSplit(booking, {
+        today,
+        amountAgorot,
+        last4,
+        approval: cardSplit.approval
+      });
+      await db.bookings.put(next);
+      await pushBookingToCloud(next, { allowOverlap: true });
+      setCardSplit({ amount: '', last4: '', approval: '' });
+      setMessage(`${row.name}: נוסף כרטיס ${formatPriorityShekels(amountAgorot)}`);
+    } catch (err) {
+      const text = `הכרטיס לא נרשם: ${err?.message || 'שגיאה'}`;
+      setSaveError(text);
+      setMessage(text);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const openGuest = (unitId, booking) => {
     setSelectedId(unitId);
@@ -1479,6 +1526,9 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
           .map(staffDisplayName)
           .filter(Boolean);
         setHousekeepers([...new Set(names)].sort((a, b) => a.localeCompare(b, 'he')));
+        const managers = cashCollectorChoices(people);
+        setCollectors(managers);
+        setCollectorName((current) => (managers.includes(current) ? current : managers[0]));
       })
       .catch(() => {});
     return () => { cancel = true; };
@@ -2019,6 +2069,17 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                     ) : null}
                   </div>
                   <label className="field">
+                    <span>מי גבה</span>
+                    <select
+                      aria-label="מי גבה"
+                      disabled={!canEdit}
+                      value={collectorName}
+                      onChange={(event) => setCollectorName(event.target.value)}
+                    >
+                      {collectors.map((name) => <option key={name} value={name}>{name}</option>)}
+                    </select>
+                  </label>
+                  <label className="field">
                     <span>גביית מזומן (F2)</span>
                     <span className="pay-line">
                       <input
@@ -2073,8 +2134,74 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                         {PAYMENT_METHODS.map((choice) => <option key={choice.key} value={choice.key}>{choice.label}</option>)}
                       </select>
                       {card.payBreakdown ? <small className="pay-breakdown">{card.payBreakdown}</small> : null}
+                      <VoucherFigure voucher={card.voucher} onOpen={setProofView} />
                     </label>
                   </div>
+                  {(card.charges || []).length ? (
+                    <div className="finance-charges" aria-label="חיובים">
+                      {card.charges.map((charge, index) => (
+                        <div className="finance-charge" key={charge.txn || charge.approval || index}>
+                          <strong>{charge.kindLabel || charge.accountLabel}</strong>
+                          {charge.amount_agorot > 0 ? <span>{formatIlsFromAgorot(charge.amount_agorot)}</span> : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  <label className="field">
+                    <span>חלוקה לכרטיסים</span>
+                    {(card.charges || []).filter((charge) => charge.kind === 'card').map((charge) => (
+                      <span className="card-split-line" key={charge.txn || `${charge.last4}-${charge.amount_agorot}`}>
+                        <b dir="ltr">{charge.last4 ? `\u2066****${charge.last4}\u2069` : 'אשראי'}</b>
+                        <span>{formatPriorityShekels(charge.amount_agorot)}</span>
+                        {charge.approval ? <span dir="ltr">{charge.approval}</span> : null}
+                      </span>
+                    ))}
+                    <span className="pay-line card-split">
+                      <input
+                        className="cash-amount"
+                        inputMode="decimal"
+                        aria-label="סכום בכרטיס"
+                        placeholder="סכום"
+                        disabled={!canEdit || !card.bookingId}
+                        value={cardSplit.amount}
+                        onFocus={() => {
+                          if (!card.bookingId || String(cardSplit.amount || '').trim()) return;
+                          const due = Math.max(0, (Number(card.amountAgorot) || 0) - (Number(card.paidAgorot) || 0));
+                          if (!(due > 0)) return;
+                          setCardSplit((current) => ({ ...current, amount: formatPriorityShekels(due) }));
+                        }}
+                        onChange={(event) => setCardSplit((current) => ({ ...current, amount: event.target.value }))}
+                      />
+                      <input
+                        className="card-last4"
+                        inputMode="numeric"
+                        dir="ltr"
+                        maxLength={4}
+                        aria-label="4 ספרות"
+                        placeholder="4 ספרות"
+                        disabled={!canEdit || !card.bookingId}
+                        value={cardSplit.last4}
+                        onChange={(event) => setCardSplit((current) => ({ ...current, last4: event.target.value.replace(/\D/g, '').slice(0, 4) }))}
+                      />
+                      <input
+                        className="card-auth"
+                        dir="ltr"
+                        aria-label="מספר אישור"
+                        placeholder="אישור"
+                        disabled={!canEdit || !card.bookingId}
+                        value={cardSplit.approval}
+                        onChange={(event) => setCardSplit((current) => ({ ...current, approval: event.target.value }))}
+                      />
+                      <button
+                        type="button"
+                        className="cash-btn"
+                        disabled={!canEdit || !card.bookingId || saving}
+                        onClick={() => addCardCharge(card)}
+                      >
+                        הוסף
+                      </button>
+                    </span>
+                  </label>
                   {phone && cardBooking ? (
                     <StayProofs
                       booking={cardBooking}
@@ -3231,26 +3358,29 @@ function SplitFeedPanel({
                 onOpen={onOpenProof || (() => {})}
               />
             ) : null}
+            <VoucherFigure voucher={card.voucher} onOpen={onOpenProof} />
             {card.charges.length ? card.charges.map((charge, index) => (
-              <div key={charge.txn || charge.ref || index} className="wa-charge-card">
+              <div key={charge.txn || charge.approval || index} className="wa-charge-card">
                 <div className="wa-charge-row">
-                  <strong>{charge.accountLabel}</strong>
+                  <strong>{charge.kindLabel || charge.accountLabel}</strong>
                   {charge.amount_agorot > 0 ? <span className="wa-charge-amount">{formatIlsFromAgorot(charge.amount_agorot)}</span> : null}
                 </div>
                 <div className="wa-charge-sub">
+                  <span>סוג תשלום: {charge.kindLabel || 'לא צוין'}</span>
+                  {charge.needsApproval ? (
+                    <span className={charge.approval ? 'wa-charge-ref' : 'wa-charge-ref is-missing'}>
+                      מספר אישור / אסמכתה: {charge.approval || 'אין'}
+                    </span>
+                  ) : null}
                   {charge.date || charge.collected_at ? <span>תאריך: {charge.date || String(charge.collected_at || '').slice(0, 10)}</span> : null}
-                  {charge.ref ? <span>אסמכתה: {charge.ref}</span> : null}
+                  {charge.accountLabel ? <span>{charge.accountLabel}</span> : null}
+                  {charge.last4 ? <span dir="ltr">{`\u2066****${charge.last4}\u2069`}</span> : null}
                   {(charge.payer_name || charge.payer_id) ? (
                     <span>משלם: {[charge.payer_name, charge.payer_id].filter(Boolean).join(' · ')}</span>
                   ) : null}
                 </div>
-                {charge.photo && onOpenProof ? (
-                  <button type="button" className="stay-proof-thumb" onClick={() => onOpenProof(charge.photo)} aria-label="הגדלת הצילום">
-                    <img src={charge.photo} alt={charge.source === 'VOUCHER' ? 'צילום שובר' : 'צילום העברה'} />
-                  </button>
-                ) : null}
               </div>
-            )) : <div className="room-empty">אין חיובים רשומים ליחידה הזו</div>}
+            )) : card.voucher ? null : <div className="room-empty">אין חיובים רשומים ליחידה הזו</div>}
           </div>
         )}
       </div>
