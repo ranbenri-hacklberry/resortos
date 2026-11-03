@@ -16,7 +16,7 @@ import { createPaymentsApi, nativeTap, paymentsMode, tapOnThisPhone } from '../l
 const DEMO = paymentsMode !== 'live';
 const SESSION_KEY = 'resortos.tap.session';
 
-export default function ChargeScreen({ preset }) {
+export default function ChargeScreen({ preset, onClose }) {
   const api = useMemo(() => createPaymentsApi(), []);
   const [amount, setAmount] = useState(preset?.amount ? String(preset.amount) : '');
   const [payments, setPayments] = useState(Number(preset?.payments) || 1);
@@ -141,6 +141,11 @@ export default function ChargeScreen({ preset }) {
 
   return (
     <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+      {onClose ? (
+        <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="חזרה לדשבורד" style={styles.back}>
+          <Text style={styles.backText}>חזרה לדשבורד</Text>
+        </Pressable>
+      ) : null}
       <Text style={styles.kicker}>מיאליס</Text>
       <Text style={styles.title}>חיוב</Text>
       {DEMO ? <Text style={styles.banner}>מצב הדגמה. לא נגבה כסף אמיתי.</Text> : null}
@@ -222,6 +227,8 @@ export default function ChargeScreen({ preset }) {
 
 const styles = StyleSheet.create({
   page: { padding: 22, paddingBottom: 48, backgroundColor: '#FAF8F3' },
+  back: { alignSelf: 'flex-start', marginBottom: 8 },
+  backText: { color: '#1b365d', fontSize: 16, fontWeight: '800' },
   kicker: { color: '#C5A059', fontWeight: '800', fontSize: 14 },
   title: { fontSize: 40, fontWeight: '900', color: '#26130F', marginTop: 4 },
   banner: { marginTop: 10, backgroundColor: '#F3E6C8', color: '#26130F', padding: 10, borderRadius: 12, overflow: 'hidden', fontWeight: '700' },

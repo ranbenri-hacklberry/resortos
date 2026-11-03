@@ -31,7 +31,8 @@ const PHONE_FIT = `
     'html.resortos-app button[style*="#C5A059"], html.resortos-app button[style*="linear-gradient(135deg, #C5A059"] { background: #1b365d !important; color: #f8fafc !important; border-color: #0f2942 !important; box-shadow: none !important; border-radius: 2px !important; }',
     'html.resortos-app .mobile-ops-view, html.resortos-app .hotelos-ops-page, html.resortos-app .dashboard-finance, html.resortos-app .dashboard-chloe { background: #eaecf0 !important; color: #0f172a !important; font-family: Tahoma, "Segoe UI", Arial, sans-serif !important; }',
     'html.resortos-app [style*="#FAF8F3"], html.resortos-app [style*="#FDFBF7"] { background-color: #eaecf0 !important; }',
-    'html.resortos-app [style*="border-radius: 16px"], html.resortos-app [style*="border-radius:16px"] { border-radius: 2px !important; }'
+    'html.resortos-app [style*="border-radius: 16px"], html.resortos-app [style*="border-radius:16px"] { border-radius: 2px !important; }',
+    'html.resortos-app #root > div { box-sizing: border-box !important; padding-bottom: __FAB_PAD__px !important; }'
   ].join('\\n');
   document.documentElement.appendChild(style);
 })();
@@ -59,7 +60,8 @@ const BRIDGE = `
 true;
 `;
 
-export default function DashboardScreen({ onOpenCharge }) {
+export default function DashboardScreen({ onOpenCharge, contentInsetBottom = 84 }) {
+  const phoneFit = PHONE_FIT.replace('__FAB_PAD__', String(Math.max(72, Math.round(contentInsetBottom))));
   const [ready, setReady] = useState(false);
 
   const onMessage = (event) => {
@@ -107,7 +109,7 @@ export default function DashboardScreen({ onOpenCharge }) {
         onLoadEnd={() => setReady(true)}
         textZoom={100}
         scalesPageToFit
-        injectedJavaScriptBeforeContentLoaded={PHONE_FIT + BRIDGE}
+        injectedJavaScriptBeforeContentLoaded={phoneFit + BRIDGE}
         onMessage={onMessage}
         onShouldStartLoadWithRequest={onShouldStart}
         setSupportMultipleWindows={false}
