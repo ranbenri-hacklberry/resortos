@@ -297,7 +297,45 @@ function guestSide(booking, today, kind) {
 
 function paymentsOf(booking) {
   const stored = Array.isArray(booking?.clearing_payments) ? booking.clearing_payments : [];
-  return stored.map(normalizeClearingPayment).filter((row) => row.amount_agorot > 0);
+  const rows = stored.map((raw) => ({ ...normalizeClearingPayment(raw), photo: '' }))
+    .filter((row) => row.amount_agorot > 0 || row.source === 'VOUCHER' || row.accountKey === 'VOUCHER');
+  const stay = booking?.stay || {};
+  const voucherPhoto = String(stay.voucher_photo || '');
+  const transferPhoto = String(stay.payment_proof || '');
+  const method = priorityMethodKey(booking);
+  const voucherRow = rows.find((row) => row.source === 'VOUCHER' || row.accountKey === 'VOUCHER');
+  if (voucherRow) {
+    voucherRow.photo = voucherPhoto;
+    voucherRow.accountLabel = 'שובר';
+  } else if (method === 'VOUCHER' || voucherPhoto) {
+    const covered = rows.reduce((sum, row) => sum + (Number(row.amount_agorot) || 0), 0);
+    rows.push({
+      source: 'VOUCHER',
+      accountKey: 'VOUCHER',
+      accountLabel: 'שובר',
+      amount_agorot: Math.max(0, (Number(booking?.total_price_agorot) || 0) - covered),
+      date: String(stay.voucher_updated_at || booking?.check_in_date || '').slice(0, 10),
+      ref: stay.voucher_company_redeemed ? 'נפדה בחברה' : '',
+      photo: voucherPhoto,
+      txn: `voucher-${booking?.id || ''}`
+    });
+  }
+  const bankRow = rows.find((row) => row.source === 'BANK' || row.accountKey === 'BANK');
+  if (bankRow) {
+    bankRow.photo = transferPhoto || bankRow.photo;
+    if (!bankRow.accountLabel || bankRow.accountLabel === 'חשבון סליקה') bankRow.accountLabel = 'העברה בנקאית';
+  } else if (transferPhoto || method === 'BANK') {
+    rows.push({
+      source: 'BANK',
+      accountKey: 'BANK',
+      accountLabel: 'העברה בנקאית',
+      amount_agorot: 0,
+      date: String(stay.payment_proof_at || booking?.check_in_date || '').slice(0, 10),
+      photo: transferPhoto,
+      txn: `transfer-${booking?.id || ''}`
+    });
+  }
+  return rows;
 }
 
 function cardFromBooking(row, booking) {
@@ -656,6 +694,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const [menuBox, setMenuBox] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [proofView, setProofView] = useState('');
   const [taskTitle, setTaskTitle] = useState('');
   const [noteText, setNoteText] = useState('');
   const [kinorotNote, setKinorotNote] = useState({ resId: '', saved: '', draft: '', loading: false });
@@ -1681,8 +1720,44 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
 
   const editorChoices = editor ? choicesFor(editor.field, housekeepers, shown.find((row) => row.id === editor.unitId)?.staff, editor.kind) : [];
 
+  async function saveStayProof(kind, dataUrl) {
+    const booking = cardBooking;
+    if (!booking?.id || !String(dataUrl || '').startsWith('data:image/')) return;
+    setSaving(true);
+    setSaveError('');
+    try {
+      const now = new Date().toISOString();
+      const stay = { ...(booking.stay || {}) };
+      if (kind === 'voucher') {
+        stay.voucher_photo = dataUrl;
+        stay.voucher_updated_at = now;
+      } else {
+        stay.payment_proof = dataUrl;
+        stay.payment_proof_at = now;
+      }
+      const next = {
+        ...booking,
+        ...(kind === 'voucher' ? { payment_mode: 'VOUCHER' } : {}),
+        ...(!booking.payment_mode && kind !== 'voucher' ? { payment_mode: 'BANK_TRANSFER' } : {}),
+        stay,
+        updated_at: now
+      };
+      await pushBookingToCloud(next, { allowOverlap: true });
+      setMessage(kind === 'voucher' ? 'צילום השובר נשמר' : 'צילום ההעברה נשמר');
+    } catch (err) {
+      setSaveError(err?.message || 'הצילום לא נשמר');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className={`priority-root${phone ? ' is-phone' : ''}`} dir="rtl">
+      {proofView ? (
+        <button type="button" className="proof-lightbox" onClick={() => setProofView('')} aria-label="סגירת הצילום">
+          <img src={proofView} alt="צילום מלא" />
+        </button>
+      ) : null}
       {untransferredAlerts.length ? (
         <div className="call-alert" role="alertdialog" aria-label="האורח מבקש שיחה">
           <p>המסך נשאר עד שהשיחה מועברת או מסומנת כנפתרה</p>
@@ -2000,6 +2075,15 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                       {card.payBreakdown ? <small className="pay-breakdown">{card.payBreakdown}</small> : null}
                     </label>
                   </div>
+                  {phone && cardBooking ? (
+                    <StayProofs
+                      booking={cardBooking}
+                      canEdit={canEdit}
+                      saving={saving}
+                      onSave={saveStayProof}
+                      onOpen={setProofView}
+                    />
+                  ) : null}
                 </div>
               </div>
 
@@ -2011,6 +2095,8 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
             <SplitFeedPanel
               card={card}
               booking={cardBooking}
+              layoutPhone={phone}
+              onOpenProof={setProofView}
               bookings={bookings}
               units={units}
               tab={tab}
@@ -2440,9 +2526,95 @@ function RoomBeaconInventory({ card }) {
   );
 }
 
+function readProofFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error || new Error('הקובץ לא נקרא'));
+    reader.onload = () => {
+      const src = String(reader.result || '');
+      const img = new Image();
+      img.onload = () => {
+        const max = 1280;
+        const scale = Math.min(1, max / Math.max(img.width, img.height || 1));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(src);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.72));
+      };
+      img.onerror = () => resolve(src);
+      img.src = src;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function ProofSlot({ label, src, alt, canEdit, saving, onOpen, onFile }) {
+  return (
+    <div className="stay-proof">
+      <span>{label}</span>
+      {src ? (
+        <button type="button" className="stay-proof-thumb" onClick={() => onOpen(src)} aria-label={alt}>
+          <img src={src} alt={alt} />
+        </button>
+      ) : <span className="stay-proof-empty">אין צילום</span>}
+      {canEdit ? (
+        <label className={`stay-proof-add${saving ? ' is-busy' : ''}`}>
+          {src ? 'החלפה' : 'צירוף'}
+          <input
+            type="file"
+            accept="image/*"
+            disabled={saving}
+            onChange={async (event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              if (!file) return;
+              const url = await readProofFile(file);
+              if (url) onFile(url);
+            }}
+          />
+        </label>
+      ) : null}
+    </div>
+  );
+}
+
+function StayProofs({ booking, canEdit, saving, onSave, onOpen }) {
+  if (!booking?.id) return null;
+  return (
+    <div className="stay-proofs">
+      <ProofSlot
+        label="שובר"
+        src={booking.stay?.voucher_photo || ''}
+        alt="צילום שובר"
+        canEdit={canEdit}
+        saving={saving}
+        onOpen={onOpen}
+        onFile={(url) => onSave('voucher', url)}
+      />
+      <ProofSlot
+        label="העברה"
+        src={booking.stay?.payment_proof || ''}
+        alt="צילום העברה"
+        canEdit={canEdit}
+        saving={saving}
+        onOpen={onOpen}
+        onFile={(url) => onSave('transfer', url)}
+      />
+    </div>
+  );
+}
+
 function SplitFeedPanel({
   card,
   booking = null,
+  layoutPhone = false,
+  onOpenProof = null,
   bookings = [],
   units = [],
   tab,
@@ -3023,19 +3195,60 @@ function SplitFeedPanel({
           </div>
         ) : (
           <div className="wa-charges-list">
+            {layoutPhone && booking ? (
+              <StayProofs
+                booking={booking}
+                canEdit={canEdit}
+                saving={saving}
+                onSave={async (kind, url) => {
+                  const now = new Date().toISOString();
+                  const stay = { ...(booking.stay || {}) };
+                  if (kind === 'voucher') {
+                    stay.voucher_photo = url;
+                    stay.voucher_updated_at = now;
+                  } else {
+                    stay.payment_proof = url;
+                    stay.payment_proof_at = now;
+                  }
+                  setSaving(true);
+                  setSaveError('');
+                  try {
+                    const next = {
+                      ...booking,
+                      ...(kind === 'voucher' ? { payment_mode: 'VOUCHER' } : {}),
+                      ...(!booking.payment_mode && kind !== 'voucher' ? { payment_mode: 'BANK_TRANSFER' } : {}),
+                      stay,
+                      updated_at: now
+                    };
+                    await pushBookingToCloud(next, { allowOverlap: true });
+                    setMessage(kind === 'voucher' ? 'צילום השובר נשמר' : 'צילום ההעברה נשמר');
+                  } catch (err) {
+                    setSaveError(err?.message || 'הצילום לא נשמר');
+                  } finally {
+                    setSaving(false);
+                  }
+                }}
+                onOpen={onOpenProof || (() => {})}
+              />
+            ) : null}
             {card.charges.length ? card.charges.map((charge, index) => (
               <div key={charge.txn || charge.ref || index} className="wa-charge-card">
                 <div className="wa-charge-row">
                   <strong>{charge.accountLabel}</strong>
-                  <span className="wa-charge-amount">{formatIlsFromAgorot(charge.amount_agorot)}</span>
+                  {charge.amount_agorot > 0 ? <span className="wa-charge-amount">{formatIlsFromAgorot(charge.amount_agorot)}</span> : null}
                 </div>
                 <div className="wa-charge-sub">
-                  <span>תאריך: {charge.date || String(charge.collected_at || '').slice(0, 10)}</span>
+                  {charge.date || charge.collected_at ? <span>תאריך: {charge.date || String(charge.collected_at || '').slice(0, 10)}</span> : null}
                   {charge.ref ? <span>אסמכתה: {charge.ref}</span> : null}
                   {(charge.payer_name || charge.payer_id) ? (
                     <span>משלם: {[charge.payer_name, charge.payer_id].filter(Boolean).join(' · ')}</span>
                   ) : null}
                 </div>
+                {charge.photo && onOpenProof ? (
+                  <button type="button" className="stay-proof-thumb" onClick={() => onOpenProof(charge.photo)} aria-label="הגדלת הצילום">
+                    <img src={charge.photo} alt={charge.source === 'VOUCHER' ? 'צילום שובר' : 'צילום העברה'} />
+                  </button>
+                ) : null}
               </div>
             )) : <div className="room-empty">אין חיובים רשומים ליחידה הזו</div>}
           </div>

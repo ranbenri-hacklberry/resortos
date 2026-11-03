@@ -130,12 +130,74 @@
 .ops-compounds {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   padding: 8px;
   background: #eaecf0;
   color: #0f172a;
   font-family: Tahoma, "Segoe UI", Arial, sans-serif;
   font-size: 11px;
+}
+.ops-area-pills {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 0 0;
+  margin-bottom: -4px;
+}
+.ops-area-pill {
+  flex: 0 0 auto;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 10px;
+  border: 1px solid #94a3b8;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #1b365d;
+  font: 700 11px/1 Tahoma, "Segoe UI", Arial, sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ops-area-pill.is-on {
+  background: #1b365d;
+  border-color: #0f2942;
+  color: #f8fafc;
+}
+.ops-day-switch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 32px;
+  margin-bottom: -4px;
+}
+.ops-day-switch button,
+.ops-day-today {
+  flex: 0 0 auto;
+  height: 28px;
+  min-width: 28px;
+  padding: 0 6px;
+  border: 1px solid #94a3b8;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #1b365d;
+  font: 700 13px/1 Tahoma, "Segoe UI", Arial, sans-serif;
+  cursor: pointer;
+}
+.ops-day-today {
+  background: #1b365d;
+  border-color: #0f2942;
+  color: #f8fafc;
+  font-size: 11px;
+}
+.ops-day-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  font: 800 12px/1.2 Tahoma, "Segoe UI", Arial, sans-serif;
+  color: #1b365d;
 }
 .ops-compound {
   background: #fff;
@@ -144,14 +206,17 @@
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
   overflow: hidden;
 }
+.ops-compound.is-empty {
+  opacity: 0.62;
+}
 .ops-compound-head {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  min-height: 44px;
+  min-height: 48px;
   margin: 0;
-  padding: 6px 8px;
+  padding: 8px 10px;
   border: 0;
   background: #f8fafc;
   color: #0f172a;
@@ -213,6 +278,11 @@
   border-color: #f59e0b;
   color: #92400e;
 }
+.ops-compound-chip.is-zero {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #94a3b8;
+}
 .ops-compound-sub {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -246,14 +316,14 @@
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.9fr) minmax(0, 0.85fr);
   align-items: center;
-  min-height: 29px;
-  padding: 1px 6px;
+  min-height: 36px;
+  padding: 4px 8px;
   border-top: 1px solid #e2e8f0;
   box-sizing: border-box;
   font-size: 11px;
 }
 .ops-unit-row.is-label {
-  min-height: 22px;
+  min-height: 28px;
   color: #64748b;
   font-weight: 700;
   background: #f8fafc;
@@ -280,7 +350,7 @@
   white-space: nowrap;
 }
 .ops-guest-status {
-  min-height: 22px;
+  min-height: 28px;
   margin: 0;
   padding: 0 6px;
   border: 1px solid #94a3b8;
@@ -321,7 +391,7 @@
 .ops-guest-menu button {
   display: block;
   width: 100%;
-  min-height: 29px;
+  min-height: 34px;
   border: 0;
   border-bottom: 1px solid #e2e8f0;
   background: #fff;

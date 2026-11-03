@@ -1,56 +1,64 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp, Home, ShoppingCart } from 'lucide-react';
-import { fieldUnitDisplayName } from '../../lib/fieldUnitCatalog';
-import { dutyUnitGroup } from '../../lib/dailyDutyReport';
+import { ChevronDown, ChevronUp, DoorOpen, Home, ShieldCheck, ShoppingCart, Sparkles } from 'lucide-react';
 import { priorityDeskGuests } from '../../lib/priorityStay';
 import { lodgingKey, lodgingLabel } from '../../lib/priorityStatus';
 import { UNIT_STATUS_BADGES, unitDisplayStatus } from '../../lib/unitStatus';
-import { inventoryUnits, unitAccessGroup } from '../../lib/units';
+import { inventoryUnits } from '../../lib/units';
 import { usePanelHistory } from '../../lib/panelHistory';
+import {
+  PHONE_AREA_FILTERS,
+  phoneOpsMatchesArea,
+  phoneOpsSection,
+  phoneOpsUnitLabel
+} from '../../lib/phoneOpsGroups';
 
 const GUEST_CHOICES = [
   { key: 'OCCUPIED', label: 'תפוס' },
   { key: 'VACANT', label: 'פנוי' }
 ];
 
-function compoundTitle(unit) {
-  const byId = unitAccessGroup(unit.id);
-  if (byId !== 'יחידות נוספות') return byId;
-  const byName = dutyUnitGroup(unit.id, unit.name || '');
-  return byName && byName !== 'יחידות נוספות' ? byName : byId;
+const HEB_DAY = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
+
+const SECTIONS = [
+  { id: 'arriving', title: 'נכנסים היום', sub: 'צ׳ק אין ליום הזה', icon: DoorOpen },
+  { id: 'cleaning', title: 'לניקיון בלי כניסה', sub: 'צריך ניקיון, בלי כניסה היום', icon: Sparkles },
+  { id: 'occupied', title: 'מאוכלסים', sub: 'אורח בשהייה', icon: Home },
+  { id: 'vacant', title: 'פנויים', sub: 'פנוי ומוכן', icon: ShieldCheck }
+];
+
+function shiftDay(ymd, days) {
+  const date = new Date(`${ymd}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
 }
 
-function cleanBadge(unit, bookings, today) {
+function dayLabel(ymd, realToday) {
+  const date = new Date(`${ymd}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return ymd || '';
+  const mark = `${HEB_DAY[date.getDay()]}׳ ${date.getDate()}.${date.getMonth() + 1}`;
+  return ymd === realToday ? `היום - ${mark}` : mark;
+}
+
+function cleanBadge(unit, bookings, day) {
   const ops = unit?.operational_status;
   if (ops && UNIT_STATUS_BADGES[ops] && ops !== 'OCCUPIED') return UNIT_STATUS_BADGES[ops];
-  const badge = unitDisplayStatus(unit, bookings, today);
+  const badge = unitDisplayStatus(unit, bookings, day);
   if (badge && badge.key !== 'OCCUPIED') return badge;
   return null;
 }
 
-function guestText(unit, bookings, today) {
-  const desk = priorityDeskGuests(bookings, unit.id, today);
+function guestText(unit, bookings, day) {
+  const desk = priorityDeskGuests(bookings, unit.id, day);
   if (desk.roomStatus) return desk.roomStatus;
   return lodgingLabel(lodgingKey(unit));
 }
 
-function guestTone(unit, bookings, today) {
-  const desk = priorityDeskGuests(bookings, unit.id, today);
+function guestTone(unit, bookings, day) {
+  const desk = priorityDeskGuests(bookings, unit.id, day);
   if (desk.roomStatus) return 'stay';
   return lodgingKey(unit) === 'OCCUPIED' ? 'in' : 'out';
-}
-
-function groupChip(units, bookings, today) {
-  const badges = units.map((unit) => cleanBadge(unit, bookings, today)).filter(Boolean);
-  const dirty = badges.filter((badge) => badge.key === 'DIRTY' || badge.key === 'IN_PROGRESS' || badge.key === 'NEEDS_COMPLETIONS').length;
-  const ready = badges.filter((badge) => badge.key === 'READY').length;
-  if (dirty) {
-    return { tone: 'alert', label: `${dirty} לניקוי`, sub: `${ready} מוכנים מתוך ${units.length}` };
-  }
-  if (units.length && ready === units.length) {
-    return { tone: 'ready', label: 'מוכן', sub: `${ready} מוכנים מתוך ${units.length}` };
-  }
-  return { tone: 'ready', label: `${units.length} יחידות`, sub: `${units.length} יחידות במתחם` };
 }
 
 export default function PhoneOperationsBoard({
@@ -67,7 +75,13 @@ export default function PhoneOperationsBoard({
   const [open, setOpen] = useState({});
   const [menu, setMenu] = useState(null);
   const [shopText, setShopText] = useState('');
+  const [area, setArea] = useState('all');
+  const [day, setDay] = useState(today || '');
   usePanelHistory(Boolean(menu), () => setMenu(null));
+
+  useEffect(() => {
+    if (today) setDay((current) => current || today);
+  }, [today]);
 
   useEffect(() => {
     if (!menu) return undefined;
@@ -80,23 +94,18 @@ export default function PhoneOperationsBoard({
     return () => document.removeEventListener('pointerdown', onPointer);
   }, [menu]);
 
-  const groups = useMemo(() => {
-    const order = [];
-    const map = new Map();
-    inventoryUnits(units).forEach((unit) => {
-      const title = compoundTitle(unit);
-      if (!map.has(title)) {
-        const group = { title, units: [] };
-        map.set(title, group);
-        order.push(group);
-      }
-      map.get(title).units.push(unit);
+  const viewDay = day || today;
+
+  const sections = useMemo(() => {
+    const buckets = { arriving: [], cleaning: [], occupied: [], vacant: [] };
+    inventoryUnits(units).filter((unit) => phoneOpsMatchesArea(unit, area)).forEach((unit) => {
+      buckets[phoneOpsSection(unit, bookings, viewDay)].push(unit);
     });
-    order.forEach((group) => {
-      group.units.sort((a, b) => fieldUnitDisplayName(a).localeCompare(fieldUnitDisplayName(b), 'he'));
+    Object.values(buckets).forEach((list) => {
+      list.sort((a, b) => phoneOpsUnitLabel(a).localeCompare(phoneOpsUnitLabel(b), 'he'));
     });
-    return order;
-  }, [units]);
+    return SECTIONS.map((section) => ({ ...section, units: buckets[section.id] }));
+  }, [units, bookings, viewDay, area]);
 
   const chooseGuest = (key) => {
     if (menu && onToggleOccupy) onToggleOccupy(menu.unitId, key);
@@ -111,29 +120,64 @@ export default function PhoneOperationsBoard({
     setShopText('');
   };
 
+  const openMenu = (event, unit) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setMenu({
+      unitId: unit.id,
+      stay: lodgingKey(unit),
+      top: Math.min(rect.bottom, window.innerHeight - 70),
+      right: Math.max(4, window.innerWidth - rect.right)
+    });
+  };
+
   return (
     <div className="ops-compounds" dir="rtl">
-      {groups.map((group) => {
-        const expanded = Boolean(open[group.title]);
-        const chip = groupChip(group.units, bookings, today);
+      <div className="ops-area-pills" role="tablist" aria-label="אזור">
+        {PHONE_AREA_FILTERS.map((filter) => (
+          <button
+            key={filter.id}
+            type="button"
+            role="tab"
+            aria-selected={area === filter.id}
+            className={`ops-area-pill${area === filter.id ? ' is-on' : ''}`}
+            onClick={() => setArea(filter.id)}
+          >
+            {filter.label}
+          </button>
+        ))}
+      </div>
+      <div className="ops-day-switch">
+        <button type="button" aria-label="יום אחורה" onClick={() => setDay((current) => shiftDay(current || today, -1))}>‹</button>
+        <span className="ops-day-name">{dayLabel(viewDay, today)}</span>
+        <button type="button" aria-label="יום קדימה" onClick={() => setDay((current) => shiftDay(current || today, 1))}>›</button>
+        {viewDay !== today ? (
+          <button type="button" className="ops-day-today" onClick={() => setDay(today)}>היום</button>
+        ) : null}
+      </div>
+      {sections.map((section) => {
+        const expanded = Boolean(open[section.id]);
+        const Icon = section.icon;
+        const empty = section.units.length === 0;
         return (
-          <section className={`ops-compound${expanded ? ' is-open' : ''}`} key={group.title}>
+          <section className={`ops-compound${expanded ? ' is-open' : ''}${empty ? ' is-empty' : ''}`} key={section.id}>
             <button
               type="button"
               className="ops-compound-head"
               aria-expanded={expanded}
-              onClick={() => setOpen((current) => ({ ...current, [group.title]: !current[group.title] }))}
+              onClick={() => setOpen((current) => ({ ...current, [section.id]: !current[section.id] }))}
             >
-              <span className="ops-compound-mark" aria-hidden="true"><Home size={15} /></span>
+              <span className="ops-compound-mark" aria-hidden="true"><Icon size={15} /></span>
               <span className="ops-compound-copy">
                 <span className="ops-compound-title">
-                  <span className="ops-compound-name">{group.title}</span>
-                  <span className={`ops-compound-chip is-${chip.tone}`}>{chip.label}</span>
+                  <span className="ops-compound-name">{section.title}</span>
+                  <span className={`ops-compound-chip${empty ? ' is-zero' : section.id === 'cleaning' ? ' is-alert' : ' is-ready'}`}>
+                    {section.units.length}
+                  </span>
                 </span>
-                <span className="ops-compound-sub">{chip.sub}</span>
+                <span className="ops-compound-sub">{section.sub}</span>
               </span>
               <span className="ops-compound-side">
-                <span className="ops-compound-count">{group.units.length}</span>
+                <span className="ops-compound-count">{section.units.length}</span>
                 <span className="ops-compound-chevron" aria-hidden="true">
                   {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                 </span>
@@ -141,52 +185,46 @@ export default function PhoneOperationsBoard({
             </button>
             {expanded ? (
               <div className="ops-compound-body">
-                <div className="ops-unit-row is-label" aria-hidden="true">
-                  <span>יחידה</span>
-                  <span>ניקיון</span>
-                  <span>אורח</span>
-                </div>
-                {group.units.map((unit) => {
-                  const stay = lodgingKey(unit);
-                  const badge = cleanBadge(unit, bookings, today);
-                  const tone = guestTone(unit, bookings, today);
-                  return (
-                    <div className="ops-unit-row" key={unit.id}>
-                      <span className="ops-unit-name">{fieldUnitDisplayName(unit)}</span>
-                      <span className="ops-clean-status">
-                        {badge ? (
-                          <span
-                            className="ops-clean-chip"
-                            style={{ color: badge.color, background: badge.bg, borderColor: badge.border || badge.color }}
-                          >
-                            {badge.label}
-                          </span>
-                        ) : '—'}
-                      </span>
-                      <button
-                        type="button"
-                        className={`ops-guest-status is-${tone}`}
-                        onClick={(event) => {
-                          const rect = event.currentTarget.getBoundingClientRect();
-                          setMenu({
-                            unitId: unit.id,
-                            stay,
-                            top: Math.min(rect.bottom, window.innerHeight - 70),
-                            right: Math.max(4, window.innerWidth - rect.right)
-                          });
-                        }}
-                      >
-                        {guestText(unit, bookings, today)}
-                      </button>
+                {empty ? <div className="ops-compound-empty">אין יחידות</div> : (
+                  <>
+                    <div className="ops-unit-row is-label" aria-hidden="true">
+                      <span>יחידה</span>
+                      <span>ניקיון</span>
+                      <span>אורח</span>
                     </div>
-                  );
-                })}
+                    {section.units.map((unit) => {
+                      const badge = cleanBadge(unit, bookings, viewDay);
+                      const tone = guestTone(unit, bookings, viewDay);
+                      return (
+                        <div className="ops-unit-row" key={unit.id}>
+                          <span className="ops-unit-name">{phoneOpsUnitLabel(unit)}</span>
+                          <span className="ops-clean-status">
+                            {badge ? (
+                              <span
+                                className="ops-clean-chip"
+                                style={{ color: badge.color, background: badge.bg, borderColor: badge.border || badge.color }}
+                              >
+                                {badge.label}
+                              </span>
+                            ) : '—'}
+                          </span>
+                          <button
+                            type="button"
+                            className={`ops-guest-status is-${tone}`}
+                            onClick={(event) => openMenu(event, unit)}
+                          >
+                            {guestText(unit, bookings, viewDay)}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
               </div>
             ) : null}
           </section>
         );
       })}
-      {!groups.length ? <div className="ops-compound-empty">אין יחידות</div> : null}
       <section className={`ops-compound${open.shop ? ' is-open' : ''}`}>
         <button
           type="button"
