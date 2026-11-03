@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Dimensions, Linking, Platform, Pressable, StatusBar, StyleSheet, useWindowDimensions, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { BackHandler, Dimensions, Linking, PanResponder, Platform, Pressable, StatusBar, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { parseChargeLink } from '../functions/lib/cardcomTapCore.js';
 import DashboardScreen from './src/screens/DashboardScreen';
 import ChargeScreen from './src/screens/ChargeScreen';
@@ -47,6 +47,35 @@ function presetFromUrl(url) {
 export default function App() {
   const [tab, setTab] = useState('dashboard');
   const [preset, setPreset] = useState(null);
+  const backRef = useRef(() => false);
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
+  const edgeRef = useRef(() => {});
+  edgeRef.current = () => {
+    if (tabRef.current === 'charge') {
+      setTab('dashboard');
+      return;
+    }
+    backRef.current();
+  };
+  const edgePan = useRef(PanResponder.create({
+    onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dx) > 18 && Math.abs(gesture.dx) > Math.abs(gesture.dy),
+    onPanResponderRelease: (_, gesture) => {
+      if (Math.abs(gesture.dx) > 56) edgeRef.current();
+    }
+  })).current;
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (tabRef.current === 'charge') {
+        setTab('dashboard');
+        return true;
+      }
+      backRef.current();
+      return true;
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     Linking.getInitialURL().then((url) => {
@@ -79,11 +108,21 @@ export default function App() {
       <StatusBar barStyle="dark-content" backgroundColor="#eaecf0" translucent={false} />
       <View style={styles.body}>
         {tab === 'dashboard' ? (
-          <DashboardScreen onOpenCharge={openCharge} contentInsetBottom={fabClearance} />
+          <DashboardScreen
+            onOpenCharge={openCharge}
+            contentInsetBottom={fabClearance}
+            onRegisterBack={(fn) => { backRef.current = fn; }}
+          />
         ) : (
           <ChargeScreen preset={preset} onClose={() => setTab('dashboard')} />
         )}
       </View>
+      {Platform.OS === 'android' ? (
+        <View pointerEvents="box-none" style={styles.edges}>
+          <View style={styles.edgeStart} {...edgePan.panHandlers} />
+          <View style={styles.edgeEnd} {...edgePan.panHandlers} />
+        </View>
+      ) : null}
       {tab === 'dashboard' ? (
         <Pressable
           accessibilityRole="button"
@@ -101,6 +140,9 @@ export default function App() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#eaecf0' },
   body: { flex: 1 },
+  edges: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, zIndex: 20 },
+  edgeStart: { position: 'absolute', top: 0, bottom: 0, start: 0, width: 16 },
+  edgeEnd: { position: 'absolute', top: 0, bottom: 0, end: 0, width: 16 },
   fab: {
     position: 'absolute',
     end: 16,

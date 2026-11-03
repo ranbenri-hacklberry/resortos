@@ -33,6 +33,7 @@ import { priorityIncomingToday } from '../../lib/priorityStay';
 import { completionsFromUnit, toggleCompletion, addCompletion } from '../../lib/roomCompletions';
 import { stayHoursFromBooking, parseStayHoursFromNotes, formatStayHourLabel } from '../../lib/kinorotStayHours';
 import { db } from '../../lib/resortos-db';
+import PhoneOperationsBoard from './PhoneOperationsBoard';
 const SHOPPING_STORAGE_KEY = 'hotelos-procurement-shopping-v1';
 
 function readShoppingList() {
@@ -85,9 +86,11 @@ export default function MobileOperationsView({
   isRTL = true,
   t = (k, f) => f
 }) {
-  const todayStr = useMemo(() => israelToday(), []);
+  const realToday = useMemo(() => israelToday(), []);
   const isDark = theme === 'dark';
   const priorityChrome = chrome === 'priority' && !isDark;
+  const [opsDay, setOpsDay] = useState(realToday);
+  const todayStr = priorityChrome ? opsDay : realToday;
 
   // Luxury Brand Tokens: Authentic Wine & Champagne Gold with modern soft radii and elegant depth.
   // On the phone dashboard the light theme follows the Priority screen instead.
@@ -643,6 +646,42 @@ export default function MobileOperationsView({
     const clean = raw.startsWith('0') ? `972${raw.slice(1)}` : raw;
     return `https://wa.me/${clean}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
   };
+
+  if (priorityChrome) {
+    return (
+      <PhoneOperationsBoard
+        day={todayStr}
+        today={realToday}
+        onDay={setOpsDay}
+        arrivingRooms={arrivingRooms}
+        cleanNowRooms={canCleanNowRooms}
+        stillInRooms={stillInHouseRooms}
+        occupiedRooms={occupiedRooms}
+        heldRooms={heldRooms}
+        vacantRooms={vacantRooms}
+        maintenanceTickets={maintenanceTickets}
+        shoppingItems={shoppingItems}
+        onRetrySync={onRetrySync}
+        onStartTask={onStartTask}
+        onFinishTask={onFinishTask}
+        onMarkDeparted={handleMarkGuestDeparted}
+        onToggleOccupy={handleToggleOccupy}
+        onResolveMaintenance={handleResolveMaintenance}
+        onAddShopping={(text) => {
+          setShoppingItems((prev) => [{
+            id: `shop-${Date.now()}`,
+            text,
+            unitName: 'כללי',
+            done: false,
+            createdAt: new Date().toISOString()
+          }, ...prev]);
+        }}
+        onToggleShopping={handleToggleShopping}
+        onDeleteShopping={handleDeleteShopping}
+        waLink={waLink}
+      />
+    );
+  }
 
   return (
     <div

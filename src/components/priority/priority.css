@@ -3830,7 +3830,34 @@
   height: 100%;
   overflow: auto;
   gap: 8px;
-  padding: 6px;
+  padding: 0 0 8px;
+}
+.priority-root.is-phone .phone-room-back {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 32px;
+  margin: 0;
+  padding-block: 4px;
+  padding-inline: 16px 8px;
+  border: 0;
+  border-bottom: 1px solid #94a3b8;
+  background: #f8fafc;
+  color: #1b365d;
+  font: 700 13px/1 Tahoma, "Segoe UI", Arial, sans-serif;
+  cursor: pointer;
+}
+.priority-root.is-phone .phone-room-back span {
+  font-size: 16px;
+  line-height: 1;
+  direction: ltr;
+  unicode-bidi: isolate;
 }
 .priority-root.is-phone .split-details-col,
 .priority-root.is-phone .split-feed-col {
@@ -3839,7 +3866,66 @@
   max-width: none;
   min-width: 0;
   height: auto;
+  padding: 0 6px;
+  box-sizing: border-box;
 }
+.priority-root.is-phone .phone-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 29px;
+  margin: 0;
+  padding: 0 8px;
+  border: 1px solid #0f2942;
+  border-radius: 0;
+  background: #1b365d;
+  color: #f8fafc;
+  font: 700 13px/1 Tahoma, "Segoe UI", Arial, sans-serif;
+  cursor: pointer;
+}
+.priority-root.is-phone .phone-action.is-ghost {
+  background: #f8fafc;
+  color: #1b365d;
+  border-color: #94a3b8;
+}
+.priority-root.is-phone .ops-phone-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+.priority-root.is-phone .ops-phone-card {
+  padding: 6px;
+}
+.priority-root.ops-phone .week-table thead tr.label-row th,
+.priority-root.ops-phone .week-table thead tr.label-row th.unit-cell {
+  top: 0;
+}
+.priority-root.is-phone .ops-shop-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 29px;
+}
+.priority-root.is-phone .ops-shop-row .stay-pill { flex: 1 1 auto; }
+.priority-root.is-phone .ops-shop-row .phone-action { width: 28px; min-width: 28px; padding: 0; }
+.priority-root.is-phone .ops-shop-add {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.priority-root.is-phone .ops-shop-add input {
+  flex: 1 1 auto;
+  height: 26px;
+  min-width: 0;
+  border: 1px solid #94a3b8;
+  background: #fff;
+  color: #0f172a;
+  font: 12px Tahoma, Arial, sans-serif;
+  padding: 0 4px;
+}
+.priority-root.is-phone .ops-shop-add .phone-action { width: auto; min-width: 64px; }
 .priority-root.is-phone .split-details-col {
   overflow: visible;
 }

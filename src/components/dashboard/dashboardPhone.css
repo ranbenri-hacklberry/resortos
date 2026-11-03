@@ -121,3 +121,8 @@
   padding: 6px 6px 16px !important;
   gap: 8px !important;
 }
+
+.dashboard-app.is-phone .hotelos-ops-page {
+  padding: 0 !important;
+  background: #eaecf0 !important;
+}

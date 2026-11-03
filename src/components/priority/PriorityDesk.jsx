@@ -35,6 +35,7 @@ import { priorityRoomStatus, unitDisplayStatus } from '../../lib/unitStatus';
 import { kinorotReservationId } from '../../lib/kinorotReservationNote';
 import { coveringUnavailableHold, isUnavailableHoldBooking, unavailableHoldLabel } from '../../lib/unavailableHold';
 import { printGuestFile } from '../../lib/guestFile';
+import { usePanelHistory } from '../../lib/panelHistory';
 import {
   PAYMENT_METHODS,
   PAYMENT_STATUSES,
@@ -1663,6 +1664,8 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
     selectedRef.current?.scrollIntoView({ block: 'nearest' });
   }, [selectedId, mode, editor]);
 
+  usePanelHistory(phone && mode === 'form', () => setMode('grid'));
+
   const exportExcel = () => {
     const header = COLUMNS.map(([, label]) => label);
     const lines = visible.map((row) => COLUMNS.map(([key]) => row[key]));
@@ -1836,6 +1839,12 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
           />
         ) : mode === 'form' && card ? (
           <div className="priority-split-view">
+            {phone ? (
+              <button type="button" className="phone-room-back" onClick={() => setMode('grid')} aria-label="חזרה">
+                <span aria-hidden="true">›</span>
+                חזרה
+              </button>
+            ) : null}
             {/* צד ימין (65%): פרטי ההזמנה, סטטוסים, פיננסים ומלאי ציוד ביקונים בחדר */}
             <div className="split-details-col">
               <div className="master">

@@ -1181,7 +1181,7 @@ export default function ResortOSOperations({
         minHeight: '100%',
         background: isMobileOpsView ? (chrome === 'priority' && !isDark ? '#eaecf0' : (isDark ? '#26130F' : '#FDFBF7')) : colors.bg,
         color: colors.textMain,
-        padding: isMobileOpsView ? '0.25rem 0.5rem 1rem' : '0.75rem 1rem',
+        padding: isMobileOpsView ? (chrome === 'priority' && !isDark ? '0' : '0.25rem 0.5rem 1rem') : '0.75rem 1rem',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'stretch',

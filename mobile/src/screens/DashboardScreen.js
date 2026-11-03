@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { parseChargeLink } from '../../../functions/lib/cardcomTapCore.js';
 import { dashboardUrl, setSessionToken } from '../lib/payments';
@@ -26,7 +26,8 @@ const PHONE_FIT = `
     'html.resortos-app .priority-root.is-phone .priority-body { padding-top: 0 !important; }',
     'html.resortos-app .priority-root.is-phone .week-table tbody tr:not(.area-break) > td { height: auto !important; min-height: 29px !important; padding-top: 1px !important; padding-bottom: 1px !important; box-sizing: border-box !important; }',
     'html.resortos-app .priority-root.is-phone .unit-status, html.resortos-app .priority-root.is-phone .week-table tbody .stay-pill { min-height: 26px !important; box-sizing: border-box !important; }',
-    'html.resortos-app .priority-root.is-phone .priority-split-view { flex-direction: column !important; height: 100% !important; overflow: auto !important; }',
+    'html.resortos-app .priority-root.is-phone .priority-split-view { flex-direction: column !important; height: 100% !important; overflow: auto !important; padding: 0 0 8px !important; }',
+    'html.resortos-app .priority-root.is-phone .phone-room-back { position: sticky !important; top: 0 !important; display: flex !important; min-height: 32px !important; background: #f8fafc !important; color: #1b365d !important; font-size: 13px !important; }',
     'html.resortos-app .priority-root.is-phone .split-details-col, html.resortos-app .priority-root.is-phone .split-feed-col { flex: 0 0 auto !important; width: 100% !important; max-width: none !important; min-width: 0 !important; height: auto !important; }',
     'html.resortos-app .priority-root.is-phone .master, html.resortos-app .priority-root.is-phone .finance-row, html.resortos-app .priority-root.is-phone .finance-row.is-pay { grid-template-columns: 1fr !important; }',
     'html.resortos-app .priority-root.is-phone .week-table thead tr.label-row th:not(.unit-cell) { height: auto !important; overflow: visible !important; }',
@@ -78,10 +79,35 @@ function priorityDashboardUrl(url) {
   return `${base}${base.includes('?') ? '&' : '?'}tab=priority`;
 }
 
-export default function DashboardScreen({ onOpenCharge, contentInsetBottom = 84 }) {
+const PANEL_BACK = `
+(function () {
+  if (window.__resortosPanel) {
+    history.back();
+  } else if (window.ReactNativeWebView) {
+    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'resortos-back-fallback' }));
+  }
+})();
+true;
+`;
+
+export default function DashboardScreen({ onOpenCharge, contentInsetBottom = 84, onRegisterBack }) {
   const phoneFit = PHONE_FIT.replace('__FAB_PAD__', String(Math.max(72, Math.round(contentInsetBottom))));
   const uri = priorityDashboardUrl(dashboardUrl);
   const [ready, setReady] = useState(false);
+  const webRef = useRef(null);
+  const canGoBack = useRef(false);
+  const onRegisterBackRef = useRef(onRegisterBack);
+  onRegisterBackRef.current = onRegisterBack;
+
+  useEffect(() => {
+    const goBack = () => {
+      if (!webRef.current) return false;
+      webRef.current.injectJavaScript(PANEL_BACK);
+      return true;
+    };
+    onRegisterBackRef.current?.(goBack);
+    return () => onRegisterBackRef.current?.(() => false);
+  }, []);
 
   const onMessage = (event) => {
     let data = null;
@@ -91,6 +117,7 @@ export default function DashboardScreen({ onOpenCharge, contentInsetBottom = 84 
       return;
     }
     if (data?.type === 'resortos-session') setSessionToken(data.token || '');
+    if (data?.type === 'resortos-back-fallback' && canGoBack.current) webRef.current?.goBack();
     if (data?.type === 'resortos-charge') {
       onOpenCharge({
         bookingId: String(data.booking || data.bookingId || ''),
@@ -123,15 +150,18 @@ export default function DashboardScreen({ onOpenCharge, contentInsetBottom = 84 
         </View>
       ) : null}
       <WebView
+        ref={webRef}
         source={{ uri }}
         style={styles.web}
         onLoadEnd={() => setReady(true)}
+        onNavigationStateChange={(nav) => { canGoBack.current = Boolean(nav.canGoBack); }}
         textZoom={100}
         scalesPageToFit
         injectedJavaScriptBeforeContentLoaded={phoneFit + BRIDGE}
         onMessage={onMessage}
         onShouldStartLoadWithRequest={onShouldStart}
         setSupportMultipleWindows={false}
+        allowsBackForwardNavigationGestures={Platform.OS === 'ios'}
         applicationNameForUserAgent="ResortOSApp/1"
         pullToRefreshEnabled
       />

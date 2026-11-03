@@ -140,88 +140,101 @@ export default function ChargeScreen({ preset, onClose }) {
   };
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
-      {onClose ? (
-        <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="חזרה לדשבורד" style={styles.back}>
-          <Text style={styles.backText}>חזרה לדשבורד</Text>
-        </Pressable>
-      ) : null}
-      <Text style={styles.kicker}>מיאליס</Text>
-      <Text style={styles.title}>חיוב</Text>
-      {DEMO ? <Text style={styles.banner}>מצב הדגמה. לא נגבה כסף אמיתי.</Text> : null}
-      {bookingId ? <Text style={styles.booking}>הזמנה {bookingId}</Text> : <Text style={styles.booking}>בלי קישור להזמנה</Text>}
-
-      <Text style={styles.label}>סכום</Text>
-      <TextInput
-        value={amount}
-        onChangeText={setAmount}
-        keyboardType="decimal-pad"
-        placeholder="0"
-        placeholderTextColor="#94a3b8"
-        style={styles.amount}
-        textAlign="right"
-      />
-
-      <Text style={styles.label}>תשלומים</Text>
-      <View style={styles.stepper}>
-        <Pressable style={styles.step} onPress={() => changePayments(1)}><Text style={styles.stepText}>+</Text></Pressable>
-        <Text style={styles.stepValue}>{payments}</Text>
-        <Pressable style={styles.step} onPress={() => changePayments(-1)}><Text style={styles.stepText}>−</Text></Pressable>
+    <View style={styles.screen}>
+      <View style={styles.header}>
+        {onClose ? (
+          <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="חזרה" style={styles.back}>
+            <Text style={styles.chevron}>›</Text>
+            <Text style={styles.backText}>חזרה</Text>
+          </Pressable>
+        ) : <View />}
+        <Text style={styles.headerTitle}>סליקת אשראי</Text>
       </View>
-      {Number(String(amount).replace(',', '.')) > 300 && showTap ? (
-        <Text style={styles.warn}>כרטיס פיזי מוגבל ל-300 ש״ח. מעל זה שלחו קישור.</Text>
-      ) : null}
-
-      {phase === 'tap' ? (
-        <View style={styles.wait}>
-          <ActivityIndicator color="#1b365d" size="large" />
-          <Text style={styles.waitText}>הצמידו את הכרטיס לגב הטלפון</Text>
-        </View>
-      ) : null}
-
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      {phase === 'done' && result ? (
-        <View style={styles.ok}>
-          <Text style={styles.okTitle}>{result.message || 'החיוב נקלט'}</Text>
-          <Text style={styles.okDeal}>עסקה {result.dealNumber}</Text>
-          {result.documentNumber ? <Text style={styles.okDeal}>חשבונית {result.documentNumber}</Text> : null}
-          <Pressable style={styles.secondary} onPress={() => { setPhase('form'); setResult(null); setAmount(''); }}>
-            <Text style={styles.secondaryText}>חיוב נוסף</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <View style={styles.actions}>
-          {showTap ? (
-            <Pressable style={styles.primary} onPress={onTap} disabled={phase === 'tap'}>
-              <Text style={styles.primaryText}>חיוב בכרטיס</Text>
-            </Pressable>
-          ) : (
-            <Text style={styles.note}>באייפון אין הצמדת כרטיס. שולחים קישור, או מקלידים את הכרטיס.</Text>
-          )}
-          <Pressable style={styles.secondary} onPress={onLink}>
-            <Text style={styles.secondaryText}>שליחת קישור לאורח</Text>
-          </Pressable>
-          <Pressable style={styles.secondary} onPress={() => setManual((open) => !open)}>
-            <Text style={styles.secondaryText}>הקלדת כרטיס</Text>
-          </Pressable>
-        </View>
-      )}
-
-      {manual && phase !== 'done' ? (
-        <View style={styles.manual}>
-          <TextInput value={cardNumber} onChangeText={setCardNumber} keyboardType="number-pad" placeholder="מספר כרטיס" placeholderTextColor="#94a3b8" style={styles.input} textAlign="right" />
-          <View style={styles.row}>
-            <TextInput value={cvv} onChangeText={setCvv} keyboardType="number-pad" placeholder="CVV" placeholderTextColor="#94a3b8" style={[styles.input, styles.half]} textAlign="right" />
-            <TextInput value={expiry} onChangeText={setExpiry} keyboardType="number-pad" placeholder="תוקף MM/YY" placeholderTextColor="#94a3b8" style={[styles.input, styles.half]} textAlign="right" />
+      <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+        <View style={styles.master}>
+          <View style={styles.col}>
+            <Text style={styles.colTitle}>פרטי חיוב</Text>
+            {DEMO ? <Text style={styles.note}>מצב הדגמה. לא נגבה כסף אמיתי.</Text> : null}
+            <Text style={styles.label}>הזמנה</Text>
+            <Text style={styles.value}>{bookingId || 'בלי קישור להזמנה'}</Text>
+            <Text style={styles.label}>סכום</Text>
+            <TextInput
+              value={amount}
+              onChangeText={setAmount}
+              keyboardType="decimal-pad"
+              placeholder="0"
+              placeholderTextColor="#94a3b8"
+              style={styles.input}
+              textAlign="right"
+            />
+            <Text style={styles.label}>תשלומים</Text>
+            <View style={styles.stepper}>
+              <Pressable style={styles.step} onPress={() => changePayments(1)} accessibilityLabel="הוספת תשלום"><Text style={styles.stepText}>+</Text></Pressable>
+              <Text style={styles.stepValue}>{payments}</Text>
+              <Pressable style={styles.step} onPress={() => changePayments(-1)} accessibilityLabel="הפחתת תשלום"><Text style={styles.stepText}>−</Text></Pressable>
+            </View>
+            {Number(String(amount).replace(',', '.')) > 300 && showTap ? (
+              <Text style={styles.warn}>כרטיס פיזי מוגבל ל-300 ש״ח. מעל זה שלחו קישור.</Text>
+            ) : null}
           </View>
-          <Pressable style={styles.primary} onPress={onManual}>
-            <Text style={styles.primaryText}>חיוב בהקלדה</Text>
-          </Pressable>
-          <Text style={styles.note}>המספר נשלח לשרת ולא נשמר בטלפון.</Text>
         </View>
-      ) : null}
-    </ScrollView>
+
+        {phase === 'tap' ? (
+          <View style={styles.wait}>
+            <ActivityIndicator color="#1b365d" size="small" />
+            <Text style={styles.waitText}>הצמידו את הכרטיס לגב הטלפון</Text>
+          </View>
+        ) : null}
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        {phase === 'done' && result ? (
+          <View style={styles.master}>
+            <View style={styles.col}>
+              <Text style={styles.colTitle}>{result.message || 'החיוב נקלט'}</Text>
+              <Text style={styles.value}>עסקה {result.dealNumber}</Text>
+              {result.documentNumber ? <Text style={styles.value}>חשבונית {result.documentNumber}</Text> : null}
+              <Pressable style={styles.secondary} onPress={() => { setPhase('form'); setResult(null); setAmount(''); }}>
+                <Text style={styles.secondaryText}>חיוב נוסף</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.actions}>
+            {showTap ? (
+              <Pressable style={styles.primary} onPress={onTap} disabled={phase === 'tap'}>
+                <Text style={styles.primaryText}>חיוב בכרטיס</Text>
+              </Pressable>
+            ) : (
+              <Text style={styles.note}>באייפון אין הצמדת כרטיס. שולחים קישור, או מקלידים את הכרטיס.</Text>
+            )}
+            <Pressable style={styles.secondary} onPress={onLink}>
+              <Text style={styles.secondaryText}>שליחת קישור לאורח</Text>
+            </Pressable>
+            <Pressable style={styles.secondary} onPress={() => setManual((open) => !open)}>
+              <Text style={styles.secondaryText}>הקלדת כרטיס</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {manual && phase !== 'done' ? (
+          <View style={styles.master}>
+            <View style={styles.col}>
+              <Text style={styles.colTitle}>הקלדת כרטיס</Text>
+              <TextInput value={cardNumber} onChangeText={setCardNumber} keyboardType="number-pad" placeholder="מספר כרטיס" placeholderTextColor="#94a3b8" style={styles.input} textAlign="right" />
+              <View style={styles.row}>
+                <TextInput value={cvv} onChangeText={setCvv} keyboardType="number-pad" placeholder="CVV" placeholderTextColor="#94a3b8" style={[styles.input, styles.half]} textAlign="right" />
+                <TextInput value={expiry} onChangeText={setExpiry} keyboardType="number-pad" placeholder="תוקף MM/YY" placeholderTextColor="#94a3b8" style={[styles.input, styles.half]} textAlign="right" />
+              </View>
+              <Pressable style={styles.primary} onPress={onManual}>
+                <Text style={styles.primaryText}>חיוב בהקלדה</Text>
+              </Pressable>
+              <Text style={styles.note}>המספר נשלח לשרת ולא נשמר בטלפון.</Text>
+            </View>
+          </View>
+        ) : null}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -229,82 +242,113 @@ const font = 'sans-serif';
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#eaecf0' },
-  page: { padding: 16, paddingBottom: 40, backgroundColor: '#eaecf0' },
-  back: { alignSelf: 'flex-start', marginBottom: 10 },
-  backText: { color: '#1b365d', fontFamily: font, fontSize: 15, fontWeight: '800' },
-  kicker: { color: '#1b365d', fontFamily: font, fontWeight: '800', fontSize: 13 },
-  title: { fontFamily: font, fontSize: 28, fontWeight: '800', color: '#0f172a', marginTop: 2 },
-  banner: {
-    marginTop: 12,
+  header: {
+    minHeight: 32,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     backgroundColor: '#f8fafc',
-    color: '#0f172a',
-    padding: 10,
-    borderRadius: 2,
-    borderWidth: 1,
-    borderColor: '#94a3b8',
-    overflow: 'hidden',
-    fontFamily: font,
-    fontWeight: '700'
+    borderBottomWidth: 1,
+    borderBottomColor: '#94a3b8',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8
   },
-  booking: { marginTop: 12, fontFamily: font, fontSize: 15, color: '#64748b' },
-  label: { marginTop: 16, fontFamily: font, fontSize: 14, fontWeight: '800', color: '#0f172a' },
-  amount: {
-    marginTop: 6,
-    backgroundColor: '#f8fafc',
-    borderRadius: 2,
+  back: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 26, paddingStart: 8 },
+  chevron: { color: '#1b365d', fontFamily: font, fontSize: 16, fontWeight: '700', lineHeight: 18 },
+  backText: { color: '#1b365d', fontFamily: font, fontSize: 13, fontWeight: '700' },
+  headerTitle: { color: '#1b365d', fontFamily: font, fontSize: 13, fontWeight: '800' },
+  page: { padding: 6, paddingBottom: 28, gap: 6, backgroundColor: '#eaecf0' },
+  master: {
+    backgroundColor: '#f1f5f9',
     borderWidth: 1,
     borderColor: '#94a3b8',
+    borderRadius: 6,
+    padding: 8
+  },
+  col: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 4,
+    padding: 8,
+    gap: 4
+  },
+  colTitle: {
     fontFamily: font,
-    fontSize: 32,
+    fontSize: 12,
     fontWeight: '800',
-    color: '#0f172a',
-    paddingHorizontal: 12,
-    paddingVertical: 8
+    color: '#1b365d',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    paddingBottom: 4,
+    marginBottom: 2
   },
-  stepper: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 8 },
+  label: { fontFamily: font, fontSize: 11, fontWeight: '600', color: '#334155' },
+  value: { fontFamily: font, fontSize: 13, fontWeight: '700', color: '#0f172a' },
+  input: {
+    height: 26,
+    backgroundColor: '#fff',
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: '#94a3b8',
+    fontFamily: font,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0f172a',
+    paddingHorizontal: 4,
+    paddingVertical: 0
+  },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   step: {
-    width: 48,
-    height: 48,
-    borderRadius: 2,
+    width: 28,
+    height: 26,
+    borderRadius: 0,
     backgroundColor: '#f8fafc',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#94a3b8'
   },
-  stepText: { fontFamily: font, fontSize: 24, fontWeight: '800', color: '#1b365d' },
-  stepValue: { flex: 1, textAlign: 'center', fontFamily: font, fontSize: 28, fontWeight: '800', color: '#0f172a' },
-  warn: { marginTop: 10, color: '#b45309', fontFamily: font, fontWeight: '700' },
-  actions: { marginTop: 20, gap: 8 },
-  primary: { backgroundColor: '#1b365d', borderRadius: 2, paddingVertical: 14, alignItems: 'center' },
-  primaryText: { color: '#f8fafc', fontFamily: font, fontSize: 18, fontWeight: '800' },
+  stepText: { fontFamily: font, fontSize: 13, fontWeight: '700', color: '#0f172a' },
+  stepValue: { flex: 1, textAlign: 'center', fontFamily: font, fontSize: 13, fontWeight: '800', color: '#1b365d' },
+  warn: { color: '#b45309', fontFamily: font, fontSize: 11, fontWeight: '700' },
+  actions: { gap: 6 },
+  primary: {
+    backgroundColor: '#1b365d',
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: '#0f2942',
+    minHeight: 32,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  primaryText: { color: '#f8fafc', fontFamily: font, fontSize: 13, fontWeight: '800' },
   secondary: {
     backgroundColor: '#f8fafc',
-    borderRadius: 2,
-    paddingVertical: 14,
+    borderRadius: 0,
+    minHeight: 29,
     alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#94a3b8'
   },
-  secondaryText: { color: '#1b365d', fontFamily: font, fontSize: 16, fontWeight: '800' },
-  note: { color: '#64748b', fontFamily: font, fontSize: 14, lineHeight: 20 },
-  error: { marginTop: 12, color: '#b91c1c', fontFamily: font, fontSize: 15, fontWeight: '800' },
-  wait: { marginTop: 20, alignItems: 'center', gap: 12, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#94a3b8', borderRadius: 2, padding: 16 },
-  waitText: { fontFamily: font, fontSize: 16, fontWeight: '800', color: '#0f172a' },
-  ok: { marginTop: 20, backgroundColor: '#f8fafc', borderRadius: 2, borderWidth: 1, borderColor: '#94a3b8', padding: 14, gap: 6 },
-  okTitle: { fontFamily: font, fontSize: 20, fontWeight: '800', color: '#1b365d' },
-  okDeal: { fontFamily: font, fontSize: 16, color: '#0f172a', fontWeight: '700' },
-  manual: { marginTop: 14, gap: 8, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#94a3b8', borderRadius: 2, padding: 12 },
-  input: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 2,
+  secondaryText: { color: '#1b365d', fontFamily: font, fontSize: 13, fontWeight: '700' },
+  note: { color: '#64748b', fontFamily: font, fontSize: 11, lineHeight: 16 },
+  error: { color: '#b91c1c', fontFamily: font, fontSize: 12, fontWeight: '800' },
+  wait: {
+    minHeight: 29,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#94a3b8',
-    padding: 12,
-    fontFamily: font,
-    fontSize: 16,
-    color: '#0f172a'
+    borderRadius: 4,
+    padding: 8
   },
-  row: { flexDirection: 'row', gap: 8 },
+  waitText: { fontFamily: font, fontSize: 12, fontWeight: '700', color: '#0f172a' },
+  row: { flexDirection: 'row', gap: 6 },
   half: { flex: 1 }
 });
