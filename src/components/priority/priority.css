@@ -3714,6 +3714,94 @@
   cursor: not-allowed;
 }
 
+/* Phone desk: one day that fits ~360px, no refresh/save bar, no selected-room footer. */
+.priority-root.is-phone {
+  font-size: 11px;
+}
+.priority-root.is-phone .priority-title,
+.priority-root.is-phone .priority-toolbar,
+.priority-root.is-phone .priority-nav,
+.priority-root.is-phone .priority-status {
+  display: none !important;
+}
+.priority-root.is-phone .grid-wrap {
+  overflow: auto;
+}
+.priority-root.is-phone .week-table {
+  min-width: 0 !important;
+  width: 100% !important;
+  table-layout: fixed;
+}
+.priority-root.is-phone .week-table .unit-cell,
+.priority-root.is-phone .week-table thead tr.occupancy-row th.occupancy-label,
+.priority-root.is-phone .week-table thead tr.label-row th.unit-cell {
+  position: static !important;
+  right: auto !important;
+  width: 42% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  box-shadow: none;
+}
+.priority-root.is-phone .week-table .week-cell,
+.priority-root.is-phone .week-table thead th.is-today,
+.priority-root.is-phone .week-table thead tr.occupancy-row th.occupancy-cell {
+  width: 58% !important;
+  min-width: 0 !important;
+}
+.priority-root.is-phone .week-table th,
+.priority-root.is-phone .week-table td {
+  overflow: hidden;
+}
+.priority-root.is-phone .unit-status {
+  min-width: 0;
+}
+.priority-root.is-phone .unit-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.priority-root.is-phone .week-cell {
+  min-width: 0 !important;
+}
+.phone-day-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 4px 6px;
+  background: #e8eef5;
+  border-bottom: 1px solid #94a3b8;
+  position: sticky;
+  top: 0;
+  z-index: 6;
+}
+.phone-day-bar button,
+.phone-today {
+  height: 26px;
+  min-width: 28px;
+  padding: 0 8px;
+  border: 1px solid #94a3b8;
+  background: #f8fafc;
+  color: #0f172a;
+  font: 700 13px/1 Tahoma, "Segoe UI", Arial, sans-serif;
+  cursor: pointer;
+}
+.phone-day-bar .phone-today {
+  border-color: #0f2942;
+  background: #0f2942;
+  color: #f8fafc;
+  font-size: 12px;
+}
+.phone-day-name {
+  font-weight: 800;
+  font-size: 13px;
+  color: #1b365d;
+  white-space: nowrap;
+}
+
 
 
 

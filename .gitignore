@@ -61,7 +61,18 @@ native/keystore/
 native/.venv/
 *.jks
 *.keystore
+!mobile/android/app/debug.keystore
 key.properties
+mobile/node_modules/
+mobile/.expo/
+mobile/android/.gradle/
+mobile/android/app/build/
+mobile/android/build/
+mobile/android/local.properties
+mobile/android/.idea/
+mobile/android/app/libs/*.aar
+mobile/android/app/libs/*.jar
+mobile/dist/
 
 # OS Junk
 .DS_Store

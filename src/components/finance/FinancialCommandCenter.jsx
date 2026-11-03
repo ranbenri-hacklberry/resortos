@@ -138,6 +138,7 @@ const DEFAULT_FALLBACK_CHECKS = [
 const CATEGORY_LABELS = { check: 'שיק', transfer: 'העברה בנקאית', card_debit: 'חיוב כרטיס', settlement: 'זיכוי סליקה' };
 
 export default function FinancialCommandCenter({
+  chrome = 'resort',
   theme = 'dark',
   setTheme = null,
   session = null,
@@ -167,6 +168,31 @@ export default function FinancialCommandCenter({
 
   // Miyalis Brand Theme Palette (From Mialees Brand Book 2025)
   const mBrand = useMemo(() => {
+    if (isLight && chrome === 'priority') {
+      return {
+        bg: '#eaecf0',
+        containerBg: '#eaecf0',
+        cardBg: '#f8fafc',
+        cardBgAlt: '#ffffff',
+        cardBorder: '#94a3b8',
+        cardBorderSubtle: '#cbd5e1',
+        text: '#0f172a',
+        textMuted: '#64748b',
+        textCloudy: '#94a3b8',
+        accentWine: '#1b365d',
+        accentCandy: '#dbeafe',
+        accentPinkDream: '#e2e8f0',
+        accentDeepPink: '#1b365d',
+        gold: '#1b365d',
+        goldBg: '#dbeafe',
+        primaryBtn: '#1b365d',
+        primaryBtnText: '#f8fafc',
+        badgeBg: '#dbeafe',
+        badgeText: '#1b365d',
+        shadow: 'none',
+        shadowLg: 'none'
+      };
+    }
     if (isLight) {
       return {
         bg: GUEST_BRAND.cream,                   // #FDFBF7
@@ -215,7 +241,7 @@ export default function FinancialCommandCenter({
       shadow: '0 8px 30px rgba(0, 0, 0, 0.45)',
       shadowLg: '0 16px 40px rgba(0, 0, 0, 0.65)'
     };
-  }, [isLight]);
+  }, [isLight, chrome]);
 
   // Control state
   const [horizonDays, setHorizonDays] = useState(120);
@@ -676,14 +702,16 @@ export default function FinancialCommandCenter({
 
   return (
     <div
+      className="dashboard-finance"
       dir="rtl"
       style={{
         background: mBrand.containerBg,
         color: mBrand.text,
-        padding: isDesktop ? '1.25rem 1.5rem' : '0.65rem',
+        fontFamily: chrome === 'priority' && isLight ? 'Tahoma, "Segoe UI", Arial, sans-serif' : GUEST_BRAND.fontBody,
+        fontSize: chrome === 'priority' && isLight ? '13px' : undefined,
+        padding: isDesktop ? '1.25rem 1.5rem' : '8px',
         borderRadius: isDesktop ? '6px' : '0',
         border: isDesktop ? `1px solid ${mBrand.cardBorder}` : 'none',
-        fontFamily: GUEST_BRAND.fontBody,
         maxWidth: isDesktop ? '1580px' : '100%',
         margin: '0 auto',
         boxSizing: 'border-box',

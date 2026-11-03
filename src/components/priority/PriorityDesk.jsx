@@ -638,7 +638,8 @@ function RoomLog({ entries, scope, onScope, checkIn, checkOut }) {
   );
 }
 
-export default function PriorityDesk({ tenantId = '', canEdit = false, active = true, session = null, operatorName = '', showCashflow = false }) {
+export default function PriorityDesk({ tenantId = '', canEdit = false, active = true, session = null, operatorName = '', showCashflow = false, layout = 'desk' }) {
+  const phone = layout === 'phone';
   const units = useLiveUnits(tenantId);
   const bookings = useLiveBookings(tenantId);
   const today = israelToday();
@@ -874,8 +875,8 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   }), [rows, drafts]);
 
   const horizon = useMemo(() => (
-    Array.from({ length: HORIZON_DAYS }, (_, index) => shiftDay(horizonStart, index))
-  ), [horizonStart]);
+    Array.from({ length: phone ? 1 : HORIZON_DAYS }, (_, index) => shiftDay(horizonStart, index))
+  ), [horizonStart, phone]);
 
   const dailyOccupancy = useMemo(() => {
     const inventoryList = units.filter(isInventoryUnit);
@@ -1678,7 +1679,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const editorChoices = editor ? choicesFor(editor.field, housekeepers, shown.find((row) => row.id === editor.unitId)?.staff, editor.kind) : [];
 
   return (
-    <div className="priority-root" dir="rtl">
+    <div className={`priority-root${phone ? ' is-phone' : ''}`} dir="rtl">
       {untransferredAlerts.length ? (
         <div className="call-alert" role="alertdialog" aria-label="האורח מבקש שיחה">
           <p>המסך נשאר עד שהשיחה מועברת או מסומנת כנפתרה</p>
@@ -1722,6 +1723,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
           <button type="button" onClick={session.onLogout}>התנתקות</button>
         </div>
       ) : null}
+      {phone ? null : (
       <div className="priority-title">
         <span className="priority-brand">
           <span>פריוריטי</span>
@@ -1732,6 +1734,8 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         </span>
         <em>חיצים בין יחידות · F2 גביית מזומן · F8 טבלה/טופס · F11 סינון · Esc {editor ? 'סוגר עריכה' : 'מנקה סינון'}</em>
       </div>
+      )}
+      {phone ? null : (
       <div className="priority-toolbar">
         <span className="tb-refresh-note">
           {refreshedAt ? `רענון אחרון ${refreshedAt.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}` : 'עדיין לא רוענן'}
@@ -1789,6 +1793,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         <button type="button" className="tb-btn" onClick={() => printCashDayReport(bookings, units, previousCashWeek(today))}><Printer size={14} /> דוח מזומנים</button>
         <button type="button" className="tb-btn" onClick={() => printDailyDutyReport({ dateStr: today, kind: 'morning', area: 'all', bookings, units })}><Printer size={14} /> תחילת יום</button>
       </div>
+      )}
       {view === 'cashflow' && showCashflow ? (
         <div className="priority-body">
           <PriorityCashflow />
@@ -1809,6 +1814,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         </div>
       ) : (
       <>
+      {phone ? null : (
       <div className="priority-nav">
         <div className="nav-group nav-back">
           <button type="button" className="tb-btn" onClick={() => setHorizonStart((day) => shiftDay(day, -7))}>« שבוע</button>
@@ -1820,6 +1826,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
           <button type="button" className="tb-btn" onClick={() => setHorizonStart((day) => shiftDay(day, 7))}>שבוע »</button>
         </div>
       </div>
+      )}
       <div className="priority-body">
         {view === 'calendar' ? (
           <PriorityCalendar
@@ -2020,10 +2027,20 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
           </div>
         ) : (
           <div className="grid-wrap">
+            {phone && horizon[0] ? (
+              <div className="phone-day-bar">
+                <button type="button" onClick={() => setHorizonStart((current) => shiftDay(current, -1))} aria-label="יום קודם">‹</button>
+                <span className="phone-day-name">{horizonLabel(horizon[0], today)}</span>
+                <button type="button" onClick={() => setHorizonStart((current) => shiftDay(current, 1))} aria-label="יום הבא">›</button>
+                {horizon[0] !== today ? (
+                  <button type="button" className="phone-today" onClick={() => setHorizonStart(today)}>היום</button>
+                ) : null}
+              </div>
+            ) : null}
             <table className="erp-table week-table">
               <thead>
                 <tr className="occupancy-row">
-                  <th className="grounds-banner" colSpan={2}>חצר ובריכה</th>
+                  {phone ? null : <th className="grounds-banner" colSpan={2}>חצר ובריכה</th>}
                   <th className="unit-cell occupancy-label">
                     <span className="occupancy-title">תפוסה כוללת</span>
                   </th>
@@ -2048,11 +2065,13 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                   })}
                 </tr>
                 <tr className="label-row">
-                  <th className="grounds-col is-yard">חצר</th>
-                  <th className="grounds-col is-pool">בריכה</th>
+                  {phone ? null : <th className="grounds-col is-yard">חצר</th>}
+                  {phone ? null : <th className="grounds-col is-pool">בריכה</th>}
                   <th className="unit-cell">יחידה</th>
                   {horizon.map((day) => (
-                    <th key={day} className={day === today ? 'is-today' : ''}>{horizonLabel(day, today)}</th>
+                    <th key={day} className={day === today ? 'is-today' : ''}>
+                      {horizonLabel(day, today)}
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -2061,11 +2080,11 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                   <React.Fragment key={row.id}>
                     {row.area !== 'ramot' && (index === 0 || visible[index - 1].area !== row.area) ? (
                       <tr className="area-break">
-                        <td colSpan={horizon.length + 3}>{priorityAreaLabel(row.area)}</td>
+                        <td colSpan={horizon.length + (phone ? 1 : 3)}>{priorityAreaLabel(row.area)}</td>
                       </tr>
                     ) : null}
                     <tr>
-                      {grounds[index]?.yard ? (
+                      {!phone && grounds[index]?.yard ? (
                         <td className="grounds-cell is-yard" rowSpan={grounds[index].yard.span}>
                           <GroundPill
                             assetId={grounds[index].yard.id}
@@ -2076,7 +2095,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                           />
                         </td>
                       ) : null}
-                      {grounds[index]?.pool ? (
+                      {!phone && grounds[index]?.pool ? (
                         <td
                           className={`grounds-cell is-pool${grounds[index].pool.kind === 'none' ? ' is-empty' : ''}`}
                           rowSpan={grounds[index].pool.span}
@@ -2176,16 +2195,18 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                     </tr>
                   </React.Fragment>
                 ))}
-                {!visible.length ? <tr><td className="empty-row" colSpan={horizon.length + 3}>אין יחידות לסינון</td></tr> : null}
+                {!visible.length ? <tr><td className="empty-row" colSpan={horizon.length + (phone ? 1 : 3)}>אין יחידות לסינון</td></tr> : null}
               </tbody>
             </table>
           </div>
         )}
       </div>
+      {phone ? null : (
       <div className={`priority-status${saveError ? ' is-error' : ''}`}>
         <span>{message}</span>
         <b>{view === 'calendar' ? 'יומן · 7 ימים' : (selected ? `${selected.name} · ${visibleIndex + 1} / ${visible.length}` : 'אין יחידה')}</b>
       </div>
+      )}
       {editor && menuBox ? (
         <div className="cell-menu" style={{ top: menuBox.top, right: menuBox.right, minWidth: menuBox.width }} role="listbox">
           {editorChoices.map((choice, index) => (
