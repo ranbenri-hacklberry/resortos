@@ -177,7 +177,8 @@ export default function ResortOSOperations({
   canSwitchRole = false,
   allowedUnitIds = [],
   boardArea: boardAreaProp,
-  operatorName = 'צוות'
+  operatorName = 'צוות',
+  chrome = 'resort'
 }) {
   const [ownArea, setOwnArea] = useState(() => {
     try {
@@ -1178,14 +1179,14 @@ export default function ResortOSOperations({
       style={{
         width: '100%',
         minHeight: '100%',
-        background: isMobileOpsView ? (isDark ? '#26130F' : '#FDFBF7') : colors.bg,
+        background: isMobileOpsView ? (chrome === 'priority' && !isDark ? '#eaecf0' : (isDark ? '#26130F' : '#FDFBF7')) : colors.bg,
         color: colors.textMain,
-        padding: isMobileOpsView ? '0.25rem 0.5rem 2rem' : '0.75rem 1rem',
+        padding: isMobileOpsView ? '0.25rem 0.5rem 1rem' : '0.75rem 1rem',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'stretch',
         justifyContent: 'flex-start',
-        fontFamily: isMobileOpsView ? "'Montserrat', 'Heebo', system-ui, sans-serif" : 'system-ui, -apple-system, sans-serif',
+        fontFamily: chrome === 'priority' && !isDark ? 'Tahoma, "Segoe UI", Arial, sans-serif' : (isMobileOpsView ? "'Montserrat', 'Heebo', system-ui, sans-serif" : 'system-ui, -apple-system, sans-serif'),
         boxSizing: 'border-box'
       }}
     >
@@ -1231,6 +1232,7 @@ export default function ResortOSOperations({
             tenantId={tenantId}
             pushUnitToCloud={pushUnitToCloud}
             theme={theme}
+            chrome={chrome}
             isRTL={isRTL}
             t={t}
           />

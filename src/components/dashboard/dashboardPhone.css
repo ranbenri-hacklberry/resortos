@@ -1,0 +1,120 @@
+/* Phone dashboard: smaller type, Priority colors, nothing clipped at ~360px. */
+.dashboard-app.is-phone {
+  font-size: 13px;
+}
+
+.dashboard-app.is-phone header {
+  padding: 6px 8px !important;
+  gap: 6px !important;
+  background: #f8fafc !important;
+  border-bottom: 1px solid #94a3b8 !important;
+  box-shadow: none !important;
+}
+
+.dashboard-app.is-phone .dash-brand {
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  color: #1b365d !important;
+}
+
+.dashboard-app.is-phone header > div:first-child span[style*="font-size: 1.25rem"] {
+  display: none;
+}
+
+.dashboard-app.is-phone .dash-tabs {
+  background: #d9dee7 !important;
+  border: 1px solid #94a3b8 !important;
+  border-radius: 2px !important;
+  gap: 2px !important;
+  padding: 2px !important;
+}
+
+.dashboard-app.is-phone .dash-tabs button {
+  min-width: 0 !important;
+  height: 32px;
+  padding: 0 4px !important;
+  font-size: 12px !important;
+  gap: 0 !important;
+  border-radius: 2px !important;
+  box-shadow: none !important;
+}
+
+.dashboard-app.is-phone .dash-tabs button svg,
+.dashboard-app.is-phone .dash-tab-extra {
+  display: none;
+}
+
+.dashboard-app.is-phone .dash-tabs button {
+  background: transparent;
+  color: #334155 !important;
+  border-color: transparent !important;
+}
+
+.dashboard-app.is-phone .dash-tabs button.is-on,
+.dashboard-app.is-phone .dash-tabs button[style*="linear-gradient"],
+.dashboard-app.is-phone .dash-tabs button[style*="#1b365d"] {
+  background: #1b365d !important;
+  color: #ffffff !important;
+  border-color: #0f2942 !important;
+}
+
+.dashboard-app.is-phone .dash-brand + div {
+  display: none;
+}
+
+.dashboard-app.is-phone .dash-user-role {
+  display: none;
+}
+
+.dashboard-app.is-phone .dash-user-btn {
+  padding: 2px 6px !important;
+  border-radius: 2px !important;
+  border: 1px solid #94a3b8 !important;
+  background: #f8fafc !important;
+  box-shadow: none !important;
+  gap: 4px !important;
+}
+
+.dashboard-app.is-phone .dash-user-btn > div:first-child {
+  width: 22px !important;
+  height: 22px !important;
+  border-radius: 2px !important;
+  background: #1b365d !important;
+  font-size: 11px !important;
+}
+
+.dashboard-app.is-phone .mobile-ops-view button[style*="linear-gradient"],
+.dashboard-app.is-phone .dashboard-finance button[style*="linear-gradient"],
+.dashboard-app.is-phone .dashboard-chloe button[style*="linear-gradient"] {
+  background: #1b365d !important;
+  color: #f8fafc !important;
+  border-radius: 2px !important;
+  box-shadow: none !important;
+}
+
+.dashboard-app.is-phone .mobile-ops-view [style*="border-radius: 16px"],
+.dashboard-app.is-phone .mobile-ops-view [style*="border-radius:16px"],
+.dashboard-app.is-phone .dashboard-finance [style*="border-radius: 16px"],
+.dashboard-app.is-phone .dashboard-finance [style*="border-radius: 6px"],
+.dashboard-app.is-phone .dashboard-chloe [style*="border-radius: 16px"],
+.dashboard-app.is-phone .dashboard-chloe [style*="border-radius: 999px"] {
+  border-radius: 2px !important;
+}
+
+.dashboard-app.is-phone .mobile-ops-view,
+.dashboard-app.is-phone .hotelos-ops-page,
+.dashboard-app.is-phone .dashboard-finance,
+.dashboard-app.is-phone .dashboard-chloe {
+  font-family: Tahoma, "Segoe UI", Arial, sans-serif !important;
+  background: #eaecf0 !important;
+  color: #0f172a !important;
+}
+
+.dashboard-app.is-phone .dashboard-finance button {
+  border-radius: 2px !important;
+}
+
+.dashboard-app.is-phone .mobile-ops-view {
+  padding: 6px 6px 16px !important;
+  gap: 8px !important;
+}

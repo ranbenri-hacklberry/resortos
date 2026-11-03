@@ -74,8 +74,15 @@ const QUICK_PILLS = [
   { id: 'send_sms', label: '💬 הודעה לנכנסים', prompt: 'תשלחי הודעת ווטסאפ קבלת פנים לאורחים' }
 ];
 
-export default function ChloeDashboardChat({ sessionUser, theme = 'light' }) {
+export default function ChloeDashboardChat({ sessionUser, theme = 'light', chrome = 'resort' }) {
   const isDark = theme === 'dark';
+  const priority = chrome === 'priority' && !isDark;
+  const pageBg = priority ? '#eaecf0' : (isDark ? '#26130F' : '#FAF8F3');
+  const cardBg = priority ? '#f8fafc' : (isDark ? '#1C0F0C' : '#FFFFFF');
+  const ink = priority ? '#0f172a' : (isDark ? '#FDFBF7' : '#26130F');
+  const accent = priority ? '#1b365d' : (isDark ? '#C5A059' : '#8C6B28');
+  const line = priority ? '#94a3b8' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(197, 160, 89, 0.22)');
+  const font = priority ? 'Tahoma, "Segoe UI", Arial, sans-serif' : 'Heebo, Assistant, system-ui, sans-serif';
   const [messages, setMessages] = useState(() => {
     try {
       const saved = sessionStorage.getItem('chloe_dashboard_messages_v1');
@@ -241,24 +248,28 @@ export default function ChloeDashboardChat({ sessionUser, theme = 'light' }) {
 
   return (
     <div 
+      className="dashboard-chloe"
       dir="rtl"
       style={{
         display: 'flex',
         flexDirection: 'column',
-        height: 'calc(100dvh - 110px)',
+        height: '100%',
+        minHeight: 0,
+        flex: 1,
         maxHeight: '100%',
-        background: isDark ? '#26130F' : '#FAF8F3',
-        color: isDark ? '#FDFBF7' : '#26130F',
-        fontFamily: 'Heebo, Assistant, system-ui, sans-serif',
+        background: pageBg,
+        color: ink,
+        fontFamily: font,
+        fontSize: priority ? '13px' : undefined,
         position: 'relative',
         overflow: 'hidden'
       }}
     >
       {/* Top Sticky Bar: Live Status + Quick Pills */}
       <div style={{
-        background: isDark ? '#1C0F0C' : '#FFFFFF',
-        borderBottom: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid rgba(197, 160, 89, 0.22)',
-        padding: '0.5rem 0.75rem 0.6rem',
+        background: cardBg,
+        borderBottom: `1px solid ${line}`,
+        padding: priority ? '6px 8px' : '0.5rem 0.75rem 0.6rem',
         display: 'flex',
         flexDirection: 'column',
         gap: '0.45rem',
@@ -266,21 +277,24 @@ export default function ChloeDashboardChat({ sessionUser, theme = 'light' }) {
         zIndex: 10
       }}>
         {/* Status Line */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', minWidth: 0 }}>
             <div style={{
               width: '8px',
               height: '8px',
               borderRadius: '50%',
               background: '#10B981',
-              boxShadow: '0 0 8px #10B981'
+              boxShadow: priority ? 'none' : '0 0 8px #10B981',
+              flex: '0 0 auto'
             }} />
-            <span style={{ fontSize: '0.74rem', fontWeight: 800, color: isDark ? '#FDFBF7' : '#26130F' }}>
+            <span style={{ fontSize: priority ? '12px' : '0.74rem', fontWeight: 800, color: ink, whiteSpace: 'nowrap' }}>
               קלואי מחוברת
             </span>
-            <span style={{ fontSize: '0.68rem', color: isDark ? '#C5A059' : '#8C6B28', fontWeight: 700 }}>
-              · Mac Studio AI (Chloe-Host)
-            </span>
+            {priority ? null : (
+              <span style={{ fontSize: '0.68rem', color: accent, fontWeight: 700 }}>
+                · Mac Studio AI (Chloe-Host)
+              </span>
+            )}
           </div>
 
           <button
@@ -290,7 +304,7 @@ export default function ChloeDashboardChat({ sessionUser, theme = 'light' }) {
             style={{
               background: 'none',
               border: 'none',
-              color: isDark ? '#A89487' : '#8C6B28',
+              color: priority ? '#334155' : (isDark ? '#A89487' : '#8C6B28'),
               fontSize: '0.7rem',
               fontWeight: 700,
               cursor: 'pointer',
@@ -308,8 +322,9 @@ export default function ChloeDashboardChat({ sessionUser, theme = 'light' }) {
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '0.35rem',
-          overflowX: 'auto',
+          flexWrap: priority ? 'wrap' : 'nowrap',
+          gap: '6px',
+          overflowX: priority ? 'visible' : 'auto',
           paddingBottom: '2px',
           scrollbarWidth: 'none',
           msOverflowStyle: 'none'
@@ -321,12 +336,12 @@ export default function ChloeDashboardChat({ sessionUser, theme = 'light' }) {
               onClick={() => handleSendMessage(pill.prompt)}
               style={{
                 whiteSpace: 'nowrap',
-                background: isDark ? 'rgba(197, 160, 89, 0.15)' : '#FAF8F3',
-                border: isDark ? '1px solid rgba(197, 160, 89, 0.35)' : '1px solid rgba(197, 160, 89, 0.32)',
-                color: isDark ? '#F1D699' : '#8C6B28',
-                borderRadius: '999px',
+                background: priority ? '#f8fafc' : (isDark ? 'rgba(197, 160, 89, 0.15)' : '#FAF8F3'),
+                border: priority ? '1px solid #94a3b8' : (isDark ? '1px solid rgba(197, 160, 89, 0.35)' : '1px solid rgba(197, 160, 89, 0.32)'),
+                color: accent,
+                borderRadius: priority ? '2px' : '999px',
                 padding: '0.3rem 0.65rem',
-                fontSize: '0.73rem',
+                fontSize: priority ? '12px' : '0.73rem',
                 fontWeight: 800,
                 cursor: 'pointer',
                 display: 'inline-flex',
@@ -370,20 +385,20 @@ export default function ChloeDashboardChat({ sessionUser, theme = 'light' }) {
                 style={{
                   maxWidth: isChloe ? '96%' : '85%',
                   background: isChloe 
-                    ? (isDark ? '#311813' : '#FFFFFF') 
-                    : 'linear-gradient(135deg, #C5A059, #A07C36)',
+                    ? (priority ? '#f8fafc' : (isDark ? '#311813' : '#FFFFFF'))
+                    : (priority ? '#1b365d' : 'linear-gradient(135deg, #C5A059, #A07C36)'),
                   color: isChloe 
-                    ? (isDark ? '#FDFBF7' : '#26130F') 
+                    ? ink
                     : '#FFFFFF',
                   border: isChloe 
-                    ? (isDark ? '1px solid rgba(197, 160, 89, 0.25)' : '1px solid rgba(197, 160, 89, 0.25)') 
+                    ? (priority ? '1px solid #94a3b8' : (isDark ? '1px solid rgba(197, 160, 89, 0.25)' : '1px solid rgba(197, 160, 89, 0.25)'))
                     : 'none',
-                  borderRadius: isChloe ? '16px 16px 16px 4px' : '16px 16px 4px 16px',
-                  padding: '0.75rem 0.9rem',
-                  boxShadow: isChloe 
+                  borderRadius: priority ? '2px' : (isChloe ? '16px 16px 16px 4px' : '16px 16px 4px 16px'),
+                  padding: priority ? '8px 10px' : '0.75rem 0.9rem',
+                  boxShadow: priority ? 'none' : (isChloe 
                     ? (isDark ? '0 4px 14px rgba(0,0,0,0.4)' : '0 3px 12px rgba(38, 19, 15, 0.06)') 
-                    : '0 4px 14px rgba(197, 160, 89, 0.3)',
-                  fontSize: '0.86rem',
+                    : '0 4px 14px rgba(197, 160, 89, 0.3)'),
+                  fontSize: priority ? '13px' : '0.86rem',
                   lineHeight: 1.5,
                   wordBreak: 'break-word',
                   position: 'relative'
@@ -398,9 +413,9 @@ export default function ChloeDashboardChat({ sessionUser, theme = 'light' }) {
                     marginBottom: '0.35rem',
                     fontSize: '0.72rem',
                     fontWeight: 900,
-                    color: '#C5A059'
+                    color: accent
                   }}>
-                    <Sparkles size={13} color="#C5A059" />
+                    <Sparkles size={13} color={accent} />
                     <span>קלואי (ResortOS AI)</span>
                   </div>
                 )}
@@ -453,17 +468,17 @@ export default function ChloeDashboardChat({ sessionUser, theme = 'light' }) {
         {isTyping && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', paddingInline: '0.4rem' }}>
             <div style={{
-              background: isDark ? '#311813' : '#FFFFFF',
-              border: isDark ? '1px solid rgba(197, 160, 89, 0.25)' : '1px solid rgba(197, 160, 89, 0.25)',
-              borderRadius: '16px 16px 16px 4px',
+              background: priority ? '#f8fafc' : (isDark ? '#311813' : '#FFFFFF'),
+              border: priority ? '1px solid #94a3b8' : (isDark ? '1px solid rgba(197, 160, 89, 0.25)' : '1px solid rgba(197, 160, 89, 0.25)'),
+              borderRadius: priority ? '2px' : '16px 16px 16px 4px',
               padding: '0.55rem 0.85rem',
               display: 'flex',
               alignItems: 'center',
               gap: '0.4rem',
-              fontSize: '0.76rem',
-              color: isDark ? '#C5A059' : '#8C6B28',
+              fontSize: priority ? '12px' : '0.76rem',
+              color: priority ? '#1b365d' : (isDark ? '#C5A059' : '#8C6B28'),
               fontWeight: 800,
-              boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
+              boxShadow: priority ? 'none' : '0 2px 8px rgba(0,0,0,0.05)'
             }}>
               <RefreshCw size={13} className="animate-spin" />
               <span>קלואי מסנכרנת נתונים...</span>
@@ -480,9 +495,9 @@ export default function ChloeDashboardChat({ sessionUser, theme = 'light' }) {
         bottom: 0,
         left: 0,
         right: 0,
-        background: isDark ? '#1C0F0C' : '#FFFFFF',
-        borderTop: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid rgba(197, 160, 89, 0.25)',
-        padding: '0.6rem 0.75rem',
+        background: cardBg,
+        borderTop: `1px solid ${line}`,
+        padding: priority ? '6px 8px' : '0.6rem 0.75rem',
         display: 'flex',
         alignItems: 'center',
         gap: '0.45rem',
@@ -495,14 +510,14 @@ export default function ChloeDashboardChat({ sessionUser, theme = 'light' }) {
           onClick={toggleListening}
           title={isListening ? 'מקשיב... לחץ לסיום' : 'הקלטה קולית בעברית'}
           style={{
-            width: '42px',
-            height: '42px',
-            borderRadius: '50%',
-            border: isListening ? '2px solid #EF4444' : (isDark ? '1px solid rgba(197, 160, 89, 0.4)' : '1px solid rgba(197, 160, 89, 0.35)'),
+            width: priority ? '36px' : '42px',
+            height: priority ? '36px' : '42px',
+            borderRadius: priority ? '2px' : '50%',
+            border: isListening ? '2px solid #EF4444' : (priority ? '1px solid #94a3b8' : (isDark ? '1px solid rgba(197, 160, 89, 0.4)' : '1px solid rgba(197, 160, 89, 0.35)')),
             background: isListening 
               ? '#FEE2E2' 
-              : (isDark ? 'rgba(197, 160, 89, 0.15)' : '#FAF8F3'),
-            color: isListening ? '#DC2626' : (isDark ? '#F1D699' : '#8C6B28'),
+              : (priority ? '#f8fafc' : (isDark ? 'rgba(197, 160, 89, 0.15)' : '#FAF8F3')),
+            color: isListening ? '#DC2626' : (priority ? '#1b365d' : (isDark ? '#F1D699' : '#8C6B28')),
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -530,12 +545,14 @@ export default function ChloeDashboardChat({ sessionUser, theme = 'light' }) {
           placeholder={isListening ? 'מקשיבה... דבר עכשיו' : 'שאל את קלואי (למשל: "כניסות היום")...'}
           style={{
             flex: 1,
-            background: isDark ? '#26130F' : '#FAF8F3',
-            border: isDark ? '1px solid rgba(197, 160, 89, 0.35)' : '1px solid rgba(197, 160, 89, 0.35)',
-            borderRadius: '999px',
-            padding: '0.65rem 1rem',
-            color: isDark ? '#FDFBF7' : '#26130F',
-            fontSize: '0.86rem',
+            minWidth: 0,
+            background: priority ? '#ffffff' : (isDark ? '#26130F' : '#FAF8F3'),
+            border: priority ? '1px solid #94a3b8' : (isDark ? '1px solid rgba(197, 160, 89, 0.35)' : '1px solid rgba(197, 160, 89, 0.35)'),
+            borderRadius: priority ? '2px' : '999px',
+            padding: priority ? '8px 10px' : '0.65rem 1rem',
+            color: priority ? '#0f172a' : (isDark ? '#FDFBF7' : '#26130F'),
+            fontSize: priority ? '13px' : '0.86rem',
+            fontFamily: font,
             fontWeight: 600,
             outline: 'none',
             boxSizing: 'border-box'
@@ -548,13 +565,13 @@ export default function ChloeDashboardChat({ sessionUser, theme = 'light' }) {
           disabled={!input.trim() || isTyping}
           onClick={() => handleSendMessage()}
           style={{
-            width: '42px',
-            height: '42px',
-            borderRadius: '50%',
+            width: priority ? '36px' : '42px',
+            height: priority ? '36px' : '42px',
+            borderRadius: priority ? '2px' : '50%',
             background: input.trim() && !isTyping 
-              ? 'linear-gradient(135deg, #C5A059, #9E7D3B)' 
-              : (isDark ? 'rgba(255, 255, 255, 0.08)' : '#F2EEE6'),
-            color: input.trim() && !isTyping ? '#FFFFFF' : '#9E897C',
+              ? (priority ? '#1b365d' : 'linear-gradient(135deg, #C5A059, #9E7D3B)')
+              : (priority ? '#e2e8f0' : (isDark ? 'rgba(255, 255, 255, 0.08)' : '#F2EEE6')),
+            color: input.trim() && !isTyping ? '#FFFFFF' : (priority ? '#64748b' : '#9E897C'),
             border: 'none',
             display: 'flex',
             alignItems: 'center',

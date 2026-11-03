@@ -42,7 +42,7 @@ export default function App() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FAF8F3" />
+      <StatusBar barStyle="dark-content" backgroundColor="#eaecf0" />
       <View style={styles.body}>
         {tab === 'dashboard' ? <DashboardScreen onOpenCharge={openCharge} /> : <ChargeScreen preset={preset} />}
       </View>
@@ -59,16 +59,16 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FAF8F3', paddingTop: StatusBar.currentHeight || 0 },
+  root: { flex: 1, backgroundColor: '#eaecf0', paddingTop: StatusBar.currentHeight || 0 },
   body: { flex: 1 },
   tabs: {
     flexDirection: 'row',
     borderTopWidth: 1,
-    borderTopColor: '#E7DFD4',
-    backgroundColor: '#fff'
+    borderTopColor: '#94a3b8',
+    backgroundColor: '#f8fafc'
   },
-  tab: { flex: 1, paddingVertical: 16, alignItems: 'center' },
-  tabOn: { backgroundColor: '#FAF8F3' },
-  tabText: { fontSize: 18, fontWeight: '800', color: '#6B5C53' },
-  tabTextOn: { color: '#10A37F' }
+  tab: { flex: 1, paddingVertical: 10, alignItems: 'center' },
+  tabOn: { backgroundColor: '#1b365d' },
+  tabText: { fontSize: 14, fontWeight: '700', color: '#334155' },
+  tabTextOn: { color: '#f8fafc' }
 });

@@ -1,4 +1,6 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
+import { canEditPriorityStatuses, canSeeFinancials } from '../../lib/staffRoles';
+import './dashboardPhone.css';
 import { 
   ShieldCheck, Phone, KeyRound, LogOut, Sparkles, Building2, TrendingUp, 
   AlertTriangle, RefreshCw, Zap, Settings as Gear, Users, Sun, Moon, 
@@ -8,6 +10,8 @@ import FinancialCommandCenter from '../finance/FinancialCommandCenter';
 import ResortOSOperations from '../ResortOSOperations';
 import ChloeDashboardChat from '../chloe/ChloeDashboardChat';
 import Settings from '../Settings';
+
+const PriorityDesk = lazy(() => import('../priority/PriorityDesk'));
 
 const DEMO_TENANT_ID = '22222222-2222-2222-2222-222222222222';
 const DASHBOARD_TOKEN_KEY = 'resortos_dashboard_token_v1';
@@ -35,6 +39,24 @@ const isLocalHost = typeof window !== 'undefined' && (
   window.location.hostname === '127.0.0.1' ||
   window.location.hostname.endsWith('.local')
 );
+
+const DASHBOARD_TABS = ['priority', 'operations', 'financials', 'chloe'];
+
+function usePhoneDashboard() {
+  const [phone, setPhone] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(max-width: 840px)').matches
+      || document.documentElement.classList.contains('resortos-app');
+  });
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 840px)');
+    const sync = () => setPhone(mq.matches || document.documentElement.classList.contains('resortos-app'));
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+  return phone;
+}
 
 export default function DashboardApp() {
   const [token, setToken] = useState(() => {
@@ -97,7 +119,12 @@ export default function DashboardApp() {
     }
   };
 
+  const phoneDash = usePhoneDashboard();
   const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const requested = new URLSearchParams(window.location.search).get('tab');
+      if (DASHBOARD_TABS.includes(requested)) return requested;
+    }
     const role = user?.role;
     if (role === 'FINANCE') return 'financials';
     return 'operations';
@@ -684,14 +711,15 @@ export default function DashboardApp() {
 
   return (
     <div 
+      className={`dashboard-app${phoneDash ? ' is-phone' : ''}`}
       dir="rtl"
       style={{
         minHeight: '100dvh',
-        background: isDark ? '#26130F' : '#FAF8F3',
-        color: isDark ? '#FDFBF7' : '#26130F',
+        background: phoneDash && !isDark ? '#eaecf0' : (isDark ? '#26130F' : '#FAF8F3'),
+        color: phoneDash && !isDark ? '#0f172a' : (isDark ? '#FDFBF7' : '#26130F'),
         display: 'flex',
         flexDirection: 'column',
-        fontFamily: 'Heebo, Assistant, system-ui, sans-serif'
+        fontFamily: phoneDash ? 'Tahoma, "Segoe UI", Arial, sans-serif' : 'Heebo, Assistant, system-ui, sans-serif'
       }}
     >
       {/* Top Header */}
@@ -712,7 +740,7 @@ export default function DashboardApp() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <span style={{ fontSize: '1.25rem' }}>⚡</span>
             <div>
-              <div style={{ fontSize: '1rem', fontWeight: 900, color: isDark ? '#FDFBF7' : '#26130F', letterSpacing: '-0.02em' }}>
+              <div className="dash-brand" style={{ fontSize: '1rem', fontWeight: 900, color: isDark ? '#FDFBF7' : '#26130F', letterSpacing: '-0.02em' }}>
                 ResortOS Dashboard
               </div>
               <div style={{ fontSize: '0.65rem', color: isDark ? '#C5A059' : '#8C6B28', fontWeight: 700 }}>
@@ -725,6 +753,7 @@ export default function DashboardApp() {
             {/* Options Popup Trigger Button */}
             <button
               type="button"
+              className="dash-user-btn"
               onClick={() => setShowOptionsMenu((prev) => !prev)}
               style={{
                 border: isDark ? '1px solid rgba(197, 160, 89, 0.45)' : '1px solid rgba(197, 160, 89, 0.35)',
@@ -763,7 +792,7 @@ export default function DashboardApp() {
                 <span style={{ fontSize: '0.78rem', fontWeight: 800, color: isDark ? '#FDFBF7' : '#26130F', lineHeight: 1.2 }}>
                   {user.display_name || user.username}
                 </span>
-                <span style={{ fontSize: '0.62rem', color: isDark ? '#C5A059' : '#8C6B28', fontWeight: 700, lineHeight: 1.1 }}>
+                <span className="dash-user-role" style={{ fontSize: '0.62rem', color: isDark ? '#C5A059' : '#8C6B28', fontWeight: 700, lineHeight: 1.1 }}>
                   {isManager ? 'מנהל מערכת' : 'צוות'} · אפשרויות ▾
                 </span>
               </div>
@@ -1145,6 +1174,7 @@ export default function DashboardApp() {
         {/* Bottom row: Tabs Switcher (Visible to Managers) */}
         {!isFinanceOnly && !isOperationsOnly && (
           <div 
+            className="dash-tabs"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -1159,6 +1189,32 @@ export default function DashboardApp() {
           >
             <button
               type="button"
+              className={activeTab === 'priority' ? 'is-on' : ''}
+              onClick={() => setActiveTab('priority')}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                border: activeTab === 'priority'
+                  ? '1px solid #0f2942'
+                  : '1px solid transparent',
+                borderRadius: '7px',
+                padding: '0.45rem 0.35rem',
+                fontSize: '0.82rem',
+                fontWeight: 800,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: activeTab === 'priority' ? '#1b365d' : 'transparent',
+                color: activeTab === 'priority' ? '#FFFFFF' : (isDark ? '#C7B9AD' : '#736055'),
+                whiteSpace: 'nowrap'
+              }}
+            >
+              <span>פריוריטי</span>
+            </button>
+            <button
+              type="button"
+              className={activeTab === 'operations' ? 'is-on' : ''}
               onClick={() => setActiveTab('operations')}
               style={{
                 flex: 1,
@@ -1192,6 +1248,7 @@ export default function DashboardApp() {
 
             <button
               type="button"
+              className={activeTab === 'financials' ? 'is-on' : ''}
               onClick={() => setActiveTab('financials')}
               style={{
                 flex: 1,
@@ -1219,12 +1276,13 @@ export default function DashboardApp() {
                 transition: 'all 0.15s ease'
               }}
             >
-              <span style={{ fontSize: '0.85rem' }}>💰</span>
+              <span className="dash-tab-extra" style={{ fontSize: '0.85rem' }}>💰</span>
               <span>פיננסים</span>
             </button>
 
             <button
               type="button"
+              className={activeTab === 'chloe' ? 'is-on' : ''}
               onClick={() => setActiveTab('chloe')}
               style={{
                 flex: 1,
@@ -1260,10 +1318,12 @@ export default function DashboardApp() {
       </header>
 
       {/* Main Content Area */}
-      <main style={{ flex: 1, overflow: activeTab === 'chloe' ? 'hidden' : 'auto' }}>
+      <main style={{ flex: 1, minHeight: 0, overflow: activeTab === 'chloe' || activeTab === 'priority' ? 'hidden' : 'auto', display: activeTab === 'chloe' || activeTab === 'priority' ? 'flex' : undefined, flexDirection: activeTab === 'priority' || activeTab === 'chloe' ? 'column' : undefined }}>
         {activeTab === 'financials' ? (
           <FinancialCommandCenter 
             tenantId={DEMO_TENANT_ID}
+            theme={phoneDash ? theme : 'dark'}
+            chrome={phoneDash ? 'priority' : 'resort'}
             session={{
               name: user.display_name || user.username,
               role: user.role,
@@ -1274,10 +1334,25 @@ export default function DashboardApp() {
           <ChloeDashboardChat 
             sessionUser={user}
             theme={theme}
+            chrome={phoneDash ? 'priority' : 'resort'}
           />
+        ) : activeTab === 'priority' ? (
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <Suspense fallback={<div style={{ padding: '1rem', fontWeight: 700 }}>טוען פריוריטי…</div>}>
+              <PriorityDesk
+                layout={phoneDash ? 'phone' : 'desk'}
+                tenantId={user.tenant_id || DEMO_TENANT_ID}
+                canEdit={canEditPriorityStatuses(user.role)}
+                active
+                showCashflow={canSeeFinancials(user.role, user.username, user.display_name || '')}
+                operatorName={user.display_name || user.username || ''}
+              />
+            </Suspense>
+          </div>
         ) : (
           <ResortOSOperations 
             theme={theme}
+            chrome={phoneDash ? 'priority' : 'resort'}
             tenantId={DEMO_TENANT_ID}
             sessionRole={user.role}
             operatorName={user.display_name || user.username}

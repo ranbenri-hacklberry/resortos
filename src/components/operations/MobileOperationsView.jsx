@@ -81,14 +81,44 @@ export default function MobileOperationsView({
   tenantId,
   pushUnitToCloud,
   theme = 'light',
+  chrome = 'resort',
   isRTL = true,
   t = (k, f) => f
 }) {
   const todayStr = useMemo(() => israelToday(), []);
   const isDark = theme === 'dark';
+  const priorityChrome = chrome === 'priority' && !isDark;
 
-  // Luxury Brand Tokens: Authentic Wine & Champagne Gold with modern soft radii and elegant depth
-  const brand = {
+  // Luxury Brand Tokens: Authentic Wine & Champagne Gold with modern soft radii and elegant depth.
+  // On the phone dashboard the light theme follows the Priority screen instead.
+  const brand = priorityChrome ? {
+    bg: '#eaecf0',
+    cardBg: '#f8fafc',
+    text: '#0f172a',
+    textMuted: '#64748b',
+    wine: '#1b365d',
+    cream: '#f8fafc',
+    gold: '#1b365d',
+    goldSoft: '#dbeafe',
+    goldBorder: '#94a3b8',
+    border: '#cbd5e1',
+    cardBorder: '#94a3b8',
+    cardShadow: 'none',
+    candy: '#dbeafe',
+    urgentBg: '#fef3c7',
+    urgentBorder: '#b45309',
+    urgentText: '#92400e',
+    readyBg: '#ecfdf5',
+    readyBorder: '#6ee7b7',
+    readyText: '#047857',
+    alertBg: '#fef2f2',
+    alertBorder: '#fca5a5',
+    alertText: '#b91c1c',
+    radius: '2px',
+    radiusMd: '2px',
+    radiusSm: '2px',
+    radiusPill: '2px'
+  } : {
     bg: isDark ? '#26130F' : '#FAF8F3',
     cardBg: isDark ? '#311813' : '#FFFFFF',
     text: isDark ? '#FDFBF7' : '#26130F',
@@ -625,8 +655,9 @@ export default function MobileOperationsView({
         overflowX: 'hidden',
         background: brand.bg,
         color: brand.text,
-        fontFamily: "'Montserrat', 'Heebo', system-ui, sans-serif",
-        padding: '0.6rem 0.65rem 4rem',
+        fontFamily: priorityChrome ? 'Tahoma, "Segoe UI", Arial, sans-serif' : "'Montserrat', 'Heebo', system-ui, sans-serif",
+        fontSize: priorityChrome ? '13px' : undefined,
+        padding: priorityChrome ? '6px 6px 16px' : '0.6rem 0.65rem 4rem',
         display: 'flex',
         flexDirection: 'column',
         gap: '0.9rem'
@@ -792,14 +823,14 @@ export default function MobileOperationsView({
               style={{
                 marginTop: '0.5rem',
                 padding: '0.65rem 1.3rem',
-                borderRadius: brand.radiusPill,
-                background: 'linear-gradient(135deg, #C5A059, #99742B)',
+                borderRadius: brand.radiusSm,
+                background: brand.gold,
                 color: '#FFFFFF',
                 border: 'none',
-                fontWeight: 900,
-                fontSize: '0.85rem',
+                fontWeight: 800,
+                fontSize: '0.8rem',
                 cursor: 'pointer',
-                boxShadow: '0 4px 12px rgba(197, 160, 89, 0.35)'
+                boxShadow: 'none'
               }}
             >
               רענן נתונים 🔄
