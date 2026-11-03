@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { ChevronDown, ChevronUp, Home, ShoppingCart } from 'lucide-react';
 import { fieldUnitDisplayName } from '../../lib/fieldUnitCatalog';
 import { dutyUnitGroup } from '../../lib/dailyDutyReport';
 import { priorityDeskGuests } from '../../lib/priorityStay';
@@ -19,18 +20,37 @@ function compoundTitle(unit) {
   return byName && byName !== 'יחידות נוספות' ? byName : byId;
 }
 
-function cleanText(unit, bookings, today) {
+function cleanBadge(unit, bookings, today) {
   const ops = unit?.operational_status;
-  if (ops && UNIT_STATUS_BADGES[ops] && ops !== 'OCCUPIED') return UNIT_STATUS_BADGES[ops].label;
+  if (ops && UNIT_STATUS_BADGES[ops] && ops !== 'OCCUPIED') return UNIT_STATUS_BADGES[ops];
   const badge = unitDisplayStatus(unit, bookings, today);
-  if (badge && badge.key !== 'OCCUPIED') return badge.label;
-  return '—';
+  if (badge && badge.key !== 'OCCUPIED') return badge;
+  return null;
 }
 
 function guestText(unit, bookings, today) {
   const desk = priorityDeskGuests(bookings, unit.id, today);
   if (desk.roomStatus) return desk.roomStatus;
   return lodgingLabel(lodgingKey(unit));
+}
+
+function guestTone(unit, bookings, today) {
+  const desk = priorityDeskGuests(bookings, unit.id, today);
+  if (desk.roomStatus) return 'stay';
+  return lodgingKey(unit) === 'OCCUPIED' ? 'in' : 'out';
+}
+
+function groupChip(units, bookings, today) {
+  const badges = units.map((unit) => cleanBadge(unit, bookings, today)).filter(Boolean);
+  const dirty = badges.filter((badge) => badge.key === 'DIRTY' || badge.key === 'IN_PROGRESS' || badge.key === 'NEEDS_COMPLETIONS').length;
+  const ready = badges.filter((badge) => badge.key === 'READY').length;
+  if (dirty) {
+    return { tone: 'alert', label: `${dirty} לניקוי`, sub: `${ready} מוכנים מתוך ${units.length}` };
+  }
+  if (units.length && ready === units.length) {
+    return { tone: 'ready', label: 'מוכן', sub: `${ready} מוכנים מתוך ${units.length}` };
+  }
+  return { tone: 'ready', label: `${units.length} יחידות`, sub: `${units.length} יחידות במתחם` };
 }
 
 export default function PhoneOperationsBoard({
@@ -95,6 +115,7 @@ export default function PhoneOperationsBoard({
     <div className="ops-compounds" dir="rtl">
       {groups.map((group) => {
         const expanded = Boolean(open[group.title]);
+        const chip = groupChip(group.units, bookings, today);
         return (
           <section className={`ops-compound${expanded ? ' is-open' : ''}`} key={group.title}>
             <button
@@ -103,8 +124,20 @@ export default function PhoneOperationsBoard({
               aria-expanded={expanded}
               onClick={() => setOpen((current) => ({ ...current, [group.title]: !current[group.title] }))}
             >
-              <span>{group.title}</span>
-              <span className="ops-compound-count">{group.units.length}</span>
+              <span className="ops-compound-mark" aria-hidden="true"><Home size={15} /></span>
+              <span className="ops-compound-copy">
+                <span className="ops-compound-title">
+                  <span className="ops-compound-name">{group.title}</span>
+                  <span className={`ops-compound-chip is-${chip.tone}`}>{chip.label}</span>
+                </span>
+                <span className="ops-compound-sub">{chip.sub}</span>
+              </span>
+              <span className="ops-compound-side">
+                <span className="ops-compound-count">{group.units.length}</span>
+                <span className="ops-compound-chevron" aria-hidden="true">
+                  {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                </span>
+              </span>
             </button>
             {expanded ? (
               <div className="ops-compound-body">
@@ -115,13 +148,24 @@ export default function PhoneOperationsBoard({
                 </div>
                 {group.units.map((unit) => {
                   const stay = lodgingKey(unit);
+                  const badge = cleanBadge(unit, bookings, today);
+                  const tone = guestTone(unit, bookings, today);
                   return (
                     <div className="ops-unit-row" key={unit.id}>
                       <span className="ops-unit-name">{fieldUnitDisplayName(unit)}</span>
-                      <span className="ops-clean-status">{cleanText(unit, bookings, today)}</span>
+                      <span className="ops-clean-status">
+                        {badge ? (
+                          <span
+                            className="ops-clean-chip"
+                            style={{ color: badge.color, background: badge.bg, borderColor: badge.border || badge.color }}
+                          >
+                            {badge.label}
+                          </span>
+                        ) : '—'}
+                      </span>
                       <button
                         type="button"
-                        className={`ops-guest-status${stay === 'OCCUPIED' ? ' is-in' : ''}`}
+                        className={`ops-guest-status is-${tone}`}
                         onClick={(event) => {
                           const rect = event.currentTarget.getBoundingClientRect();
                           setMenu({
@@ -150,8 +194,24 @@ export default function PhoneOperationsBoard({
           aria-expanded={Boolean(open.shop)}
           onClick={() => setOpen((current) => ({ ...current, shop: !current.shop }))}
         >
-          <span>רכש</span>
-          <span className="ops-compound-count">{shoppingItems.filter((item) => !item.done).length}</span>
+          <span className="ops-compound-mark" aria-hidden="true"><ShoppingCart size={15} /></span>
+          <span className="ops-compound-copy">
+            <span className="ops-compound-title">
+              <span className="ops-compound-name">רכש</span>
+              <span className={`ops-compound-chip ${shoppingItems.some((item) => !item.done) ? 'is-alert' : 'is-ready'}`}>
+                {shoppingItems.filter((item) => !item.done).length} חסרים
+              </span>
+            </span>
+            <span className="ops-compound-sub">
+              {shoppingItems.some((item) => !item.done) ? 'פריטים שעדיין חסרים' : 'הרשימה הושלמה'}
+            </span>
+          </span>
+          <span className="ops-compound-side">
+            <span className="ops-compound-count">{shoppingItems.filter((item) => !item.done).length}</span>
+            <span className="ops-compound-chevron" aria-hidden="true">
+              {open.shop ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </span>
+          </span>
         </button>
         {open.shop ? (
           <div className="ops-compound-body">

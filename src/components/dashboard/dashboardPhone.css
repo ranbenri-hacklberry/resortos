@@ -130,43 +130,116 @@
 .ops-compounds {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 6px;
+  gap: 8px;
+  padding: 8px;
   background: #eaecf0;
   color: #0f172a;
   font-family: Tahoma, "Segoe UI", Arial, sans-serif;
   font-size: 11px;
 }
 .ops-compound {
-  background: #f8fafc;
-  border: 1px solid #94a3b8;
-  border-radius: 2px;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  overflow: hidden;
 }
 .ops-compound-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
   width: 100%;
-  min-height: 32px;
+  min-height: 44px;
   margin: 0;
-  padding: 4px 8px;
+  padding: 6px 8px;
   border: 0;
   background: #f8fafc;
-  color: #1b365d;
-  font: 700 13px/1.2 Tahoma, "Segoe UI", Arial, sans-serif;
+  color: #0f172a;
   text-align: right;
   cursor: pointer;
 }
 .ops-compound.is-open .ops-compound-head {
-  border-bottom: 1px solid #cbd5e1;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f1f5f9;
+}
+.ops-compound-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #94a3b8;
+  background: #dbeafe;
+  color: #1b365d;
+  box-shadow: 0 2px 6px rgba(27, 54, 93, 0.12);
+}
+.ops-compound-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.ops-compound-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.ops-compound-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 800 13px/1.2 Tahoma, "Segoe UI", Arial, sans-serif;
+  color: #0f172a;
+}
+.ops-compound-chip {
+  flex: 0 0 auto;
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid #6ee7b7;
+  background: #ecfdf5;
+  color: #047857;
+  font: 800 11px/1.3 Tahoma, "Segoe UI", Arial, sans-serif;
+}
+.ops-compound-chip.is-alert {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+.ops-compound-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #64748b;
+  font: 700 11px/1.2 Tahoma, "Segoe UI", Arial, sans-serif;
+}
+.ops-compound-side {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
 }
 .ops-compound-count {
-  flex: 0 0 auto;
-  min-width: 18px;
   color: #1b365d;
-  font-size: 12px;
-  font-weight: 800;
+  font: 800 13px/1 Tahoma, "Segoe UI", Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.ops-compound-chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.05);
+  color: #64748b;
 }
 .ops-compound-body { background: #fff; }
 .ops-unit-row {
@@ -193,12 +266,25 @@
 }
 .ops-unit-name { font-weight: 700; }
 .ops-clean-status { color: #334155; }
+.ops-clean-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 20px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font: 700 11px/1 Tahoma, "Segoe UI", Arial, sans-serif;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .ops-guest-status {
-  min-height: 26px;
+  min-height: 22px;
   margin: 0;
-  padding: 0 4px;
+  padding: 0 6px;
   border: 1px solid #94a3b8;
-  border-radius: 0;
+  border-radius: 999px;
   background: #f8fafc;
   color: #1b365d;
   font: 700 11px/1 Tahoma, "Segoe UI", Arial, sans-serif;
@@ -208,16 +294,29 @@
   white-space: nowrap;
 }
 .ops-guest-status.is-in {
-  background: #dbeafe;
-  border-color: #1b365d;
+  background: #ede9fe;
+  border-color: #c4b5fd;
+  color: #6d28d9;
+}
+.ops-guest-status.is-out {
+  background: #ecfdf5;
+  border-color: #6ee7b7;
+  color: #047857;
+}
+.ops-guest-status.is-stay {
+  background: #e0f2fe;
+  border-color: #7dd3fc;
+  color: #0369a1;
 }
 .ops-guest-menu {
   position: fixed;
   z-index: 30;
   min-width: 96px;
+  overflow: hidden;
   background: #fff;
-  border: 1px solid #94a3b8;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
 }
 .ops-guest-menu button {
   display: block;
@@ -227,11 +326,12 @@
   border-bottom: 1px solid #e2e8f0;
   background: #fff;
   color: #0f172a;
-  font: 700 12px/1 Tahoma, "Segoe UI", Arial, sans-serif;
+  font: 700 11px/1 Tahoma, "Segoe UI", Arial, sans-serif;
   text-align: right;
   padding: 0 8px;
   cursor: pointer;
 }
+.ops-guest-menu button:last-child { border-bottom: 0; }
 .ops-guest-menu button.is-on,
 .ops-guest-menu button:hover { background: #dbeafe; }
 .ops-compound-empty {
