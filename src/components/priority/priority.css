@@ -3755,6 +3755,22 @@
 .priority-root.is-phone .unit-status {
   min-width: 0;
 }
+.priority-root.is-phone .priority-body {
+  padding: 0;
+  gap: 0;
+}
+.priority-root.is-phone .week-table tbody tr:not(.area-break) > td {
+  height: auto;
+  min-height: 46px;
+  padding: 4px 3px;
+  vertical-align: middle;
+  box-sizing: border-box;
+}
+.priority-root.is-phone .unit-status,
+.priority-root.is-phone .week-table tbody .stay-pill {
+  min-height: 40px;
+  box-sizing: border-box;
+}
 .priority-root.is-phone .unit-name {
   display: block;
   overflow: hidden;

@@ -19,6 +19,13 @@ const PHONE_FIT = `
   style.setAttribute('data-resortos-phone', '1');
   style.textContent = [
     'html.resortos-app { font-size: 15px !important; -webkit-text-size-adjust: 100% !important; }',
+    'html.resortos-app, html.resortos-app body, html.resortos-app #root { margin: 0 !important; padding-top: 0 !important; }',
+    'html.resortos-app .boot { padding: 12px 16px !important; }',
+    'html.resortos-app .dashboard-app, html.resortos-app .dashboard-app.is-phone, html.resortos-app .dashboard-app.is-phone header { margin-top: 0 !important; padding-top: 0 !important; }',
+    'html.resortos-app .dashboard-app.is-phone header { padding: 4px 8px !important; }',
+    'html.resortos-app .priority-root.is-phone .priority-body { padding-top: 0 !important; }',
+    'html.resortos-app .priority-root.is-phone .week-table tbody tr:not(.area-break) > td { height: auto !important; min-height: 46px !important; padding-top: 4px !important; padding-bottom: 4px !important; box-sizing: border-box !important; }',
+    'html.resortos-app .priority-root.is-phone .unit-status, html.resortos-app .priority-root.is-phone .week-table tbody .stay-pill { min-height: 40px !important; box-sizing: border-box !important; }',
     'html.resortos-app .priority-root.is-phone .priority-status { display: none !important; }',
     'html.resortos-app .priority-root.is-phone .priority-toolbar { display: none !important; }',
     'html.resortos-app .priority-root.is-phone .priority-title { display: none !important; }',
@@ -27,7 +34,7 @@ const PHONE_FIT = `
     'html.resortos-app .priority-root.is-phone .week-table .week-cell, html.resortos-app .priority-root.is-phone .week-table thead th.is-today { width: auto !important; min-width: 0 !important; }',
     'html.resortos-app .priority-root.is-phone .phone-day-switch { max-width: 100%; }',
     'html.resortos-app .priority-root.is-phone .phone-day-switch button { min-width: 22px !important; height: 22px !important; font-size: 13px !important; }',
-    'html.resortos-app header { padding: 6px 8px !important; }',
+    'html.resortos-app header { padding: 4px 8px !important; }',
     'html.resortos-app button[style*="#C5A059"], html.resortos-app button[style*="linear-gradient(135deg, #C5A059"] { background: #1b365d !important; color: #f8fafc !important; border-color: #0f2942 !important; box-shadow: none !important; border-radius: 2px !important; }',
     'html.resortos-app .mobile-ops-view, html.resortos-app .hotelos-ops-page, html.resortos-app .dashboard-finance, html.resortos-app .dashboard-chloe { background: #eaecf0 !important; color: #0f172a !important; font-family: Tahoma, "Segoe UI", Arial, sans-serif !important; }',
     'html.resortos-app [style*="#FAF8F3"], html.resortos-app [style*="#FDFBF7"] { background-color: #eaecf0 !important; }',
@@ -60,8 +67,16 @@ const BRIDGE = `
 true;
 `;
 
+function priorityDashboardUrl(url) {
+  const base = String(url || '');
+  if (/[?&]tab=priority(?:&|$)/.test(base)) return base;
+  if (/[?&]tab=/.test(base)) return base.replace(/([?&]tab=)[^&]*/, '$1priority');
+  return `${base}${base.includes('?') ? '&' : '?'}tab=priority`;
+}
+
 export default function DashboardScreen({ onOpenCharge, contentInsetBottom = 84 }) {
   const phoneFit = PHONE_FIT.replace('__FAB_PAD__', String(Math.max(72, Math.round(contentInsetBottom))));
+  const uri = priorityDashboardUrl(dashboardUrl);
   const [ready, setReady] = useState(false);
 
   const onMessage = (event) => {
@@ -104,7 +119,7 @@ export default function DashboardScreen({ onOpenCharge, contentInsetBottom = 84 
         </View>
       ) : null}
       <WebView
-        source={{ uri: dashboardUrl }}
+        source={{ uri }}
         style={styles.web}
         onLoadEnd={() => setReady(true)}
         textZoom={100}

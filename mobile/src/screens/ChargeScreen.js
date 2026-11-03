@@ -140,7 +140,7 @@ export default function ChargeScreen({ preset, onClose }) {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+    <ScrollView style={styles.screen} contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
       {onClose ? (
         <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="חזרה לדשבורד" style={styles.back}>
           <Text style={styles.backText}>חזרה לדשבורד</Text>
@@ -157,7 +157,7 @@ export default function ChargeScreen({ preset, onClose }) {
         onChangeText={setAmount}
         keyboardType="decimal-pad"
         placeholder="0"
-        placeholderTextColor="#B7A89A"
+        placeholderTextColor="#94a3b8"
         style={styles.amount}
         textAlign="right"
       />
@@ -174,7 +174,7 @@ export default function ChargeScreen({ preset, onClose }) {
 
       {phase === 'tap' ? (
         <View style={styles.wait}>
-          <ActivityIndicator color="#10A37F" size="large" />
+          <ActivityIndicator color="#1b365d" size="large" />
           <Text style={styles.waitText}>הצמידו את הכרטיס לגב הטלפון</Text>
         </View>
       ) : null}
@@ -210,10 +210,10 @@ export default function ChargeScreen({ preset, onClose }) {
 
       {manual && phase !== 'done' ? (
         <View style={styles.manual}>
-          <TextInput value={cardNumber} onChangeText={setCardNumber} keyboardType="number-pad" placeholder="מספר כרטיס" placeholderTextColor="#B7A89A" style={styles.input} textAlign="right" />
+          <TextInput value={cardNumber} onChangeText={setCardNumber} keyboardType="number-pad" placeholder="מספר כרטיס" placeholderTextColor="#94a3b8" style={styles.input} textAlign="right" />
           <View style={styles.row}>
-            <TextInput value={cvv} onChangeText={setCvv} keyboardType="number-pad" placeholder="CVV" placeholderTextColor="#B7A89A" style={[styles.input, styles.half]} textAlign="right" />
-            <TextInput value={expiry} onChangeText={setExpiry} keyboardType="number-pad" placeholder="תוקף MM/YY" placeholderTextColor="#B7A89A" style={[styles.input, styles.half]} textAlign="right" />
+            <TextInput value={cvv} onChangeText={setCvv} keyboardType="number-pad" placeholder="CVV" placeholderTextColor="#94a3b8" style={[styles.input, styles.half]} textAlign="right" />
+            <TextInput value={expiry} onChangeText={setExpiry} keyboardType="number-pad" placeholder="תוקף MM/YY" placeholderTextColor="#94a3b8" style={[styles.input, styles.half]} textAlign="right" />
           </View>
           <Pressable style={styles.primary} onPress={onManual}>
             <Text style={styles.primaryText}>חיוב בהקלדה</Text>
@@ -225,46 +225,86 @@ export default function ChargeScreen({ preset, onClose }) {
   );
 }
 
+const font = 'sans-serif';
+
 const styles = StyleSheet.create({
-  page: { padding: 22, paddingBottom: 48, backgroundColor: '#FAF8F3' },
-  back: { alignSelf: 'flex-start', marginBottom: 8 },
-  backText: { color: '#1b365d', fontSize: 16, fontWeight: '800' },
-  kicker: { color: '#C5A059', fontWeight: '800', fontSize: 14 },
-  title: { fontSize: 40, fontWeight: '900', color: '#26130F', marginTop: 4 },
-  banner: { marginTop: 10, backgroundColor: '#F3E6C8', color: '#26130F', padding: 10, borderRadius: 12, overflow: 'hidden', fontWeight: '700' },
-  booking: { marginTop: 14, fontSize: 16, color: '#6B5C53' },
-  label: { marginTop: 22, fontSize: 16, fontWeight: '800', color: '#26130F' },
-  amount: {
-    marginTop: 8,
-    backgroundColor: '#fff',
-    borderRadius: 16,
+  screen: { flex: 1, backgroundColor: '#eaecf0' },
+  page: { padding: 16, paddingBottom: 40, backgroundColor: '#eaecf0' },
+  back: { alignSelf: 'flex-start', marginBottom: 10 },
+  backText: { color: '#1b365d', fontFamily: font, fontSize: 15, fontWeight: '800' },
+  kicker: { color: '#1b365d', fontFamily: font, fontWeight: '800', fontSize: 13 },
+  title: { fontFamily: font, fontSize: 28, fontWeight: '800', color: '#0f172a', marginTop: 2 },
+  banner: {
+    marginTop: 12,
+    backgroundColor: '#f8fafc',
+    color: '#0f172a',
+    padding: 10,
+    borderRadius: 2,
     borderWidth: 1,
-    borderColor: '#E7DFD4',
-    fontSize: 42,
-    fontWeight: '900',
-    color: '#26130F',
-    paddingHorizontal: 16,
-    paddingVertical: 10
+    borderColor: '#94a3b8',
+    overflow: 'hidden',
+    fontFamily: font,
+    fontWeight: '700'
   },
-  stepper: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-  step: { width: 64, height: 64, borderRadius: 16, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E7DFD4' },
-  stepText: { fontSize: 32, fontWeight: '800', color: '#26130F' },
-  stepValue: { flex: 1, textAlign: 'center', fontSize: 36, fontWeight: '900', color: '#26130F' },
-  warn: { marginTop: 10, color: '#9B2335', fontWeight: '700' },
-  actions: { marginTop: 28, gap: 12 },
-  primary: { backgroundColor: '#10A37F', borderRadius: 18, paddingVertical: 18, alignItems: 'center' },
-  primaryText: { color: '#fff', fontSize: 22, fontWeight: '900' },
-  secondary: { backgroundColor: '#fff', borderRadius: 18, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: '#E7DFD4' },
-  secondaryText: { color: '#26130F', fontSize: 18, fontWeight: '800' },
-  note: { color: '#6B5C53', fontSize: 15, lineHeight: 22 },
-  error: { marginTop: 16, color: '#9B2335', fontSize: 16, fontWeight: '800' },
-  wait: { marginTop: 28, alignItems: 'center', gap: 12 },
-  waitText: { fontSize: 20, fontWeight: '800', color: '#26130F' },
-  ok: { marginTop: 28, backgroundColor: '#E7F6F1', borderRadius: 18, padding: 18, gap: 8 },
-  okTitle: { fontSize: 24, fontWeight: '900', color: '#0D8A6A' },
-  okDeal: { fontSize: 18, color: '#26130F', fontWeight: '700' },
-  manual: { marginTop: 18, gap: 10 },
-  input: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#E7DFD4', padding: 14, fontSize: 18, color: '#26130F' },
-  row: { flexDirection: 'row', gap: 10 },
+  booking: { marginTop: 12, fontFamily: font, fontSize: 15, color: '#64748b' },
+  label: { marginTop: 16, fontFamily: font, fontSize: 14, fontWeight: '800', color: '#0f172a' },
+  amount: {
+    marginTop: 6,
+    backgroundColor: '#f8fafc',
+    borderRadius: 2,
+    borderWidth: 1,
+    borderColor: '#94a3b8',
+    fontFamily: font,
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#0f172a',
+    paddingHorizontal: 12,
+    paddingVertical: 8
+  },
+  stepper: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 8 },
+  step: {
+    width: 48,
+    height: 48,
+    borderRadius: 2,
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#94a3b8'
+  },
+  stepText: { fontFamily: font, fontSize: 24, fontWeight: '800', color: '#1b365d' },
+  stepValue: { flex: 1, textAlign: 'center', fontFamily: font, fontSize: 28, fontWeight: '800', color: '#0f172a' },
+  warn: { marginTop: 10, color: '#b45309', fontFamily: font, fontWeight: '700' },
+  actions: { marginTop: 20, gap: 8 },
+  primary: { backgroundColor: '#1b365d', borderRadius: 2, paddingVertical: 14, alignItems: 'center' },
+  primaryText: { color: '#f8fafc', fontFamily: font, fontSize: 18, fontWeight: '800' },
+  secondary: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 2,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#94a3b8'
+  },
+  secondaryText: { color: '#1b365d', fontFamily: font, fontSize: 16, fontWeight: '800' },
+  note: { color: '#64748b', fontFamily: font, fontSize: 14, lineHeight: 20 },
+  error: { marginTop: 12, color: '#b91c1c', fontFamily: font, fontSize: 15, fontWeight: '800' },
+  wait: { marginTop: 20, alignItems: 'center', gap: 12, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#94a3b8', borderRadius: 2, padding: 16 },
+  waitText: { fontFamily: font, fontSize: 16, fontWeight: '800', color: '#0f172a' },
+  ok: { marginTop: 20, backgroundColor: '#f8fafc', borderRadius: 2, borderWidth: 1, borderColor: '#94a3b8', padding: 14, gap: 6 },
+  okTitle: { fontFamily: font, fontSize: 20, fontWeight: '800', color: '#1b365d' },
+  okDeal: { fontFamily: font, fontSize: 16, color: '#0f172a', fontWeight: '700' },
+  manual: { marginTop: 14, gap: 8, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#94a3b8', borderRadius: 2, padding: 12 },
+  input: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 2,
+    borderWidth: 1,
+    borderColor: '#94a3b8',
+    padding: 12,
+    fontFamily: font,
+    fontSize: 16,
+    color: '#0f172a'
+  },
+  row: { flexDirection: 'row', gap: 8 },
   half: { flex: 1 }
 });

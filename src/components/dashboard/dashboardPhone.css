@@ -1,11 +1,14 @@
 /* Phone dashboard: smaller type, Priority colors, nothing clipped at ~360px. */
 .dashboard-app.is-phone {
   font-size: 13px;
+  margin-top: 0;
+  padding-top: 0;
 }
 
 .dashboard-app.is-phone header {
-  padding: 6px 8px !important;
-  gap: 6px !important;
+  margin: 0 !important;
+  padding: 4px 8px !important;
+  gap: 4px !important;
   background: #f8fafc !important;
   border-bottom: 1px solid #94a3b8 !important;
   box-shadow: none !important;

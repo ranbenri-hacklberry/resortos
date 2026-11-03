@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Dimensions, Linking, Platform, Pressable, StatusBar, StyleSheet, View } from 'react-native';
+import { Dimensions, Linking, Platform, Pressable, StatusBar, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { parseChargeLink } from '../functions/lib/cardcomTapCore.js';
 import DashboardScreen from './src/screens/DashboardScreen';
 import ChargeScreen from './src/screens/ChargeScreen';
@@ -14,6 +14,14 @@ function systemBottomInset() {
   if (overlap > 0 && overlap < 80) return overlap;
   if (Platform.OS === 'ios' && window.height >= 812) return 34;
   return 0;
+}
+
+function systemTopInset(window) {
+  const screen = Dimensions.get('screen');
+  const status = Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : (window.height >= 812 ? 47 : 20);
+  const outside = Math.round(screen.height - window.height);
+  if (status > 0 && outside + 1 >= status) return 0;
+  return status;
 }
 
 function CardIcon() {
@@ -61,12 +69,14 @@ export default function App() {
     setTab('charge');
   };
 
+  const window = useWindowDimensions();
+  const topInset = systemTopInset(window);
   const bottomInset = systemBottomInset();
   const fabClearance = bottomInset + FAB + 28;
 
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor="#eaecf0" />
+    <View style={[styles.root, { paddingTop: topInset }]}>
+      <StatusBar barStyle="dark-content" backgroundColor="#eaecf0" translucent={false} />
       <View style={styles.body}>
         {tab === 'dashboard' ? (
           <DashboardScreen onOpenCharge={openCharge} contentInsetBottom={fabClearance} />
@@ -89,11 +99,11 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#eaecf0', paddingTop: StatusBar.currentHeight || 0 },
+  root: { flex: 1, backgroundColor: '#eaecf0' },
   body: { flex: 1 },
   fab: {
     position: 'absolute',
-    start: 16,
+    end: 16,
     width: FAB,
     height: FAB,
     borderRadius: FAB / 2,
