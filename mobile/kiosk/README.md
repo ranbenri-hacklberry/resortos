@@ -225,7 +225,43 @@ From `mobile/kiosk/android`, with the Android SDK installed (`local.properties` 
 
 The debug APK is a mock until an AAR is placed in `app/libs/`. A live APK has to be finalized with Cardcom's `finalizer` the same way as the desk app (`mobile/scripts/finalize-apk.sh`). Cardcom must register this package's signing SHA-256. It is not the Mialis certificate.
 
-`mobile/kiosk/esp32/cart_pay.ino` is the ESP32 Arduino reference. It is not part of the existing resort firmware.
+`mobile/kiosk/esp32/cart_pay/` is the ESP32 Arduino reference (sketch `cart_pay.ino`, driver `jura_uart.h` / `jura_uart.cpp`). It is not part of the existing resort firmware.
+
+## Jura X8
+
+The cart's machine is expected to be a Jura X8 (professional). After the dispense rule passes, the sketch can ask that machine to pour over its service UART. `cartBrewIfPaid` is the only pour call. It runs `brewProduct` for `JURA_DRINK` (button 1..6) only when `ok` is true, `status` is `approved`, `settled` is true, and `mock` is present and false. Every other result leaves the UART alone.
+
+The service protocol is unofficial community reverse engineering. It is **UNVERIFIED on an X8**. `brewProduct(1..6)` sends `FA:04` through `FA:09`. That map was recorded on older models. An X8 may ignore it.
+
+The X8 service port is a D-SUB 9 behind the logo. The pinout is non-standard and unpublished. Measure every pin with a multimeter before connecting a wire. The UART is 5V, 9600 8N1. The ESP32 pins are 3.3V, so TX and RX need a level shifter, with a shared ground. Leave the machine's 5V pin unconnected until a meter shows what it actually is.
+
+Each logical byte is four raw bytes, 8 ms apart. Data bits are UART bits 2 and 5, with the same polarity as [COM8/esp32-jura](https://github.com/COM8/esp32-jura) (a 1 is sent as a 1). Spare bits stay 1 (`0xFF` base, the usual Arduino form). COM8's encoder uses base `0x5B`, so the bytes differ in bit 7. COM8's decoder only samples bits 2 and 5. This has not been checked on an X8.
+
+`JuraUart::command` refuses `AN:` and `FN:` before it touches the port. Those prefixes are reported as an EEPROM wipe (`AN:0A`) and direct actuator control (`FN:`). The driver does not write them and does not log them as sent.
+
+Compile-time flags in `cart_pay.ino` (override with `-D` on `compiler.cpp.extra_flags`):
+
+| Flag | Default | Effect |
+| --- | --- | --- |
+| `JURA_ENABLED` | 0 | 0: never open the UART and never brew. 1: the driver is in the build |
+| `JURA_DRY_RUN` | 1 | Log `brewProduct(n) FA:xx` and do not write that command. A bring-up `TY:` is still sent when `JURA_BRINGUP` is 1 |
+| `JURA_BRINGUP` | 0 | `setup()` sends `TY:` and prints the reply on the USB serial console |
+| `JURA_DRINK` | 1 | Product button 1..6. Used only after the pour gate |
+
+Test order on the bench: `JURA_ENABLED=1` and `JURA_BRINGUP=1` first, and read the `TY:` reply. Then one `FA:` with a cup under the spout (`JURA_DRY_RUN=0`, a single drink index). ESP32-S3 wiring in the sketch is RX GPIO 18 and TX GPIO 17 (GPIO 19 and 20 are USB). The ESP32-P4 RX/TX numbers in the sketch are placeholders.
+
+If the service port is the wrong interface, Jura sells payment hardware instead:
+
+- Smart Payment Box, article **24069**. MDB, Nayax VPOS. It needs Smart Connect, article **72167**.
+- Payment Connect, article **25062**. The Jura page lists GIGA X8 and X8c. The plain X8 is absent from that list.
+
+Sources:
+
+- https://github.com/COM8/esp32-jura
+- https://github.com/Jutta-Proto/protocol-cpp
+- https://thank-the-maker.org/posts/somethingaboutjuragigax8/
+- https://www.jura.com/en/professional/accessories/smartpaymentbox-ch-24069
+- https://www.jura.com/en/professional/accessories/payment-connect-25062
 
 ## Verified and untested
 
@@ -246,9 +282,11 @@ Not verified:
 - the real `topliteapp` 3.0.5.3 AAR, including whether `performTransaction` can start with no button on screen
 - a live `PrepareDevice` / `ProcessSDKTransaction` / `CreateDocument` / Low Profile round trip
 - Cardcom actually calling the webhook
-- the ESP32 sketch on hardware
+- the ESP32 sketch on hardware, and the Jura service UART on an X8 (pinout, spare bit 7, and whether `FA:04`..`FA:09` selects a product)
 
 `./gradlew assembleDebug` completed for the mock build (no AAR in `app/libs`). That checks that the kiosk module compiles. It does not check Tap on Phone.
+
+`arduino-cli compile` with core `esp32:esp32` 3.3.12 succeeded for `esp32:esp32:esp32s3` (USB CDC on boot) three ways: default flags, `-DJURA_ENABLED=1 -DJURA_DRY_RUN=1 -DJURA_BRINGUP=1`, and `-DJURA_ENABLED=1 -DJURA_DRY_RUN=0`. `esp32:esp32:esp32p4` succeeded with the driver enabled, dry-run off, and bring-up on. Compile only. No board and no X8 were attached.
 
 ## Open questions for Cardcom
 
