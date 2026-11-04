@@ -1,0 +1,54 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'il.resortos.kiosk'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'il.resortos.kiosk'
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName '0.1.0'
+        def cardcomAars = fileTree(dir: "$projectDir/libs", include: ["*.aar"]).files
+        def cardcomMock = cardcomAars.isEmpty() || project.hasProperty('cardcomTapMock')
+        buildConfigField 'boolean', 'CARDCOM_TAP_MOCK', cardcomMock ? 'true' : 'false'
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    packaging {
+        resources {
+            excludes += ['META-INF/DEPENDENCIES', 'META-INF/LICENSE', 'META-INF/LICENSE.txt', 'META-INF/NOTICE']
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.13.1'
+    def cardcomAars = fileTree(dir: 'libs', include: ['*.aar'])
+    if (!cardcomAars.files.isEmpty() && !project.hasProperty('cardcomTapMock')) {
+        implementation cardcomAars
+    }
+}
