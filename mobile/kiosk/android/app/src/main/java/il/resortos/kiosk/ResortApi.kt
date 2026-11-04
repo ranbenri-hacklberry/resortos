@@ -22,6 +22,18 @@ class ResortApi(private val base: String, private val token: String) {
         return post("/api/payments/kiosk/link-status", JSONObject().put("orderId", orderId))
     }
 
+    fun basaltWallet(body: JSONObject): JSONObject = post("/api/payments/kiosk/basalt/wallets", body)
+    fun basaltTopup(body: JSONObject): JSONObject = post("/api/payments/kiosk/basalt/topup", body)
+    fun basaltPrepare(body: JSONObject): JSONObject = post("/api/payments/kiosk/basalt/tap/prepare", body)
+    fun basaltComplete(body: JSONObject): JSONObject = post("/api/payments/kiosk/basalt/tap/complete", body)
+    fun basaltSpend(body: JSONObject): JSONObject = post("/api/payments/kiosk/basalt/spend", body)
+    fun basaltRefund(body: JSONObject): JSONObject = post("/api/payments/kiosk/basalt/refund", body)
+
+    fun basaltBalance(phone: String): JSONObject {
+        val url = "$base/api/payments/kiosk/basalt/balance?phone=${URLEncoder.encode(phone, "UTF-8")}"
+        return request("GET", url, null)
+    }
+
     private fun post(path: String, body: JSONObject): JSONObject {
         return request("POST", base + path, body.toString())
     }

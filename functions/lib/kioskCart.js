@@ -254,10 +254,17 @@ export async function prepareKioskTap(env, body, deps = {}) {
     merchantCode: registration?.merchantCode || '',
     at: now,
     mock: isCardcomMock(env),
-    message: 'ממתין להצמדת כרטיס'
+    message: 'ממתין להצמדת כרטיס',
+    ...(existing?.basaltTopup ? { basaltTopup: existing.basaltTopup } : {})
   };
   await writeOrder(store, order);
   return resumePayload(order, false);
+}
+
+async function creditBasaltTopupIfTagged(env, order, deps) {
+  if (!order?.basaltTopup || order.status !== 'approved') return;
+  const { creditApprovedTopup } = await import('./basalt.js');
+  await creditApprovedTopup(env, order, deps);
 }
 
 function resumePayload(order, resume) {
@@ -285,6 +292,7 @@ export async function completeKioskTap(env, body, deps = {}) {
   const order = await readOrder(store, orderId);
   if (!order || order.channel !== 'tap') throw fail('NOT_FOUND', 'אין חיוב פתוח להזמנה');
   if (order.status === 'approved' || order.status === 'review' || order.status === 'declined') {
+    if (order.status === 'approved') await creditBasaltTopupIfTagged(env, order, deps);
     return { ...publicKioskOrder(order), idempotent: true };
   }
   const key = String(body?.idempotencyKey || '').trim();
@@ -378,6 +386,7 @@ export async function completeKioskTap(env, body, deps = {}) {
     at: nowMs(deps)
   };
   await writeOrder(store, next);
+  if (next.status === 'approved') await creditBasaltTopupIfTagged(env, next, deps);
   return publicKioskOrder(next);
 }
 
@@ -546,6 +555,7 @@ export async function confirmKioskLink(env, rawFields, deps = {}) {
     return { ok: true, status: 'unknown', settled: false, paid: false, message: 'אין דף תשלום להזמנה' };
   }
   if (order.status === 'approved' || order.status === 'review') {
+    if (order.status === 'approved') await creditBasaltTopupIfTagged(env, order, deps);
     return { ...publicKioskOrder(order), idempotent: true, paid: order.status === 'approved' };
   }
   const lpId = String(lowProfileId || order.lowProfileId || '').trim();
@@ -609,6 +619,7 @@ export async function confirmKioskLink(env, rawFields, deps = {}) {
     at: nowMs(deps)
   };
   await writeOrder(store, next);
+  if (next.status === 'approved') await creditBasaltTopupIfTagged(env, next, deps);
   return { ...publicKioskOrder(next), paid: true };
 }
 

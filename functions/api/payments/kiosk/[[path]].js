@@ -1,4 +1,5 @@
 import { errorJson, json } from '../../_db.js';
+import { basaltPageResponse, handleBasaltRequest } from '../../../lib/basalt.js';
 import {
   completeKioskTap,
   confirmKioskLink,
@@ -19,12 +20,14 @@ function text(body, status = 200, contentType = 'text/plain; charset=utf-8') {
 
 function routeError(err) {
   const code = err?.code || 'KIOSK_ERROR';
-  const status = code === 'UNAUTHORIZED' ? 401
+  const status = code === 'UNAUTHORIZED' || code === 'BAD_PIN' ? 401
     : code === 'NOT_FOUND' ? 404
-      : code === 'IN_PROGRESS' || code === 'ATTEMPT_MISMATCH' || code === 'DEVICE_MISMATCH' ? 409
+      : code === 'IN_PROGRESS' || code === 'ATTEMPT_MISMATCH' || code === 'DEVICE_MISMATCH' || code === 'FORK' || code === 'IDEMPOTENCY_MISMATCH' ? 409
         : code === 'CARDCOM_NOT_CONFIGURED' || code === 'UNCONFIGURED' ? 503
           : code === 'CARDCOM_TIMEOUT' ? 504
-            : 400;
+            : code === 'CLOSED_LOOP' || code === 'FROZEN' ? 403
+              : code === 'INSUFFICIENT' ? 402
+                : 400;
   return json({
     ok: false,
     status: 'error',
@@ -81,6 +84,16 @@ export async function onRequest(context) {
     }
   }
 
+  if (action === 'basalt' && pathParts[1] === 'page' && method === 'GET') {
+    try {
+      return await basaltPageResponse(env, request);
+    } catch (err) {
+      if (err?.code) return routeError(err);
+      console.error('[basalt page]', err?.message || err);
+      return routeError(err || new Error('שגיאת שרת'));
+    }
+  }
+
   if (action === 'done' && (method === 'GET' || method === 'POST')) {
     let result = { status: 'unknown' };
     try {
@@ -103,6 +116,12 @@ export async function onRequest(context) {
       const order = await readKioskOrder(env, orderId);
       if (!order) return errorJson('ההזמנה לא נמצאה', 404, 'NOT_FOUND');
       return json(order);
+    }
+    if (action === 'basalt') {
+      const body = method === 'GET'
+        ? Object.fromEntries(new URL(request.url).searchParams.entries())
+        : await readBody(request);
+      return await handleBasaltRequest(env, pathParts, method, body);
     }
     if (method !== 'POST') return errorJson('נתיב לא קיים', 404, 'NOT_FOUND');
     const body = await readBody(request);

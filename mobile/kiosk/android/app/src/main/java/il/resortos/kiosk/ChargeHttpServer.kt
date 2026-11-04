@@ -78,6 +78,8 @@ class ChargeHttpServer(
             return ChargeResult(400, error("BAD_JSON", "JSON לא תקין"))
         }
         if (method == "POST" && path == "/v1/charges") return coordinator.charge(json)
+        if (method == "POST" && path == "/v1/basalt/spend") return coordinator.basaltSpend(json)
+        if (method == "POST" && path == "/v1/basalt/refund") return coordinator.basaltRefund(json)
         if (method == "POST" && path == "/v1/fallback") return coordinator.fallback(json)
         val charge = Regex("^/v1/charges/([^/]+)$").matchEntire(path)
         if (method == "GET" && charge != null) return coordinator.status(decode(charge.groupValues[1]))

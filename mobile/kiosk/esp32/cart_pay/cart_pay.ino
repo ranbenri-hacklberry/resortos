@@ -19,6 +19,14 @@
 #include <HTTPClient.h>
 
 #include "jura_uart.h"
+#include "basalt_verify.h"
+
+// Basalt (BSLT). 1 BSLT = 1 ILS. Closed loop: no transfer, no cash-out.
+// The sketch holds only the server public key (BASALT_PUBKEY_B64). Never a private key.
+// JURA_ENABLED defaults to 0, so this reference does not spend or pour until you opt in.
+#ifndef BASALT_PUBKEY_B64
+#define BASALT_PUBKEY_B64 ""
+#endif
 
 #ifndef JURA_ENABLED
 #define JURA_ENABLED 0
@@ -177,6 +185,82 @@ static String cartPayAndBrew(const char *orderId, const char *amount, int timeou
   return result;
 }
 
+static bool basaltFieldSafe(const char *value) {
+  if (!value) return false;
+  for (const char *p = value; *p; p++) {
+    if (*p == '"' || *p == '\\' || *p == '\n' || *p == '\r') return false;
+  }
+  return true;
+}
+
+static bool basaltPubkey(uint8_t pk[32]) {
+  return basalt_b64_decode(BASALT_PUBKEY_B64, pk, 32) == 32;
+}
+
+static String cartBasaltPost(const char *path, const String &json) {
+  return kioskRequest("POST", path, json, 20000);
+}
+
+// Identify with a short-lived pass from the customer page, or an NFC UID plus PIN.
+// The phone forwards this to the server. The ESP checks the returned signature itself.
+static String cartBasaltSpend(const char *orderId, const char *amount, const char *pass, const char *nfcUid, const char *pin) {
+  if (!basaltFieldSafe(orderId) || !basaltFieldSafe(amount) || !basaltFieldSafe(pass) || !basaltFieldSafe(nfcUid) || !basaltFieldSafe(pin)) {
+    return "{\"ok\":false,\"status\":\"error\",\"settled\":true,\"mock\":true,\"error\":\"BAD_FIELD\"}";
+  }
+  String body = String("{\"orderId\":\"") + orderId + "\",\"amount\":\"" + amount + "\",\"idempotencyKey\":\"" + orderId + "\"";
+  if (pass && pass[0]) body += String(",\"pass\":\"") + pass + "\"";
+  if (nfcUid && nfcUid[0]) body += String(",\"nfcUid\":\"") + nfcUid + "\"";
+  if (pin && pin[0]) body += String(",\"pin\":\"") + pin + "\"";
+  body += "}";
+  return cartBasaltPost("/v1/basalt/spend", body);
+}
+
+static void cartBasaltRefund(const char *orderId) {
+  if (!basaltFieldSafe(orderId)) return;
+  String body = String("{\"orderId\":\"") + orderId + "\"}";
+  String result = cartBasaltPost("/v1/basalt/refund", body);
+  Serial.print("basalt: refund ");
+  Serial.println(jsonText(result, "status").length() ? jsonText(result, "status") : jsonText(result, "error"));
+}
+
+// Spend BSLT only after the server signature checks out, then brew through the pour gate.
+// A bad signature or a live brew failure asks for the BSLT back. That refund is not shekels.
+static bool cartBasaltPayAndBrew(const char *orderId, const char *amount, const char *pass, int drink, const char *nfcUid = "", const char *pin = "") {
+#if !JURA_ENABLED
+  Serial.println("basalt: JURA_ENABLED=0, not spending BSLT");
+  return false;
+#else
+  uint8_t pk[32];
+  if (!basaltPubkey(pk)) {
+    Serial.println("basalt: BASALT_PUBKEY_B64 missing, not spending BSLT");
+    return false;
+  }
+  String result = cartBasaltSpend(orderId, amount, pass, nfcUid, pin);
+  String payloadB64 = jsonText(result, "payloadB64");
+  String signatureB64 = jsonText(result, "signature");
+  uint8_t payload[1024];
+  uint8_t sig[64];
+  int payloadLen = basalt_b64_decode(payloadB64.c_str(), payload, sizeof(payload));
+  int sigLen = basalt_b64_decode(signatureB64.c_str(), sig, sizeof(sig));
+  bool verified = payloadLen > 0 && sigLen == 64 && basalt_verify_worker(payload, (size_t)payloadLen, sig, pk) == 1;
+  String signedJson;
+  if (verified) {
+    for (int i = 0; i < payloadLen; i++) signedJson += (char)payload[i];
+  }
+  bool sameOrder = verified && jsonText(signedJson, "orderId") == orderId && jsonText(signedJson, "amount") == amount;
+  if (!verified || !sameOrder || !cartMayDispense(signedJson)) {
+    Serial.println("basalt: signature or pour gate rejected, not brewing");
+    if (jsonText(result, "status") == "approved") cartBasaltRefund(orderId);
+    return false;
+  }
+  bool poured = cartBrewIfPaid(signedJson, drink);
+#if !JURA_DRY_RUN
+  if (!poured) cartBasaltRefund(orderId);
+#endif
+  return poured;
+#endif
+}
+
 static void juraBringUp() {
 #if JURA_ENABLED && JURA_BRINGUP
   String reply;
@@ -214,8 +298,13 @@ void loop() {
   // cartBrewIfPaid(result, JURA_DRINK);
   //
   // cartCancel("cart-1001");  // second task, while cartPay is blocked
+  //
+  // Pay with Basalt (BSLT). pass is the short-lived QR from the customer page.
+  // Dry-run still debits BSLT if you uncomment this, then only logs the FA: line.
+  // bool poured = cartBasaltPayAndBrew("cart-1001", "18.50", passFromQr, JURA_DRINK);
   (void)cartPayAndBrew;
   (void)cartPayQr;
   (void)cartCancel;
+  (void)cartBasaltPayAndBrew;
   delay(1000);
 }

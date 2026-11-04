@@ -263,9 +263,112 @@ Sources:
 - https://www.jura.com/en/professional/accessories/smartpaymentbox-ch-24069
 - https://www.jura.com/en/professional/accessories/payment-connect-25062
 
+## Basalt (בזלת, BSLT)
+
+בזלת היא יתרה סגורה של עגלת הקפה ושל מאליס. 1 BSLT = 1 ILS. היא לא מטבע סחיר: אין העברה בין לקוחות, אין פדיון לשקלים, והיא לא רצה על שרשרת ציבורית או בורסה.
+
+Basalt is closed-loop stored value for the cart and for Mialis Resort. 1 BSLT = 1 ILS. It is not a tradable token.
+
+הסכום נשמר ביחידות קטנות. `amount_bslt` של 100 הוא 1.00 בזלת, שהוא 1.00 ₪. טעינה, בונוס והחזר הם חיוביים. קנייה היא שלילית. תיקון (`adjustment`) יכול להיות כל אחד מהסימנים, לא אפס, ולא יכול להוריד יתרה מתחת לאפס. היתרה היא סכום שורות היומן של הארנק. אין עמודת יתרה שאפשר לעדכן.
+
+### למה אין העברה ואין פדיון
+
+`POST /api/payments/kiosk/basalt/transfer`, `cashout`, `cash-out` ו-`redeem` מחזירים 403 עם `CLOSED_LOOP`. זה לא נתיב חסר. יתרה סגורה לשימוש במקום נשארת מחוץ לרישוי של נכס קריפטו סחיר ושל שירותי תשלום להעברת כסף בין אנשים. את זה צריך לאשר רואה החשבון ועורך הדין. המוצר לא מחזיר שקלים, גם כשקונים פחות ממה שנטען.
+
+### טבלאות
+
+`migrations/009_basalt.sql`:
+
+| טבלה | תוכן |
+| --- | --- |
+| `basalt_wallets` | לקוח, טלפון (ייחודי), שם, חותמת הסכמה, סטטוס `active` / `frozen` / `closed`, גיבוב PIN, UID של תג NFC, גיבוב מפתח הדף |
+| `basalt_ledger` | יומן append-only. `seq`, `id`, `wallet_id`, `type`, `amount_bslt`, `prev_hash`, `hash`, חתימת Ed25519, `created_at` כטקסט ISO, `ref`, מפתח אידמפוטנטיות |
+| `basalt_bonus_tiers` | מדרגות בונוס. ברירת מחדל: 100→100, 200→220, 500→575 (בשקלים שלמים) |
+
+החתימה היא SHA-256 של JSON קנוני (בלי רווחים, סדר שדות קבוע: `amount_bslt`, `created_at`, `id`, `idempotency_key`, `mock`, `prev_hash`, `ref`, `type`, `wallet_id`) ואז Ed25519 על אותם בתים. `prev_hash` הראשון הוא 64 אפסים. `prev_hash` ייחודי, אז יש ילד אחד לכל חוליה. טריגר חוסם UPDATE ו-DELETE, RLS דולק, ו-`anon` / `authenticated` לא יכולים לגשת. מפתח השירות עדיין יכול `TRUNCATE`. בדיקת השרשרת היא הרשת שמאחורי זה.
+
+`ref` בטעינה הוא מזהה עסקת קארדקום. `ref` בקנייה הוא מזהה ההזמנה של העגלה.
+
+### מפתחות
+
+| שם | איפה |
+| --- | --- |
+| `BASALT_ED25519_PRIVATE_KEY` | שרת בלבד. PKCS8 ב-base64, בלי שורה בקובץ |
+| `BASALT_ED25519_PUBLIC_KEY` | שרת. 32 בתים גולמיים ב-base64. השרת חותם בדיקה ודוחה זוג שלא תואם |
+| `BASALT_PIN_PEPPER` | שרת. אם חסר, נופלים ל-`CHECKOUT_MAILBOX_SECRET`. ה-PIN הוא SHA-256 של `pepper:walletId:4digits` |
+| `BASALT_PUBKEY_B64` | דגל קומפילציה ב-ESP בלבד. אותו מפתח ציבורי. אין מפתח פרטי ואין טוקן על הבקר |
+
+מפתח הדף האישי הוא 32 בתים אקראיים. בשרת נשמר רק ה-SHA-256. הוא חוזר פעם אחת ב-`pageUrl`.
+
+### זיהוי ותשלום
+
+דף הלקוח `GET /api/payments/kiosk/basalt/page?w=&k=` לא דורש את טוקן הקיוסק. הוא מציג יתרה וקוד QR קצר (60 שניות, `aud` של `basalt-pass`). הדף מתרענן כל 45 שניות. הקוד מהדף לא מבקש PIN שוב. תג NFC (`8–20` ספרות הקס) כן מבקש PIN אם הוגדר. ארנק קפוא או סגור נדחה. טלפון אחד לארנק. הסכמה חייבת להיות `true`.
+
+נתיבי השרת, כולם תחת `/api/payments/kiosk/basalt/` ועם `CARDCOM_KIOSK_TOKEN`, חוץ מהדף:
+
+| נתיב | מה הוא עושה |
+| --- | --- |
+| `POST wallets` | פותח ארנק. אותו טלפון מחזיר את הארנק הקיים |
+| `GET balance?phone=` | יתרה מהיומן |
+| `POST topup` | דף Low Profile לטעינה. אחרי אישור נכתבות שורות `topup` ו-`bonus` |
+| `POST tap/prepare` ו-`tap/complete` | אותה טעינה בהצמדת כרטיס |
+| `POST spend` | חיוב אטומי. מפתח אידמפוטנטיות. יתרה חסרה נדחית. חוזר אישור חתום |
+| `POST refund` | מחזיר בזלת לאותו ארנק, לא שקלים. מפתח `refund:{orderId}` |
+| `POST adjust` | תיקון עם סיבה. לא מזומן |
+| `POST nfc`, `pass`, `page-key` | שיוך תג, הנפקת קוד, סיבוב מפתח הדף |
+| `GET verify` | מחשב מחדש גיבובים וחתימות ומדווח על החוליה השבורה הראשונה |
+| `GET pubkey` | המפתח הציבורי |
+
+מדרגה מדויקת מקבלת את הבונוס. כל סכום אחר מזוכה אחד-לאחד. 500 בזלת גבוה מהתקרה של דף ושל הצמדה (ברירת מחדל ₪300, `KIOSK_LINK_MAX_ILS`). לא מעלים את התקרה בשביל זה. 200 עובר גם בהצמדה וגם בדף. החשבונית של קארדקום נרשמת על סכום הכרטיס, בלי הבונוס. קנייה בבזלת לא פותחת מסמך שני.
+
+הטלפון חושף לעגלה `POST /v1/basalt/spend` ו-`POST /v1/basalt/refund` ומעביר את גוף השרת כמו שהוא, כולל `payloadB64` והחתימה. הוא לא מדליק `mock` בעצמו.
+
+ה-ESP (`cartBasaltPayAndBrew`) מזהה, מבקש חיוב, בודק את חתימת השרת ב-TweetNaCl על משימה עם מחסנית של 32KB, ורק אז קורא ל-`cartBrewIfPaid`. אין מזיגה אם `JURA_ENABLED` הוא 0 או אם המפתח הציבורי לא באורך 32 בתים. חתימה שנכשלת אחרי `approved`, או מזיגה חיה שנכשלה (`JURA_DRY_RUN=0`), מבקשת החזר בזלת. **הרצה יבשה עדיין מחייבת בזלת** אם מפעילים את הקריאה, ואז רק רושמת את שורת `FA:` בלי לכתוב למכונה. הלולאה לא מפעילה את זה לבד.
+
+בדיקה מקומית: `node --test functions/lib/basalt.test.js`. שרשרת שמורה: `node scripts/verify-basalt.mjs chain.json <publicKeyB64>`.
+
+### למה בזלת? / Why Basalt?
+
+1. הסלע הנפוץ ביותר על פני כדור הארץ – רוב קרקעית האוקיינוסים בנויה מבזלת.  
+   The most common rock on the surface of the Earth. Most of the ocean floor is basalt.
+2. גם על הירח ועל מאדים – הכתמים הכהים בירח הם מישורי בזלת עצומים.  
+   The Moon and Mars too. The dark patches on the Moon are huge basalt plains.
+3. רוב שכבות הבזלת בגולן נוצרו בשני מיליון השנים האחרונות, מהתפרצויות של הרי געש בצפון הגולן כמו הר בנטל והר אביטל.  
+   Most Golan basalt is from the last two million years, from volcanoes such as Bental and Avital.
+4. בריכת המשושים נוצרה כשלבה התקררה והתכווצה לאט ונסדקה לעמודים משושים – כמו מסלול הענקים באירלנד.  
+   Hexagon Pool formed as lava cooled, shrank, and cracked into columns, like the Giant's Causeway.
+5. בזלת צפופה פי שלושה בערך ממים, ולכן מבני הבזלת העתיקים בגולן שרדו אלפי שנים.  
+   About three times as dense as water, which is why ancient Golan basalt buildings lasted.
+6. בתי כנסת עתיקים כמו באום אל-קנאטיר ובכורזים נבנו מבזלת, ובכורזים יש גם "כיסא משה" מבזלת.  
+   Ancient synagogues at Umm el-Kanatir and Chorazin are basalt, including the Seat of Moses.
+7. בזלת מתבלה לאדמה עשירה במינרלים – אחת הסיבות שהכרמים והמטעים בגולן כל כך טובים.  
+   It weathers into mineral-rich soil, one reason the Golan vineyards and orchards do well.
+8. מתיכים בזלת ומושכים ממנה סיבים חזקים ועמידים לאש, שמחליפים סיבי זכוכית בבנייה וברכב.  
+   Melted basalt is drawn into strong, fire-resistant fibers that replace glass fiber.
+9. באיסלנד מזריקים CO₂ לבזלת והוא הופך לאבן תוך כשנתיים – פתרון מבטיח לאגירת פחמן.  
+   Iceland injects CO₂ into basalt and it becomes stone in about two years.
+10. אבני בזלת שומרות חום זמן רב, ולכן משתמשים בהן לעיסוי באבנים חמות ולצלייה.  
+    Basalt holds heat for a long time, so it is used for hot-stone massage and for grilling.
+
+הצד המזרחי של הכנרת מוקף בזלת, ורמות יושבת על זרמי לבה עתיקים שהשתפכו לכיוון האגם.  
+The east shore of the Kinneret is ringed with basalt, and Ramot sits on old lava flows that ran toward the lake.
+
+### שאלות פתוחות לרואה החשבון
+
+אלה שאלות, לא תשובה משפטית:
+
+1. בטעינה קארדקום מפיק חשבונית מס קבלה על סכום החיוב בכרטיס. הבונוס (למשל 20 בזלת על טעינת 200) אינו חיוב. האם צריך מסמך גם כשבזלת נצרכת בכוס, או שהמסמך בטעינה מספיק?
+2. מה המדיניות ליתרה שלא נוצלה: פקיעה, שבירה, או שהיא נשארת בארנק. אין פדיון לשקלים במוצר.
+3. האם יתרה סגורה כזאת, בלי העברה ובלי משיכה, נשארת מחוץ לרישוי של שירותי תשלום ושל נכס פיננסי. לאשר מול עורך הדין.
+
+### שאלות פתוחות לקארדקום, בנוסף לרשימה למטה
+
+1. תנאי טוקן ותשלום כרטיס-שלא-בפני-הלקוח. הטעינה כאן היא הצמדה חדשה או דף מתארח. מספר הכרטיס לא נשמר אצלנו.
+2. החיוב בכרטיס הוא סכום התשלום בלבד, לא סכום הבזלת שמקבלים אחרי בונוס. לאשר שזה המסמך הנכון.
+
 ## Verified and untested
 
-Verified with `node --test functions/lib/kioskCart.test.js` (and the existing `functions/lib/cardcomTap.test.js` still passes):
+Verified with `node --test functions/lib/basalt.test.js functions/lib/kioskCart.test.js functions/lib/cardcomTap.test.js` (22 tests, all passing):
 
 - kiosk routes reject a missing token, a short token, and the kiosk token is not a dashboard session
 - a tap prepare builds the same SDK sale as the desk, capture runs once, the invoice URL comes back, a repeat does not capture again
@@ -275,6 +378,7 @@ Verified with `node --test functions/lib/kioskCart.test.js` (and the existing `f
 - a Low Profile create points `WebHookUrl` at `/api/payments/kiosk/webhook` and leaves `ApiPassword` on the outbound Cardcom call only
 - GetLpResult must say paid, the Low Profile id must be the one we stored, and a different amount becomes `review` instead of `approved`
 - the mock webhook marks the order paid and the done page does not echo the token
+- a Basalt hash chain reports the first broken link (`CANONICAL`, `SIGNATURE`, `PREV`), a repeated spend does not debit twice, a short balance is refused, the memory ledger throws on update and delete, a 200 ILS top-up credits 220 BSLT once, a mock spend stays `mock: true`, and transfer / cash-out return 403 `CLOSED_LOOP`
 
 Not verified:
 
@@ -286,7 +390,7 @@ Not verified:
 
 `./gradlew assembleDebug` completed for the mock build (no AAR in `app/libs`). That checks that the kiosk module compiles. It does not check Tap on Phone.
 
-`arduino-cli compile` with core `esp32:esp32` 3.3.12 succeeded for `esp32:esp32:esp32s3` (USB CDC on boot) three ways: default flags, `-DJURA_ENABLED=1 -DJURA_DRY_RUN=1 -DJURA_BRINGUP=1`, and `-DJURA_ENABLED=1 -DJURA_DRY_RUN=0`. `esp32:esp32:esp32p4` succeeded with the driver enabled, dry-run off, and bring-up on. Compile only. No board and no X8 were attached.
+`arduino-cli compile` with core `esp32:esp32` 3.3.12 succeeded for `esp32:esp32:esp32s3` (USB CDC on boot) three ways: default flags, `-DJURA_ENABLED=1 -DJURA_DRY_RUN=1 -DJURA_BRINGUP=1`, and `-DJURA_ENABLED=1 -DJURA_DRY_RUN=0` with a 32-byte `BASALT_PUBKEY_B64` so the TweetNaCl verify stays in the link. `esp32:esp32:esp32p4` succeeded with the driver enabled, dry-run off, bring-up on, and the same public key. Compile only. No board, no X8, and no Basalt spend were attached. The all-zero public key is not a real point; verify returns false, which is enough to keep the call linked.
 
 ## Open questions for Cardcom
 

@@ -80,6 +80,9 @@ class ChargeCoordinator(
         }
 
         val job = Job(orderId, amount, timeout)
+        job.basalt = body.optBoolean("basaltTopup")
+        job.walletId = body.optString("walletId")
+        job.phone = body.optString("phone")
         synchronized(startLock) {
             val current = inflight
             if (current != null) {
@@ -94,6 +97,41 @@ class ChargeCoordinator(
             clearInflight(job)
             error(500, "TAP_FAILED", err.message ?: "החיוב לא הושלם", orderId)
         }
+    }
+
+    fun basaltSpend(body: JSONObject): ChargeResult = basaltProxy(api?.basaltSpend(body))
+
+    fun basaltRefund(body: JSONObject): ChargeResult = basaltProxy(api?.basaltRefund(body))
+
+    fun basaltWallet(phone: String, name: String, pin: String): ChargeResult {
+        val body = JSONObject().put("phone", phone).put("displayName", name).put("consent", true)
+        if (pin.isNotBlank()) body.put("pin", pin)
+        return basaltProxy(api?.basaltWallet(body))
+    }
+
+    fun basaltBalance(phone: String): ChargeResult = basaltProxy(api?.basaltBalance(phone))
+
+    fun basaltTopup(phone: String, amount: String): ChargeResult {
+        return basaltProxy(api?.basaltTopup(JSONObject().put("phone", phone).put("amount", amount)))
+    }
+
+    fun basaltTap(phone: String, walletId: String, amount: String): ChargeResult {
+        return charge(
+            JSONObject()
+                .put("orderId", "bslt-" + System.currentTimeMillis())
+                .put("amount", amount)
+                .put("phone", phone)
+                .put("walletId", walletId)
+                .put("basaltTopup", true)
+                .put("timeoutSec", 60)
+        )
+    }
+
+    private fun basaltProxy(remote: JSONObject?): ChargeResult {
+        if (api == null || remote == null) return error(503, "UNCONFIGURED", "אין שרת לבזלת")
+        val http = remote.optInt("_http", 200)
+        remote.remove("_http")
+        return ChargeResult(if (http == 0) 502 else http, remote)
     }
 
     fun cancel(orderId: String): ChargeResult {
@@ -271,7 +309,13 @@ class ChargeCoordinator(
             if (rav != null && rav != JSONObject.NULL) body.put("ravMutavTerminalNumber", rav)
         }
         if (force) body.put("forceRegister", true)
-        val prep = api?.prepare(body) ?: return JSONObject().put("event", "server")
+        if (job.basalt) {
+            body.put("walletId", job.walletId)
+            body.put("phone", job.phone)
+            body.put("basaltTopup", true)
+        }
+        val prep = (if (job.basalt) api?.basaltPrepare(body) else api?.prepare(body))
+            ?: return JSONObject().put("event", "server")
         val prepStatus = prep.optString("status")
         if (prepStatus == "approved" || prepStatus == "review" || prep.optBoolean("alreadyPaid")) {
             job.early = fromServer(prep, job.orderId)
@@ -332,8 +376,9 @@ class ChargeCoordinator(
                 .put("idempotencyKey", job.idempotencyKey)
                 .put("ravMutavTerminalNumber", job.rav)
                 .put("sdkResponse", payload)
+            if (job.basalt) envelope.put("basaltTopup", true)
             if (approved) persistPending(envelope)
-            val remote = api.complete(envelope)
+            val remote = if (job.basalt) api.basaltComplete(envelope) else api.complete(envelope)
             val mapped = fromServer(remote, job.orderId)
             if (mapped.optBoolean("settled", true) && mapped.optString("error") != "UNCONFIRMED") {
                 prefs.edit().remove(PENDING).commit()
@@ -367,7 +412,7 @@ class ChargeCoordinator(
             ui("recover", "משלים חיוב קודם. אל תצמידו כרטיס.")
             try {
                 val saved = JSONObject(raw)
-                val remote = api?.complete(saved) ?: return@Thread
+                val remote = (if (saved.optBoolean("basaltTopup")) api?.basaltComplete(saved) else api?.complete(saved)) ?: return@Thread
                 val mapped = fromServer(remote, saved.optString("orderId"))
                 if (mapped.optString("error") != "UNCONFIRMED") prefs.edit().remove(PENDING).commit()
                 remember(saved.optString("orderId"), mapped)
@@ -524,6 +569,9 @@ class ChargeCoordinator(
         var idempotencyKey: String = ""
         var rav: String = ""
         var sdkRequest: JSONObject = JSONObject()
+        var basalt: Boolean = false
+        var walletId: String = ""
+        var phone: String = ""
     }
 
     companion object {
