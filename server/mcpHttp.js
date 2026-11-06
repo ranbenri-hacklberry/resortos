@@ -18,6 +18,8 @@ import {
 } from './mcpRead.js';
 import { productionDeps } from './mcpData.js';
 import { GUEST_PRINT_ABSENT, projectGuestPage, projectGuestPageSummary } from '../src/lib/guestPageRead.js';
+import { mergeClearingPayments, normalizeClearingPayment } from '../src/lib/clearingPayments.js';
+import { paymentStatusAfterPaid, recordedPaidAgorot } from '../src/lib/bookingPaid.js';
 
 const REFRESH_GAP_MS = 5 * 60 * 1000;
 const PROTOCOL = '2025-03-26';
@@ -79,7 +81,25 @@ const TOOLS = [
       to: { type: 'string' }
     },
     additionalProperties: false
-  }, true)
+  }, true),
+  tool('resortos_record_payment', 'רישום תקבול שכבר התקבל על הזמנה. לא מחייב כרטיס ולא מזיז כסף — רק שומר את התקבול.', {
+    type: 'object',
+    properties: {
+      booking_id: { type: 'string', minLength: 1 },
+      amount_ils: { type: 'number', exclusiveMinimum: 0 },
+      date: { type: 'string' },
+      method: { type: 'string', enum: ['CARD', 'CASH', 'BANK', 'VOUCHER', 'BOOKING', 'AIRBNB'] },
+      txn: { type: 'string' },
+      approval: { type: 'string' },
+      last4: { type: 'string' },
+      invoice: { type: 'string' },
+      collector: { type: 'string' },
+      payer_name: { type: 'string' },
+      note: { type: 'string' }
+    },
+    required: ['booking_id', 'amount_ils'],
+    additionalProperties: false
+  }, false)
 ];
 
 function tool(name, description, inputSchema, readOnly, openWorld = false) {
@@ -182,7 +202,15 @@ export function createMcpHandler(deps) {
 
   async function callTool(user, name, args) {
     const guestTool = name === 'resortos_guest_page' || name === 'resortos_guest_page_print';
-    if (!isManager(user) && !guestTool) {
+    const paymentTool = name === 'resortos_record_payment';
+    const connectedUserAllowed = guestTool || paymentTool;
+    if (!isManager(user) && !connectedUserAllowed) {
+      const denied = new Error('FORBIDDEN');
+      denied.status = 403;
+      denied.expose = true;
+      throw denied;
+    }
+    if (paymentTool && !canReadGuestPage(user)) {
       const denied = new Error('FORBIDDEN');
       denied.status = 403;
       denied.expose = true;
@@ -342,6 +370,98 @@ export function createMcpHandler(deps) {
         return { ...stamp, items: loaded.rows.map(projectGuestPageSummary), print_url: null };
       }
       return { ...stamp, ...projectGuestPage(loaded.rows[0]) };
+    }
+    if (name === 'resortos_record_payment') {
+      const bookingId = String(args.booking_id || '').trim();
+      if (!bookingId) {
+        const badReq = new Error('MISSING_BOOKING_ID');
+        badReq.status = 400;
+        badReq.expose = true;
+        throw badReq;
+      }
+      const amountIls = Number(args.amount_ils);
+      if (!Number.isFinite(amountIls) || amountIls <= 0) {
+        const badAmount = new Error('INVALID_AMOUNT');
+        badAmount.status = 400;
+        badAmount.expose = true;
+        throw badAmount;
+      }
+      const amountAgorot = Math.round(amountIls * 100);
+      const dateVal = String(args.date || '').trim() || now.toISOString().slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) {
+        const badDate = new Error('INVALID_DATE');
+        badDate.status = 400;
+        badDate.expose = true;
+        throw badDate;
+      }
+      const method = String(args.method || 'CARD').toUpperCase();
+      const validMethods = ['CARD', 'CASH', 'BANK', 'VOUCHER', 'BOOKING', 'AIRBNB'];
+      if (!validMethods.includes(method)) {
+        const badMethod = new Error('INVALID_METHOD');
+        badMethod.status = 400;
+        badMethod.expose = true;
+        throw badMethod;
+      }
+      const txn = String(args.txn || '').trim();
+      const approval = String(args.approval || '').trim();
+      const last4 = String(args.last4 || '').replace(/\D/g, '').slice(-4);
+      const invoice = String(args.invoice || '').trim();
+      const collector = String(args.collector || user.display_name || user.username || '').trim();
+      const payerName = String(args.payer_name || '').trim();
+      const note = String(args.note || '').trim();
+
+      const booking = await deps.loadBookingById(user, bookingId);
+      if (!booking) {
+        const notFound = new Error('BOOKING_NOT_FOUND');
+        notFound.status = 404;
+        notFound.expose = true;
+        throw notFound;
+      }
+
+      const idempotencyKey = txn || `mcp_${bookingId}_${amountAgorot}_${dateVal}_${method}`;
+      const existing = Array.isArray(booking.clearing_payments) ? booking.clearing_payments : [];
+      const duplicate = existing.find((row) => {
+        const normalized = normalizeClearingPayment(row);
+        const rowKey = normalized.txn || `${normalized.ref}|${normalized.amount_agorot}|${normalized.date}`;
+        const newKey = txn || `${approval}|${amountAgorot}|${dateVal}`;
+        return rowKey && rowKey === newKey;
+      });
+
+      if (duplicate) {
+        return { ...stamp, ...projectBookingMoney(booking), idempotent: true, note: 'התקבול כבר נרשם' };
+      }
+
+      const payment = {
+        source: method,
+        accountKey: method,
+        amount_agorot: amountAgorot,
+        date: dateVal,
+        ref: approval,
+        txn: idempotencyKey,
+        last4,
+        invoice,
+        collector,
+        payer_name: payerName || booking.guest_name || '',
+        collected_at: `${dateVal}T12:00:00`,
+        note,
+        recorded_via: 'mcp',
+        recorded_by: user.id,
+        recorded_at: now.toISOString()
+      };
+
+      const mergedPayments = mergeClearingPayments(booking.clearing_payments, payment);
+      const totalAgorot = Number(booking.total_price_agorot) || 0;
+      const paidAgorot = mergedPayments.reduce((sum, row) => sum + (Number(normalizeClearingPayment(row).amount_agorot) || 0), 0);
+      const nextStatus = paymentStatusAfterPaid(totalAgorot, paidAgorot);
+
+      const updated = await deps.patchBooking(user, bookingId, {
+        clearing_payments: mergedPayments,
+        payment_status: nextStatus,
+        payment_mode: booking.payment_mode || method
+      });
+
+      const result = { ...booking, ...updated, clearing_payments: mergedPayments, payment_status: nextStatus };
+      return { ...stamp, ...projectBookingMoney(result), recorded: true, note: 'התקבול נרשם' };
     }
     const err = new Error('UNKNOWN_TOOL');
     err.status = 404;
@@ -508,7 +628,8 @@ export function createMcpHandler(deps) {
         }
         if (body.method === 'ping') return {};
         if (body.method === 'tools/list') {
-          const tools = isManager(user) ? TOOLS : TOOLS.filter((item) => item.name.startsWith('resortos_guest_page'));
+          const connectedTools = ['resortos_guest_page', 'resortos_guest_page_print', 'resortos_record_payment'];
+          const tools = isManager(user) ? TOOLS : TOOLS.filter((item) => connectedTools.includes(item.name));
           return { tools: tools.map(publicTool) };
         }
         if (body.method === 'tools/call') {
