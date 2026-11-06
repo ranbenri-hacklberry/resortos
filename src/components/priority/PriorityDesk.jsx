@@ -610,8 +610,11 @@ function GuestPill({ kind, booking, swap = false, onOpen, callPending = null, on
         onOpen();
       }}
     >
-      {kind === 'in' ? <span className="pill-arrow" dir="ltr">←</span> : null}
-      {departed ? <span className="departed-mark" aria-label="יצא">✓</span> : null}
+      {departed ? (
+        <span className="pill-arrow" aria-label="יצא">✓</span>
+      ) : kind === 'in' ? (
+        <span className="pill-arrow" dir="ltr">←</span>
+      ) : null}
       <b>{name}</b>
       {isBday ? <span title={booking?.birthday_note ? `יום הולדת: ${booking.birthday_note}` : 'חוגג יום הולדת 🎂'}> 🎂</span> : null}
       {hasUpsell ? <span title={booking?.upsell_description ? `שדרוג: ${booking.upsell_description}${booking.upsell_price ? ` (₪${booking.upsell_price})` : ''}` : 'שדרוג 🎁'}> 🎁</span> : null}

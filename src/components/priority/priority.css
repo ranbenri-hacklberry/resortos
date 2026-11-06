@@ -1085,26 +1085,6 @@
   color: #57534e;
   cursor: default;
 }
-.stay-pill.is-departed {
-  background: #f1f5f9;
-  color: #94a3b8;
-  border: 1px dashed #cbd5e1;
-  opacity: 0.72;
-}
-.stay-pill.is-departed b {
-  color: #94a3b8;
-}
-.stay-pill.is-departed .owe {
-  color: #94a3b8;
-  animation: none;
-}
-.departed-mark {
-  flex: 0 0 auto;
-  font-size: 9px;
-  font-weight: 700;
-  color: #94a3b8;
-  margin-inline-end: 1px;
-}
 .no-entry {
   position: relative;
   flex: 0 0 auto;
