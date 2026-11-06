@@ -599,17 +599,19 @@ function GuestPill({ kind, booking, swap = false, onOpen, callPending = null, on
   const shekel = priorityShekelMark(booking);
   const isBday = Boolean(booking?.is_birthday);
   const hasUpsell = Boolean(booking?.upsell_description || (Number(booking?.upsell_price) > 0));
+  const departed = booking?.booking_status === 'CHECKED_OUT';
   return (
     <button
       type="button"
-      className={`stay-pill is-${kind}${swap ? ' is-swap' : ''}`}
-      title={`${full || name}${isBday ? ' · 🎂 יום הולדת' : ''}${hasUpsell ? ' · 🎁 שדרוג' : ''}`}
+      className={`stay-pill is-${kind}${swap ? ' is-swap' : ''}${departed ? ' is-departed' : ''}`}
+      title={`${full || name}${departed ? ' · יצא' : ''}${isBday ? ' · 🎂 יום הולדת' : ''}${hasUpsell ? ' · 🎁 שדרוג' : ''}`}
       onClick={(event) => {
         event.stopPropagation();
         onOpen();
       }}
     >
       {kind === 'in' ? <span className="pill-arrow" dir="ltr">←</span> : null}
+      {departed ? <span className="departed-mark" aria-label="יצא">✓</span> : null}
       <b>{name}</b>
       {isBday ? <span title={booking?.birthday_note ? `יום הולדת: ${booking.birthday_note}` : 'חוגג יום הולדת 🎂'}> 🎂</span> : null}
       {hasUpsell ? <span title={booking?.upsell_description ? `שדרוג: ${booking.upsell_description}${booking.upsell_price ? ` (₪${booking.upsell_price})` : ''}` : 'שדרוג 🎁'}> 🎁</span> : null}
