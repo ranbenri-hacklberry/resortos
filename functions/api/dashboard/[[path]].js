@@ -6,7 +6,7 @@ const MICROPAY_SMS_URL = 'https://www.micropay.co.il/extApi/scheduleSms.php';
 const DEFAULT_MICROPAY_TOKEN = '1UJIb8c2bfab883c334cb1048f1315c070ca';
 const DEFAULT_MICROPAY_FROM = '0548076123';
 
-async function sendMicropaySms(env, phone, message) {
+export async function sendMicropaySms(env, phone, message) {
   const token = env?.MICROPAY_TOKEN || DEFAULT_MICROPAY_TOKEN;
   const from = env?.MICROPAY_FROM || DEFAULT_MICROPAY_FROM;
   const url = env?.MICROPAY_URL || MICROPAY_SMS_URL;
@@ -170,7 +170,7 @@ async function hmacHex(secret, text) {
   return [...new Uint8Array(sig)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-async function signSessionToken(env, user) {
+export async function signSessionToken(env, user) {
   const exp = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days session
   const payload = JSON.stringify({
     username: user.username,
@@ -184,7 +184,7 @@ async function signSessionToken(env, user) {
   return `${encoded}.${sig}`;
 }
 
-async function verifySessionToken(env, token) {
+export async function verifySessionToken(env, token) {
   if (!token || !token.includes('.')) return null;
   const [encoded, sig] = token.split('.');
   const expected = await hmacHex(env.CHECKOUT_MAILBOX_SECRET || env.HOTELOS_DESK_PIN || 'dashboard_salt', encoded);
