@@ -113,14 +113,20 @@ export function chargeDisplay(raw = {}) {
   const row = normalizeClearingPayment(raw);
   const method = String(raw.method || '').toLowerCase();
   const kind = method === 'app' || method === 'check' ? method : (clearingKind(raw) || method);
-  const approval = String(row.ref || row.depositApproval || raw.auth || raw.ACode || '').trim();
+  const approval = String(row.ref || row.depositApproval || raw.auth || raw.ACode || raw.approval || '').trim();
   const needsApproval = kind === 'card' || kind === 'bank';
+  const txn = String(raw.txn || raw.deal_number || raw.dealNumber || row.txn || '').trim();
+  const invoice = String(raw.invoice || raw.document_number || raw.documentNumber || row.invoice || '').trim();
+  const gateway = String(raw.gateway || row.source || '').toLowerCase();
   return {
     ...row,
     kind,
     kindLabel: CHARGE_KIND_LABEL[kind] || 'לא צוין',
     approval: needsApproval ? approval : '',
-    needsApproval
+    needsApproval,
+    txn,
+    invoice,
+    gateway
   };
 }
 

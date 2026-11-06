@@ -2158,7 +2158,9 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                       <span className="card-split-line" key={charge.txn || `${charge.last4}-${charge.amount_agorot}`}>
                         <b dir="ltr">{charge.last4 ? `\u2066****${charge.last4}\u2069` : 'אשראי'}</b>
                         <span>{formatPriorityShekels(charge.amount_agorot)}</span>
-                        {charge.approval ? <span dir="ltr">{charge.approval}</span> : null}
+                        {charge.approval ? <span dir="ltr" title="מספר אישור">אישור: {charge.approval}</span> : null}
+                        {charge.txn ? <span dir="ltr" title="מספר עסקה">עסקה: {charge.txn}</span> : null}
+                        {charge.invoice ? <span title="חשבונית">חשבונית: {charge.invoice}</span> : null}
                       </span>
                     ))}
                     <span className="pay-line card-split">
@@ -3374,12 +3376,14 @@ function SplitFeedPanel({
                   <span>סוג תשלום: {charge.kindLabel || 'לא צוין'}</span>
                   {charge.needsApproval ? (
                     <span className={charge.approval ? 'wa-charge-ref' : 'wa-charge-ref is-missing'}>
-                      מספר אישור / אסמכתה: {charge.approval || 'אין'}
+                      מספר אישור: {charge.approval || 'אין'}
                     </span>
                   ) : null}
+                  {charge.last4 ? <span dir="ltr" className="wa-charge-last4">{`\u2066****${charge.last4}\u2069`}</span> : null}
+                  {charge.txn ? <span className="wa-charge-txn">עסקה: {charge.txn}</span> : null}
+                  {charge.invoice ? <span className="wa-charge-invoice">חשבונית: {charge.invoice}</span> : null}
                   {charge.date || charge.collected_at ? <span>תאריך: {charge.date || String(charge.collected_at || '').slice(0, 10)}</span> : null}
-                  {charge.accountLabel ? <span>{charge.accountLabel}</span> : null}
-                  {charge.last4 ? <span dir="ltr">{`\u2066****${charge.last4}\u2069`}</span> : null}
+                  {charge.accountLabel && charge.accountLabel !== charge.kindLabel ? <span>{charge.accountLabel}</span> : null}
                   {(charge.payer_name || charge.payer_id) ? (
                     <span>משלם: {[charge.payer_name, charge.payer_id].filter(Boolean).join(' · ')}</span>
                   ) : null}

@@ -105,6 +105,11 @@ export function normalizeClearingPayment(raw = {}) {
   const amountAgorot = Number.isFinite(Number(raw.amount_agorot))
     ? Number(raw.amount_agorot)
     : Math.round(Number(raw.amount || 0) * 100);
+  const txn = String(raw.txn || raw.deal_number || raw.dealNumber || raw.id || '').trim();
+  const invoice = String(raw.invoice || raw.document_number || raw.documentNumber || raw.hesh || '').trim();
+  const documentUrl = String(raw.document_url || raw.documentUrl || '').trim();
+  const gateway = String(raw.gateway || '').trim() || (hyp ? '' : '');
+  const approval = String(raw.approval || raw.auth || raw.ACode || '').trim();
   return {
     source: raw.source || (hyp ? 'HYP' : accountKey) || 'UNKNOWN',
     accountKey: accountKey || raw.accountKey || '',
@@ -114,8 +119,11 @@ export function normalizeClearingPayment(raw = {}) {
     terminalId: terminalId || account?.terminalId || '',
     acquirer: raw.acquirer || account?.acquirer || '',
     ref,
-    txn: String(raw.txn || raw.id || '').trim(),
-    invoice: String(raw.invoice || raw.hesh || '').trim(),
+    txn,
+    invoice,
+    document_url: documentUrl,
+    gateway,
+    approval,
     depositApproval: String(raw.depositApproval || '').trim(),
     amount_agorot: amountAgorot,
     date: raw.date || '',

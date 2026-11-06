@@ -420,14 +420,40 @@ export function createMcpHandler(deps) {
 
       const idempotencyKey = txn || `mcp_${bookingId}_${amountAgorot}_${dateVal}_${method}`;
       const existing = Array.isArray(booking.clearing_payments) ? booking.clearing_payments : [];
-      const duplicate = existing.find((row) => {
+      let duplicateIdx = -1;
+      const duplicate = existing.find((row, idx) => {
         const normalized = normalizeClearingPayment(row);
         const rowKey = normalized.txn || `${normalized.ref}|${normalized.amount_agorot}|${normalized.date}`;
         const newKey = txn || `${approval}|${amountAgorot}|${dateVal}`;
-        return rowKey && rowKey === newKey;
+        const match = rowKey && rowKey === newKey;
+        if (match) duplicateIdx = idx;
+        return match;
       });
 
       if (duplicate) {
+        const normalizedDupe = normalizeClearingPayment(duplicate);
+        const needsInvoiceUpdate = invoice && !normalizedDupe.invoice;
+        const needsApprovalUpdate = approval && !normalizedDupe.approval && !normalizedDupe.ref;
+        const needsLast4Update = last4 && !normalizedDupe.last4;
+
+        if (needsInvoiceUpdate || needsApprovalUpdate || needsLast4Update) {
+          const updatedPayment = {
+            ...duplicate,
+            invoice: invoice || duplicate.invoice || normalizedDupe.invoice || '',
+            document_number: invoice || duplicate.document_number || '',
+            approval: approval || duplicate.approval || normalizedDupe.approval || normalizedDupe.ref || '',
+            last4: last4 || duplicate.last4 || normalizedDupe.last4 || '',
+            updated_via: 'mcp_update',
+            updated_by: user.id,
+            updated_at: now.toISOString()
+          };
+          const updatedPayments = existing.map((row, idx) => (idx === duplicateIdx ? updatedPayment : row));
+          const patchResult = await deps.patchBooking(user, bookingId, {
+            clearing_payments: updatedPayments
+          });
+          const result = { ...booking, ...patchResult, clearing_payments: updatedPayments };
+          return { ...stamp, ...projectBookingMoney(result), updated: true, note: 'התקבול עודכן (חשבונית/אישור)' };
+        }
         return { ...stamp, ...projectBookingMoney(booking), idempotent: true, note: 'התקבול כבר נרשם' };
       }
 
