@@ -167,6 +167,20 @@ describe('priorityIncomingToday', () => {
 describe('priorityDayCell', () => {
   const day = '2026-10-13';
 
+  it('preserves booking_status CHECKED_OUT for departed styling (GuestPill)', () => {
+    const departedCell = priorityDayCell([
+      booking({ id: 'd', unit_id: 'k1', guest_name: 'יצא', check_in_date: '2026-10-11', check_out_date: '2026-10-13', booking_status: 'CHECKED_OUT' })
+    ], 'k1', day);
+    expect(departedCell.kind).toBe('out');
+    expect(departedCell.guest.booking_status).toBe('CHECKED_OUT');
+
+    const stayingDeparted = priorityDayCell([
+      booking({ id: 's', unit_id: 'k2', guest_name: 'עוד כאן אבל יצא', check_in_date: '2026-10-11', check_out_date: '2026-10-14', booking_status: 'CHECKED_OUT' })
+    ], 'k2', day);
+    expect(stayingDeparted.kind).toBe('stay');
+    expect(stayingDeparted.guest.booking_status).toBe('CHECKED_OUT');
+  });
+
   it('paints a stay, an arrival, a departure, a same-day swap, and an empty cabin', () => {
     expect(priorityDayCell([
       booking({ id: 's', unit_id: 'k1', guest_name: 'נשאר', check_in_date: '2026-10-11', check_out_date: '2026-10-16' })
