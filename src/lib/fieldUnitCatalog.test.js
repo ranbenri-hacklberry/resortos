@@ -58,7 +58,7 @@ describe('fieldUnitCatalog', () => {
     );
     expect(hit.unit_id).toBe('k810');
     expect(hit.resolved).toBe(true);
-    expect(mapsDestination(hit.mapsUrl)).toBe("טאג' מאהל מושב רמות");
+    expect(mapsDestination(hit.mapsUrl)).toBe('32.852592,35.667799');
   });
 
   it('resolves Thai map legend letter/code', () => {

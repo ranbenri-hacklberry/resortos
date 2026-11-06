@@ -609,17 +609,21 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
           )}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: (wazeUrl(booking.unit_id) && googleMapsUrl(booking.unit_id)) ? '1fr 1fr' : '1fr', gap: 8, marginTop: 14 }}>
           {wazeUrl(booking.unit_id) || googleMapsUrl(booking.unit_id) ? (
             <>
-              <ActionBtn href={wazeUrl(booking.unit_id)} bg="#D7EAF2" color="#1E3A4C">
-                <Navigation size={15} />
-                {t('GUEST_WAZE')}
-              </ActionBtn>
-              <ActionBtn href={googleMapsUrl(booking.unit_id)} bg="#E4E0D6" color="#3F3A33">
-                <Map size={15} />
-                {t('GUEST_MAPS')}
-              </ActionBtn>
+              {wazeUrl(booking.unit_id) ? (
+                <ActionBtn href={wazeUrl(booking.unit_id)} bg="#D7EAF2" color="#1E3A4C">
+                  <Navigation size={15} />
+                  {t('GUEST_WAZE')}
+                </ActionBtn>
+              ) : null}
+              {googleMapsUrl(booking.unit_id) ? (
+                <ActionBtn href={googleMapsUrl(booking.unit_id)} bg="#E4E0D6" color="#3F3A33">
+                  <Map size={15} />
+                  {t('GUEST_MAPS')}
+                </ActionBtn>
+              ) : null}
             </>
           ) : (
             <div style={{ gridColumn: '1 / -1', textAlign: 'center', fontSize: '0.78rem', fontWeight: 700, opacity: 0.55, padding: '0.5rem 0' }}>ניווט לא זמין כרגע</div>

@@ -40,6 +40,7 @@ const COMPLEXES = [
     name: 'בתי נורית',
     query: 'בתי נורית מושב רמות',
     waze: 'https://waze.com/ul/hsvc6gs4p2',
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.850371,35.664408',
     wifi: [{ ssid: 'MIALEES RESORT', password: 'MIAL2026' }],
     units: [
       { id: 'k671', name: 'בתי נורית 1' },
@@ -57,6 +58,7 @@ const COMPLEXES = [
     name: 'טאג׳ מאהל',
     query: "טאג' מאהל מושב רמות",
     waze: 'https://waze.com/ul/hsvc6gsskp',
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.852592,35.667799',
     wifi: [{ ssid: 'lotus', password: '12345678' }],
     units: [
       { id: 'k808', name: "טאג' מאהל · בקתה 1" },
@@ -70,6 +72,7 @@ const COMPLEXES = [
     name: 'מול הנוף',
     query: 'מול הנוף ברמות',
     waze: 'https://waze.com/ul/hsvc6gtk3v',
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.856309,35.667694',
     wifi: [{ ssid: 'Mol_hanof', password: '12345678' }],
     units: [
       { id: 'k680', name: 'מול הנוף · בקתה 1' },
@@ -84,6 +87,7 @@ const COMPLEXES = [
     name: 'נופים בלבן',
     query: 'נופים בלבן מושב רמות',
     waze: 'https://waze.com/ul/hsvc6gt4ct',
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.854897,35.665635',
     wifi: [{ ssid: 'TP-LINK_FA30', password: '15107312' }],
     units: [
       { id: 'k685', name: 'נופים בלבן · בקתה 1' },
@@ -95,6 +99,7 @@ const COMPLEXES = [
     name: 'בקתות טוסקנה',
     query: 'בקתות טוסקנה מושב רמות',
     waze: 'https://waze.com/ul/hsvc6gsutg',
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.854241,35.667930',
     wifi: [{ ssid: 'Toscana', password: '12345678' }],
     units: [
       { id: 'k687', name: 'טוסקנה · 1' },
@@ -107,6 +112,7 @@ const COMPLEXES = [
     name: 'החצר המוסיקלית',
     query: 'החצר המוסיקלית מושב רמות',
     waze: 'https://waze.com/ul/hsvc6gsdq7',
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.852962,35.664861',
     wifi: [{ ssid: 'Music yard', password: '12345678' }],
     units: [
       { id: 'k690', name: 'חצר מוסיקלית · חליל' },
@@ -119,6 +125,7 @@ const COMPLEXES = [
     name: 'בקתות מאיה',
     query: 'בקתות מאיה מושב רמות',
     waze: 'https://waze.com/ul/hsvc6gs4k0',
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.849829,35.664732',
     wifi: [{ ssid: 'maya', password: '12345678' }],
     units: [
       { id: 'k693', name: 'בקתות מאיה · בקתה 1' },
@@ -128,8 +135,9 @@ const COMPLEXES = [
   }
 ];
 
-export function googleMapsUrl(query) {
-  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(query)}&travelmode=driving`;
+export function googleMapsUrl(queryOrUrl) {
+  if (String(queryOrUrl || '').startsWith('http')) return queryOrUrl;
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(queryOrUrl)}&travelmode=driving`;
 }
 
 export function isRamotPin(pin) {
@@ -142,7 +150,7 @@ export function ramotPublicList() {
     id: row.id,
     name: row.name,
     wazeUrl: row.waze,
-    mapsUrl: googleMapsUrl(row.query)
+    mapsUrl: row.maps || googleMapsUrl(row.query)
   }));
 }
 
