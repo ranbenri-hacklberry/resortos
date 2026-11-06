@@ -7,7 +7,7 @@ import {
   pullConfirmedFromMailbox
 } from './checkoutMailbox.js';
 import { stayExpiresAt, stayLinkExpired } from '../src/lib/stayAccess.js';
-import { confirmShouldStartCardCharge } from '../src/lib/guestPaymentFlow.js';
+import { confirmShouldStartCardCharge, persistGuestPaymentChoice } from '../src/lib/guestPaymentFlow.js';
 import { scheduleGuestContextPush } from './guestContext.js';
 
 const BOOKING_TABLE = 'hotelos_bookings';
@@ -399,17 +399,19 @@ export async function confirmGuestCheckout(req, res) {
   const guestName = String(req.body?.guest_name || '').trim();
   const guestEmail = String(req.body?.guest_email || '').trim();
   const specialRequests = String(req.body?.special_requests || '').trim();
-  const rawPref = req.body?.balance_payment_preference || 'CREDIT_CARD';
+  const storedChoice = persistGuestPaymentChoice({
+    requested: req.body?.payment_choice || req.body?.balance_payment_preference || '',
+    previousMode: req.body?.payment_mode || ''
+  });
+  const rawPref = storedChoice.balancePreference || req.body?.balance_payment_preference || 'CREDIT_CARD';
   const balancePref = ['CREDIT_CARD', 'BANK_TRANSFER', 'CASH'].includes(rawPref) ? rawPref : 'CREDIT_CARD';
-  const paymentChoice = req.body?.payment_choice || rawPref;
-  const paymentMode = paymentChoice === 'CASH'
-    ? 'CASH_TRUST'
-    : (req.body?.payment_mode || (paymentChoice === 'VOUCHER' ? 'VOUCHER' : paymentChoice === 'ALREADY_PAID' ? 'ALREADY_PAID' : 'CREDIT_DEPOSIT'));
+  const paymentChoice = storedChoice.choice;
+  const paymentMode = storedChoice.paymentMode;
   const voucherCode = String(req.body?.voucher_code || '').trim();
   const chargeCard = confirmShouldStartCardCharge({
     pay: req.body?.pay === true,
     paymentMode,
-    paymentChoice
+    paymentChoice: req.body?.payment_choice || paymentChoice
   });
 
   if (!guestName) {
