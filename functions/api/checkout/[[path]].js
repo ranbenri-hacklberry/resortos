@@ -40,7 +40,7 @@ import { scanGuestId } from '../../lib/idScan.js';
 import { allCabinsPaid, applyPaySplitView, resolveStayUnitId } from '../../lib/paySplit.js';
 import { verifyStaffPin } from '../../lib/staffPin.js';
 import { normalizeBalancePreference } from '../../lib/balancePref.js';
-import { confirmShouldStartCardCharge } from '../../../src/lib/guestPaymentFlow.js';
+import { confirmShouldStartCardCharge, persistGuestPaymentChoice } from '../../../src/lib/guestPaymentFlow.js';
 import { buildDemoCheckoutRow } from '../../lib/demoCheckout.js';
 import { departuresAuthorized, parseDeparturesQuery, departureRow } from '../../lib/checkoutDepartures.js';
 import { applyPaidArrivalCheckin, stayExpiresAt, stayLinkExpired } from '../../../src/lib/stayAccess.js';
@@ -1529,18 +1529,21 @@ async function handleCheckout(context) {
     const guestEmail = String(body.guest_email || '').trim();
     const specialRequests = String(body.special_requests || '').trim();
     if (!guestName) return json({ error: 'MISSING_GUEST_FIELDS' }, 400);
-    const pref = normalizeBalancePreference(
+    const storedChoice = persistGuestPaymentChoice({
+      requested: body.payment_choice || body.balance_payment_preference || '',
+      previousChoice: row.stay?.payment_choice || '',
+      previousMode: row.payment_mode || ''
+    });
+    const paymentChoice = storedChoice.choice;
+    const payMode = storedChoice.paymentMode;
+    const pref = storedChoice.balancePreference || normalizeBalancePreference(
       body.balance_payment_preference,
       row.balance_payment_preference || row.stay?.balance_payment_preference || 'CREDIT_CARD'
     );
-    const paymentChoice = body.payment_choice || body.balance_payment_preference || pref;
-    const payMode = paymentChoice === 'CASH'
-      ? 'CASH_TRUST'
-      : (body.payment_mode || (paymentChoice === 'VOUCHER' ? 'VOUCHER' : paymentChoice === 'ALREADY_PAID' ? 'ALREADY_PAID' : 'CREDIT_DEPOSIT'));
     const wantPay = confirmShouldStartCardCharge({
       pay: body.pay !== false,
       paymentMode: payMode,
-      paymentChoice
+      paymentChoice: body.payment_choice || paymentChoice
     });
     const voucherCode = String(body.voucher_code || '').trim();
     const keepStatus = row.booking_status === 'CHECKED_IN' || row.booking_status === 'CHECKED_OUT'

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Calendar as CalendarIcon,
@@ -11,7 +11,6 @@ import {
   FileText,
   Banknote,
   Building2,
-  Receipt,
   Ticket,
   UploadCloud,
   X,
@@ -31,13 +30,13 @@ import {
 import { cleanGuestCabinName, localizedUnitName } from '../lib/units';
 import { applyStayCabin } from '../lib/cabinParty';
 import { applyPaySplitView } from '../lib/paySplit';
-import { skipPaymentChoiceAfterId } from '../lib/stayAccess';
 import {
+  acceptedGuestPaymentChoice,
+  bookingMayShowStay,
   checkoutPayUrl,
   confirmChargePlan,
-  guestCheckoutResumeStep,
-  guestCheckoutShowsStay,
-  guestHasId
+  guestCheckoutResumeView,
+  guestCheckoutShowsStay
 } from '../lib/guestPaymentFlow';
 import GuestStay from './GuestStay';
 import HypPayFrame from './HypPayFrame';
@@ -121,36 +120,37 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
   const [freshBooking, setFreshBooking] = useState(null);
   const [payFrame, setPayFrame] = useState('');
   const [bankFollowup, setBankFollowup] = useState(false);
+  const [cashFollowup, setCashFollowup] = useState(false);
+  const [voucherFollowup, setVoucherFollowup] = useState(false);
+  const resumedToken = useRef('');
   const paidReturn = hypPaidReturn();
   const hypStatus = typeof window === 'undefined' ? '' : new URLSearchParams(window.location.search).get('hyp') || '';
 
   const themeStyles = guestThemeStyles(theme);
   const activeBooking = freshBooking || booking;
 
-  // Stay portal only after the payment path is finished, or the guest is in-house.
-  // An ID on file, including an unpaid saved card choice, stays on payment options.
+  // Stay portal only when money is recorded or the guest is in-house.
+  // Card, bank, cash, voucher, and a leftover already-paid choice stay off that screen.
   const stayReady = guestCheckoutShowsStay({
     payFrame,
     bankFollowup,
-    isSubmitted,
+    cashFollowup,
+    voucherFollowup,
     paidReturn,
-    booking: activeBooking,
-    skipPayment: skipPaymentChoiceAfterId(activeBooking)
+    booking: activeBooking
   });
 
   useEffect(() => {
-    if (!activeBooking || stayReady || payFrame || bankFollowup) return;
-    if (!guestHasId(activeBooking)) return;
-    const resume = guestCheckoutResumeStep(activeBooking);
-    if (resume > 1) setStep((current) => (current < resume ? resume : current));
-  }, [
-    activeBooking,
-    stayReady,
-    payFrame,
-    bankFollowup,
-    activeBooking?.stay?.id_photo_received_at,
-    activeBooking?.stay?.id_scan
-  ]);
+    if (!activeBooking || payFrame) return;
+    const key = String(activeBooking.checkout_token || token || '');
+    if (!key || resumedToken.current === key) return;
+    resumedToken.current = key;
+    const view = guestCheckoutResumeView(activeBooking);
+    if (view === 'bank') setBankFollowup(true);
+    else if (view === 'cash') setCashFollowup(true);
+    else if (view === 'voucher') setVoucherFollowup(true);
+    else if (view === 'methods') setStep((current) => (current < 3 ? 3 : current));
+  }, [activeBooking, payFrame, token]);
 
   useEffect(() => {
     if (previewBooking || !token || typeof window === 'undefined') return;
@@ -194,17 +194,11 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
     setGuestEmail((current) => current || activeBooking.guest_email || '');
     setSpecialRequests((current) => current || activeBooking.special_requests || '');
     if (activeBooking.special_requests) setShowRequests(true);
-    if (activeBooking.stay?.payment_choice) {
-      setBalancePref(activeBooking.stay.payment_choice);
-    } else if (activeBooking.payment_mode === 'VOUCHER') {
-      setBalancePref('VOUCHER');
-    } else if (activeBooking.payment_mode === 'ALREADY_PAID') {
-      setBalancePref('ALREADY_PAID');
-    } else if (activeBooking.balance_payment_preference) {
-      setBalancePref(activeBooking.balance_payment_preference);
-    } else if (activeBooking.payment_mode === 'CASH_TRUST') {
-      setBalancePref('CASH');
-    }
+    const savedChoice = acceptedGuestPaymentChoice(activeBooking.stay?.payment_choice)
+      || (activeBooking.payment_mode === 'VOUCHER' ? 'VOUCHER' : '')
+      || (activeBooking.payment_mode === 'CASH_TRUST' ? 'CASH' : '')
+      || acceptedGuestPaymentChoice(activeBooking.balance_payment_preference);
+    if (savedChoice) setBalancePref(savedChoice);
     if (activeBooking.stay?.voucher_code) {
       setVoucherCode(activeBooking.stay.voucher_code);
     }
@@ -362,8 +356,8 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
         setPaying(false);
       }
     }
-    if (skipPaymentChoiceAfterId(activeBooking)) {
-      // Already paid: save details (no payment change) and open the guest page for check-in.
+    if (bookingMayShowStay(activeBooking)) {
+      // Money is already recorded, or the guest is in-house: save details and open the stay page.
       setPaying(true);
       try {
         const next = await confirmGuestCheckout(token, {
@@ -390,33 +384,29 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
     if (paying) return;
     setPaying(true);
     try {
-      const mode = balancePref === 'CASH'
-        ? 'CASH_TRUST'
-        : balancePref === 'VOUCHER'
-          ? 'VOUCHER'
-          : balancePref === 'ALREADY_PAID'
-            ? 'ALREADY_PAID'
-            : 'CREDIT_DEPOSIT';
-
-      const safePref = (balancePref === 'ALREADY_PAID' || balancePref === 'VOUCHER')
-        ? 'CREDIT_CARD'
-        : balancePref;
+      const choice = acceptedGuestPaymentChoice(balancePref);
+      if (!choice) return;
+      const stored = {
+        choice,
+        paymentMode: choice === 'CASH' ? 'CASH_TRUST' : choice === 'VOUCHER' ? 'VOUCHER' : 'CREDIT_DEPOSIT',
+        balancePreference: choice === 'VOUCHER' ? 'CREDIT_CARD' : choice
+      };
 
       const fullRequests = [
         specialRequests,
         voucherCode ? `שובר: ${voucherCode}` : ''
       ].filter(Boolean).join('\n');
 
-      const plan = confirmChargePlan({ choice: balancePref, prepaid: isPrepaid });
+      const plan = confirmChargePlan({ choice, prepaid: isPrepaid && bookingMayShowStay(activeBooking) });
       const next = await confirmGuestCheckout(token, {
         guest_name: guestName || usableGuestName(activeBooking?.guest_name) || 'נטשה',
         guest_email: guestEmail,
         special_requests: fullRequests,
         pay: plan.pay,
         embed_receipt: plan.embedReceipt,
-        balance_payment_preference: safePref,
-        payment_mode: mode,
-        payment_choice: balancePref,
+        balance_payment_preference: stored.balancePreference,
+        payment_mode: stored.paymentMode,
+        payment_choice: stored.choice,
         voucher_code: voucherCode || ''
       });
       const payUrl = checkoutPayUrl(next);
@@ -432,9 +422,25 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
       if (next) setFreshBooking(next);
       if (plan.next === 'bank') {
         setBankFollowup(true);
+        setCashFollowup(false);
+        setVoucherFollowup(false);
         return;
       }
-      setIsSubmitted(true);
+      if (plan.next === 'cash') {
+        setCashFollowup(true);
+        setBankFollowup(false);
+        setVoucherFollowup(false);
+        return;
+      }
+      if (plan.next === 'voucher') {
+        setVoucherFollowup(true);
+        setBankFollowup(false);
+        setCashFollowup(false);
+        return;
+      }
+      if (plan.next === 'stay' && bookingMayShowStay(next || activeBooking)) {
+        setIsSubmitted(true);
+      }
     } catch (_) {
       window.alert(t(balancePref === 'CREDIT_CARD' && !isPrepaid ? 'GUEST_PAY_FAILED' : 'GUEST_CONFIRM_FAILED'));
     } finally {
@@ -706,20 +712,82 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
             type="button"
             onClick={() => {
               setBankFollowup(false);
-              setIsSubmitted(true);
+              setStep(3);
             }}
             style={{
               width: '100%',
-              border: 'none',
               borderRadius: 12,
               padding: '0.85rem',
-              fontWeight: 900,
-              background: themeStyles.cta,
-              color: themeStyles.ctaText,
+              fontWeight: 800,
+              background: themeStyles.inputBg,
+              color: themeStyles.textPrimary,
+              border: `1px solid ${themeStyles.inputBorder}`,
               cursor: 'pointer'
             }}
           >
-            {t('GUEST_STEP_3_CTA')}
+            {t('GUEST_STEP_BACK')}
+          </button>
+        </div>
+      ) : cashFollowup ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 900 }}>{t('GUEST_PAY_CASH_TITLE')}</h3>
+            <p style={{ margin: '4px 0 0', fontSize: '0.84rem', color: themeStyles.textMuted, lineHeight: 1.5 }}>
+              {t('GUEST_PAY_CASH_DESC')}
+            </p>
+          </div>
+          {totalPriceIls > 0 ? (
+            <div style={{ fontWeight: 900, fontSize: '1.35rem' }}>₪{totalPriceIls.toLocaleString('he-IL')}</div>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => {
+              setCashFollowup(false);
+              setStep(3);
+            }}
+            style={{
+              width: '100%',
+              borderRadius: 12,
+              padding: '0.85rem',
+              fontWeight: 800,
+              background: themeStyles.inputBg,
+              color: themeStyles.textPrimary,
+              border: `1px solid ${themeStyles.inputBorder}`,
+              cursor: 'pointer'
+            }}
+          >
+            {t('GUEST_STEP_BACK')}
+          </button>
+        </div>
+      ) : voucherFollowup ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 900 }}>{t('GUEST_PAY_VOUCHER_TITLE')}</h3>
+            <p style={{ margin: '4px 0 0', fontSize: '0.84rem', color: themeStyles.textMuted, lineHeight: 1.5 }}>
+              {t('GUEST_PAY_VOUCHER_DESC')}
+            </p>
+            {voucherCode ? (
+              <p style={{ margin: '8px 0 0', fontWeight: 800 }}>{voucherCode}</p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setVoucherFollowup(false);
+              setStep(3);
+            }}
+            style={{
+              width: '100%',
+              borderRadius: 12,
+              padding: '0.85rem',
+              fontWeight: 800,
+              background: themeStyles.inputBg,
+              color: themeStyles.textPrimary,
+              border: `1px solid ${themeStyles.inputBorder}`,
+              cursor: 'pointer'
+            }}
+          >
+            {t('GUEST_STEP_BACK')}
           </button>
         </div>
       ) : (
@@ -1217,35 +1285,7 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
                   </div>
                 </div>
 
-                {/* 4. Already Paid */}
-                <div
-                  onClick={() => setBalancePref('ALREADY_PAID')}
-                  style={{
-                    background: balancePref === 'ALREADY_PAID' ? themeStyles.accentSoft : themeStyles.inputBg,
-                    border: `2px solid ${balancePref === 'ALREADY_PAID' ? themeStyles.accent : themeStyles.inputBorder}`,
-                    borderRadius: 14,
-                    padding: '1rem 1.1rem',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: 12,
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  <div style={{ color: themeStyles.accent, marginTop: 2 }}>
-                    <Receipt size={26} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 900, fontSize: '0.96rem', color: themeStyles.textPrimary }}>
-                      {t('GUEST_PAY_ALREADY_PAID_TITLE')}
-                    </div>
-                    <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: themeStyles.textMuted, lineHeight: 1.4 }}>
-                      {t('GUEST_PAY_ALREADY_PAID_DESC')}
-                    </p>
-                  </div>
-                </div>
-
-                {/* 5. Vouchers / Coupons */}
+                {/* 4. Vouchers / Coupons */}
                 <div
                   onClick={() => setBalancePref('VOUCHER')}
                   style={{

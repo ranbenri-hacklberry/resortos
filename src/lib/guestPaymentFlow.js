@@ -1,18 +1,51 @@
+import { hasRecordedReceipt, kinorotSettlementKind } from './bookingPaid.js';
+
+const GUEST_METHOD_CHOICES = ['CREDIT_CARD', 'CASH', 'BANK_TRANSFER', 'VOUCHER'];
+
+/** Guest methods the checkout form may offer. "Already paid" is not one of them. */
+export function acceptedGuestPaymentChoice(choice) {
+  const value = String(choice || '').toUpperCase();
+  if (value === 'CARD' || value === 'CREDIT' || value === 'SAVED_CARD') return 'CREDIT_CARD';
+  if (value === 'BANK') return 'BANK_TRANSFER';
+  if (GUEST_METHOD_CHOICES.includes(value)) return value;
+  return '';
+}
+
+/**
+ * What confirm may store. ALREADY_PAID is dropped so a later visit cannot reopen the stay guide from it.
+ */
+export function persistGuestPaymentChoice({ requested = '', previousChoice = '', previousMode = '' } = {}) {
+  const raw = String(requested || '').trim().toUpperCase();
+  const rejected = raw === 'ALREADY_PAID';
+  const choice = rejected
+    ? ''
+    : (acceptedGuestPaymentChoice(requested) || acceptedGuestPaymentChoice(previousChoice));
+  let paymentMode = 'CREDIT_DEPOSIT';
+  if (choice === 'CASH') paymentMode = 'CASH_TRUST';
+  else if (choice === 'VOUCHER') paymentMode = 'VOUCHER';
+  else if (!choice) {
+    const prior = String(previousMode || '').trim().toUpperCase();
+    paymentMode = prior && prior !== 'ALREADY_PAID' ? prior : 'CREDIT_DEPOSIT';
+  }
+  const balancePreference = choice === 'VOUCHER'
+    ? 'CREDIT_CARD'
+    : (choice === 'CREDIT_CARD' || choice === 'BANK_TRANSFER' || choice === 'CASH' ? choice : '');
+  return { choice, paymentMode, balancePreference };
+}
+
 /**
  * What happens immediately after the guest confirms a payment method.
- * Card continues into Cardcom. Bank shows account details. Cash, voucher,
- * and already-paid do not open a card terminal.
- * The stay / area-guide page is not the next step for card or bank.
+ * Card continues into Cardcom. Bank shows account details. Cash stays on the cash path.
+ * None of those unpaid choices open the stay guide. "Already paid" is ignored.
  */
 export function confirmChargePlan({ choice, prepaid = false } = {}) {
-  const value = String(choice || '').toUpperCase();
-  if (prepaid || value === 'CASH' || value === 'VOUCHER' || value === 'ALREADY_PAID') {
-    return { pay: false, embedReceipt: false, next: 'stay' };
-  }
-  if (value === 'BANK_TRANSFER' || value === 'BANK') {
-    return { pay: false, embedReceipt: false, next: 'bank' };
-  }
-  return { pay: true, embedReceipt: true, next: 'cardcom' };
+  const value = acceptedGuestPaymentChoice(choice);
+  if (prepaid && value) return { pay: false, embedReceipt: false, next: 'stay' };
+  if (value === 'CASH') return { pay: false, embedReceipt: false, next: 'cash' };
+  if (value === 'VOUCHER') return { pay: false, embedReceipt: false, next: 'voucher' };
+  if (value === 'BANK_TRANSFER') return { pay: false, embedReceipt: false, next: 'bank' };
+  if (value === 'CREDIT_CARD') return { pay: true, embedReceipt: true, next: 'cardcom' };
+  return { pay: false, embedReceipt: false, next: 'methods' };
 }
 
 /** Server-side: start a Cardcom charge only when this confirmation still owes a card payment. */
@@ -38,72 +71,66 @@ function savedPaymentChoice(booking) {
   return String(booking?.stay?.payment_choice || '').trim().toUpperCase();
 }
 
-function cardChoice(choice) {
-  return choice === 'CREDIT_CARD' || choice === 'CARD' || choice === 'CREDIT' || choice === 'SAVED_CARD';
-}
-
-/** Card was selected, but no money has been recorded yet. The guide must not replace payment. */
-export function unpaidCardChoice(booking) {
-  if (!booking) return false;
-  const status = String(booking.payment_status || '').toUpperCase();
-  if (status === 'PAID' || status === 'DEPOSIT_PAID' || status === 'PARTIAL' || status === 'PENDING_BANK' || status === 'PENDING_CASH') {
-    return false;
-  }
-  if (booking.stay?.hyp?.paid || booking.stay?.hyp_deposit?.paid || booking.balance_paid || booking.stay?.balance_paid) {
-    return false;
-  }
-  return cardChoice(savedPaymentChoice(booking));
-}
-
 /**
- * A later stay-link visit may show the guide only after the payment path is finished:
- * money recorded, or a non-card method was actually saved (cash, bank, voucher, already paid).
- * An ID photo plus an unpaid credit-card choice is not finished, even if checkout_completed_at is set.
+ * The stay guide is for guests who are in-house or whose money is actually recorded.
+ * A saved cash, bank, voucher, or already-paid choice is not a receipt.
  */
-export function paymentPathFinished(booking) {
+export function bookingMayShowStay(booking) {
   if (!booking) return false;
-  if (unpaidCardChoice(booking)) return false;
-  const status = String(booking.payment_status || '').toUpperCase();
-  if (status === 'PAID' || status === 'DEPOSIT_PAID' || status === 'PARTIAL' || status === 'PENDING_BANK' || status === 'PENDING_CASH') {
-    return true;
-  }
-  if (booking.stay?.hyp?.paid || booking.stay?.hyp_deposit?.paid || booking.balance_paid || booking.stay?.balance_paid) {
-    return true;
-  }
-  const choice = savedPaymentChoice(booking);
-  if (!booking.stay?.checkout_completed_at || !choice || cardChoice(choice)) return false;
-  return choice === 'CASH' || choice === 'BANK_TRANSFER' || choice === 'BANK' || choice === 'VOUCHER' || choice === 'ALREADY_PAID';
+  if (booking.is_cabin_portal) return true;
+  const stayStatus = String(booking.booking_status || '');
+  if (stayStatus === 'CHECKED_IN' || stayStatus === 'CHECKED_OUT') return true;
+  if (booking.stay?.guest_checked_in_at) return true;
+  if (hasRecordedReceipt(booking)) return true;
+  if (booking.stay?.hyp?.paid || booking.stay?.hyp_deposit?.paid) return true;
+  const pay = String(booking.payment_status || '').toUpperCase();
+  if (pay === 'DEPOSIT_PAID' || pay === 'PARTIAL') return true;
+  const settled = kinorotSettlementKind(booking);
+  if (settled === 'booking' || settled === 'comp') return true;
+  if (pay === 'PAID' && settled) return true;
+  return false;
+}
+
+/** @deprecated Choice plus checkout_completed_at is not enough. Use bookingMayShowStay. */
+export function paymentPathFinished(booking) {
+  return bookingMayShowStay(booking);
 }
 
 export function guestHasId(booking) {
   return Boolean(booking?.stay?.id_photo_received_at || booking?.stay?.id_scan);
 }
 
-/** After the ID is on file and payment is still open, reopen on the payment-method step. */
+/** After the ID is on file and money is still open, reopen on the payment-method step. */
 export function guestCheckoutResumeStep(booking) {
-  if (!guestHasId(booking) || paymentPathFinished(booking)) return 1;
+  if (!guestHasId(booking) || bookingMayShowStay(booking)) return 1;
   return 3;
 }
 
+/** Where an unpaid stay link should land. Already-paid is not a destination. */
+export function guestCheckoutResumeView(booking) {
+  if (bookingMayShowStay(booking)) return 'stay';
+  const choice = acceptedGuestPaymentChoice(savedPaymentChoice(booking));
+  if (choice === 'BANK_TRANSFER') return 'bank';
+  if (choice === 'CASH') return 'cash';
+  if (choice === 'VOUCHER') return 'voucher';
+  if (guestHasId(booking)) return 'methods';
+  return 'form';
+}
+
 /**
- * Stay portal (Maps / Waze / area guide) replaces checkout only when payment is
- * finished, the guest is already in-house, or this session just completed a non-card method.
- * Uploading an ID, or saving an unpaid card choice, stays on the payment step.
+ * Stay portal (Maps / Waze / area guide / unpaid banner) only when money is recorded
+ * or the guest is already in-house. Choosing a method, including "already paid", does not open it.
  */
 export function guestCheckoutShowsStay({
   payFrame = '',
   bankFollowup = false,
-  isSubmitted = false,
+  cashFollowup = false,
+  voucherFollowup = false,
   paidReturn = false,
-  booking = null,
-  skipPayment = false
+  booking = null
 } = {}) {
-  if (payFrame || bankFollowup) return false;
+  if (payFrame || bankFollowup || cashFollowup || voucherFollowup) return false;
+  if (!bookingMayShowStay(booking)) return false;
   if (paidReturn) return true;
-  if (isSubmitted && !unpaidCardChoice(booking)) return true;
-  if (!booking) return false;
-  if (booking.is_cabin_portal) return true;
-  if (booking.booking_status === 'CHECKED_IN' || booking.booking_status === 'CHECKED_OUT') return true;
-  if (skipPayment && !unpaidCardChoice(booking)) return true;
-  return paymentPathFinished(booking);
+  return true;
 }
