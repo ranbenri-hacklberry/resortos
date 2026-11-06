@@ -6,6 +6,7 @@ import {
   templateById
 } from '../src/lib/guestComms.js';
 import { unitFullName } from '../src/lib/units.js';
+import { publishBookingToMailbox } from './checkoutMailbox.js';
 
 const BOOKING_TABLE = 'hotelos_bookings';
 const COMMS_TABLE = 'guest_communications';
@@ -508,6 +509,36 @@ export async function handleSendGuestComm(req, res) {
       });
     }
     if (!message) return res.status(400).json({ error: 'MESSAGE_REQUIRED' });
+
+    const kind = req.body?.kind || '';
+    const isStayLink = kind === 'stay_link' || templateId === 'checkin' || templateId === 'stay_link';
+    if (isStayLink && booking?.checkout_token) {
+      try {
+        await publishBookingToMailbox(booking);
+      } catch (err) {
+        console.error('[handleSendGuestComm] mailbox publish failed:', err.message);
+        await insertGuestComm({
+          booking_id: bookingId,
+          tenant_id: booking.tenant_id || null,
+          channel: req.body?.channel || 'sms',
+          direction: 'outbound',
+          recipient_phone: recipientPhone,
+          content: message,
+          status: 'failed',
+          sent_at: null,
+          metadata: {
+            kind: kind || templateId || 'stay_link',
+            template: templateId || null,
+            actor: req.staffUser?.username || req.staff?.username || req.staff?.name || 'staff',
+            error: `PUBLISH_FAILED: ${err.message || String(err)}`
+          }
+        }).catch(() => {});
+        return res.status(err.status || 502).json({
+          error: 'PUBLISH_FAILED',
+          reason: 'קישור האורח לא עלה לשרת — הסמס לא נשלח'
+        });
+      }
+    }
 
     if (req.body?.channel === 'whatsapp') {
       let sentStatus = 'sent';
