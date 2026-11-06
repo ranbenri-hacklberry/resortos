@@ -228,6 +228,61 @@ export async function loadStaff(id) {
   return Array.isArray(rows) ? rows[0] || null : null;
 }
 
+export async function loadBookingById(user, bookingId) {
+  const id = String(bookingId || '').trim();
+  if (!id) return null;
+  const rows = await rest(
+    `hotelos_bookings?select=${BOOKING_COLUMNS}&tenant_id=eq.${tenant(user)}&id=eq.${encodeURIComponent(id)}&deleted_at=is.null&limit=1`
+  );
+  const list = Array.isArray(rows) ? rows : [];
+  const row = list[0] || null;
+  if (!row) return null;
+  if (!unitAllowed(user, row.unit_id)) return null;
+  return row;
+}
+
+async function restPatch(pathAndQuery, body) {
+  const key = dbKey();
+  if (!key) {
+    const err = new Error('DB_NOT_CONFIGURED');
+    err.status = 503;
+    throw err;
+  }
+  const response = await fetch(`${supabaseUrl()}/rest/v1/${pathAndQuery}`, {
+    method: 'PATCH',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Prefer: 'return=representation'
+    },
+    body: JSON.stringify(body)
+  });
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!response.ok) {
+    const err = new Error(data?.message || 'DB_WRITE_FAILED');
+    err.status = response.status || 502;
+    throw err;
+  }
+  return Array.isArray(data) ? data[0] : data;
+}
+
+export async function patchBooking(user, bookingId, patch) {
+  const id = String(bookingId || '').trim();
+  if (!id) {
+    const err = new Error('MISSING_BOOKING_ID');
+    err.status = 400;
+    throw err;
+  }
+  const updated = await restPatch(
+    `hotelos_bookings?tenant_id=eq.${tenant(user)}&id=eq.${encodeURIComponent(id)}&deleted_at=is.null`,
+    { ...patch, updated_at: new Date().toISOString() }
+  );
+  return updated;
+}
+
 export function productionDeps() {
   return {
     verifyStaff: (username, password, req) => verifyStaffCredentials(username, password, req),
@@ -235,6 +290,8 @@ export function productionDeps() {
     loadUnits,
     loadBookings,
     loadGuestBookings,
+    loadBookingById,
+    patchBooking,
     loadWorkLog,
     loadProcedures,
     loadDocuments,

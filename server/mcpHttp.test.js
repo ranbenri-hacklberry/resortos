@@ -34,14 +34,36 @@ function managerToken(handlerOauth) {
   }));
 }
 
+function priorityToken(handlerOauth) {
+  const client = handlerOauth.register({ redirectUris: ['https://grok.com/callback'], name: 'grok' });
+  return handlerOauth.issueCode({
+    clientId: client.id,
+    redirectUri: 'https://grok.com/callback',
+    codeChallenge: s256('verifier-verifier-verifier-verifier'),
+    method: 'S256',
+    username: 'priority',
+    password: 'secret',
+    resource: 'https://studio.example/mcp'
+  }).then((code) => handlerOauth.exchange({
+    code,
+    verifier: 'verifier-verifier-verifier-verifier',
+    clientId: client.id,
+    redirectUri: 'https://grok.com/callback',
+    resource: 'https://studio.example/mcp'
+  }));
+}
+
 function harness(extra = {}) {
   const calls = [];
+  const patchedBookings = new Map();
   const oauth = createOauthService({
     store: createMemoryOauthStore(),
     verifyStaff: async (username) => (
       username === 'daniel'
         ? { id: 'daniel', username: 'daniel', role: 'MANAGER', display_name: 'דניאל', tenant_id: 't', is_active: true }
-        : { id: 'h', username, role: 'HOUSEKEEPING', is_active: true }
+        : username === 'priority'
+          ? { id: 'priority', username: 'priority', role: 'PRIORITY', display_name: 'פריוריטי', tenant_id: 't', is_active: true }
+          : { id: 'h', username, role: 'HOUSEKEEPING', is_active: true }
     )
   });
   const bookings = {
@@ -67,6 +89,17 @@ function harness(extra = {}) {
     loadCatalog: async () => [{ id: 'k680', name: 'מול הנוף 1', property_id: 'mool', base_price_agorot: 120000 }],
     loadUnits: async () => [{ id: 'k680', name: 'מול הנוף 1', operational_status: 'READY' }],
     loadBookings: extra.loadBookings || (async () => bookings),
+    loadBookingById: extra.loadBookingById || (async (_user, id) => {
+      if (patchedBookings.has(id)) return patchedBookings.get(id);
+      return bookings.rows.find((row) => row.id === id) || null;
+    }),
+    patchBooking: extra.patchBooking || (async (_user, id, patch) => {
+      calls.push({ action: 'patch', id, patch });
+      const existing = patchedBookings.get(id) || bookings.rows.find((row) => row.id === id);
+      const updated = { ...existing, ...patch, updated_at: new Date().toISOString() };
+      patchedBookings.set(id, updated);
+      return updated;
+    }),
     loadWorkLog: async () => [],
     loadProcedures: async () => [{ id: 'sop1', domain: 'ניקיון', title: 'יציאה', steps: ['מיטות'] }],
     loadDocuments: async () => [{ id: 'doc1', title: 'נוהל', html: '<p>שלום</p>', updatedAt: '2026-10-01' }],
@@ -77,13 +110,16 @@ function harness(extra = {}) {
       accounts: [{ id: 'a1', accountType: 'CARD', currency: 'ILS', accountNumber: '4580123412341234', parsedAccount: { number: '395140' }, displayBalance: { amount: 12.5, currency: 'ILS' } }]
     }),
     loadBankTransactions: async () => ({ items: [{ id: 'tx1', amount: 12.5, currency: 'ILS', transactionDate: '2026-10-20' }], nextPage: null }),
-    loadStaff: async () => ({ id: 'daniel', role: 'MANAGER', is_active: true, allowed_units: [] }),
+    loadStaff: extra.loadStaff || (async (id) => {
+      if (id === 'priority') return { id: 'priority', role: 'PRIORITY', is_active: true, allowed_units: [] };
+      return { id: 'daniel', role: 'MANAGER', is_active: true, allowed_units: [] };
+    }),
     refreshBanks: async () => {
-      calls.push('refresh');
+      calls.push({ action: 'refresh' });
       return { connections: [{ providerId: 'fibi', status: 'FETCHING' }] };
     }
   });
-  return { handler, oauth, calls };
+  return { handler, oauth, calls, patchedBookings };
 }
 
 async function call(handler, body, token) {
@@ -137,7 +173,7 @@ test('manager can list tools, read money, and refresh once', async () => {
   assert.equal(refreshed.json.result.structuredContent.refreshed, true);
   const limited = await call(handler, { jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'resortos_finance_refresh', arguments: {} } }, issued.access_token);
   assert.equal(limited.json.error.message, 'RATE_LIMIT');
-  assert.deepEqual(calls, ['refresh']);
+  assert.deepEqual(calls, [{ action: 'refresh' }]);
   const blocked = await call(handler, { jsonrpc: '2.0', id: 6, method: 'tools/call', params: { name: 'resortos_send_sms', arguments: {} } }, issued.access_token);
   assert.equal(blocked.json.error.message, 'UNKNOWN_TOOL');
 });
@@ -223,4 +259,180 @@ test('discovery document advertises the owner scope', async () => {
   assert.deepEqual(body.scopes_supported, ['resortos:owner']);
   assert.deepEqual(body.code_challenge_methods_supported, ['S256']);
   assert.equal(body.authorization_response_iss_parameter_supported, true);
+});
+
+test('resortos_record_payment is listed for connected users', async () => {
+  const { handler, oauth } = harness();
+  const managerIssued = await managerToken(oauth);
+  const managerList = await call(handler, { jsonrpc: '2.0', id: 1, method: 'tools/list' }, managerIssued.access_token);
+  const managerNames = managerList.json.result.tools.map((item) => item.name);
+  assert.equal(managerNames.includes('resortos_record_payment'), true);
+
+  const priorityIssued = await priorityToken(oauth);
+  const priorityList = await call(handler, { jsonrpc: '2.0', id: 2, method: 'tools/list' }, priorityIssued.access_token);
+  const priorityNames = priorityList.json.result.tools.map((item) => item.name);
+  assert.equal(priorityNames.includes('resortos_record_payment'), true);
+  assert.equal(priorityNames.includes('resortos_guest_page'), true);
+  assert.equal(priorityNames.includes('resortos_finance_refresh'), false);
+});
+
+test('resortos_record_payment records a payment and updates status', async () => {
+  const { handler, oauth, calls } = harness();
+  const issued = await managerToken(oauth);
+  const result = await call(handler, {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'tools/call',
+    params: {
+      name: 'resortos_record_payment',
+      arguments: {
+        booking_id: 'b1',
+        amount_ils: 650,
+        date: '2026-11-06',
+        method: 'CARD',
+        txn: '269149464',
+        approval: '0834838',
+        last4: '7717',
+        collector: 'מנהל'
+      }
+    }
+  }, issued.access_token);
+  assert.equal(result.status, 200);
+  const content = result.json.result.structuredContent;
+  assert.equal(content.id, 'b1');
+  assert.equal(content.recorded, true);
+  assert.equal(content.receipts_ils, '1150.00');
+  assert.equal(content.balance_ils, '650.00');
+  assert.equal(content.payment_status, 'PARTIAL');
+
+  assert.equal(calls.length, 1);
+  const patch = calls[0];
+  assert.equal(patch.action, 'patch');
+  assert.equal(patch.id, 'b1');
+  assert.equal(patch.patch.payment_status, 'PARTIAL');
+  assert.equal(patch.patch.clearing_payments.length, 2);
+});
+
+test('resortos_record_payment returns 404 for unknown booking', async () => {
+  const { handler, oauth } = harness();
+  const issued = await managerToken(oauth);
+  const result = await call(handler, {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'tools/call',
+    params: {
+      name: 'resortos_record_payment',
+      arguments: {
+        booking_id: 'unknown_booking',
+        amount_ils: 100,
+        method: 'CASH'
+      }
+    }
+  }, issued.access_token);
+  assert.equal(result.status, 404);
+  assert.equal(result.json.error, 'BOOKING_NOT_FOUND');
+});
+
+test('resortos_record_payment returns 400 for bad amount', async () => {
+  const { handler, oauth } = harness();
+  const issued = await managerToken(oauth);
+  const result = await call(handler, {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'tools/call',
+    params: {
+      name: 'resortos_record_payment',
+      arguments: {
+        booking_id: 'b1',
+        amount_ils: -100,
+        method: 'CASH'
+      }
+    }
+  }, issued.access_token);
+  assert.equal(result.status, 400);
+  assert.equal(result.json.error, 'INVALID_AMOUNT');
+});
+
+test('resortos_record_payment is idempotent on replay', async () => {
+  const { handler, oauth, calls } = harness();
+  const issued = await managerToken(oauth);
+  const args = {
+    booking_id: 'b1',
+    amount_ils: 650,
+    date: '2026-11-06',
+    method: 'CARD',
+    txn: 'unique_txn_123',
+    approval: '0834838'
+  };
+  const first = await call(handler, {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'tools/call',
+    params: { name: 'resortos_record_payment', arguments: args }
+  }, issued.access_token);
+  assert.equal(first.json.result.structuredContent.recorded, true);
+  assert.equal(calls.length, 1);
+
+  const second = await call(handler, {
+    jsonrpc: '2.0',
+    id: 2,
+    method: 'tools/call',
+    params: { name: 'resortos_record_payment', arguments: args }
+  }, issued.access_token);
+  assert.equal(second.json.result.structuredContent.idempotent, true);
+  assert.equal(calls.length, 1);
+});
+
+test('resortos_record_payment updates payment_status to PAID when fully paid', async () => {
+  const { handler, oauth, calls } = harness({
+    loadBookingById: async (_user, id) => id === 'b2' ? {
+      id: 'b2',
+      unit_id: 'k680',
+      guest_name: 'אורח',
+      check_in_date: '2026-10-16',
+      check_out_date: '2026-10-17',
+      booking_status: 'CONFIRMED',
+      payment_status: 'UNPAID',
+      total_price_agorot: 100000,
+      deposit_agorot: 0,
+      clearing_payments: []
+    } : null
+  });
+  const issued = await managerToken(oauth);
+  const result = await call(handler, {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'tools/call',
+    params: {
+      name: 'resortos_record_payment',
+      arguments: {
+        booking_id: 'b2',
+        amount_ils: 1000,
+        method: 'CARD'
+      }
+    }
+  }, issued.access_token);
+  assert.equal(result.status, 200);
+  const content = result.json.result.structuredContent;
+  assert.equal(content.payment_status, 'PAID');
+  assert.equal(content.balance_ils, '0.00');
+  assert.equal(calls[0].patch.payment_status, 'PAID');
+});
+
+test('resortos_record_payment rejects unauthenticated callers', async () => {
+  const { handler } = harness();
+  const result = await call(handler, {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'tools/call',
+    params: {
+      name: 'resortos_record_payment',
+      arguments: {
+        booking_id: 'b1',
+        amount_ils: 100,
+        method: 'CASH'
+      }
+    }
+  }, '');
+  assert.equal(result.status, 401);
 });
