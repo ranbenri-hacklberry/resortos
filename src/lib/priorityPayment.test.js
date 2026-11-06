@@ -253,6 +253,40 @@ describe('priority payment', () => {
     expect(chargeDisplay({ source: 'HYP', amount_agorot: 100, method: 'card' }).approval).toBe('');
   });
 
+  it('exposes txn, invoice, and gateway from chargeDisplay', () => {
+    const cardcomPayment = {
+      source: 'CARD',
+      gateway: 'cardcom',
+      txn: '269149464',
+      deal_number: '269149464',
+      invoice: '6',
+      document_number: '6',
+      document_url: 'https://secure.cardcom.solutions/doc/6',
+      amount_agorot: 65000,
+      approval: '0834838',
+      last4: '7717'
+    };
+    const display = chargeDisplay(cardcomPayment);
+    expect(display.txn).toBe('269149464');
+    expect(display.invoice).toBe('6');
+    expect(display.gateway).toBe('cardcom');
+    expect(display.approval).toBe('0834838');
+    expect(display.last4).toBe('7717');
+    expect(display.kind).toBe('card');
+    expect(display.needsApproval).toBe(true);
+  });
+
+  it('shows txn without invoice when invoice missing', () => {
+    const payment = {
+      source: 'CARD',
+      txn: '269149464',
+      amount_agorot: 65000
+    };
+    const display = chargeDisplay(payment);
+    expect(display.txn).toBe('269149464');
+    expect(display.invoice).toBe('');
+  });
+
   it('does not put a card payment into the cash report', () => {
     const card = stay({ payment_status: 'PAID', payment_mode: 'CARD' });
     expect(priorityPayLabel({ status: 'PAID', method: 'CARD', amountAgorot: 200000 })).toBe('שולם (אשראי)');
