@@ -35,7 +35,9 @@ import { skipPaymentChoiceAfterId } from '../lib/stayAccess';
 import {
   checkoutPayUrl,
   confirmChargePlan,
-  guestCheckoutShowsStay
+  guestCheckoutResumeStep,
+  guestCheckoutShowsStay,
+  guestHasId
 } from '../lib/guestPaymentFlow';
 import GuestStay from './GuestStay';
 import HypPayFrame from './HypPayFrame';
@@ -125,8 +127,8 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
   const themeStyles = guestThemeStyles(theme);
   const activeBooking = freshBooking || booking;
 
-  // Stay portal (area guide / Maps) only after payment is done or this visit is in-house.
-  // Choosing a card or bank method keeps the guest on the payment step.
+  // Stay portal only after the payment path is finished, or the guest is in-house.
+  // An ID on file, including an unpaid saved card choice, stays on payment options.
   const stayReady = guestCheckoutShowsStay({
     payFrame,
     bankFollowup,
@@ -135,6 +137,20 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
     booking: activeBooking,
     skipPayment: skipPaymentChoiceAfterId(activeBooking)
   });
+
+  useEffect(() => {
+    if (!activeBooking || stayReady || payFrame || bankFollowup) return;
+    if (!guestHasId(activeBooking)) return;
+    const resume = guestCheckoutResumeStep(activeBooking);
+    if (resume > 1) setStep((current) => (current < resume ? resume : current));
+  }, [
+    activeBooking,
+    stayReady,
+    payFrame,
+    bankFollowup,
+    activeBooking?.stay?.id_photo_received_at,
+    activeBooking?.stay?.id_scan
+  ]);
 
   useEffect(() => {
     if (previewBooking || !token || typeof window === 'undefined') return;

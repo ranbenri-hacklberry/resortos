@@ -3,6 +3,7 @@ import {
   checkoutPayUrl,
   confirmChargePlan,
   confirmShouldStartCardCharge,
+  guestCheckoutResumeStep,
   guestCheckoutShowsStay
 } from './guestPaymentFlow.js';
 
@@ -29,6 +30,32 @@ describe('guest payment view after method selection', () => {
       payFrame: checkoutPayUrl(booking),
       booking
     })).toBe(false);
+  });
+
+  it('after ID, an unpaid card choice reopens payment options instead of the stay guide', () => {
+    const booking = {
+      booking_status: 'CONFIRMED',
+      payment_status: 'UNPAID',
+      payment_mode: '',
+      balance_payment_preference: 'CREDIT_CARD',
+      total_price_agorot: 135000,
+      deposit_agorot: 27000,
+      stay: {
+        id_photo_received_at: '2026-11-06T11:29:34.361Z',
+        checkout_completed_at: '2026-11-06T11:29:42.170Z',
+        payment_choice: 'CREDIT_CARD',
+        balance_payment_preference: 'CREDIT_CARD',
+        cabin_ready: true,
+        operational_status: 'READY'
+      }
+    };
+    expect(guestCheckoutShowsStay({ booking })).toBe(false);
+    expect(guestCheckoutShowsStay({ booking, isSubmitted: true })).toBe(false);
+    expect(guestCheckoutResumeStep(booking)).toBe(3);
+    expect(guestCheckoutShowsStay({
+      booking: { ...booking, payment_status: 'PAID' }
+    })).toBe(true);
+    expect(guestCheckoutResumeStep({ ...booking, payment_status: 'PAID' })).toBe(1);
   });
 
   it('does not treat the API default credit-card preference as a finished payment', () => {
@@ -70,6 +97,19 @@ describe('guest payment view after method selection', () => {
         }
       }
     })).toBe(true);
+    expect(guestCheckoutShowsStay({
+      booking: {
+        payment_status: 'UNPAID',
+        stay: {
+          id_photo_received_at: '2026-11-06T10:00:00Z',
+          checkout_completed_at: '2026-11-06T10:05:00Z',
+          payment_choice: 'BANK_TRANSFER'
+        }
+      }
+    })).toBe(true);
+    expect(guestCheckoutResumeStep({
+      stay: { id_photo_received_at: '2026-11-06T10:00:00Z' }
+    })).toBe(3);
   });
 
   it('a paid return or in-house guest still sees the stay page', () => {
