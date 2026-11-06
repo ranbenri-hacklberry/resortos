@@ -10,6 +10,7 @@ export const HYP_BASE = 'https://pay.hyp.co.il/p/';
 export const HYP_TERMINAL_A = '4502210929';
 export const HYP_TERMINAL_B = '4502315932';
 export const HYP_RETURN_ORIGIN = 'https://resortos.app';
+export const FALLBACK_INVOICE_EMAIL = 'mialeesresort@mialees.com';
 
 export function hypBrowserReturnUrl() {
   return `${HYP_RETURN_ORIGIN}/api/payments/hyp/success`;
@@ -578,12 +579,14 @@ export function buildHypLowProfileBody(user, input) {
       } : {})
     }
   };
-  if (input.invoice !== false && input.sendHesh !== false && (input.email || (input.products && input.products.length))) {
+  if (input.invoice !== false && input.sendHesh !== false) {
+    const customerEmail = String(input.email || '').trim();
+    const invoiceEmail = customerEmail || FALLBACK_INVOICE_EMAIL;
     body.Document = {
       Name: fullName,
-      Email: input.email || undefined,
+      Email: invoiceEmail,
       Phone: digitsPhone(input.cell) || undefined,
-      IsSendByEmail: Boolean(input.email),
+      IsSendByEmail: true,
       Products: products
     };
   }

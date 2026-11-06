@@ -18,6 +18,7 @@ export const MANUAL_CHARGE_URL = 'https://secure.cardcom.solutions/api/v11/Trans
 export const TAP_PHYSICAL_LIMIT_ILS = 300;
 export const WALK_IN_MAX_ILS = 20000;
 export const MAX_PAYMENTS = 12;
+export const FALLBACK_INVOICE_EMAIL = 'mialeesresort@mialees.com';
 
 const SECRET_KEYS = new Set([
   'apipassword',
@@ -261,7 +262,8 @@ export function buildCreateDocumentBody(creds, input) {
     throw err;
   }
   const amount = roundMoney(input.amount);
-  const email = String(input.email || '').trim();
+  const customerEmail = String(input.email || '').trim();
+  const invoiceEmail = customerEmail || FALLBACK_INVOICE_EMAIL;
   const phone = String(input.phone || '').trim();
   const name = String(input.name || '').trim() || 'אורח';
   return {
@@ -271,9 +273,9 @@ export function buildCreateDocumentBody(creds, input) {
     Document: {
       DocumentTypeToCreate: 'TaxInvoiceAndReceipt',
       Name: name,
-      Email: email || undefined,
+      Email: invoiceEmail,
       Phone: phone || undefined,
-      IsSendByEmail: Boolean(email),
+      IsSendByEmail: true,
       Products: [{
         Description: String(input.description || 'שהייה במיאליס').slice(0, 200),
         UnitCost: amount,
