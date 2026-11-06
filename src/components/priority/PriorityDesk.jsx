@@ -57,6 +57,7 @@ import { addCardSplit } from '../../lib/cardSplit';
 import { cashCollectorChoices, DEFAULT_CASH_COLLECTOR } from '../../lib/cashCollectors';
 import { pushBookingToCloud, pushUnitToCloud, subscribeToOpsEdgeEvents, syncCloudBookingsToDexie, syncUnitOpsToDexie } from '../../lib/cloudDb';
 import { getStoredToken, listAssignableStaff, staffDisplayName } from '../../lib/staffAuth';
+import { readApiJson } from '../../lib/readApiJson';
 import { toMicropayPhone } from '../../lib/micropaySms';
 import { displayPhone, heStayDate } from '../command/liveCabins';
 import PriorityCashflow from './PriorityCashflow';
@@ -2744,6 +2745,17 @@ function StayProofs({ booking, canEdit, saving, onSave, onOpen }) {
   );
 }
 
+function commsFailureText(err, fallback = 'שגיאה') {
+  const code = err?.message || '';
+  if (err?.status === 401 || code === 'UNAUTHORIZED') return 'צריך להתחבר מחדש';
+  if (code === 'COMMS_UNAVAILABLE' || code === 'COMMS_LIST_FAILED' || code === 'COMMS_FAILED') {
+    return 'לא ניתן לטעון הודעות (בדקו חיבור לשרת)';
+  }
+  if (code === 'PUBLISH_FAILED') return 'קישור האורח לא עלה לשרת — הסמס לא נשלח';
+  if (!code || /^[A-Z0-9_]+$/.test(code)) return fallback;
+  return code;
+}
+
 function SplitFeedPanel({
   card,
   booking = null,
@@ -2786,6 +2798,11 @@ function SplitFeedPanel({
     upsell_price: ''
   });
   const feedEndRef = useRef(null);
+
+  useEffect(() => {
+    if (tab !== 'comms') return;
+    feedEndRef.current?.scrollIntoView({ block: 'end' });
+  }, [commsRows, tab]);
 
   const bookingId = card?.bookingId || booking?.id || '';
   const phone = card?.phoneRaw || card?.phone || '';
@@ -2899,8 +2916,7 @@ function SplitFeedPanel({
     const token = getStoredToken();
     if (token) headers.Authorization = `Bearer ${token}`;
     const response = await fetch(`/api/guest-comms?booking_id=${encodeURIComponent(bookingId)}`, { headers });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || 'COMMS_LIST_FAILED');
+    const data = await readApiJson(response);
     const rows = Array.isArray(data.rows) ? data.rows : [];
     setCommsRows(rows);
 
@@ -2918,7 +2934,7 @@ function SplitFeedPanel({
 
   useEffect(() => {
     setCommsError('');
-    loadComms().catch((err) => setCommsError(err.message || 'שגיאה'));
+    loadComms().catch((err) => setCommsError(commsFailureText(err)));
   }, [bookingId]);
 
   async function postComm(body) {
@@ -2930,8 +2946,7 @@ function SplitFeedPanel({
       headers,
       body: JSON.stringify({ booking_id: bookingId, channel_id: automationChannel, ...body })
     });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || 'COMMS_SEND_FAILED');
+    const data = await readApiJson(response);
     setAutoReplyEnabled(false);
     if (refreshUnreadSummary) refreshUnreadSummary();
     return data;
@@ -2947,7 +2962,7 @@ function SplitFeedPanel({
       if (setMessage) setMessage(`${card.name}: נשלח קישור דף אורח בסמס`);
       if (tab !== 'comms') setTab('comms');
     } catch (err) {
-      setCommsError(err.message || 'שליחת קישור נכשלה');
+      setCommsError(commsFailureText(err, 'שליחת קישור נכשלה'));
     } finally {
       setCommsBusy(false);
     }
@@ -2967,7 +2982,7 @@ function SplitFeedPanel({
       }
       await loadComms();
     } catch (err) {
-      setCommsError(err.message || 'השיחה לא נרשמה');
+      setCommsError(commsFailureText(err, 'השיחה לא נרשמה'));
     } finally {
       setCommsBusy(false);
     }
@@ -3005,7 +3020,7 @@ function SplitFeedPanel({
       await loadComms();
       if (tab !== 'comms') setTab('comms');
     } catch (err) {
-      setCommsError(err.message || 'השליחה נכשלה');
+      setCommsError(commsFailureText(err, 'השליחה נכשלה'));
     } finally {
       setCommsBusy(false);
     }

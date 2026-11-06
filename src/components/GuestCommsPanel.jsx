@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { MessageSquare, Send, RefreshCw, X } from 'lucide-react';
 import { getStoredToken } from '../lib/staffAuth';
 import { GUEST_SMS_TEMPLATES, guestPresenceBadge, templateById } from '../lib/guestComms';
+import { readApiJson } from '../lib/readApiJson';
 import { guestStayUrl } from '../lib/guestStayUrl';
 import { unitFullName } from '../lib/units';
 
@@ -15,14 +16,7 @@ async function commsFetch(path, options = {}) {
     headers,
     signal: options.signal || AbortSignal.timeout(20000)
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const err = new Error(data.error || 'COMMS_FAILED');
-    err.status = response.status;
-    err.body = data;
-    throw err;
-  }
-  return data;
+  return readApiJson(response);
 }
 
 function statusLabel(status) {
@@ -170,7 +164,7 @@ export default function GuestCommsPanel({ booking, themeStyles, isLight }) {
       setError(
         err.status === 401
           ? 'צריך להתחבר מחדש'
-          : err.message === 'COMMS_LIST_FAILED' || err.message === 'COMMS_FAILED'
+          : err.message === 'COMMS_LIST_FAILED' || err.message === 'COMMS_FAILED' || err.message === 'COMMS_UNAVAILABLE'
             ? 'לא ניתן לטעון הודעות (בדקו חיבור לשרת)'
             : (err.message || 'שגיאה')
       );
