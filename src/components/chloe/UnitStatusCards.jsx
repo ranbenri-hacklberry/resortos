@@ -26,6 +26,7 @@ export function UnitStatusCards({ data }) {
   const [expandedUnitId, setExpandedUnitId] = useState(null);
   const [updatingUnitId, setUpdatingUnitId] = useState(null);
   const [statusFeedback, setStatusFeedback] = useState({}); // unitId -> string
+  const [confirmModal, setConfirmModal] = useState(null);
 
   // Keep local items in sync if prop changes significantly
   React.useEffect(() => {
@@ -186,6 +187,44 @@ export function UnitStatusCards({ data }) {
     } finally {
       setUpdatingUnitId(null);
     }
+  };
+
+  const requestUpdateStatus = (u, targetStatus, targetLabel) => {
+    const currentLabel = u.status === 'READY'
+      ? 'מוכן'
+      : u.status === 'IN_PROGRESS'
+        ? 'בניקיון'
+        : (u.status === 'MAINTENANCE_ALERT' || u.status === 'MAINTENANCE')
+          ? 'תקלה'
+          : 'לניקוי';
+    if (u.status === targetStatus) return;
+    setConfirmModal({
+      unitId: u.id,
+      unitName: safeString(u.name || u.unitName || u.id),
+      currentLabel,
+      targetStatus,
+      targetLabel,
+      isDepart: false,
+      onConfirm: () => {
+        handleUpdateUnitStatus(u.id, targetStatus);
+        setConfirmModal(null);
+      }
+    });
+  };
+
+  const requestMarkDeparted = (u) => {
+    setConfirmModal({
+      unitId: u.id,
+      unitName: safeString(u.name || u.unitName || u.id),
+      currentLabel: u.is_still_in_house ? 'עוד בשהייה' : 'בשהייה',
+      targetStatus: 'DEPARTED',
+      targetLabel: 'האורח יצא (צ׳ק-אאוט)',
+      isDepart: true,
+      onConfirm: () => {
+        handleMarkDeparted(u.id);
+        setConfirmModal(null);
+      }
+    });
   };
 
   const renderUnitCard = (u) => {
@@ -371,7 +410,7 @@ export function UnitStatusCards({ data }) {
             <button
               type="button"
               disabled={updatingUnitId === u.id}
-              onClick={() => handleMarkDeparted(u.id)}
+              onClick={() => requestMarkDeparted(u)}
               style={{
                 width: '100%',
                 background: 'linear-gradient(135deg, #10B981, #059669)',
@@ -394,7 +433,7 @@ export function UnitStatusCards({ data }) {
             </button>
           )}
 
-          {/* Quick 1-Click Operational Status Switcher Pills */}
+          {/* Operational Status Switcher Pills (עם וידוא שינוי סטטוס) */}
           <div style={{
             display: 'grid',
             gridTemplateColumns: '1fr 1fr 1fr 1fr',
@@ -404,7 +443,7 @@ export function UnitStatusCards({ data }) {
             <button
               type="button"
               disabled={updatingUnitId === u.id}
-              onClick={() => handleUpdateUnitStatus(u.id, 'READY')}
+              onClick={() => requestUpdateStatus(u, 'READY', 'מוכן')}
               style={{
                 padding: '0.35rem 0.2rem',
                 borderRadius: '6px',
@@ -419,7 +458,7 @@ export function UnitStatusCards({ data }) {
                 justifyContent: 'center',
                 gap: '0.2rem'
               }}
-              title="סמן כנקי ומוכן לקליטה"
+              title="סמן כנקי ומוכן לקליטה (דורש אישור)"
             >
               <Check size={11} />
               <span>מוכן</span>
@@ -429,7 +468,7 @@ export function UnitStatusCards({ data }) {
             <button
               type="button"
               disabled={updatingUnitId === u.id}
-              onClick={() => handleUpdateUnitStatus(u.id, 'IN_PROGRESS')}
+              onClick={() => requestUpdateStatus(u, 'IN_PROGRESS', 'בניקיון')}
               style={{
                 padding: '0.35rem 0.2rem',
                 borderRadius: '6px',
@@ -444,7 +483,7 @@ export function UnitStatusCards({ data }) {
                 justifyContent: 'center',
                 gap: '0.2rem'
               }}
-              title="סמן שבניקיון כרגע"
+              title="סמן שבניקיון כרגע (דורש אישור)"
             >
               <Clock size={11} />
               <span>בניקיון</span>
@@ -454,7 +493,7 @@ export function UnitStatusCards({ data }) {
             <button
               type="button"
               disabled={updatingUnitId === u.id}
-              onClick={() => handleUpdateUnitStatus(u.id, 'DIRTY')}
+              onClick={() => requestUpdateStatus(u, 'DIRTY', 'לניקוי')}
               style={{
                 padding: '0.35rem 0.2rem',
                 borderRadius: '6px',
@@ -469,7 +508,7 @@ export function UnitStatusCards({ data }) {
                 justifyContent: 'center',
                 gap: '0.2rem'
               }}
-              title="סמן כממתין לניקיון"
+              title="סמן כממתין לניקיון (דורש אישור)"
             >
               <RefreshCw size={11} />
               <span>לניקוי</span>
@@ -479,7 +518,7 @@ export function UnitStatusCards({ data }) {
             <button
               type="button"
               disabled={updatingUnitId === u.id}
-              onClick={() => handleUpdateUnitStatus(u.id, 'MAINTENANCE_ALERT')}
+              onClick={() => requestUpdateStatus(u, 'MAINTENANCE_ALERT', 'תקלה')}
               style={{
                 padding: '0.35rem 0.2rem',
                 borderRadius: '6px',
@@ -494,7 +533,7 @@ export function UnitStatusCards({ data }) {
                 justifyContent: 'center',
                 gap: '0.2rem'
               }}
-              title="דווח על תקלת אחזקה"
+              title="דווח על תקלת אחזקה (דורש אישור)"
             >
               <Wrench size={11} />
               <span>תקלה</span>
@@ -688,6 +727,94 @@ export function UnitStatusCards({ data }) {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
           {filteredItems.map(renderUnitCard)}
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {confirmModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="confirm-status-title"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            zIndex: 10000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem',
+            backdropFilter: 'blur(3px)'
+          }}
+          onClick={() => setConfirmModal(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#FFFFFF',
+              borderRadius: '12px',
+              maxWidth: '380px',
+              width: '100%',
+              padding: '1.25rem',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25), 0 10px 10px -5px rgba(0, 0, 0, 0.1)',
+              direction: 'rtl',
+              textAlign: 'right',
+              border: '1px solid #E2E8F0',
+              fontFamily: 'inherit'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.65rem' }}>
+              <span style={{ fontSize: '1.25rem' }}>⚠️</span>
+              <h3 id="confirm-status-title" style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0F172A' }}>
+                וידוא שינוי סטטוס
+              </h3>
+            </div>
+            <p style={{ margin: '0 0 1.15rem 0', fontSize: '0.86rem', color: '#334155', lineHeight: 1.55 }}>
+              {confirmModal.isDepart ? (
+                <>האם לסמן יציאת אורח (צ׳ק-אאוט) עבור <strong>{confirmModal.unitName}</strong>? היחידה תעבור לראש תור הניקיון.</>
+              ) : (
+                <>
+                  האם לשנות את סטטוס יחידה <strong>{confirmModal.unitName}</strong> מ-<strong>{confirmModal.currentLabel}</strong> ל-<strong>{confirmModal.targetLabel}</strong>?
+                </>
+              )}
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.65rem' }}>
+              <button
+                type="button"
+                onClick={() => setConfirmModal(null)}
+                style={{
+                  padding: '0.45rem 0.95rem',
+                  borderRadius: '6px',
+                  border: '1px solid #CBD5E1',
+                  background: '#F1F5F9',
+                  color: '#334155',
+                  fontWeight: 700,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer'
+                }}
+              >
+                ביטול
+              </button>
+              <button
+                type="button"
+                onClick={() => confirmModal.onConfirm()}
+                style={{
+                  padding: '0.45rem 1.05rem',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: '#059669',
+                  color: '#FFFFFF',
+                  fontWeight: 800,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.1)'
+                }}
+              >
+                אישור שינוי
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
