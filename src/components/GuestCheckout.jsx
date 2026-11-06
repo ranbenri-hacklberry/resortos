@@ -20,21 +20,26 @@ import {
 import { confirmGuestCheckout, fetchGuestCheckout } from '../lib/guestCheckoutApi';
 import { useGuestBooking } from '../lib/useGuestBooking';
 import { persistStayToken } from '../lib/stayToken';
-import { isAndroidInAppBrowser, listenHypParentBreakout } from '../lib/guestPayBrowser';
+import { listenHypParentBreakout } from '../lib/guestPayBrowser';
 import {
   applyGuestTheme,
   guestThemeStyles,
   persistGuestTheme,
   readGuestTheme,
-  usableGuestName,
-  guestShouldSeeStayPortal
+  usableGuestName
 } from '../lib/guestTheme';
 import { cleanGuestCabinName, localizedUnitName } from '../lib/units';
 import { applyStayCabin } from '../lib/cabinParty';
 import { applyPaySplitView } from '../lib/paySplit';
 import { skipPaymentChoiceAfterId } from '../lib/stayAccess';
+import {
+  checkoutPayUrl,
+  confirmChargePlan,
+  guestCheckoutShowsStay
+} from '../lib/guestPaymentFlow';
 import GuestStay from './GuestStay';
 import HypPayFrame from './HypPayFrame';
+import BankDetailsCard from './BankDetailsCard';
 import GuestChrome from './GuestChrome';
 import GuestReach from './GuestReach';
 import '../guest.css';
@@ -113,17 +118,23 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
   const [agreed, setAgreed] = useState(false);
   const [freshBooking, setFreshBooking] = useState(null);
   const [payFrame, setPayFrame] = useState('');
+  const [bankFollowup, setBankFollowup] = useState(false);
   const paidReturn = hypPaidReturn();
   const hypStatus = typeof window === 'undefined' ? '' : new URLSearchParams(window.location.search).get('hyp') || '';
 
   const themeStyles = guestThemeStyles(theme);
   const activeBooking = freshBooking || booking;
 
-  // Once submitted or paid, or returning guest already completed ID + payment preference
-  const stayReady =
-    isSubmitted ||
-    paidReturn ||
-    (Boolean(activeBooking?.stay?.id_photo_received_at || activeBooking?.stay?.id_scan) && (Boolean(activeBooking?.balance_payment_preference || activeBooking?.payment_mode === 'CASH_TRUST') || skipPaymentChoiceAfterId(activeBooking)));
+  // Stay portal (area guide / Maps) only after payment is done or this visit is in-house.
+  // Choosing a card or bank method keeps the guest on the payment step.
+  const stayReady = guestCheckoutShowsStay({
+    payFrame,
+    bankFollowup,
+    isSubmitted,
+    paidReturn,
+    booking: activeBooking,
+    skipPayment: skipPaymentChoiceAfterId(activeBooking)
+  });
 
   useEffect(() => {
     if (previewBooking || !token || typeof window === 'undefined') return;
@@ -262,6 +273,7 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
   const totalPriceIls = Math.round((activeBooking.total_price_agorot || 0) / 100);
   const depositIls = Math.round((activeBooking.deposit_agorot || 0) / 100);
   const payNowIls = paymentMode === 'CASH_TRUST' ? 0 : paymentMode === 'CREDIT_FULL' ? totalPriceIls : depositIls;
+  const cardChargeIls = paymentMode === 'CREDIT_FULL' || !(depositIls > 0.5) ? totalPriceIls : depositIls;
   const balanceIls = Math.max(0, totalPriceIls - payNowIls);
   const isPrepaid = activeBooking.payment_status === 'PAID'
     || activeBooking.payment_mode === 'BOOKING'
@@ -379,20 +391,36 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
         voucherCode ? `שובר: ${voucherCode}` : ''
       ].filter(Boolean).join('\n');
 
+      const plan = confirmChargePlan({ choice: balancePref, prepaid: isPrepaid });
       const next = await confirmGuestCheckout(token, {
         guest_name: guestName || usableGuestName(activeBooking?.guest_name) || 'נטשה',
         guest_email: guestEmail,
         special_requests: fullRequests,
-        pay: false,
+        pay: plan.pay,
+        embed_receipt: plan.embedReceipt,
         balance_payment_preference: safePref,
         payment_mode: mode,
         payment_choice: balancePref,
         voucher_code: voucherCode || ''
       });
+      const payUrl = checkoutPayUrl(next);
+      if (plan.next === 'cardcom') {
+        if (!payUrl) {
+          window.alert(t('GUEST_PAY_FAILED'));
+          return;
+        }
+        if (next) setFreshBooking(next);
+        setPayFrame(payUrl);
+        return;
+      }
       if (next) setFreshBooking(next);
+      if (plan.next === 'bank') {
+        setBankFollowup(true);
+        return;
+      }
       setIsSubmitted(true);
     } catch (_) {
-      window.alert(t('GUEST_CONFIRM_FAILED'));
+      window.alert(t(balancePref === 'CREDIT_CARD' && !isPrepaid ? 'GUEST_PAY_FAILED' : 'GUEST_CONFIRM_FAILED'));
     } finally {
       setPaying(false);
     }
@@ -637,6 +665,47 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
           themeStyles={themeStyles}
           justConfirmed={isSubmitted || paidReturn}
         />
+      ) : payFrame ? (
+        <div style={{ marginTop: '0.35rem' }}>
+          <h3 style={{ margin: '0 0 0.45rem', fontSize: '1.05rem', fontWeight: 900 }}>{t('GUEST_PAY_PAGE_TITLE')}</h3>
+          <HypPayFrame
+            url={payFrame}
+            t={t}
+            themeStyles={themeStyles}
+            amountLabel={(Number(activeBooking?.payment?.quote?.amount || cardChargeIls) || 0).toLocaleString('he-IL')}
+            onDone={finishPayment}
+            doneBusy={paying}
+          />
+        </div>
+      ) : bankFollowup ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 900 }}>{t('GUEST_PAY_BANK_TITLE')}</h3>
+            <p style={{ margin: '4px 0 0', fontSize: '0.84rem', color: themeStyles.textMuted, lineHeight: 1.5 }}>
+              {t('GUEST_PAY_BANK_DESC')}
+            </p>
+          </div>
+          <BankDetailsCard themeStyles={themeStyles} t={t} />
+          <button
+            type="button"
+            onClick={() => {
+              setBankFollowup(false);
+              setIsSubmitted(true);
+            }}
+            style={{
+              width: '100%',
+              border: 'none',
+              borderRadius: 12,
+              padding: '0.85rem',
+              fontWeight: 900,
+              background: themeStyles.cta,
+              color: themeStyles.ctaText,
+              cursor: 'pointer'
+            }}
+          >
+            {t('GUEST_STEP_3_CTA')}
+          </button>
+        </div>
       ) : (
         <>
           {renderTermsModal()}
@@ -1300,7 +1369,13 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
                     boxShadow: '0 4px 14px rgba(0,0,0,0.15)'
                   }}
                 >
-                  {paying ? t('GUEST_LOADING') : t('GUEST_STEP_3_CTA')}
+                  {paying
+                    ? t('GUEST_LOADING')
+                    : (balancePref === 'CREDIT_CARD' && !isPrepaid && cardChargeIls > 0.5
+                      ? t(paymentMode === 'CREDIT_FULL' || !(depositIls > 0.5) ? 'CONFIRM_AND_PAY_FULL' : 'CONFIRM_AND_PAY_DEPOSIT', {
+                        amount: cardChargeIls.toLocaleString('he-IL')
+                      })
+                      : t('GUEST_STEP_3_CTA'))}
                 </button>
               </div>
             </div>

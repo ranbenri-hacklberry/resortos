@@ -7,6 +7,7 @@ import {
   pullConfirmedFromMailbox
 } from './checkoutMailbox.js';
 import { stayExpiresAt, stayLinkExpired } from '../src/lib/stayAccess.js';
+import { confirmShouldStartCardCharge } from '../src/lib/guestPaymentFlow.js';
 import { scheduleGuestContextPush } from './guestContext.js';
 
 const BOOKING_TABLE = 'hotelos_bookings';
@@ -53,7 +54,28 @@ function publicBooking(row) {
     expires_at: row.expires_at,
     created_at: row.created_at,
     updated_at: row.updated_at,
-    stay: row.stay || null
+    stay: row.stay || null,
+    payment: publicCardPayment(row.payment)
+  };
+}
+
+function publicCardPayment(payment) {
+  if (!payment || typeof payment !== 'object') return null;
+  const payUrl = String(payment.iframe_url || payment.pay_url || '').trim();
+  if (!payUrl) return null;
+  const quote = payment.quote && typeof payment.quote === 'object'
+    ? {
+      amount: payment.quote.amount,
+      purpose: payment.quote.purpose || '',
+      needsCharge: payment.quote.needsCharge
+    }
+    : undefined;
+  return {
+    pay_url: payment.pay_url || payUrl,
+    iframe_url: payment.iframe_url || payUrl,
+    embed: Boolean(payment.embed),
+    purpose: payment.purpose || '',
+    ...(quote ? { quote } : {})
   };
 }
 
@@ -384,6 +406,11 @@ export async function confirmGuestCheckout(req, res) {
     ? 'CASH_TRUST'
     : (req.body?.payment_mode || (paymentChoice === 'VOUCHER' ? 'VOUCHER' : paymentChoice === 'ALREADY_PAID' ? 'ALREADY_PAID' : 'CREDIT_DEPOSIT'));
   const voucherCode = String(req.body?.voucher_code || '').trim();
+  const chargeCard = confirmShouldStartCardCharge({
+    pay: req.body?.pay === true,
+    paymentMode,
+    paymentChoice
+  });
 
   if (!guestName) {
     return res.status(400).json({ error: 'MISSING_GUEST_FIELDS' });
@@ -396,11 +423,16 @@ export async function confirmGuestCheckout(req, res) {
       special_requests: specialRequests,
       balance_payment_preference: balancePref,
       payment_mode: paymentMode,
-      pay: false
+      payment_choice: paymentChoice,
+      voucher_code: voucherCode || '',
+      pay: chargeCard,
+      embed_receipt: chargeCard
     };
     let saved = null;
+    let mailboxBooking = null;
     if (isMailboxConfigured()) {
-      saved = await confirmMailboxBooking(token, payload);
+      mailboxBooking = await confirmMailboxBooking(token, payload);
+      saved = mailboxBooking;
     }
     const row = await findByToken(token);
     if (row) {
@@ -449,7 +481,10 @@ export async function confirmGuestCheckout(req, res) {
     if (!saved && !row) {
       return res.status(404).json({ error: 'NOT_FOUND' });
     }
-    return res.json(publicBooking(saved || row));
+    const view = publicBooking(saved || row);
+    const cardPayment = publicCardPayment(mailboxBooking?.payment);
+    if (view && cardPayment) view.payment = cardPayment;
+    return res.json(view);
   } catch (err) {
     console.error('[guest checkout confirm]', err.message);
     return res.status(err.status || 500).json({ error: 'CONFIRM_FAILED' });

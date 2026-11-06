@@ -57,12 +57,24 @@ export function quoteGuestCharge(booking) {
       label: 'שהייה'
     };
   }
+  if (deposit > 0.5) {
+    return {
+      amount: deposit,
+      purpose: 'deposit',
+      terminal,
+      needsCharge: true,
+      label: 'מקדמה'
+    };
+  }
+  // No deposit on the booking: card checkout still has to open for the unpaid stay.
+  const due = bookingDueIls(booking);
+  const locked = booking?.hyp_terminal || booking?.stay?.hyp_terminal || booking?.stay?.hyp_intent?.terminal;
   return {
-    amount: deposit,
-    purpose: 'deposit',
-    terminal,
-    needsCharge: deposit > 0.5,
-    label: 'מקדמה'
+    amount: due,
+    purpose: 'balance',
+    terminal: locked ? terminal : 'A',
+    needsCharge: due > 0.5,
+    label: 'שהייה'
   };
 }
 
@@ -214,7 +226,9 @@ export async function startGuestPayment(booking, env, { successUrl, failUrl, sta
     successUrl,
     failUrl,
     stayInFrame: Boolean(stayInFrame),
-    tokenize: true
+    tokenize: true,
+    // Cardcom only. Do not fall back to the retired signed payment page.
+    allowSign: false
   });
   return {
     quote,
