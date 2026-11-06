@@ -34,11 +34,61 @@ export function checkoutPayUrl(booking) {
   return String(payment.iframe_url || payment.pay_url || '').trim();
 }
 
+function savedPaymentChoice(booking) {
+  return String(booking?.stay?.payment_choice || '').trim().toUpperCase();
+}
+
+function cardChoice(choice) {
+  return choice === 'CREDIT_CARD' || choice === 'CARD' || choice === 'CREDIT' || choice === 'SAVED_CARD';
+}
+
+/** Card was selected, but no money has been recorded yet. The guide must not replace payment. */
+export function unpaidCardChoice(booking) {
+  if (!booking) return false;
+  const status = String(booking.payment_status || '').toUpperCase();
+  if (status === 'PAID' || status === 'DEPOSIT_PAID' || status === 'PARTIAL' || status === 'PENDING_BANK' || status === 'PENDING_CASH') {
+    return false;
+  }
+  if (booking.stay?.hyp?.paid || booking.stay?.hyp_deposit?.paid || booking.balance_paid || booking.stay?.balance_paid) {
+    return false;
+  }
+  return cardChoice(savedPaymentChoice(booking));
+}
+
 /**
- * Stay portal (Maps / Waze / area guide) replaces checkout only when this visit
- * is done with payment, or the guest is already in-house.
- * An active Cardcom frame or bank-details step wins over that page.
- * A default CREDIT_CARD preference on the public booking is not a completed choice.
+ * A later stay-link visit may show the guide only after the payment path is finished:
+ * money recorded, or a non-card method was actually saved (cash, bank, voucher, already paid).
+ * An ID photo plus an unpaid credit-card choice is not finished, even if checkout_completed_at is set.
+ */
+export function paymentPathFinished(booking) {
+  if (!booking) return false;
+  if (unpaidCardChoice(booking)) return false;
+  const status = String(booking.payment_status || '').toUpperCase();
+  if (status === 'PAID' || status === 'DEPOSIT_PAID' || status === 'PARTIAL' || status === 'PENDING_BANK' || status === 'PENDING_CASH') {
+    return true;
+  }
+  if (booking.stay?.hyp?.paid || booking.stay?.hyp_deposit?.paid || booking.balance_paid || booking.stay?.balance_paid) {
+    return true;
+  }
+  const choice = savedPaymentChoice(booking);
+  if (!booking.stay?.checkout_completed_at || !choice || cardChoice(choice)) return false;
+  return choice === 'CASH' || choice === 'BANK_TRANSFER' || choice === 'BANK' || choice === 'VOUCHER' || choice === 'ALREADY_PAID';
+}
+
+export function guestHasId(booking) {
+  return Boolean(booking?.stay?.id_photo_received_at || booking?.stay?.id_scan);
+}
+
+/** After the ID is on file and payment is still open, reopen on the payment-method step. */
+export function guestCheckoutResumeStep(booking) {
+  if (!guestHasId(booking) || paymentPathFinished(booking)) return 1;
+  return 3;
+}
+
+/**
+ * Stay portal (Maps / Waze / area guide) replaces checkout only when payment is
+ * finished, the guest is already in-house, or this session just completed a non-card method.
+ * Uploading an ID, or saving an unpaid card choice, stays on the payment step.
  */
 export function guestCheckoutShowsStay({
   payFrame = '',
@@ -49,14 +99,11 @@ export function guestCheckoutShowsStay({
   skipPayment = false
 } = {}) {
   if (payFrame || bankFollowup) return false;
-  if (isSubmitted || paidReturn) return true;
+  if (paidReturn) return true;
+  if (isSubmitted && !unpaidCardChoice(booking)) return true;
   if (!booking) return false;
   if (booking.is_cabin_portal) return true;
   if (booking.booking_status === 'CHECKED_IN' || booking.booking_status === 'CHECKED_OUT') return true;
-  const hasId = Boolean(booking.stay?.id_photo_received_at || booking.stay?.id_scan);
-  if (!hasId) return false;
-  if (skipPayment) return true;
-  const choice = String(booking.stay?.payment_choice || '').trim();
-  if (!booking.stay?.checkout_completed_at || !choice) return false;
-  return true;
+  if (skipPayment && !unpaidCardChoice(booking)) return true;
+  return paymentPathFinished(booking);
 }
