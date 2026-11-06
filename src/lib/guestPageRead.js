@@ -42,17 +42,116 @@ const PROPERTY_NAMES = {
 };
 
 const PROPERTY_NAV = {
-  hill: { query: 'צימר בגבעה גבעת יואב' },
-  kipat: { query: 'כיפת השמיים גבעת יואב' },
-  mialis: { query: 'מיאליס ריזורט גבעת יואב' },
-  nurit: { query: 'בתי נורית מושב רמות', waze: 'https://waze.com/ul/hsvc6gs4p2' },
-  taj: { query: "טאג' מאהל מושב רמות" },
-  mool: { query: 'מול הנוף ברמות', waze: 'https://waze.com/ul/hsvc6gtk3v' },
-  nofim: { query: 'נופים בלבן מושב רמות' },
-  toscana: { query: 'בקתות טוסקנה מושב רמות', waze: 'https://waze.com/ul/hsvc6gsux5' },
-  musical: { query: 'החצר המוסיקלית מושב רמות', waze: 'https://waze.com/ul/hsvc6gsdq7' },
-  maya: { query: 'בקתות מאיה מושב רמות', waze: 'https://waze.com/ul/hsvc6gs4k0' },
-  'casa-nova': { query: 'קאסה נובה נוב' }
+  hill: {
+    query: 'צימר בגבעה גבעת יואב',
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.8011237,35.6845369'
+  },
+  kipat: {
+    query: 'כיפת השמיים גבעת יואב',
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.8022197,35.6830016'
+  },
+  mialis: {
+    query: 'מיאליס ריזורט גבעת יואב',
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.7834989,35.6869576'
+  },
+  nurit: {
+    query: 'בתי נורית מושב רמות',
+    waze: 'https://waze.com/ul/hsvc6gs4p2',
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.850371,35.664408'
+  },
+  taj: {
+    query: "טאג' מאהל מושב רמות",
+    waze: 'https://waze.com/ul/hsvc6gsskp',
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.852592,35.667799'
+  },
+  mool: {
+    query: 'מול הנוף ברמות',
+    waze: 'https://waze.com/ul/hsvc6gtk3v',
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.856309,35.667694'
+  },
+  nofim: {
+    query: 'נופים בלבן מושב רמות',
+    waze: 'https://waze.com/ul/hsvc6gt4ct',
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.854897,35.665635'
+  },
+  toscana: {
+    query: 'בקתות טוסקנה מושב רמות',
+    waze: 'https://waze.com/ul/hsvc6gsutg',
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.854241,35.667930'
+  },
+  musical: {
+    query: 'החצר המוסיקלית מושב רמות',
+    waze: 'https://waze.com/ul/hsvc6gsdq7',
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.852962,35.664861'
+  },
+  maya: {
+    query: 'בקתות מאיה מושב רמות',
+    waze: 'https://waze.com/ul/hsvc6gs4k0',
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.849829,35.664732'
+  },
+  'casa-nova': {
+    query: 'קאסה נובה מושב נוב',
+    waze: 'https://waze.com/ul?ll=32.8277487,35.7808935&navigate=yes',
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.8277487,35.7808935'
+  }
+};
+
+export const UNIT_NAV_OVERRIDES = {
+  // כיפת שמיים
+  'dome-red': {
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.8022197,35.6830016',
+    waze: 'https://waze.com/ul?ll=32.8022197,35.6830016&navigate=yes'
+  },
+  'dome-green': {
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.8021462,35.6828917',
+    waze: 'https://waze.com/ul?ll=32.8021462,35.6828917&navigate=yes'
+  },
+  'dome-blue': {
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.8023302,35.6831226',
+    waze: 'https://waze.com/ul?ll=32.8023302,35.6831226&navigate=yes'
+  },
+
+  // מיאליס
+  'suite-1': {
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.7835566,35.6868208',
+    waze: 'https://waze.com/ul?ll=32.7835566,35.6868208&navigate=yes'
+  },
+  'suite-2': {
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.7836233,35.6868252',
+    waze: 'https://waze.com/ul?ll=32.7836233,35.6868252&navigate=yes'
+  },
+  'mialis-villa': {
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.7834989,35.6869576',
+    waze: 'https://waze.com/ul?ll=32.7834989,35.6869576&navigate=yes'
+  },
+
+  // קאסה נובה
+  k826: {
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.8277487,35.7808935',
+    waze: 'https://waze.com/ul?ll=32.8277487,35.7808935&navigate=yes'
+  },
+  k827: {
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.8277491,35.7809611',
+    waze: 'https://waze.com/ul?ll=32.8277491,35.7809611&navigate=yes'
+  },
+
+  // צימר בגבעה
+  'hill-1': {
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.8011237,35.6845369',
+    waze: 'https://waze.com/ul?ll=32.8011237,35.6845369&navigate=yes'
+  },
+  'hill-2': {
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.8012232,35.6846325',
+    waze: 'https://waze.com/ul?ll=32.8012232,35.6846325&navigate=yes'
+  },
+  'hill-3': {
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.8013035,35.6845212',
+    waze: 'https://waze.com/ul?ll=32.8013035,35.6845212&navigate=yes'
+  },
+  'hill-4': {
+    maps: 'https://www.google.com/maps/dir/?api=1&destination=32.8011534,35.6844202',
+    waze: 'https://waze.com/ul?ll=32.8011534,35.6844202&navigate=yes'
+  }
 };
 
 export const GUEST_PRINT_ABSENT = {
@@ -140,7 +239,7 @@ export function projectGuestPage(booking) {
   const hours = hoursFor(booking);
   const visible = lockboxVisibleToGuest(booking);
   const access = guestAccessCodes(booking);
-  const nav = PROPERTY_NAV[propertyId] || {};
+  const nav = { ...(PROPERTY_NAV[propertyId] || {}), ...(UNIT_NAV_OVERRIDES[unitId] || {}) };
   return {
     booking_id: booking?.id || '',
     guest_name: guestNameFor(booking),

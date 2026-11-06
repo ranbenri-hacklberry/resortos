@@ -50,38 +50,86 @@ export const PROPERTY_SEED = {
     access: { gate: DIAL_GATE, wifi: [{ ssid: 'CASAMIA', password: 'CASAMIA10' }] }
   }),
   nurit: property('nurit', 'בתי נורית', 'מושב רמות', 'ramot', 10, {
-    content: { nav: { query: 'בתי נורית מושב רמות', waze: 'https://waze.com/ul/hsvc6gs4p2' } },
+    content: {
+      nav: {
+        query: 'בתי נורית מושב רמות',
+        waze: 'https://waze.com/ul/hsvc6gs4p2',
+        maps: 'https://www.google.com/maps/dir/?api=1&destination=32.850371,35.664408'
+      }
+    },
     access: { gate: RAMOT_GATE, wifi: [{ ssid: 'MIALEES RESORT', password: 'Mial2026' }] }
   }),
   taj: property('taj', "טאג' מאהל", 'מושב רמות', 'ramot', 11, {
-    content: { nav: { query: "טאג' מאהל מושב רמות", waze: 'https://waze.com/ul/hsvc6gsskp' } },
+    content: {
+      nav: {
+        query: "טאג' מאהל מושב רמות",
+        waze: 'https://waze.com/ul/hsvc6gsskp',
+        maps: 'https://www.google.com/maps/dir/?api=1&destination=32.852592,35.667799'
+      }
+    },
     access: { gate: RAMOT_GATE, wifi: [{ ssid: 'lotus', password: '12345678' }] }
   }),
   mool: property('mool', 'מול הנוף', 'מושב רמות', 'ramot', 12, {
-    content: { nav: { query: 'מול הנוף ברמות', waze: 'https://waze.com/ul/hsvc6gtk3v' } },
+    content: {
+      nav: {
+        query: 'מול הנוף ברמות',
+        waze: 'https://waze.com/ul/hsvc6gtk3v',
+        maps: 'https://www.google.com/maps/dir/?api=1&destination=32.856309,35.667694'
+      }
+    },
     access: { gate: RAMOT_GATE, wifi: [{ ssid: 'Mol_hanof', password: '12345678' }] }
   }),
   nofim: property('nofim', 'נופים בלבן', 'מושב רמות', 'ramot', 13, {
-    content: { nav: { query: 'נופים בלבן מושב רמות', waze: 'https://waze.com/ul/hsvc6gt4ct' } },
+    content: {
+      nav: {
+        query: 'נופים בלבן מושב רמות',
+        waze: 'https://waze.com/ul/hsvc6gt4ct',
+        maps: 'https://www.google.com/maps/dir/?api=1&destination=32.854897,35.665635'
+      }
+    },
     access: { gate: RAMOT_GATE, wifi: [{ ssid: 'TP-Link_FA30_5G', password: '15107312' }] }
   }),
   toscana: property('toscana', 'בקתות טוסקנה', 'מושב רמות', 'ramot', 14, {
-    content: { nav: { query: 'בקתות טוסקנה מושב רמות', waze: 'https://waze.com/ul/hsvc6gsutg' } },
+    content: {
+      nav: {
+        query: 'בקתות טוסקנה מושב רמות',
+        waze: 'https://waze.com/ul/hsvc6gsutg',
+        maps: 'https://www.google.com/maps/dir/?api=1&destination=32.854241,35.667930'
+      }
+    },
     access: {
       gate: RAMOT_GATE,
       wifi: [{ ssid: 'Toscana', password: '12345678' }]
     }
   }),
   musical: property('musical', 'החצר המוסיקלית', 'מושב רמות', 'ramot', 15, {
-    content: { nav: { query: 'החצר המוסיקלית מושב רמות', waze: 'https://waze.com/ul/hsvc6gsdq7' } },
+    content: {
+      nav: {
+        query: 'החצר המוסיקלית מושב רמות',
+        waze: 'https://waze.com/ul/hsvc6gsdq7',
+        maps: 'https://www.google.com/maps/dir/?api=1&destination=32.852962,35.664861'
+      }
+    },
     access: { gate: RAMOT_GATE, wifi: [{ ssid: 'Music yard', password: '12345678' }] }
   }),
   maya: property('maya', 'בקתות מאיה', 'מושב רמות', 'ramot', 16, {
-    content: { nav: { query: 'בקתות מאיה מושב רמות', waze: 'https://waze.com/ul/hsvc6gs4k0' } },
+    content: {
+      nav: {
+        query: 'בקתות מאיה מושב רמות',
+        waze: 'https://waze.com/ul/hsvc6gs4k0',
+        maps: 'https://www.google.com/maps/dir/?api=1&destination=32.849829,35.664732'
+      }
+    },
     access: { gate: RAMOT_GATE, wifi: MAYA_WIFI }
   }),
   'casa-nova': property('casa-nova', 'קאסה נובה', 'מושב נוב', 'nov', 20, {
-    content: { nav: { unavailable: true } },
+    content: {
+      nav: {
+        query: 'קאסה נובה מושב נוב',
+        waze: 'https://waze.com/ul?ll=32.8277487,35.7808935&navigate=yes',
+        maps: 'https://www.google.com/maps/dir/?api=1&destination=32.8277487,35.7808935'
+      }
+    },
     access: { gate: NIGHT_CALL_GATE, wifi: [{ ssid: 'MIALEES', password: 'AD654321' }] }
   })
 };
@@ -158,13 +206,105 @@ export const UNIT_OVERRIDES = {
   'pilot-office': {
     access: { wifi: [{ ssid: 'ResortOS_5G', password: '0506102416' }] }
   },
+  'dome-red': {
+    content: {
+      nav: {
+        maps: 'https://www.google.com/maps/dir/?api=1&destination=32.8022197,35.6830016',
+        waze: 'https://waze.com/ul?ll=32.8022197,35.6830016&navigate=yes'
+      }
+    }
+  },
+  'dome-green': {
+    content: {
+      nav: {
+        maps: 'https://www.google.com/maps/dir/?api=1&destination=32.8021462,35.6828917',
+        waze: 'https://waze.com/ul?ll=32.8021462,35.6828917&navigate=yes'
+      }
+    }
+  },
   'dome-blue': {
     content: {
+      nav: {
+        maps: 'https://www.google.com/maps/dir/?api=1&destination=32.8023302,35.6831226',
+        waze: 'https://waze.com/ul?ll=32.8023302,35.6831226&navigate=yes'
+      },
       guides: {
         tv: [
           'מדליקים את הטלוויזיה בכפתור בצד הטלוויזיה ומעבירים את הקלט ל־HDMI1.',
           'מדליקים את הממיר בשלט או בלחיצה על הכפתור בממיר עצמו.'
         ]
+      }
+    }
+  },
+  'suite-1': {
+    content: {
+      nav: {
+        maps: 'https://www.google.com/maps/dir/?api=1&destination=32.7835566,35.6868208',
+        waze: 'https://waze.com/ul?ll=32.7835566,35.6868208&navigate=yes'
+      }
+    }
+  },
+  'suite-2': {
+    content: {
+      nav: {
+        maps: 'https://www.google.com/maps/dir/?api=1&destination=32.7836233,35.6868252',
+        waze: 'https://waze.com/ul?ll=32.7836233,35.6868252&navigate=yes'
+      }
+    }
+  },
+  'mialis-villa': {
+    content: {
+      nav: {
+        maps: 'https://www.google.com/maps/dir/?api=1&destination=32.7834989,35.6869576',
+        waze: 'https://waze.com/ul?ll=32.7834989,35.6869576&navigate=yes'
+      }
+    }
+  },
+  k826: {
+    content: {
+      nav: {
+        maps: 'https://www.google.com/maps/dir/?api=1&destination=32.8277487,35.7808935',
+        waze: 'https://waze.com/ul?ll=32.8277487,35.7808935&navigate=yes'
+      }
+    }
+  },
+  k827: {
+    content: {
+      nav: {
+        maps: 'https://www.google.com/maps/dir/?api=1&destination=32.8277491,35.7809611',
+        waze: 'https://waze.com/ul?ll=32.8277491,35.7809611&navigate=yes'
+      }
+    }
+  },
+  'hill-1': {
+    content: {
+      nav: {
+        maps: 'https://www.google.com/maps/dir/?api=1&destination=32.8011237,35.6845369',
+        waze: 'https://waze.com/ul?ll=32.8011237,35.6845369&navigate=yes'
+      }
+    }
+  },
+  'hill-2': {
+    content: {
+      nav: {
+        maps: 'https://www.google.com/maps/dir/?api=1&destination=32.8012232,35.6846325',
+        waze: 'https://waze.com/ul?ll=32.8012232,35.6846325&navigate=yes'
+      }
+    }
+  },
+  'hill-3': {
+    content: {
+      nav: {
+        maps: 'https://www.google.com/maps/dir/?api=1&destination=32.8013035,35.6845212',
+        waze: 'https://waze.com/ul?ll=32.8013035,35.6845212&navigate=yes'
+      }
+    }
+  },
+  'hill-4': {
+    content: {
+      nav: {
+        maps: 'https://www.google.com/maps/dir/?api=1&destination=32.8011534,35.6844202',
+        waze: 'https://waze.com/ul?ll=32.8011534,35.6844202&navigate=yes'
       }
     }
   },
