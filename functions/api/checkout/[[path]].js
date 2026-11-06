@@ -40,6 +40,7 @@ import { scanGuestId } from '../../lib/idScan.js';
 import { allCabinsPaid, applyPaySplitView, resolveStayUnitId } from '../../lib/paySplit.js';
 import { verifyStaffPin } from '../../lib/staffPin.js';
 import { normalizeBalancePreference } from '../../lib/balancePref.js';
+import { confirmShouldStartCardCharge } from '../../../src/lib/guestPaymentFlow.js';
 import { buildDemoCheckoutRow } from '../../lib/demoCheckout.js';
 import { departuresAuthorized, parseDeparturesQuery, departureRow } from '../../lib/checkoutDepartures.js';
 import { applyPaidArrivalCheckin, stayExpiresAt, stayLinkExpired } from '../../../src/lib/stayAccess.js';
@@ -1528,8 +1529,6 @@ async function handleCheckout(context) {
     const guestEmail = String(body.guest_email || '').trim();
     const specialRequests = String(body.special_requests || '').trim();
     if (!guestName) return json({ error: 'MISSING_GUEST_FIELDS' }, 400);
-    const paymentMode = String(row.payment_mode || 'CREDIT_DEPOSIT');
-    const wantPay = body.pay !== false && paymentMode !== 'CASH_TRUST';
     const pref = normalizeBalancePreference(
       body.balance_payment_preference,
       row.balance_payment_preference || row.stay?.balance_payment_preference || 'CREDIT_CARD'
@@ -1538,6 +1537,11 @@ async function handleCheckout(context) {
     const payMode = paymentChoice === 'CASH'
       ? 'CASH_TRUST'
       : (body.payment_mode || (paymentChoice === 'VOUCHER' ? 'VOUCHER' : paymentChoice === 'ALREADY_PAID' ? 'ALREADY_PAID' : 'CREDIT_DEPOSIT'));
+    const wantPay = confirmShouldStartCardCharge({
+      pay: body.pay !== false,
+      paymentMode: payMode,
+      paymentChoice
+    });
     const voucherCode = String(body.voucher_code || '').trim();
     const keepStatus = row.booking_status === 'CHECKED_IN' || row.booking_status === 'CHECKED_OUT'
       ? row.booking_status

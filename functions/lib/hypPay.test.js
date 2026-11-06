@@ -52,6 +52,28 @@ test('guest charge uses the terminal locked on the booking', () => {
   assert.equal(quoted.amount, 250);
 });
 
+test('guest card charge with no deposit opens the outstanding balance', () => {
+  const quoted = quoteGuestCharge({
+    payment_mode: 'CREDIT_DEPOSIT',
+    deposit_agorot: 0,
+    total_price_agorot: 120000,
+    payment_status: 'UNPAID'
+  });
+  assert.equal(quoted.needsCharge, true);
+  assert.equal(quoted.amount, 1200);
+  assert.equal(quoted.purpose, 'balance');
+  assert.equal(quoted.terminal, 'A');
+
+  const paid = quoteGuestCharge({
+    payment_mode: 'CREDIT_DEPOSIT',
+    payment_status: 'PAID',
+    deposit_agorot: 0,
+    total_price_agorot: 120000
+  });
+  assert.equal(paid.needsCharge, false);
+  assert.equal(paid.amount, 0);
+});
+
 test('purpose maps deposit to terminal B and balance/extra to A', () => {
   assert.equal(hypTerminalForPurpose('deposit'), 'B');
   assert.equal(hypTerminalForPurpose('balance'), 'A');
