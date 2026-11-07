@@ -134,7 +134,7 @@ export default function DashboardApp() {
     }
     const role = user?.role;
     if (role === 'FINANCE') return 'financials';
-    return 'operations';
+    return 'priority';
   });
 
   const [dashRecentlyApproved, setDashRecentlyApproved] = useState([]);

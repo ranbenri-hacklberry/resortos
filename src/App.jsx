@@ -28,8 +28,8 @@ const DEMO_TENANT_ID = '22222222-2222-2222-2222-222222222222';
 function App() {
   const { t } = useTranslation();
   const [theme, setTheme] = useState(localStorage.getItem('hotelos-theme') || 'dark');
-  const [activeTab, setActiveTab] = useState('calendar'); // 'calendar' | 'operations' | 'financials' | 'priority'
-  const [priorityMounted, setPriorityMounted] = useState(false);
+  const [activeTab, setActiveTab] = useState('priority'); // 'priority' | 'operations' | 'calendar' | 'financials'
+  const [priorityMounted, setPriorityMounted] = useState(true);
   const [authReady, setAuthReady] = useState(false);
   const [sessionUser, setSessionUser] = useState(null);
   const [kinorotSync, setKinorotSync] = useState(null);
@@ -567,7 +567,7 @@ function App() {
           }}
         >
           <button
-            onClick={() => setActiveTab('calendar')}
+            onClick={() => setActiveTab('priority')}
             style={{
               flex: '1 0 auto',
               minWidth: 'max-content',
@@ -582,18 +582,18 @@ function App() {
               justifyContent: 'center',
               gap: '0.3rem',
               whiteSpace: 'nowrap',
-              background: activeTab === 'calendar' 
-                ? 'linear-gradient(135deg, #6366F1, #4F46E5)' 
+              background: activeTab === 'priority'
+                ? 'linear-gradient(135deg, #1b365d, #0f2942)'
                 : (isLight ? '#EAE5DD' : '#1E293B'),
-              color: activeTab === 'calendar' 
-                ? '#FFFFFF' 
+              color: activeTab === 'priority'
+                ? '#FFFFFF'
                 : (isLight ? '#44403C' : '#94A3B8'),
-              boxShadow: activeTab === 'calendar' ? '0 4px 12px rgba(99, 102, 241, 0.35)' : 'none',
+              boxShadow: activeTab === 'priority' ? '0 4px 12px rgba(15, 41, 66, 0.35)' : 'none',
               transition: 'all 0.2s ease'
             }}
           >
-            <span>📅</span>
-            <span>{t('OCCUPANCY_TAB', 'תפוסה')}</span>
+            <span>▦</span>
+            <span>פריוריטי</span>
           </button>
 
           <button
@@ -627,7 +627,7 @@ function App() {
           </button>
 
           <button
-            onClick={() => setActiveTab('priority')}
+            onClick={() => setActiveTab('calendar')}
             style={{
               flex: '1 0 auto',
               minWidth: 'max-content',
@@ -642,18 +642,18 @@ function App() {
               justifyContent: 'center',
               gap: '0.3rem',
               whiteSpace: 'nowrap',
-              background: activeTab === 'priority'
-                ? 'linear-gradient(135deg, #1b365d, #0f2942)'
+              background: activeTab === 'calendar' 
+                ? 'linear-gradient(135deg, #6366F1, #4F46E5)' 
                 : (isLight ? '#EAE5DD' : '#1E293B'),
-              color: activeTab === 'priority'
-                ? '#FFFFFF'
+              color: activeTab === 'calendar' 
+                ? '#FFFFFF' 
                 : (isLight ? '#44403C' : '#94A3B8'),
-              boxShadow: activeTab === 'priority' ? '0 4px 12px rgba(15, 41, 66, 0.35)' : 'none',
+              boxShadow: activeTab === 'calendar' ? '0 4px 12px rgba(99, 102, 241, 0.35)' : 'none',
               transition: 'all 0.2s ease'
             }}
           >
-            <span>▦</span>
-            <span>פריוריטי</span>
+            <span>📅</span>
+            <span>{t('OCCUPANCY_TAB', 'ארכיון יומן')}</span>
           </button>
 
           {canViewErrands && (

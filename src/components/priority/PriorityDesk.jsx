@@ -1107,9 +1107,11 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const operator = operatorName || session?.name || 'משרד';
 
   const chooseStatus = (unitId, field, key) => {
+    let changed = false;
     if (field === 'ground') {
       const kind = editor?.kind || groundsState[unitId]?.kind || 'yard';
       const saved = groundsState[unitId]?.status || defaultGroundStatus(kind);
+      if (key && key !== saved) changed = true;
       setGroundDrafts((current) => {
         const next = { ...current };
         if (!key || key === saved) delete next[unitId];
@@ -1119,13 +1121,18 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       setEditor(null);
       setMenuBox(null);
       setSaveError('');
-      setMessage(!key || key === saved ? '' : 'יש שינויים שטרם נשמרו');
+      if (phone && changed) {
+        setShowSaveConfirmModal(true);
+      } else {
+        setMessage(!key || key === saved ? '' : 'יש שינויים שטרם נשמרו');
+      }
       return;
     }
     const row = rows.find((item) => item.id === unitId);
     if (field === 'week') {
       const live = liveWeekKey(row?.stayKey, row?.cleanKey, row?.reason);
       const choice = WEEK_STATUSES.find((item) => item.key === key);
+      if (choice && key !== live) changed = true;
       setDrafts((current) => {
         const prev = { ...(current[unitId] || {}) };
         if (!choice || key === live) {
@@ -1150,17 +1157,22 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       setEditor(null);
       setMenuBox(null);
       setSaveError('');
-      setMessage(!choice || key === live
-        ? ''
-        : choice.hold
-          ? 'לא נקי עד מחר בכינורות, בסטטוס לניקוי. יש שינויים שטרם נשמרו'
-          : 'יש שינויים שטרם נשמרו');
+      if (phone && changed) {
+        setShowSaveConfirmModal(true);
+      } else {
+        setMessage(!choice || key === live
+          ? ''
+          : choice.hold
+            ? 'לא נקי עד מחר בכינורות, בסטטוס לניקוי. יש שינויים שטרם נשמרו'
+            : 'יש שינויים שטרם נשמרו');
+      }
       return;
     }
     const liveKey = field === 'stay' ? row?.stayKey : field === 'clean' ? row?.cleanKey : (row?.staff || '');
+    const same = field === 'staff' ? (key || '') === (liveKey || '') : (!key || key === liveKey);
+    if (!same) changed = true;
     setDrafts((current) => {
       const prev = { ...(current[unitId] || {}) };
-      const same = field === 'staff' ? (key || '') === (liveKey || '') : (!key || key === liveKey);
       if (same) delete prev[field];
       else prev[field] = field === 'staff' ? (key || '') : key;
       if (field === 'staff' && key && !same && (prev.clean || row?.cleanKey) === 'READY') {
@@ -1176,9 +1188,13 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
     setSaveError('');
     const assigningCleaner = field === 'staff' && key && (key || '') !== (row?.staff || '');
     const cleanNow = (drafts[unitId]?.clean || row?.cleanKey);
-    setMessage(assigningCleaner && cleanNow === 'READY'
-      ? 'השיבוץ מסמן את היחידה לניקוי'
-      : 'יש שינויים שטרם נשמרו');
+    if (phone && changed) {
+      setShowSaveConfirmModal(true);
+    } else {
+      setMessage(assigningCleaner && cleanNow === 'READY'
+        ? 'השיבוץ מסמן את היחידה לניקוי'
+        : 'יש שינויים שטרם נשמרו');
+    }
   };
   chooseRef.current = chooseStatus;
 
@@ -1635,12 +1651,21 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
     if (!showSaveConfirmModal) return undefined;
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        setShowSaveConfirmModal(false);
+        if (phone) discardDrafts();
+        else setShowSaveConfirmModal(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showSaveConfirmModal]);
+  }, [showSaveConfirmModal, phone]);
+
+  useEffect(() => {
+    if (!phone || !message || saveError) return undefined;
+    const timer = setTimeout(() => {
+      setMessage('');
+    }, 3500);
+    return () => clearTimeout(timer);
+  }, [phone, message, saveError]);
 
   const pendingSaveItems = useMemo(() => {
     const list = [];
@@ -1648,32 +1673,35 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       const draft = drafts[row.id];
       if (!draft) return;
       const changes = [];
-      if (row.cleanDirty) {
-        const newLabel = (CLEANING_CHOICES.find((c) => c.key === draft.clean) || {}).label || draft.clean;
-        changes.push({
-          field: 'סטטוס ניקיון',
-          from: row.clean,
-          to: newLabel,
-          tone: newLabel === 'מוכן' ? 'is-ready' : (newLabel === 'לניקוי' ? 'is-dirty' : '')
-        });
-      }
-      if (row.stayDirty) {
-        const newLabel = (LODGING_CHOICES.find((c) => c.key === draft.stay) || {}).label || draft.stay;
-        changes.push({
-          field: 'סטטוס אירוח',
-          from: row.stay,
-          to: newLabel,
-          tone: ''
-        });
-      }
       if (row.weekDirty) {
+        const liveKey = liveWeekKey(row.stayKey, row.cleanKey, row.reason);
+        const fromLabel = (WEEK_STATUSES.find((c) => c.key === liveKey) || {}).label || row.weekLabel || row.clean || 'רגיל';
         const newLabel = (WEEK_STATUSES.find((c) => c.key === draft.weekMark) || {}).label || 'חסימה';
         changes.push({
-          field: 'תצוגה שבועית / חסימה',
-          from: 'רגיל',
+          field: 'סטטוס יחידה',
+          from: fromLabel,
           to: newLabel,
-          tone: 'is-dirty'
+          tone: newLabel === 'מוכן' ? 'is-ready' : 'is-dirty'
         });
+      } else {
+        if (row.cleanDirty) {
+          const newLabel = (CLEANING_CHOICES.find((c) => c.key === draft.clean) || {}).label || draft.clean;
+          changes.push({
+            field: 'סטטוס ניקיון',
+            from: row.clean,
+            to: newLabel,
+            tone: newLabel === 'מוכן' ? 'is-ready' : (newLabel === 'לניקוי' ? 'is-dirty' : '')
+          });
+        }
+        if (row.stayDirty) {
+          const newLabel = (LODGING_CHOICES.find((c) => c.key === draft.stay) || {}).label || draft.stay;
+          changes.push({
+            field: 'סטטוס אירוח',
+            from: row.stay,
+            to: newLabel,
+            tone: ''
+          });
+        }
       }
       if (row.staffDirty) {
         changes.push({
@@ -2691,21 +2719,27 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
           role="dialog"
           aria-modal="true"
           aria-labelledby="priority-save-confirm-title"
-          onClick={() => setShowSaveConfirmModal(false)}
+          onClick={() => {
+            if (phone) discardDrafts();
+            else setShowSaveConfirmModal(false);
+          }}
         >
           <div className="priority-save-confirm-modal" onClick={(e) => e.stopPropagation()}>
             <div className="priority-save-confirm-header">
               <div className="priority-save-confirm-title">
                 <AlertTriangle size={18} color="#b45309" />
                 <div>
-                  <h3 id="priority-save-confirm-title">וידוא שמירת שינויים בפריוריטי</h3>
-                  <p>נמצאו {dirtyCount} שינויים הממתינים לשמירה במערכת</p>
+                  <h3 id="priority-save-confirm-title">{phone ? 'וידוא שינוי סטטוס' : 'וידוא שמירת שינויים בפריוריטי'}</h3>
+                  <p>{phone ? `נמצאו ${dirtyCount} שינויים לאישור ושמירה` : `נמצאו ${dirtyCount} שינויים הממתינים לשמירה במערכת`}</p>
                 </div>
               </div>
               <button
                 type="button"
                 className="priority-save-confirm-close"
-                onClick={() => setShowSaveConfirmModal(false)}
+                onClick={() => {
+                  if (phone) discardDrafts();
+                  else setShowSaveConfirmModal(false);
+                }}
                 title="סגור חלון"
               >
                 <X size={16} />
@@ -2744,30 +2778,120 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                 type="button"
                 className="priority-save-confirm-btn-discard"
                 onClick={discardDrafts}
-                title="בטל את כל השינויים שטרם נשמרו והחזר למצב המקורי"
+                title={phone ? 'בטל את השינוי' : 'בטל את כל השינויים שטרם נשמרו והחזר למצב המקורי'}
               >
-                בטל את כל השינויים (איפוס)
+                {phone ? 'ביטול שינוי' : 'בטל את כל השינויים (איפוס)'}
               </button>
 
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <button
-                  type="button"
-                  className="priority-save-confirm-btn-cancel"
-                  onClick={() => setShowSaveConfirmModal(false)}
-                >
-                  המשך בעריכה
-                </button>
+                {!phone ? (
+                  <button
+                    type="button"
+                    className="priority-save-confirm-btn-cancel"
+                    onClick={() => setShowSaveConfirmModal(false)}
+                  >
+                    המשך בעריכה
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="priority-save-confirm-btn-submit"
                   onClick={handleConfirmSave}
                   disabled={saving || !dirtyCount}
                 >
-                  {saving ? 'שומר…' : 'אישור ושמירה'}
+                  {saving ? 'שומר…' : (phone ? 'אישור ועדכון' : 'אישור ושמירה')}
                 </button>
               </div>
             </div>
           </div>
+        </div>
+      ) : null}
+
+      {phone && dirtyCount > 0 && !showSaveConfirmModal ? (
+        <div
+          className="phone-floating-save-bar"
+          style={{
+            position: 'fixed',
+            bottom: '16px',
+            left: '16px',
+            right: '16px',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: '#ffffff',
+            padding: '10px 16px',
+            borderRadius: '12px',
+            boxShadow: '0 8px 30px rgba(0, 0, 0, 0.22)',
+            border: '1px solid #cbd5e1'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '14px' }}>✏️</span>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>
+              {dirtyCount} שינויים לשמירה
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={discardDrafts}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '6px',
+                border: '1px solid #cbd5e1',
+                background: '#f8fafc',
+                color: '#64748b',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              איפוס
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowSaveConfirmModal(true)}
+              disabled={saving}
+              style={{
+                padding: '6px 18px',
+                borderRadius: '6px',
+                border: 'none',
+                background: '#1b365d',
+                color: '#ffffff',
+                fontSize: '12px',
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(27, 54, 93, 0.3)'
+              }}
+            >
+              {saving ? 'שומר…' : 'שמירה'}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {phone && (message || saveError) && !showSaveConfirmModal && !dirtyCount ? (
+        <div
+          className={`phone-status-toast${saveError ? ' is-error' : ''}`}
+          style={{
+            position: 'fixed',
+            top: '12px',
+            left: '16px',
+            right: '16px',
+            zIndex: 9998,
+            padding: '10px 16px',
+            borderRadius: '8px',
+            background: saveError ? '#fef2f2' : '#f0fdf4',
+            border: `1px solid ${saveError ? '#fecaca' : '#bbf7d0'}`,
+            color: saveError ? '#991b1b' : '#166534',
+            fontSize: '13px',
+            fontWeight: 700,
+            textAlign: 'center',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.12)'
+          }}
+        >
+          {saveError || message}
         </div>
       ) : null}
       <CardcomAutoApprovedModal
