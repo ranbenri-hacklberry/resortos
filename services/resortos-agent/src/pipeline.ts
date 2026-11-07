@@ -55,6 +55,15 @@ import { join as joinPath } from 'node:path';
 import { placeDetail, placeMenuFor } from './guest/placeMenu.js';
 import { handleManagerWifi } from './manager/managerWifi.js';
 import {
+  handleRanTerminalInbound,
+  handleGuestInvoiceReply,
+  parseRanApprovalChoice,
+  isGuestInvoiceYesReply,
+  loadPendingMatchesFromFile,
+  savePendingMatchesToFile,
+  isRanPhone,
+} from './manager/cardcomApproval.js';
+import {
   amountFromReply,
   createHypPayLinkClient,
   draftFromBooking,
@@ -1068,6 +1077,86 @@ export function createPipeline(deps: PipelineDeps) {
     if (!cleaner && !msg.key.fromMe && isEmojiOnlyMessage(text)) {
       d.log.info({ jid, text: String(text).slice(0, 20) }, 'guest emoji-only message: no reply');
       return { handled: true, reason: 'emoji_only_no_reply' };
+    }
+
+    // Cardcom manual terminal charges: Ran approval (+972 54-831-7887 / Baileys LID)
+    if (!msg.key.fromMe && text?.trim() && (isRanPhone(jid) || isRanPhone(senderPhone) || isRanPhone(baseGuestPhone))) {
+      const choice = parseRanApprovalChoice(text);
+      if (choice) {
+        const matches = loadPendingMatchesFromFile();
+        const pendingMatches = matches.filter((m) => m.status === 'pending');
+        if (pendingMatches.length > 0) {
+          const apiName = process.env.CARDCOM_API_NAME || '';
+          const apiPassword = process.env.CARDCOM_API_PASSWORD || '';
+          const res = await handleRanTerminalInbound(jid, text, {
+            matches,
+            saveMatches: (m) => savePendingMatchesToFile(m),
+            loadBooking: async (id) => {
+              const bookings = (await d.resortos.listBookings?.()) || [];
+              return bookings.find((b) => b.id === id);
+            },
+            patchBooking: async (id, patch) => {
+              const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+              const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+              if (supabaseUrl && supabaseKey) {
+                await fetch(`${supabaseUrl}/rest/v1/hotelos_bookings?id=eq.${encodeURIComponent(id)}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json', apikey: supabaseKey, authorization: `Bearer ${supabaseKey}` },
+                  body: JSON.stringify(patch)
+                });
+              }
+            },
+            sendWhatsApp: async (targetJid, content) => {
+              await d.send(targetJid, content, channelId);
+              return true;
+            },
+            logGuestComm: async (comm) => {
+              await d.resortos.logGuestComm?.({
+                bookingId: comm.bookingId,
+                channel: 'whatsapp',
+                direction: comm.direction,
+                phone: comm.phone || '',
+                content: comm.content,
+                status: 'sent'
+              });
+            },
+            cardcomCreds: apiName && apiPassword ? { apiName, apiPassword } : undefined,
+            logger: d.log
+          });
+          if (res.handled) {
+            return { handled: true, reason: 'cardcom_terminal_ran_approval' };
+          }
+        }
+      }
+    }
+
+    // Cardcom manual terminal charges: Guest replies "yes" ("כן", "אשמח") to invoice delivery
+    if (!msg.key.fromMe && !cleaner && text?.trim() && isGuestInvoiceYesReply(text)) {
+      const matches = loadPendingMatchesFromFile();
+      const invoiceDelivered = await handleGuestInvoiceReply(guestPhone, text, {
+        matches,
+        saveMatches: (m) => savePendingMatchesToFile(m),
+        loadBooking: async () => null,
+        patchBooking: async () => {},
+        sendWhatsApp: async (targetJid, content) => {
+          await d.send(targetJid, content, channelId);
+          return true;
+        },
+        logGuestComm: async (comm) => {
+          await d.resortos.logGuestComm?.({
+            bookingId: comm.bookingId,
+            channel: 'whatsapp',
+            direction: comm.direction,
+            phone: comm.phone || '',
+            content: comm.content,
+            status: 'sent'
+          });
+        },
+        logger: d.log
+      });
+      if (invoiceDelivered) {
+        return { handled: true, reason: 'cardcom_guest_invoice_delivered' };
+      }
     }
     // Ran 2026-10-28: a room outside the manager's allowed units is refused politely.
     {
