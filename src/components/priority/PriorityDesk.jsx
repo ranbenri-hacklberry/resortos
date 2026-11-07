@@ -312,7 +312,7 @@ function paymentsOf(booking) {
 
 function voucherView(booking) {
   const stay = booking?.stay && typeof booking.stay === 'object' ? booking.stay : {};
-  const photo = String(stay.voucher_photo || stay.payment_proof || '');
+  const photo = String(stay.voucher_photo || '');
   const safePhoto = photo.startsWith('data:image/') || /^https?:\/\//.test(photo) || photo.startsWith('/')
     ? photo
     : '';
@@ -2444,9 +2444,10 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                       </button>
                     </span>
                   </label>
-                  {phone && cardBooking ? (
+                  {cardBooking ? (
                     <StayProofs
                       booking={cardBooking}
+                      card={card}
                       canEdit={canEdit}
                       saving={saving}
                       onSave={saveStayProof}
@@ -3152,28 +3153,43 @@ function ProofSlot({ label, src, alt, canEdit, saving, onOpen, onFile }) {
   );
 }
 
-function StayProofs({ booking, canEdit, saving, onSave, onOpen }) {
+function StayProofs({ booking, card, canEdit, saving, onSave, onOpen }) {
   if (!booking?.id) return null;
+  const payMethod = card?.payMethod || priorityMethodKey(booking);
+  const mode = String(booking?.payment_mode || '').toUpperCase();
+
+  const hasVoucherPhoto = Boolean(booking?.stay?.voucher_photo);
+  const isVoucher = payMethod === 'VOUCHER' || mode === 'VOUCHER' || hasVoucherPhoto || Boolean(card?.voucher);
+
+  const hasTransferPhoto = Boolean(booking?.stay?.payment_proof);
+  const isTransfer = payMethod === 'BANK' || payMethod === 'BANK_TRANSFER' || mode === 'BANK_TRANSFER' || hasTransferPhoto;
+
+  if (!isVoucher && !isTransfer) return null;
+
   return (
     <div className="stay-proofs">
-      <ProofSlot
-        label="שובר"
-        src={booking.stay?.voucher_photo || ''}
-        alt="צילום שובר"
-        canEdit={canEdit}
-        saving={saving}
-        onOpen={onOpen}
-        onFile={(url) => onSave('voucher', url)}
-      />
-      <ProofSlot
-        label="העברה"
-        src={booking.stay?.payment_proof || ''}
-        alt="צילום העברה"
-        canEdit={canEdit}
-        saving={saving}
-        onOpen={onOpen}
-        onFile={(url) => onSave('transfer', url)}
-      />
+      {isVoucher ? (
+        <ProofSlot
+          label="שובר"
+          src={booking.stay?.voucher_photo || ''}
+          alt="צילום שובר"
+          canEdit={canEdit}
+          saving={saving}
+          onOpen={onOpen}
+          onFile={(url) => onSave('voucher', url)}
+        />
+      ) : null}
+      {isTransfer ? (
+        <ProofSlot
+          label="העברה"
+          src={booking.stay?.payment_proof || ''}
+          alt="צילום העברה"
+          canEdit={canEdit}
+          saving={saving}
+          onOpen={onOpen}
+          onFile={(url) => onSave('transfer', url)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -3780,6 +3796,7 @@ function SplitFeedPanel({
             {layoutPhone && booking ? (
               <StayProofs
                 booking={booking}
+                card={card}
                 canEdit={canEdit}
                 saving={saving}
                 onSave={async (kind, url) => {
