@@ -1107,11 +1107,9 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const operator = operatorName || session?.name || 'משרד';
 
   const chooseStatus = (unitId, field, key) => {
-    let changed = false;
     if (field === 'ground') {
       const kind = editor?.kind || groundsState[unitId]?.kind || 'yard';
       const saved = groundsState[unitId]?.status || defaultGroundStatus(kind);
-      if (key && key !== saved) changed = true;
       setGroundDrafts((current) => {
         const next = { ...current };
         if (!key || key === saved) delete next[unitId];
@@ -1121,18 +1119,13 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       setEditor(null);
       setMenuBox(null);
       setSaveError('');
-      if (phone && changed) {
-        setShowSaveConfirmModal(true);
-      } else {
-        setMessage(!key || key === saved ? '' : 'יש שינויים שטרם נשמרו');
-      }
+      setMessage(!key || key === saved ? '' : 'יש שינויים שטרם נשמרו');
       return;
     }
     const row = rows.find((item) => item.id === unitId);
     if (field === 'week') {
       const live = liveWeekKey(row?.stayKey, row?.cleanKey, row?.reason);
       const choice = WEEK_STATUSES.find((item) => item.key === key);
-      if (choice && key !== live) changed = true;
       setDrafts((current) => {
         const prev = { ...(current[unitId] || {}) };
         if (!choice || key === live) {
@@ -1157,20 +1150,15 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       setEditor(null);
       setMenuBox(null);
       setSaveError('');
-      if (phone && changed) {
-        setShowSaveConfirmModal(true);
-      } else {
-        setMessage(!choice || key === live
-          ? ''
-          : choice.hold
-            ? 'לא נקי עד מחר בכינורות, בסטטוס לניקוי. יש שינויים שטרם נשמרו'
-            : 'יש שינויים שטרם נשמרו');
-      }
+      setMessage(!choice || key === live
+        ? ''
+        : choice.hold
+          ? 'לא נקי עד מחר בכינורות, בסטטוס לניקוי. יש שינויים שטרם נשמרו'
+          : 'יש שינויים שטרם נשמרו');
       return;
     }
     const liveKey = field === 'stay' ? row?.stayKey : field === 'clean' ? row?.cleanKey : (row?.staff || '');
     const same = field === 'staff' ? (key || '') === (liveKey || '') : (!key || key === liveKey);
-    if (!same) changed = true;
     setDrafts((current) => {
       const prev = { ...(current[unitId] || {}) };
       if (same) delete prev[field];
@@ -1188,13 +1176,9 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
     setSaveError('');
     const assigningCleaner = field === 'staff' && key && (key || '') !== (row?.staff || '');
     const cleanNow = (drafts[unitId]?.clean || row?.cleanKey);
-    if (phone && changed) {
-      setShowSaveConfirmModal(true);
-    } else {
-      setMessage(assigningCleaner && cleanNow === 'READY'
-        ? 'השיבוץ מסמן את היחידה לניקוי'
-        : 'יש שינויים שטרם נשמרו');
-    }
+    setMessage(assigningCleaner && cleanNow === 'READY'
+      ? 'השיבוץ מסמן את היחידה לניקוי'
+      : 'יש שינויים שטרם נשמרו');
   };
   chooseRef.current = chooseStatus;
 
