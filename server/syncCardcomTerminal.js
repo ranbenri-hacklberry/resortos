@@ -30,6 +30,10 @@ if (fs.existsSync(envPath)) {
   }
 }
 
+export function isPollerEnabled() {
+  return process.env.CARDCOM_TERMINAL_SYNC_ENABLED === 'true' || process.env.CARDCOM_TERMINAL_SYNC_ENABLED === '1';
+}
+
 const LOCAL_STORE_DIR = path.join(__dirname, '..', 'data');
 const LOCAL_SEEN_FILE = path.join(LOCAL_STORE_DIR, 'cardcom-seen-deals.json');
 const LOCAL_PENDING_FILE = path.join(LOCAL_STORE_DIR, 'cardcom-pending-matches.json');
@@ -142,8 +146,14 @@ export async function pollCardcomTerminal({
   apiPassword = process.env.CARDCOM_API_PASSWORD,
   terminal = process.env.CARDCOM_TERMINAL || DEFAULT_CARDCOM_TERMINAL,
   fetchImpl = fetch,
-  notifyRan = true
+  notifyRan = true,
+  force = false
 } = {}) {
+  if (!isPollerEnabled() && !force) {
+    console.log('[syncCardcomTerminal] Poller is disabled by default (CARDCOM_TERMINAL_SYNC_ENABLED != 1). Skipping run.');
+    return { ok: false, disabled: true, reason: 'DISABLED_BY_DEFAULT', newMatches: [] };
+  }
+
   if (!apiName || !apiPassword) {
     console.log('[syncCardcomTerminal] Cardcom API credentials not configured; skipping poll.');
     return { ok: false, reason: 'NOT_CONFIGURED', newMatches: [] };
@@ -273,8 +283,14 @@ export async function pollCardcomTerminal({
 
 // If executed directly from command line
 if (process.argv[1] && process.argv[1].endsWith('syncCardcomTerminal.js')) {
+  const force = process.argv.includes('--force');
+  if (!isPollerEnabled() && !force) {
+    console.log('[syncCardcomTerminal] Poller is disabled by default (CARDCOM_TERMINAL_SYNC_ENABLED != 1).');
+    console.log('To run once manually: CARDCOM_TERMINAL_SYNC_ENABLED=1 node server/syncCardcomTerminal.js (or pass --force).');
+    process.exit(0);
+  }
   console.log('[syncCardcomTerminal] Starting terminal poller...');
-  pollCardcomTerminal()
+  pollCardcomTerminal({ force: true })
     .then((res) => {
       console.log('[syncCardcomTerminal] Result:', JSON.stringify(res, null, 2));
       process.exit(0);

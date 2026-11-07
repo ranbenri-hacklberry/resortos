@@ -8,10 +8,12 @@ import {
   formatGuestInvoiceDeliveryMessage,
   recordCardcomTerminalPayment,
   createCardcomInvoiceForDeal,
+  resolveBookingInvoiceDetails,
   OutboundRateLimiter,
   isRanPhone,
   CARDCOM_CREATE_DOCUMENT_URL
 } from './lib/cardcomTerminalService.js';
+import { isPollerEnabled } from './syncCardcomTerminal.js';
 
 test('normalizeCardcomDeal extracts all transaction fields correctly', () => {
   const raw = {
@@ -161,6 +163,109 @@ test('formatGuestInvoiceDeliveryMessage sends invoice link gracefully', () => {
   assert.ok(text.includes('1099'), 'Includes invoice number');
 });
 
+test('company booking with custom line: invoice name, HP, line and guest text use it', async () => {
+  const companyBooking = {
+    id: 'b-company-1',
+    guest_name: 'יוסי כהן',
+    company_name: 'אלפא הייטק בע"מ',
+    tax_id: '515998877',
+    custom_invoice_line: 'סדנת מנהלים שנתית',
+    guest_phone: '0541112233',
+    guest_email: 'finance@alphatech.co.il',
+    unit_name: 'וילה מיאליס'
+  };
+
+  const deal = { amount: 8500, approval: '987654' };
+
+  // 1. Check resolveBookingInvoiceDetails
+  const resolved = resolveBookingInvoiceDetails(companyBooking, companyBooking.unit_name);
+  assert.equal(resolved.companyName, 'אלפא הייטק בע"מ');
+  assert.equal(resolved.taxId, '515998877');
+  assert.equal(resolved.customLine, 'סדנת מנהלים שנתית');
+  assert.equal(resolved.invoiceLine, 'סדנת מנהלים שנתית');
+  assert.equal(resolved.guestDescription, 'סדנת מנהלים שנתית');
+  assert.ok(resolved.invoiceCustomerName.includes('אלפא הייטק בע"מ'));
+  assert.ok(resolved.invoiceCustomerName.includes('515998877'));
+
+  // 2. Check guest text: uses custom line and NOT unit name
+  const guestMsg = formatGuestConfirmationMessage(deal, companyBooking, companyBooking.unit_name);
+  assert.ok(guestMsg.includes('עבור סדנת מנהלים שנתית'), 'Guest text uses custom line');
+  assert.ok(!guestMsg.includes('וילה מיאליס'), 'Guest text does not include unit name when custom line is set');
+  assert.ok(guestMsg.includes('8,500') || guestMsg.includes('8500'));
+  assert.ok(guestMsg.includes('987654'));
+
+  // 3. Check Cardcom invoice creation: passes company name + HP and custom line
+  let sentBody = null;
+  const mockFetch = async (url, opts) => {
+    sentBody = JSON.parse(opts.body);
+    return {
+      ok: true,
+      json: async () => ({ ResponseCode: 0, DocumentNumber: 'INV-888', DocumentUrl: 'https://cardcom/doc/888' })
+    };
+  };
+
+  await createCardcomInvoiceForDeal({
+    dealId: 'deal-comp-1',
+    amount: 8500,
+    booking: companyBooking,
+    apiName: 'test',
+    apiPassword: 'pass',
+    fetchImpl: mockFetch
+  });
+
+  assert.ok(sentBody.Document.Name.includes('אלפא הייטק בע"מ ח.פ. 515998877'));
+  assert.equal(sentBody.Document.Email, 'finance@alphatech.co.il');
+  assert.equal(sentBody.Document.Products[0].Description, 'סדנת מנהלים שנתית');
+});
+
+test('regular stay booking falls back to "אירוח" and unit name', async () => {
+  const regularBooking = {
+    id: 'b-reg-1',
+    guest_name: 'דני לוי',
+    unit_name: 'סוויטה 1'
+  };
+
+  const deal = { amount: 1500, approval: '112233' };
+
+  // 1. Check resolveBookingInvoiceDetails
+  const resolved = resolveBookingInvoiceDetails(regularBooking, regularBooking.unit_name);
+  assert.equal(resolved.customLine, '');
+  assert.equal(resolved.invoiceLine, 'אירוח ב-סוויטה 1');
+  assert.equal(resolved.guestDescription, 'האירוח ב-סוויטה 1');
+  assert.equal(resolved.invoiceCustomerName, 'דני לוי');
+
+  // 2. Check guest text
+  const guestMsg = formatGuestConfirmationMessage(deal, regularBooking, regularBooking.unit_name);
+  assert.ok(guestMsg.includes('עבור האירוח ב-סוויטה 1'));
+
+  // 3. Check regular booking without unit: falls back to "האירוח"
+  const noUnitBooking = { guest_name: 'שרה' };
+  const noUnitMsg = formatGuestConfirmationMessage(deal, noUnitBooking, '');
+  assert.ok(noUnitMsg.includes('עבור האירוח'));
+
+  // 4. Check Cardcom invoice fallback email when booking has no email
+  let sentBody = null;
+  const mockFetch = async (url, opts) => {
+    sentBody = JSON.parse(opts.body);
+    return {
+      ok: true,
+      json: async () => ({ ResponseCode: 0, DocumentNumber: 'INV-111', DocumentUrl: 'https://cardcom/doc/111' })
+    };
+  };
+
+  await createCardcomInvoiceForDeal({
+    dealId: 'deal-reg-1',
+    amount: 1500,
+    booking: noUnitBooking,
+    apiName: 'test',
+    apiPassword: 'pass',
+    fetchImpl: mockFetch
+  });
+
+  assert.equal(sentBody.Document.Email, 'mialeesresort@mialees.com');
+  assert.equal(sentBody.Document.Products[0].Description, 'אירוח ונופש');
+});
+
 test('recordCardcomTerminalPayment records payment and is idempotent', () => {
   const booking = {
     id: 'b-test-1',
@@ -277,4 +382,27 @@ test('isRanPhone recognizes Ran private phone and Baileys LID', () => {
   assert.equal(isRanPhone('170626836910125@lid'), true);
   assert.equal(isRanPhone('052-123-4567'), false);
   assert.equal(isRanPhone('050-999-9999'), false);
+});
+
+test('poller is disabled by default and enabled only when flag is set', () => {
+  const oldEnv = process.env.CARDCOM_TERMINAL_SYNC_ENABLED;
+  try {
+    delete process.env.CARDCOM_TERMINAL_SYNC_ENABLED;
+    assert.equal(isPollerEnabled(), false, 'Poller is disabled by default');
+
+    process.env.CARDCOM_TERMINAL_SYNC_ENABLED = '0';
+    assert.equal(isPollerEnabled(), false, 'Poller is disabled when set to 0');
+
+    process.env.CARDCOM_TERMINAL_SYNC_ENABLED = '1';
+    assert.equal(isPollerEnabled(), true, 'Poller is enabled when set to 1');
+
+    process.env.CARDCOM_TERMINAL_SYNC_ENABLED = 'true';
+    assert.equal(isPollerEnabled(), true, 'Poller is enabled when set to true');
+  } finally {
+    if (oldEnv !== undefined) {
+      process.env.CARDCOM_TERMINAL_SYNC_ENABLED = oldEnv;
+    } else {
+      delete process.env.CARDCOM_TERMINAL_SYNC_ENABLED;
+    }
+  }
 });

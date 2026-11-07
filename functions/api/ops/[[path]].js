@@ -332,19 +332,29 @@ export async function onRequest(context) {
 
       if (apiName && apiPassword && amount > 0) {
         try {
+          const companyName = String(booking.company_name || booking.invoice_company || booking.business_name || '').trim();
+          const taxId = String(booking.tax_id || booking.company_hp || booking.hp || booking.vat_id || booking.business_id || '').trim();
+          let customerName = String(booking.invoice_name || companyName || booking.guest_name || 'אורח').trim();
+          if (taxId && !customerName.includes(taxId)) {
+            customerName = `${customerName} ח.פ. ${taxId}`;
+          }
+          const customLine = String(booking.custom_invoice_line || booking.invoice_line || booking.custom_line || booking.invoice_description || '').trim();
+          const unit = booking.unit_name || booking.unit_id || '';
+          const invoiceDesc = customLine || (unit ? `אירוח ב-${unit}` : 'אירוח');
+
           const docBody = {
             ApiName: apiName,
             ApiPassword: apiPassword,
             IsSendSMS: false,
             Document: {
               DocumentTypeToCreate: 'TaxInvoiceAndReceipt',
-              Name: booking.guest_name || 'אורח',
+              Name: customerName,
               Email: booking.guest_email || 'mialeesresort@mialees.com',
               Phone: booking.guest_phone || undefined,
               IsSendByEmail: true,
               Products: [
                 {
-                  Description: `אירוח ב-${booking.unit_name || booking.unit_id || 'ריזורט'}`,
+                  Description: invoiceDesc,
                   UnitCost: Math.round(amount * 100) / 100,
                   Quantity: 1,
                   IsVatFree: false

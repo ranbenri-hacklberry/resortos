@@ -652,10 +652,7 @@ app.post('/api/ops/cardcom-terminal/link', requireStaff, async (req, res) => {
         invoiceInfo = await createCardcomInvoiceForDeal({
           dealId: deal_id,
           amount: match.amount,
-          name: booking.guest_name,
-          email: booking.guest_email,
-          phone: booking.guest_phone,
-          description: `אירוח ב-${booking.unit_name || booking.unit_id}`,
+          booking,
           apiName,
           apiPassword
         });

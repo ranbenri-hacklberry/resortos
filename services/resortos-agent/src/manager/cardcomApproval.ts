@@ -102,28 +102,107 @@ export function formatRanApprovalPrompt(deal: any, candidate: any, remainingCand
   return msg;
 }
 
-export function formatGuestConfirmationMessage(deal: any, booking: any, unitName = ''): string {
-  const guestName = (booking.guest_name || 'שלום').trim().split(/\s+/)[0];
-  const amountFormatted = Number(deal.amount).toLocaleString('he-IL');
-  const unit = unitName || booking.unit_name || booking.unit_id || 'הריזורט';
-  const approval = deal.approval ? ` (אישור: ${deal.approval})` : '';
+/**
+ * Resolves customer name, tax ID (ח.פ.), invoice description, and guest notification text
+ * from a booking record.
+ * Handles company bookings with custom line items (e.g. "סדנה", company name + ח.פ.)
+ * and falls back to "אירוח" only when nothing else is defined.
+ */
+export function resolveBookingInvoiceDetails(booking: any = {}, unitName: string = '') {
+  // 1. Company name & tax ID / ח.פ.
+  const companyName = String(
+    booking.company_name ||
+    booking.invoice_company ||
+    booking.business_name ||
+    ''
+  ).trim();
 
-  return `שלום ${guestName}, התשלום בסך ₪${amountFormatted} עבור האירוח ב-${unit} התקבל בהצלחה${approval}. לשלוח לך את החשבונית לכאן בווטסאפ?`;
+  const taxId = String(
+    booking.tax_id ||
+    booking.company_hp ||
+    booking.hp ||
+    booking.vat_id ||
+    booking.business_id ||
+    booking.company_id ||
+    ''
+  ).trim();
+
+  let invoiceCustomerName = String(
+    booking.invoice_name ||
+    companyName ||
+    booking.guest_name ||
+    'אורח'
+  ).trim();
+
+  if (taxId) {
+    if (!invoiceCustomerName.includes(taxId)) {
+      invoiceCustomerName = `${invoiceCustomerName} ח.פ. ${taxId}`;
+    }
+  }
+
+  // 2. Custom line / description (e.g. "סדנה")
+  const customLine = String(
+    booking.custom_invoice_line ||
+    booking.invoice_line ||
+    booking.custom_line ||
+    booking.invoice_description ||
+    booking.line_item ||
+    booking.service_description ||
+    ''
+  ).trim();
+
+  const unit = unitName || booking.unit_name || booking.unit_id || '';
+  const isStay = Boolean(!customLine && unit);
+
+  // Line item for Cardcom Invoice product description
+  let invoiceLine = customLine;
+  if (!invoiceLine) {
+    invoiceLine = unit ? `אירוח ב-${unit}` : 'אירוח ונופש';
+  }
+
+  // Description phrase used in guest WhatsApp text:
+  // "התשלום בסך ₪X עבור <תיאור> התקבל בהצלחה (אישור: NNNN)"
+  // unit name only when it's a stay!
+  let guestDescription = customLine;
+  if (!guestDescription) {
+    guestDescription = unit ? `האירוח ב-${unit}` : 'האירוח';
+  }
+
+  return {
+    invoiceCustomerName,
+    taxId,
+    companyName,
+    customLine,
+    invoiceLine,
+    guestDescription,
+    isStay
+  };
 }
 
-export function formatGuestInvoiceDeliveryMessage(invoiceUrl: string, invoiceNumber?: string, unitName = ''): string {
+export function formatGuestConfirmationMessage(deal: any, booking: any = {}, unitName = ''): string {
+  const guestName = (booking.guest_name || booking.invoice_name || 'שלום').trim().split(/\s+/)[0];
+  const amountFormatted = Number(deal.amount).toLocaleString('he-IL');
+  const approval = deal.approval ? ` (אישור: ${deal.approval})` : '';
+
+  const { guestDescription } = resolveBookingInvoiceDetails(booking, unitName);
+
+  return `שלום ${guestName}, התשלום בסך ₪${amountFormatted} עבור ${guestDescription} התקבל בהצלחה${approval}. לשלוח לך את החשבונית לכאן בווטסאפ?`;
+}
+
+export function formatGuestInvoiceDeliveryMessage(invoiceUrl: string, invoiceNumber?: string, unitName = '', customLine = ''): string {
   const docRef = invoiceNumber ? ` מס׳ ${invoiceNumber}` : '';
-  const unitRef = unitName ? ` ב-${unitName}` : '';
-  return `בשמחה! הנה קישור לחשבונית המס קבלה${docRef} עבור השהייה שלך${unitRef}:\n${invoiceUrl}\nנשמח לעמוד לרשותך לכל דבר נוסף ✨`;
+  const descRef = customLine ? ` עבור ${customLine}` : (unitName ? ` עבור השהייה שלך ב-${unitName}` : ' עבור השהייה שלך');
+  return `בשמחה! הנה קישור לחשבונית המס קבלה${docRef}${descRef}:\n${invoiceUrl}\nנשמח לעמוד לרשותך לכל דבר נוסף ✨`;
 }
 
 export async function createCardcomInvoiceForDeal({
   dealId,
   amount,
+  booking,
   name,
   email,
   phone,
-  description = 'אירוח ונופש',
+  description,
   apiName,
   apiPassword,
   fetchImpl = fetch,
@@ -131,6 +210,7 @@ export async function createCardcomInvoiceForDeal({
 }: {
   dealId: string;
   amount: number;
+  booking?: any;
   name?: string;
   email?: string;
   phone?: string;
@@ -143,10 +223,13 @@ export async function createCardcomInvoiceForDeal({
   if (!dealId) throw new Error('MISSING_DEAL_ID');
   if (!apiName || !apiPassword) throw new Error('MISSING_CARDCOM_CREDENTIALS');
 
-  const customerEmail = String(email || '').trim();
+  const resolved = booking ? resolveBookingInvoiceDetails(booking, booking.unit_name) : null;
+
+  const customerName = resolved?.invoiceCustomerName || String(name || '').trim() || 'אורח';
+  const customerEmail = String((booking && booking.guest_email) || email || '').trim();
   const invoiceEmail = customerEmail || FALLBACK_INVOICE_EMAIL;
-  const customerName = String(name || '').trim() || 'אורח';
-  const customerPhone = String(phone || '').trim();
+  const customerPhone = String((booking && booking.guest_phone) || phone || '').trim();
+  const invoiceDesc = resolved?.invoiceLine || String(description || 'אירוח ונופש').slice(0, 200);
 
   const body = {
     ApiName: apiName,
@@ -160,7 +243,7 @@ export async function createCardcomInvoiceForDeal({
       IsSendByEmail: true,
       Products: [
         {
-          Description: String(description || 'אירוח ונופש').slice(0, 200),
+          Description: invoiceDesc,
           UnitCost: Math.round(Number(amount) * 100) / 100,
           Quantity: 1,
           IsVatFree: false
@@ -397,13 +480,15 @@ export async function handleRanTerminalInbound(
     // 2. Create Cardcom invoice linked to existing deal (no new card charge)
     if (deps.cardcomCreds?.apiName && deps.cardcomCreds?.apiPassword) {
       try {
+        const resolved = resolveBookingInvoiceDetails(booking, candidate.unitName);
         invoiceInfo = await createCardcomInvoiceForDeal({
           dealId: match.deal_id,
           amount: match.amount,
-          name: candidate.guestName,
-          email: candidate.guestEmail,
-          phone: candidate.guestPhone,
-          description: `אירוח ב-${candidate.unitName}`,
+          booking,
+          name: resolved.invoiceCustomerName,
+          email: booking?.guest_email || candidate.guestEmail,
+          phone: booking?.guest_phone || candidate.guestPhone,
+          description: resolved.invoiceLine,
           apiName: deps.cardcomCreds.apiName,
           apiPassword: deps.cardcomCreds.apiPassword,
           fetchImpl: deps.fetchImpl
@@ -439,7 +524,7 @@ export async function handleRanTerminalInbound(
     // 5. Send warm WhatsApp to guest asking if they want the invoice
     if (candidate.guestPhone) {
       const guestJid = `${normalizePhone(candidate.guestPhone)}@s.whatsapp.net`;
-      const guestMsg = formatGuestConfirmationMessage(deal, booking, candidate.unitName);
+      const guestMsg = formatGuestConfirmationMessage(deal, booking || candidate, candidate.unitName);
 
       if (defaultRateLimiter.canSend(guestJid).allowed) {
         const guestSent = await deps.sendWhatsApp(guestJid, guestMsg);

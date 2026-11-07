@@ -1111,7 +1111,7 @@ export function createPipeline(deps: PipelineDeps) {
               return true;
             },
             logGuestComm: async (comm) => {
-              await d.resortos.logGuestComm({
+              await d.resortos.logGuestComm?.({
                 bookingId: comm.bookingId,
                 channel: 'whatsapp',
                 direction: comm.direction,
@@ -1143,7 +1143,7 @@ export function createPipeline(deps: PipelineDeps) {
           return true;
         },
         logGuestComm: async (comm) => {
-          await d.resortos.logGuestComm({
+          await d.resortos.logGuestComm?.({
             bookingId: comm.bookingId,
             channel: 'whatsapp',
             direction: comm.direction,
