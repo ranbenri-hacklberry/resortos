@@ -594,13 +594,22 @@ app.get('/api/ops/cardcom-terminal/pending', requireStaff, async (_req, res) => 
     const path = await import('node:path');
     const file = path.join(process.cwd(), 'data', 'cardcom-pending-matches.json');
     let pending = [];
+    let recentlyApproved = [];
     if (fs.existsSync(file)) {
       try {
         const all = JSON.parse(fs.readFileSync(file, 'utf8'));
-        pending = (Array.isArray(all) ? all : []).filter((m) => m.status === 'pending');
+        const list = Array.isArray(all) ? all : [];
+        pending = list.filter((m) => m.status === 'pending');
+        const twoDaysAgo = Date.now() - 48 * 3600 * 1000;
+        recentlyApproved = list
+          .filter((m) => (m.status === 'approved' || m.status === 'manual_linked') && (
+            !m.approved_at || new Date(m.approved_at).getTime() >= twoDaysAgo
+          ))
+          .sort((a, b) => new Date(b.approved_at || b.deal_time || 0) - new Date(a.approved_at || a.deal_time || 0))
+          .slice(0, 15);
       } catch {}
     }
-    res.json({ ok: true, pending });
+    res.json({ ok: true, pending, recently_approved: recentlyApproved });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -715,6 +724,8 @@ app.post('/api/ops/cardcom-terminal/link', requireStaff, async (req, res) => {
     match.selected_booking_id = booking_id;
     match.approved_at = new Date().toISOString();
     match.payment_recorded_at = new Date().toISOString();
+    match.guest_name = booking.guest_name || booking.invoice_name || match.guest_name || '';
+    match.unit_name = booking.unit_name || booking.unit_id || match.unit_name || '';
 
     fs.writeFileSync(file, JSON.stringify(allMatches, null, 2), 'utf8');
 
