@@ -588,6 +588,146 @@ app.post('/api/ops/call-me/transfer', requireStaff, async (req, res) => {
   }
 });
 
+app.get('/api/ops/cardcom-terminal/pending', requireStaff, async (_req, res) => {
+  try {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const file = path.join(process.cwd(), 'data', 'cardcom-pending-matches.json');
+    let pending = [];
+    if (fs.existsSync(file)) {
+      try {
+        const all = JSON.parse(fs.readFileSync(file, 'utf8'));
+        pending = (Array.isArray(all) ? all : []).filter((m) => m.status === 'pending');
+      } catch {}
+    }
+    res.json({ ok: true, pending });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/ops/cardcom-terminal/link', requireStaff, async (req, res) => {
+  try {
+    const { deal_id, booking_id } = req.body || {};
+    if (!deal_id || !booking_id) {
+      return res.status(400).json({ error: 'MISSING_DEAL_OR_BOOKING_ID' });
+    }
+    const {
+      recordCardcomTerminalPayment,
+      createCardcomInvoiceForDeal
+    } = await import('./lib/cardcomTerminalService.js');
+
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const file = path.join(process.cwd(), 'data', 'cardcom-pending-matches.json');
+    let allMatches = [];
+    if (fs.existsSync(file)) {
+      try { allMatches = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {}
+    }
+    const match = allMatches.find((m) => m.deal_id === deal_id);
+    if (!match) {
+      return res.status(404).json({ error: 'MATCH_NOT_FOUND' });
+    }
+
+    let booking = null;
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+    if (supabaseUrl && supabaseKey) {
+      const bRes = await fetch(`${supabaseUrl}/rest/v1/hotelos_bookings?id=eq.${encodeURIComponent(booking_id)}`, {
+        headers: { apikey: supabaseKey, authorization: `Bearer ${supabaseKey}` }
+      });
+      const rows = await bRes.json();
+      if (Array.isArray(rows) && rows[0]) booking = rows[0];
+    }
+
+    if (!booking) {
+      return res.status(404).json({ error: 'BOOKING_NOT_FOUND' });
+    }
+
+    let invoiceInfo = null;
+    const apiName = process.env.CARDCOM_API_NAME;
+    const apiPassword = process.env.CARDCOM_API_PASSWORD;
+    if (apiName && apiPassword) {
+      try {
+        invoiceInfo = await createCardcomInvoiceForDeal({
+          dealId: deal_id,
+          amount: match.amount,
+          name: booking.guest_name,
+          email: booking.guest_email,
+          phone: booking.guest_phone,
+          description: `אירוח ב-${booking.unit_name || booking.unit_id}`,
+          apiName,
+          apiPassword
+        });
+        match.invoice_number = invoiceInfo.documentNumber;
+        match.invoice_url = invoiceInfo.documentUrl;
+      } catch (err) {
+        console.warn('[Cardcom Manual Link] Invoice error:', err.message);
+      }
+    }
+
+    const deal = {
+      dealId: match.deal_id,
+      amount: match.amount,
+      amountAgorot: Math.round(match.amount * 100),
+      approval: match.approval,
+      last4: match.last4,
+      cardOwnerName: match.payer_name,
+      dealTime: match.deal_time
+    };
+
+    const { booking: updatedBooking, paymentEntry } = recordCardcomTerminalPayment(booking, deal, invoiceInfo || {});
+
+    if (supabaseUrl && supabaseKey) {
+      await fetch(`${supabaseUrl}/rest/v1/hotelos_bookings?id=eq.${encodeURIComponent(booking_id)}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: supabaseKey,
+          authorization: `Bearer ${supabaseKey}`
+        },
+        body: JSON.stringify({
+          clearing_payments: updatedBooking.clearing_payments,
+          payment_status: updatedBooking.payment_status,
+          payment_mode: updatedBooking.payment_mode
+        })
+      });
+    }
+
+    match.status = 'manual_linked';
+    match.selected_booking_id = booking_id;
+    match.approved_at = new Date().toISOString();
+    match.payment_recorded_at = new Date().toISOString();
+
+    fs.writeFileSync(file, JSON.stringify(allMatches, null, 2), 'utf8');
+
+    res.json({ ok: true, booking: updatedBooking, invoice: invoiceInfo, payment: paymentEntry });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/ops/cardcom-terminal/ignore', requireStaff, async (req, res) => {
+  try {
+    const { deal_id } = req.body || {};
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const file = path.join(process.cwd(), 'data', 'cardcom-pending-matches.json');
+    if (fs.existsSync(file)) {
+      const allMatches = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const match = allMatches.find((m) => m.deal_id === deal_id);
+      if (match) {
+        match.status = 'ignored';
+        match.updated_at = new Date().toISOString();
+        fs.writeFileSync(file, JSON.stringify(allMatches, null, 2), 'utf8');
+      }
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/internal/staff', async (req, res) => {
   const ip = req.ip || req.socket?.remoteAddress || '';
   const local = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';

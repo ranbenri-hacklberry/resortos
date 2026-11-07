@@ -272,5 +272,188 @@ export async function onRequest(context) {
     return json({ ok: true, templates: [], tenant_id: tenantId || DEMO_TENANT_ID });
   }
 
+  // 6. /api/ops/cardcom-terminal/*
+  if (head === 'cardcom-terminal') {
+    if (!(await isAuthorizedOps(request, env))) {
+      return errorJson('לא מורשה', 401, 'UNAUTHORIZED');
+    }
+
+    // GET /api/ops/cardcom-terminal/pending
+    if (sub === 'pending' && request.method === 'GET') {
+      try {
+        const res = await fetchPostgrest('/cardcom_pending_matches?status=eq.pending&order=created_at.desc', { method: 'GET' }, env);
+        if (res && res.ok) {
+          const rows = await res.json();
+          if (Array.isArray(rows)) {
+            return json({ ok: true, pending: rows });
+          }
+        }
+      } catch (_) {}
+      return json({ ok: true, pending: [] });
+    }
+
+    // POST /api/ops/cardcom-terminal/link
+    if (sub === 'link' && request.method === 'POST') {
+      let body = {};
+      try { body = await request.json(); } catch {}
+      const { deal_id, booking_id } = body;
+      if (!deal_id || !booking_id) {
+        return errorJson('MISSING_DEAL_OR_BOOKING_ID', 400);
+      }
+
+      // Fetch match
+      let match = null;
+      try {
+        const mRes = await fetchPostgrest(`/cardcom_pending_matches?deal_id=eq.${encodeURIComponent(deal_id)}`, { method: 'GET' }, env);
+        if (mRes && mRes.ok) {
+          const mRows = await mRes.json();
+          if (Array.isArray(mRows) && mRows[0]) match = mRows[0];
+        }
+      } catch (_) {}
+
+      // Fetch booking
+      let booking = null;
+      try {
+        const bRes = await fetchPostgrest(`/hotelos_bookings?id=eq.${encodeURIComponent(booking_id)}`, { method: 'GET' }, env);
+        if (bRes && bRes.ok) {
+          const bRows = await bRes.json();
+          if (Array.isArray(bRows) && bRows[0]) booking = bRows[0];
+        }
+      } catch (_) {}
+
+      if (!booking) {
+        return errorJson('BOOKING_NOT_FOUND', 404);
+      }
+
+      const amount = match ? Number(match.amount) : 0;
+      let invoiceInfo = null;
+      const apiName = env.CARDCOM_API_NAME;
+      const apiPassword = env.CARDCOM_API_PASSWORD;
+
+      if (apiName && apiPassword && amount > 0) {
+        try {
+          const docBody = {
+            ApiName: apiName,
+            ApiPassword: apiPassword,
+            IsSendSMS: false,
+            Document: {
+              DocumentTypeToCreate: 'TaxInvoiceAndReceipt',
+              Name: booking.guest_name || 'אורח',
+              Email: booking.guest_email || 'mialeesresort@mialees.com',
+              Phone: booking.guest_phone || undefined,
+              IsSendByEmail: true,
+              Products: [
+                {
+                  Description: `אירוח ב-${booking.unit_name || booking.unit_id || 'ריזורט'}`,
+                  UnitCost: Math.round(amount * 100) / 100,
+                  Quantity: 1,
+                  IsVatFree: false
+                }
+              ],
+              ISOCoinID: '1'
+            },
+            DealNumbers: [{ DealNumber: String(deal_id) }]
+          };
+          const cardcomRes = await fetch('https://secure.cardcom.solutions/api/v11/Documents/CreateDocument', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(docBody)
+          });
+          const cData = await cardcomRes.json();
+          if (cardcomRes.ok && (cData.ResponseCode === 0 || cData.ResponseCode === '0')) {
+            invoiceInfo = {
+              documentNumber: String(cData.DocumentNumber || cData.DocNumber || ''),
+              documentUrl: String(cData.DocumentUrl || cData.DocUrl || cData.Url || ''),
+              dealId: String(deal_id)
+            };
+          }
+        } catch (err) {
+          console.warn('[Cloudflare Ops Link] Cardcom Invoice error:', err);
+        }
+      }
+
+      // Record clearing_payment idempotently on booking
+      const existingPayments = Array.isArray(booking.clearing_payments) ? [...booking.clearing_payments] : [];
+      const dealIdStr = String(deal_id);
+      const paymentEntry = {
+        method: 'CARD',
+        amount_ils: amount,
+        amount_agorot: Math.round(amount * 100),
+        deal_number: dealIdStr,
+        txn: dealIdStr,
+        approval: match?.approval || undefined,
+        last4: match?.last4 || undefined,
+        payer_name: match?.payer_name || undefined,
+        invoice: invoiceInfo?.documentNumber || undefined,
+        invoice_url: invoiceInfo?.documentUrl || undefined,
+        terminal: '184288',
+        recorded_at: new Date().toISOString()
+      };
+      const existingIdx = existingPayments.findIndex((p) => String(p.deal_number || p.txn || '') === dealIdStr);
+      if (existingIdx >= 0) {
+        existingPayments[existingIdx] = { ...existingPayments[existingIdx], ...paymentEntry };
+      } else {
+        existingPayments.push(paymentEntry);
+      }
+
+      const totalPriceAgorot = Number(booking.total_price_agorot || 0);
+      const totalPaidAgorot = existingPayments.reduce((sum, p) => sum + (Number(p.amount_agorot) || Math.round((Number(p.amount_ils) || 0) * 100)), 0);
+      let paymentStatus = booking.payment_status || 'UNPAID';
+      if (totalPriceAgorot > 0) {
+        if (totalPaidAgorot >= totalPriceAgorot) paymentStatus = 'PAID';
+        else if (totalPaidAgorot > 0) paymentStatus = 'PARTIAL';
+      } else if (totalPaidAgorot > 0) {
+        paymentStatus = 'PAID';
+      }
+
+      try {
+        await fetchPostgrest(`/hotelos_bookings?id=eq.${encodeURIComponent(booking_id)}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            clearing_payments: existingPayments,
+            payment_status: paymentStatus,
+            payment_mode: 'CARD'
+          })
+        }, env);
+      } catch (_) {}
+
+      try {
+        await fetchPostgrest(`/cardcom_pending_matches?deal_id=eq.${encodeURIComponent(deal_id)}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            status: 'manual_linked',
+            selected_booking_id: booking_id,
+            invoice_number: invoiceInfo?.documentNumber || null,
+            invoice_url: invoiceInfo?.documentUrl || null,
+            approved_at: new Date().toISOString(),
+            payment_recorded_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+        }, env);
+      } catch (_) {}
+
+      return json({ ok: true, booking_id, invoice: invoiceInfo, payment: paymentEntry });
+    }
+
+    // POST /api/ops/cardcom-terminal/ignore
+    if (sub === 'ignore' && request.method === 'POST') {
+      let body = {};
+      try { body = await request.json(); } catch {}
+      const { deal_id } = body;
+      if (deal_id) {
+        try {
+          await fetchPostgrest(`/cardcom_pending_matches?deal_id=eq.${encodeURIComponent(deal_id)}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              status: 'ignored',
+              updated_at: new Date().toISOString()
+            })
+          }, env);
+        } catch (_) {}
+      }
+      return json({ ok: true });
+    }
+  }
+
   return errorJson('נתיב לא קיים', 404, 'NOT_FOUND');
 }
