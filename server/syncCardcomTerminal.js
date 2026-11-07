@@ -274,6 +274,33 @@ export async function pollCardcomTerminal({
     newMatches.push(matchRecord);
   }
 
+  // Prompt Ran for any pending matches that haven't been prompted yet
+  if (notifyRan) {
+    for (const match of pendingMatches) {
+      if (match.status === 'pending' && !match.ran_prompted_at && match.candidates?.length > 0) {
+        const deal = {
+          dealId: match.deal_id,
+          amount: match.amount,
+          last4: match.last4,
+          approval: match.approval,
+          cardOwnerName: match.payer_name,
+          dealTime: match.deal_time
+        };
+        const idx = match.current_candidate_index || 0;
+        const topCandidate = match.candidates[idx] || match.candidates[0];
+        const alternatives = match.candidates.slice(idx + 1);
+        const promptText = formatRanApprovalPrompt(deal, topCandidate, alternatives);
+        const ranJid = `${RAN_PRIVATE_PHONE_DIGITS}@s.whatsapp.net`;
+        const sent = await sendWhatsAppMessage({ jid: ranJid, text: promptText, fetchImpl });
+        if (sent) {
+          match.ran_prompted_at = new Date().toISOString();
+          match.ran_prompt_message = promptText;
+          console.log(`[syncCardcomTerminal] Prompted Ran for pending deal ${match.deal_id} (suggested ${topCandidate.guestName})`);
+        }
+      }
+    }
+  }
+
 async function syncToSupabaseSettings(pendingMatches) {
   const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
