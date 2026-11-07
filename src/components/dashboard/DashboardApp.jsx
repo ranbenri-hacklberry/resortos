@@ -142,10 +142,11 @@ export default function DashboardApp() {
   const [dashPendingCharges, setDashPendingCharges] = useState([]);
 
   useEffect(() => {
-    if (!token) return;
     const checkCardcom = async () => {
       try {
-        const res = await fetch('/api/ops/cardcom-terminal/pending');
+        const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem(DASHBOARD_TOKEN_KEY) : null);
+        const headers = activeToken ? { Authorization: `Bearer ${activeToken}` } : {};
+        const res = await fetch('/api/ops/cardcom-terminal/pending', { headers });
         if (res.ok) {
           const data = await res.json();
           const pending = Array.isArray(data?.pending) ? data.pending : [];
@@ -161,7 +162,7 @@ export default function DashboardApp() {
       } catch (_) {}
     };
     checkCardcom();
-    const interval = setInterval(checkCardcom, 30000);
+    const interval = setInterval(checkCardcom, 10000);
     return () => clearInterval(interval);
   }, [token, activeTab]);
 
@@ -757,7 +758,7 @@ export default function DashboardApp() {
         fontFamily: phoneDash ? 'Tahoma, "Segoe UI", Arial, sans-serif' : 'Heebo, Assistant, system-ui, sans-serif'
       }}
     >
-      {phoneDash && dashPendingCharges.length > 0 && activeTab !== 'priority' ? (
+      {dashPendingCharges.length > 0 && activeTab !== 'priority' ? (
         <CardcomMobilePill
           pendingCount={dashPendingCharges.length}
           totalAmount={dashPendingCharges.reduce((s, c) => s + (Number(c.amount) || 0), 0)}
