@@ -239,6 +239,8 @@ export async function pollCardcomTerminal({
       amount: deal.amount,
       last4: deal.last4,
       approval: deal.approval,
+      document_number: deal.documentNumber || null,
+      document_url: deal.documentUrl || null,
       deal_time: deal.dealTime,
       payer_name: deal.cardOwnerName,
       candidates,

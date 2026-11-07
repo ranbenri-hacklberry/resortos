@@ -53,6 +53,19 @@ export async function handleRanTerminalInbound(
   // Find latest pending match
   const pendingList = (deps.matches || []).filter((m) => m.status === 'pending');
   if (!pendingList.length) {
+    if (choice === '1') {
+      const approvedList = (deps.matches || []).filter((m) => m.status === 'approved');
+      if (approvedList.length) {
+        approvedList.sort((a, b) => new Date(b.approved_at || b.deal_time || 0).getTime() - new Date(a.approved_at || a.deal_time || 0).getTime());
+        const lastApproved = approvedList[0];
+        const candidate = (lastApproved.candidates || []).find((c) => c.bookingId === lastApproved.selected_booking_id) || lastApproved.candidates?.[0];
+        const guestName = candidate?.guestName || lastApproved.payer_name || 'האורח';
+        const docText = lastApproved.invoice_number ? ` (חשבונית מס קבלה מס׳ ${lastApproved.invoice_number})` : '';
+        const repeatReply = `ℹ️ הסליקה בסך ₪${Number(lastApproved.amount).toLocaleString('he-IL')} כבר שויכה ל-*${guestName}*${docText}. לא בוצע חיוב או שיוך כפול.`;
+        await deps.sendWhatsApp?.(sender, repeatReply);
+        return { handled: true, reply: repeatReply, alreadyApproved: true };
+      }
+    }
     return { handled: false };
   }
 
@@ -66,7 +79,9 @@ export async function handleRanTerminalInbound(
     approval: match.approval,
     last4: match.last4,
     cardOwnerName: match.payer_name,
-    dealTime: match.deal_time
+    dealTime: match.deal_time,
+    documentNumber: match.document_number || match.invoice_number || '',
+    documentUrl: match.document_url || match.invoice_url || ''
   };
 
   const candidateIdx = match.current_candidate_index || 0;
@@ -77,24 +92,72 @@ export async function handleRanTerminalInbound(
       return { handled: true, reply: '⚠️ לא נבחרה הזמנה לשיוך. סליקה זו ממתינה לשיוך ידני בדשבורד.' };
     }
 
+    if (match.status === 'approved') {
+      const docText = match.invoice_number ? ` (חשבונית מס קבלה מס׳ ${match.invoice_number})` : '';
+      const repeatReply = `ℹ️ הסליקה בסך ₪${Number(match.amount).toLocaleString('he-IL')} כבר שויכה ל-*${candidate.guestName}*${docText}. לא בוצע חיוב או שיוך כפול.`;
+      await deps.sendWhatsApp?.(sender, repeatReply);
+      return { handled: true, reply: repeatReply, alreadyApproved: true };
+    }
+
     match.status = 'approved';
     match.selected_booking_id = candidate.bookingId;
     match.approved_at = new Date().toISOString();
 
-    // 1. Load booking & record payment
+    // 1. Load booking & check for existing Cardcom document
     const booking = await deps.loadBooking(candidate.bookingId);
     let invoiceInfo = null;
 
-    // 2. Create Cardcom invoice linked to existing deal (no new card charge)
-    if (deps.cardcomCreds?.apiName && deps.cardcomCreds?.apiPassword) {
+    // Check if this deal already has a Cardcom document (DocumentNumber on the transaction / existing invoice on booking)
+    const clearing = Array.isArray(booking?.clearing_payments) ? booking.clearing_payments : [];
+    const existingPaymentForDeal = clearing.find(
+      (p) => String(p.deal_number || p.txn || '').trim() === String(deal.dealId).trim()
+    );
+
+    const existingDocNumber = String(
+      deal.documentNumber ||
+      match.document_number ||
+      match.invoice_number ||
+      existingPaymentForDeal?.invoice ||
+      existingPaymentForDeal?.document_number ||
+      ''
+    ).trim();
+
+    const existingDocUrl = String(
+      deal.documentUrl ||
+      match.document_url ||
+      match.invoice_url ||
+      existingPaymentForDeal?.document_url ||
+      existingPaymentForDeal?.invoice_url ||
+      ''
+    ).trim();
+
+    const guestEmail = String(booking?.guest_email || booking?.email || candidate.guestEmail || '').trim();
+    const hasGuestEmail = Boolean(guestEmail && guestEmail.includes('@'));
+
+    if (existingDocNumber) {
+      // 1. Deal already has a Cardcom document: do NOT issue another; save existing invoice number on payment
+      invoiceInfo = {
+        documentNumber: existingDocNumber,
+        documentUrl: existingDocUrl,
+        isExisting: true,
+        hasGuestEmail,
+        emailSentTo: hasGuestEmail ? guestEmail : 'mialeesresort@mialees.com'
+      };
+      match.invoice_number = existingDocNumber;
+      if (existingDocUrl) match.invoice_url = existingDocUrl;
+    } else if (deps.cardcomCreds?.apiName && deps.cardcomCreds?.apiPassword) {
+      // 2. Otherwise issue a Cardcom חשבונית מס קבלה (TaxInvoiceAndReceipt) linked to the existing deal (no new charge)
       try {
+        const guestPhone = String(booking?.guest_phone || booking?.phone || candidate.guestPhone || '').trim();
+
         invoiceInfo = await createCardcomInvoiceForDeal({
           dealId: match.deal_id,
           amount: match.amount,
+          booking,
           name: candidate.guestName,
-          email: candidate.guestEmail,
-          phone: candidate.guestPhone,
-          description: `אירוח ב-${candidate.unitName}`,
+          email: guestEmail,
+          phone: guestPhone,
+          description: candidate.unitName ? `אירוח ב-${candidate.unitName}` : undefined,
           apiName: deps.cardcomCreds.apiName,
           apiPassword: deps.cardcomCreds.apiPassword,
           fetchImpl: deps.fetchImpl
@@ -111,7 +174,7 @@ export async function handleRanTerminalInbound(
       }
     }
 
-    // 3. Record payment into booking clearing_payments
+    // 4. Save invoice number on the clearing payment so it shows in Priority charges line (approval, last4, deal number, invoice number)
     const { booking: updatedBooking } = recordCardcomTerminalPayment(booking, deal, invoiceInfo || {});
     await deps.patchBooking?.(candidate.bookingId, {
       clearing_payments: updatedBooking.clearing_payments,
@@ -122,20 +185,31 @@ export async function handleRanTerminalInbound(
 
     await deps.saveMatches?.(deps.matches);
 
-    // 4. Confirm to Ran
-    const docText = match.invoice_number ? ` הופקה חשבונית מס קבלה שמספרה ${match.invoice_number}.` : '';
+    // Confirm to Ran
+    let docText = '';
+    if (match.invoice_number) {
+      docText = invoiceInfo?.isExisting
+        ? ` נשמרה חשבונית קיימת שמספרה ${match.invoice_number}.`
+        : ` הופקה חשבונית מס קבלה שמספרה ${match.invoice_number}.`;
+    }
     const ranConfirmation = `✅ הסליקה בסך ₪${match.amount.toLocaleString('he-IL')} שויכה בהצלחה ל-*${candidate.guestName}* (${candidate.unitName}).${docText}`;
     await deps.sendWhatsApp?.(sender, ranConfirmation);
 
     // 5. Send warm WhatsApp to guest asking if they want the invoice
-    if (candidate.guestPhone) {
+    // if an invoice was emailed, say it was sent to their email and ask if they also want it in WhatsApp;
+    // if no email, ask if to send it in WhatsApp.
+    if (candidate.guestPhone && !match.guest_notified_at) {
       const guestJid = `${normalizePhone(candidate.guestPhone)}@s.whatsapp.net`;
-      const guestMsg = formatGuestConfirmationMessage(deal, booking, candidate.unitName);
+      const guestMsg = formatGuestConfirmationMessage(deal, booking, candidate.unitName, {
+        hasGuestEmail,
+        guestEmail
+      });
 
-      if (defaultRateLimiter.canSend(guestJid).allowed) {
+      const rateLimiter = deps.rateLimiter || defaultRateLimiter;
+      if (rateLimiter.canSend(guestJid).allowed) {
         const guestSent = await deps.sendWhatsApp?.(guestJid, guestMsg);
         if (guestSent) {
-          defaultRateLimiter.recordOutbound(guestJid);
+          rateLimiter.recordOutbound(guestJid);
           match.guest_notified_at = new Date().toISOString();
           await deps.saveMatches?.(deps.matches);
 
@@ -216,10 +290,11 @@ export async function handleGuestInvoiceReply(
   const guestJid = `${normSender}@s.whatsapp.net`;
   const msg = formatGuestInvoiceDeliveryMessage(match.invoice_url, match.invoice_number, candidate?.unitName);
 
-  if (defaultRateLimiter.canSend(guestJid).allowed) {
+  const rateLimiter = deps.rateLimiter || defaultRateLimiter;
+  if (rateLimiter.canSend(guestJid).allowed) {
     const sent = await deps.sendWhatsApp?.(guestJid, msg);
     if (sent) {
-      defaultRateLimiter.recordOutbound(guestJid);
+      rateLimiter.recordOutbound(guestJid);
       match.guest_invoice_requested = true;
       match.guest_invoice_sent_at = new Date().toISOString();
       await deps.saveMatches?.(deps.matches);

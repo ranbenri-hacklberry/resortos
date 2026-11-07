@@ -65,6 +65,11 @@ export class OutboundRateLimiter {
   recordInbound(chatId: string): void {
     this.chatConsecutiveOutbound.set(chatId, 0);
   }
+
+  reset(): void {
+    this.chatTimestamps.clear();
+    this.chatConsecutiveOutbound.clear();
+  }
 }
 
 export const defaultRateLimiter = new OutboundRateLimiter();
@@ -179,14 +184,28 @@ export function resolveBookingInvoiceDetails(booking: any = {}, unitName: string
   };
 }
 
-export function formatGuestConfirmationMessage(deal: any, booking: any = {}, unitName = ''): string {
+export function formatGuestConfirmationMessage(
+  deal: any,
+  booking: any = {},
+  unitName = '',
+  options: { hasGuestEmail?: boolean; guestEmail?: string } = {}
+): string {
   const guestName = (booking.guest_name || booking.invoice_name || 'שלום').trim().split(/\s+/)[0];
   const amountFormatted = Number(deal.amount).toLocaleString('he-IL');
   const approval = deal.approval ? ` (אישור: ${deal.approval})` : '';
 
   const { guestDescription } = resolveBookingInvoiceDetails(booking, unitName);
 
-  return `שלום ${guestName}, התשלום בסך ₪${amountFormatted} עבור ${guestDescription} התקבל בהצלחה${approval}. לשלוח לך את החשבונית לכאן בווטסאפ?`;
+  const hasEmail = Boolean(
+    options.hasGuestEmail ??
+    ((booking && (booking.guest_email || booking.email || booking.invoice_email)) || options.guestEmail)
+  );
+
+  const invoicePart = hasEmail
+    ? 'החשבונית נשלחה למייל שלך. לשלוח לך אותה גם לכאן בווטסאפ?'
+    : 'לשלוח לך את החשבונית לכאן בווטסאפ?';
+
+  return `שלום ${guestName}, התשלום בסך ₪${amountFormatted} עבור ${guestDescription} התקבל בהצלחה${approval}. ${invoicePart}`;
 }
 
 export function formatGuestInvoiceDeliveryMessage(invoiceUrl: string, invoiceNumber?: string, unitName = '', customLine = ''): string {
@@ -226,9 +245,10 @@ export async function createCardcomInvoiceForDeal({
   const resolved = booking ? resolveBookingInvoiceDetails(booking, booking.unit_name) : null;
 
   const customerName = resolved?.invoiceCustomerName || String(name || '').trim() || 'אורח';
-  const customerEmail = String((booking && booking.guest_email) || email || '').trim();
-  const invoiceEmail = customerEmail || FALLBACK_INVOICE_EMAIL;
-  const customerPhone = String((booking && booking.guest_phone) || phone || '').trim();
+  const customerEmail = String((booking && (booking.guest_email || booking.email || booking.invoice_email)) || email || '').trim();
+  const hasGuestEmail = Boolean(customerEmail && customerEmail.includes('@'));
+  const invoiceEmail = hasGuestEmail ? customerEmail : FALLBACK_INVOICE_EMAIL;
+  const customerPhone = String((booking && (booking.guest_phone || booking.phone)) || phone || '').trim();
   const invoiceDesc = resolved?.invoiceLine || String(description || 'אירוח ונופש').slice(0, 200);
 
   const body = {
@@ -273,7 +293,10 @@ export async function createCardcomInvoiceForDeal({
     return {
       documentNumber: String(data.DocumentNumber || data.DocNumber || ''),
       documentUrl: String(data.DocumentUrl || data.DocUrl || data.Url || ''),
-      dealId: String(dealId)
+      dealId: String(dealId),
+      description: String(data.Description || ''),
+      emailSentTo: invoiceEmail,
+      hasGuestEmail
     };
   } finally {
     clearTimeout(t);
@@ -286,21 +309,30 @@ export function recordCardcomTerminalPayment(booking: any, deal: any, invoiceInf
     : [];
 
   const dealIdStr = String(deal.dealId || deal.deal_id);
+  const invoiceNum = invoiceInfo?.documentNumber || invoiceInfo?.invoice ? String(invoiceInfo.documentNumber || invoiceInfo.invoice) : undefined;
+  const invoiceUrl = invoiceInfo?.documentUrl || invoiceInfo?.invoice_url ? String(invoiceInfo.documentUrl || invoiceInfo.invoice_url) : undefined;
+  const amountAgorot = deal.amountAgorot || Math.round(Number(deal.amount || 0) * 100);
+  const amountIls = Number(deal.amount || (amountAgorot / 100));
+
   const alreadyRecorded = existingPayments.find(
     (p: any) => String(p.deal_number || p.txn || '') === dealIdStr
+      || (deal.approval && p.approval === deal.approval && Math.abs((Number(p.amount_agorot) || Math.round((Number(p.amount_ils) || 0) * 100)) - amountAgorot) < 5)
   );
 
   const paymentEntry = {
     method: 'CARD',
-    amount_ils: Number(deal.amount),
-    amount_agorot: Math.round(Number(deal.amount) * 100),
+    amount_ils: amountIls,
+    amount_agorot: amountAgorot,
     deal_number: dealIdStr,
     txn: dealIdStr,
     approval: deal.approval ? String(deal.approval) : undefined,
-    last4: deal.last4 ? String(deal.last4) : undefined,
+    ref: deal.approval ? String(deal.approval) : undefined,
+    last4: deal.last4 ? String(deal.last4).replace(/\D/g, '').slice(-4) : undefined,
     payer_name: deal.cardOwnerName || deal.payer_name || undefined,
-    invoice: invoiceInfo?.documentNumber ? String(invoiceInfo.documentNumber) : undefined,
-    invoice_url: invoiceInfo?.documentUrl ? String(invoiceInfo.documentUrl) : undefined,
+    invoice: invoiceNum,
+    document_number: invoiceNum,
+    invoice_url: invoiceUrl,
+    document_url: invoiceUrl,
     terminal: '184288',
     recorded_at: new Date().toISOString()
   };
@@ -308,7 +340,13 @@ export function recordCardcomTerminalPayment(booking: any, deal: any, invoiceInf
   if (!alreadyRecorded) {
     existingPayments.push(paymentEntry);
   } else {
-    Object.assign(alreadyRecorded, paymentEntry);
+    Object.assign(alreadyRecorded, {
+      ...paymentEntry,
+      invoice: invoiceNum || alreadyRecorded.invoice || alreadyRecorded.document_number,
+      document_number: invoiceNum || alreadyRecorded.document_number || alreadyRecorded.invoice,
+      invoice_url: invoiceUrl || alreadyRecorded.invoice_url || alreadyRecorded.document_url,
+      document_url: invoiceUrl || alreadyRecorded.document_url || alreadyRecorded.invoice_url
+    });
   }
 
   const totalPriceAgorot = Number(booking.total_price_agorot || 0);
@@ -369,6 +407,8 @@ export interface TerminalPendingMatch {
   payment_recorded_at?: string;
   invoice_number?: string;
   invoice_url?: string;
+  document_number?: string;
+  document_url?: string;
   guest_notified_at?: string;
   guest_invoice_requested?: boolean;
   guest_invoice_sent_at?: string;
@@ -421,6 +461,7 @@ export interface ApprovalDeps {
     channel?: string;
   }) => Promise<void>;
   cardcomCreds?: { apiName: string; apiPassword: string };
+  rateLimiter?: OutboundRateLimiter;
   fetchImpl?: typeof fetch;
   logger?: { info: (msg: any, ...args: any[]) => void; warn: (msg: any, ...args: any[]) => void; error: (msg: any, ...args: any[]) => void };
 }
@@ -445,6 +486,19 @@ export async function handleRanTerminalInbound(
   // Find latest pending match
   const pendingList = (deps.matches || []).filter((m) => m.status === 'pending');
   if (!pendingList.length) {
+    if (choice === '1') {
+      const approvedList = (deps.matches || []).filter((m) => m.status === 'approved');
+      if (approvedList.length) {
+        approvedList.sort((a, b) => new Date(b.approved_at || b.deal_time || 0).getTime() - new Date(a.approved_at || a.deal_time || 0).getTime());
+        const lastApproved = approvedList[0];
+        const candidate = (lastApproved.candidates || []).find((c) => c.bookingId === lastApproved.selected_booking_id) || lastApproved.candidates?.[0];
+        const guestName = candidate?.guestName || lastApproved.payer_name || 'האורח';
+        const docText = lastApproved.invoice_number ? ` (חשבונית מס קבלה מס׳ ${lastApproved.invoice_number})` : '';
+        const repeatReply = `ℹ️ הסליקה בסך ₪${Number(lastApproved.amount).toLocaleString('he-IL')} כבר שויכה ל-*${guestName}*${docText}. לא בוצע חיוב או שיוך כפול.`;
+        await deps.sendWhatsApp(sender, repeatReply);
+        return { handled: true, reply: repeatReply };
+      }
+    }
     return { handled: false };
   }
 
@@ -458,7 +512,9 @@ export async function handleRanTerminalInbound(
     approval: match.approval,
     last4: match.last4,
     cardOwnerName: match.payer_name,
-    dealTime: match.deal_time
+    dealTime: match.deal_time,
+    documentNumber: match.document_number || match.invoice_number || '',
+    documentUrl: match.document_url || match.invoice_url || ''
   };
 
   const candidateIdx = match.current_candidate_index || 0;
@@ -469,25 +525,72 @@ export async function handleRanTerminalInbound(
       return { handled: true, reply: '⚠️ לא נבחרה הזמנה לשיוך. סליקה זו ממתינה לשיוך ידני בדשבורד.' };
     }
 
+    if (match.status === 'approved') {
+      const docText = match.invoice_number ? ` (חשבונית מס קבלה מס׳ ${match.invoice_number})` : '';
+      const repeatReply = `ℹ️ הסליקה בסך ₪${Number(match.amount).toLocaleString('he-IL')} כבר שויכה ל-*${candidate.guestName}*${docText}. לא בוצע חיוב או שיוך כפול.`;
+      await deps.sendWhatsApp(sender, repeatReply);
+      return { handled: true, reply: repeatReply };
+    }
+
     match.status = 'approved';
     match.selected_booking_id = candidate.bookingId;
     match.approved_at = new Date().toISOString();
 
-    // 1. Load booking & record payment
+    // 1. Load booking & check for existing Cardcom document
     let booking = await deps.loadBooking(candidate.bookingId);
-    let invoiceInfo = null;
+    let invoiceInfo: any = null;
 
-    // 2. Create Cardcom invoice linked to existing deal (no new card charge)
-    if (deps.cardcomCreds?.apiName && deps.cardcomCreds?.apiPassword) {
+    // Check if this deal already has a Cardcom document (DocumentNumber on transaction / existing invoice on booking)
+    const clearing = Array.isArray(booking?.clearing_payments) ? booking.clearing_payments : [];
+    const existingPaymentForDeal = clearing.find(
+      (p: any) => String(p.deal_number || p.txn || '').trim() === String(deal.dealId).trim()
+    );
+
+    const existingDocNumber = String(
+      deal.documentNumber ||
+      match.document_number ||
+      match.invoice_number ||
+      existingPaymentForDeal?.invoice ||
+      existingPaymentForDeal?.document_number ||
+      ''
+    ).trim();
+
+    const existingDocUrl = String(
+      deal.documentUrl ||
+      match.document_url ||
+      match.invoice_url ||
+      existingPaymentForDeal?.document_url ||
+      existingPaymentForDeal?.invoice_url ||
+      ''
+    ).trim();
+
+    const guestEmail = String(booking?.guest_email || booking?.email || candidate.guestEmail || '').trim();
+    const hasGuestEmail = Boolean(guestEmail && guestEmail.includes('@'));
+
+    if (existingDocNumber) {
+      // 1. Deal already has a Cardcom document: do NOT issue another; save existing invoice number on payment
+      invoiceInfo = {
+        documentNumber: existingDocNumber,
+        documentUrl: existingDocUrl,
+        isExisting: true,
+        hasGuestEmail,
+        emailSentTo: hasGuestEmail ? guestEmail : 'mialeesresort@mialees.com'
+      };
+      match.invoice_number = existingDocNumber;
+      if (existingDocUrl) match.invoice_url = existingDocUrl;
+    } else if (deps.cardcomCreds?.apiName && deps.cardcomCreds?.apiPassword) {
+      // 2. Otherwise issue a Cardcom חשבונית מס קבלה (TaxInvoiceAndReceipt) linked to the existing deal (no new charge)
       try {
         const resolved = resolveBookingInvoiceDetails(booking, candidate.unitName);
+        const guestPhone = String(booking?.guest_phone || booking?.phone || candidate.guestPhone || '').trim();
+
         invoiceInfo = await createCardcomInvoiceForDeal({
           dealId: match.deal_id,
           amount: match.amount,
           booking,
           name: resolved.invoiceCustomerName,
-          email: booking?.guest_email || candidate.guestEmail,
-          phone: booking?.guest_phone || candidate.guestPhone,
+          email: guestEmail,
+          phone: guestPhone,
           description: resolved.invoiceLine,
           apiName: deps.cardcomCreds.apiName,
           apiPassword: deps.cardcomCreds.apiPassword,
@@ -505,7 +608,7 @@ export async function handleRanTerminalInbound(
       }
     }
 
-    // 3. Record payment into booking clearing_payments
+    // 4. Save invoice number on the clearing payment so it shows in Priority charges line (approval, last4, deal number, invoice number)
     const { booking: updatedBooking } = recordCardcomTerminalPayment(booking, deal, invoiceInfo || {});
     await deps.patchBooking(candidate.bookingId, {
       clearing_payments: updatedBooking.clearing_payments,
@@ -516,20 +619,31 @@ export async function handleRanTerminalInbound(
 
     await deps.saveMatches(deps.matches);
 
-    // 4. Confirm to Ran
-    const docText = match.invoice_number ? ` הופקה חשבונית מס קבלה שמספרה ${match.invoice_number}.` : '';
+    // Confirm to Ran
+    let docText = '';
+    if (match.invoice_number) {
+      docText = invoiceInfo?.isExisting
+        ? ` נשמרה חשבונית קיימת שמספרה ${match.invoice_number}.`
+        : ` הופקה חשבונית מס קבלה שמספרה ${match.invoice_number}.`;
+    }
     const ranConfirmation = `✅ הסליקה בסך ₪${match.amount.toLocaleString('he-IL')} שויכה בהצלחה ל-*${candidate.guestName}* (${candidate.unitName}).${docText}`;
     await deps.sendWhatsApp(sender, ranConfirmation);
 
     // 5. Send warm WhatsApp to guest asking if they want the invoice
-    if (candidate.guestPhone) {
+    // if an invoice was emailed, say it was sent to their email and ask if they also want it in WhatsApp;
+    // if no email, ask if to send it in WhatsApp.
+    if (candidate.guestPhone && !match.guest_notified_at) {
       const guestJid = `${normalizePhone(candidate.guestPhone)}@s.whatsapp.net`;
-      const guestMsg = formatGuestConfirmationMessage(deal, booking || candidate, candidate.unitName);
+      const guestMsg = formatGuestConfirmationMessage(deal, booking || candidate, candidate.unitName, {
+        hasGuestEmail,
+        guestEmail
+      });
 
-      if (defaultRateLimiter.canSend(guestJid).allowed) {
+      const rateLimiter = deps.rateLimiter || defaultRateLimiter;
+      if (rateLimiter.canSend(guestJid).allowed) {
         const guestSent = await deps.sendWhatsApp(guestJid, guestMsg);
         if (guestSent) {
-          defaultRateLimiter.recordOutbound(guestJid);
+          rateLimiter.recordOutbound(guestJid);
           match.guest_notified_at = new Date().toISOString();
           await deps.saveMatches(deps.matches);
 
@@ -610,10 +724,11 @@ export async function handleGuestInvoiceReply(
   const guestJid = `${normSender}@s.whatsapp.net`;
   const msg = formatGuestInvoiceDeliveryMessage(match.invoice_url, match.invoice_number, candidate?.unitName);
 
-  if (defaultRateLimiter.canSend(guestJid).allowed) {
+  const rateLimiter = (deps as any).rateLimiter || defaultRateLimiter;
+  if (rateLimiter.canSend(guestJid).allowed) {
     const sent = await deps.sendWhatsApp(guestJid, msg);
     if (sent) {
-      defaultRateLimiter.recordOutbound(guestJid);
+      rateLimiter.recordOutbound(guestJid);
       match.guest_invoice_requested = true;
       match.guest_invoice_sent_at = new Date().toISOString();
       await deps.saveMatches(deps.matches);

@@ -645,21 +645,41 @@ app.post('/api/ops/cardcom-terminal/link', requireStaff, async (req, res) => {
     }
 
     let invoiceInfo = null;
-    const apiName = process.env.CARDCOM_API_NAME;
-    const apiPassword = process.env.CARDCOM_API_PASSWORD;
-    if (apiName && apiPassword) {
-      try {
-        invoiceInfo = await createCardcomInvoiceForDeal({
-          dealId: deal_id,
-          amount: match.amount,
-          booking,
-          apiName,
-          apiPassword
-        });
-        match.invoice_number = invoiceInfo.documentNumber;
-        match.invoice_url = invoiceInfo.documentUrl;
-      } catch (err) {
-        console.warn('[Cardcom Manual Link] Invoice error:', err.message);
+    const existingPaymentForDeal = (booking.clearing_payments || []).find(
+      (p) => String(p.deal_number || p.txn || '').trim() === String(deal_id).trim()
+    );
+    const existingDocNumber = String(
+      match.document_number ||
+      match.invoice_number ||
+      existingPaymentForDeal?.invoice ||
+      existingPaymentForDeal?.document_number ||
+      ''
+    ).trim();
+
+    if (existingDocNumber) {
+      invoiceInfo = {
+        documentNumber: existingDocNumber,
+        documentUrl: match.document_url || match.invoice_url || existingPaymentForDeal?.document_url || '',
+        isExisting: true
+      };
+      match.invoice_number = existingDocNumber;
+    } else {
+      const apiName = process.env.CARDCOM_API_NAME;
+      const apiPassword = process.env.CARDCOM_API_PASSWORD;
+      if (apiName && apiPassword) {
+        try {
+          invoiceInfo = await createCardcomInvoiceForDeal({
+            dealId: deal_id,
+            amount: match.amount,
+            booking,
+            apiName,
+            apiPassword
+          });
+          match.invoice_number = invoiceInfo.documentNumber;
+          match.invoice_url = invoiceInfo.documentUrl;
+        } catch (err) {
+          console.warn('[Cardcom Manual Link] Invoice error:', err.message);
+        }
       }
     }
 

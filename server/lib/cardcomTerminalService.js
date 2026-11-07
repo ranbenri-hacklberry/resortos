@@ -114,6 +114,26 @@ export function normalizeCardcomDeal(raw = {}) {
   const entryMode = String(raw.CardNumberEntryMode || raw.cardNumberEntryMode || raw.entry_mode || '').trim();
   const dealTime = raw.CreateDate || raw.DealDate || raw.deal_time || new Date().toISOString();
   const returnValue = String(raw.ReturnValue || raw.returnValue || raw.ExternalId || raw.order || '').trim();
+  const documentNumber = String(
+    raw.DocumentNumber
+    || raw.documentNumber
+    || raw.DocNumber
+    || raw.docNumber
+    || raw.InvoiceNumber
+    || raw.invoiceNumber
+    || raw.DocumentId
+    || raw.InvoiceId
+    || ''
+  ).trim();
+  const documentUrl = String(
+    raw.DocumentUrl
+    || raw.documentUrl
+    || raw.DocUrl
+    || raw.docUrl
+    || raw.Url
+    || raw.url
+    || ''
+  ).trim();
   const statusStr = String(raw.Status || raw.status || raw.Description || '');
   const responseCode = Number(raw.ResponseCode ?? raw.responseCode ?? 0);
 
@@ -130,6 +150,8 @@ export function normalizeCardcomDeal(raw = {}) {
     entryMode,
     dealTime,
     returnValue,
+    documentNumber,
+    documentUrl,
     isSuccess
   };
 }
@@ -463,15 +485,26 @@ export function resolveBookingInvoiceDetails(booking = {}, unitName = '') {
 /**
  * Formats warm guest confirmation WhatsApp message asking if they'd like their invoice.
  * Uses booking description/custom line when defined (e.g. "סדנה"), and unit name only when it's a stay.
+ * If an invoice was emailed to the guest, says it was sent to their email and asks if they also want it in WhatsApp;
+ * if no email, asks if to send it in WhatsApp.
  */
-export function formatGuestConfirmationMessage(deal, booking = {}, unitName = '') {
+export function formatGuestConfirmationMessage(deal, booking = {}, unitName = '', options = {}) {
   const guestName = (booking.guest_name || booking.invoice_name || 'שלום').trim().split(/\s+/)[0];
   const amountFormatted = Number(deal.amount).toLocaleString('he-IL');
   const approval = deal.approval ? ` (אישור: ${deal.approval})` : '';
 
   const { guestDescription } = resolveBookingInvoiceDetails(booking, unitName);
 
-  return `שלום ${guestName}, התשלום בסך ₪${amountFormatted} עבור ${guestDescription} התקבל בהצלחה${approval}. לשלוח לך את החשבונית לכאן בווטסאפ?`;
+  const hasEmail = Boolean(
+    options.hasGuestEmail ??
+    ((booking && (booking.guest_email || booking.email || booking.invoice_email)) || options.guestEmail)
+  );
+
+  const invoicePart = hasEmail
+    ? 'החשבונית נשלחה למייל שלך. לשלוח לך אותה גם לכאן בווטסאפ?'
+    : 'לשלוח לך את החשבונית לכאן בווטסאפ?';
+
+  return `שלום ${guestName}, התשלום בסך ₪${amountFormatted} עבור ${guestDescription} התקבל בהצלחה${approval}. ${invoicePart}`;
 }
 
 /**
@@ -486,7 +519,7 @@ export function formatGuestInvoiceDeliveryMessage(invoiceUrl, invoiceNumber, uni
 /**
  * Creates Cardcom invoice for an existing approved transaction (No new card charge).
  * Emits invoice to company name + ח.פ. when available, with custom line item.
- * If the guest/company has no email, invoice email = mialeesresort@mialees.com.
+ * If the guest/company has no email in ResortOS, sends invoice to mialeesresort@mialees.com.
  */
 export async function createCardcomInvoiceForDeal({
   dealId,
@@ -507,9 +540,10 @@ export async function createCardcomInvoiceForDeal({
   const resolved = booking ? resolveBookingInvoiceDetails(booking, booking.unit_name) : null;
 
   const customerName = resolved?.invoiceCustomerName || String(name || '').trim() || 'אורח';
-  const customerEmail = String((booking && booking.guest_email) || email || '').trim();
-  const invoiceEmail = customerEmail || FALLBACK_INVOICE_EMAIL;
-  const customerPhone = String((booking && booking.guest_phone) || phone || '').trim();
+  const customerEmail = String((booking && (booking.guest_email || booking.email || booking.invoice_email)) || email || '').trim();
+  const hasGuestEmail = Boolean(customerEmail && customerEmail.includes('@'));
+  const invoiceEmail = hasGuestEmail ? customerEmail : FALLBACK_INVOICE_EMAIL;
+  const customerPhone = String((booking && (booking.guest_phone || booking.phone)) || phone || '').trim();
   const invoiceDesc = resolved?.invoiceLine || String(description || 'אירוח ונופש').slice(0, 200);
 
   const body = {
@@ -551,7 +585,7 @@ export async function createCardcomInvoiceForDeal({
 
     const data = await res.json().catch(() => null);
     const code = Number(data?.ResponseCode);
-    const documentNumber = String(data?.DocumentNumber || data?.documentNumber || '').trim();
+    const documentNumber = String(data?.DocumentNumber || data?.documentNumber || data?.DocNumber || '').trim();
 
     if (!res.ok || code !== 0 || !documentNumber) {
       const err = new Error(data?.Description || `Cardcom Document creation failed (code ${code})`);
@@ -562,8 +596,10 @@ export async function createCardcomInvoiceForDeal({
 
     return {
       documentNumber,
-      documentUrl: String(data?.DocumentUrl || data?.Url || ''),
-      description: String(data?.Description || '')
+      documentUrl: String(data?.DocumentUrl || data?.DocUrl || data?.Url || ''),
+      description: String(data?.Description || ''),
+      emailSentTo: invoiceEmail,
+      hasGuestEmail
     };
   } finally {
     clearTimeout(timer);
@@ -575,11 +611,15 @@ export async function createCardcomInvoiceForDeal({
  */
 export function recordCardcomTerminalPayment(booking, deal, invoiceInfo = {}) {
   const existing = Array.isArray(booking?.clearing_payments) ? booking.clearing_payments.slice() : [];
-  const dealStr = String(deal.dealId || '').trim();
+  const dealStr = String(deal.dealId || deal.deal_id || '').trim();
+  const invoiceNum = String(invoiceInfo.documentNumber || invoiceInfo.invoice || '').trim();
+  const invoiceUrl = String(invoiceInfo.documentUrl || invoiceInfo.invoice_url || '').trim();
+  const amountAgorot = deal.amountAgorot || Math.round(Number(deal.amount || 0) * 100);
+  const amountIls = Number(deal.amount || (amountAgorot / 100));
 
   const existingIdx = existing.findIndex((row) => (
     (dealStr && (row.deal_number === dealStr || row.txn === dealStr))
-    || (deal.approval && row.approval === deal.approval && Math.abs(Number(row.amount_agorot) - deal.amountAgorot) < 5)
+    || (deal.approval && row.approval === deal.approval && Math.abs(Number(row.amount_agorot || (Number(row.amount_ils) * 100)) - amountAgorot) < 5)
   ));
 
   const entry = {
@@ -592,10 +632,12 @@ export function recordCardcomTerminalPayment(booking, deal, invoiceInfo = {}) {
     approval: String(deal.approval || ''),
     ref: String(deal.approval || ''),
     last4: String(deal.last4 || '').replace(/\D/g, '').slice(-4),
-    amount_agorot: deal.amountAgorot,
-    document_number: String(invoiceInfo.documentNumber || ''),
-    invoice: String(invoiceInfo.documentNumber || ''),
-    document_url: String(invoiceInfo.documentUrl || ''),
+    amount_ils: amountIls,
+    amount_agorot: amountAgorot,
+    document_number: invoiceNum,
+    invoice: invoiceNum,
+    document_url: invoiceUrl,
+    invoice_url: invoiceUrl,
     payer_name: String(deal.cardOwnerName || booking.guest_name || ''),
     at: deal.dealTime || new Date().toISOString(),
     date: (deal.dealTime || new Date().toISOString()).slice(0, 10),
@@ -609,11 +651,14 @@ export function recordCardcomTerminalPayment(booking, deal, invoiceInfo = {}) {
     const prev = existing[existingIdx];
     existing[existingIdx] = {
       ...prev,
-      document_number: entry.document_number || prev.document_number || prev.invoice || '',
-      invoice: entry.document_number || prev.invoice || prev.document_number || '',
-      document_url: entry.document_url || prev.document_url || '',
+      document_number: invoiceNum || prev.document_number || prev.invoice || '',
+      invoice: invoiceNum || prev.invoice || prev.document_number || '',
+      document_url: invoiceUrl || prev.document_url || prev.invoice_url || '',
+      invoice_url: invoiceUrl || prev.invoice_url || prev.document_url || '',
       approval: entry.approval || prev.approval || prev.ref || '',
-      last4: entry.last4 || prev.last4 || ''
+      ref: entry.approval || prev.approval || prev.ref || '',
+      last4: entry.last4 || prev.last4 || '',
+      payer_name: entry.payer_name || prev.payer_name || ''
     };
     nextClearing = existing;
   } else {
