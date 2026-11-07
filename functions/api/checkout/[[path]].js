@@ -345,6 +345,7 @@ function publicBooking(row) {
     channel_source: row.channel_source,
     checkout_token: row.checkout_token,
     special_requests: inStay ? null : row.special_requests,
+    charge_quote: inStay ? null : quoteGuestCharge(row),
     payment: inStay ? null : publicPayment(row),
     expires_at: row.expires_at,
     checked_out_at: row.checked_out_at || row.stay?.self_checked_out_at || null,
@@ -1319,16 +1320,18 @@ async function handleCheckout(context) {
       }
     } else if (action === 'guest_deposit') {
       try {
-        if (hypDepositPaid(row) || hypAlreadyPaid(row)) {
+        const quote = quoteGuestCharge(row);
+        const alreadySatisfied = hypAlreadyPaid(row)
+          || (quote.purpose === 'deposit' ? hypDepositPaid(row) : hypAlreadyPaid(row));
+        if (alreadySatisfied || !quote.needsCharge) {
           if (row.booking_status !== 'CHECKED_IN' && row.booking_status !== 'CHECKED_OUT') {
             row.booking_status = 'CONFIRMED';
           }
         } else {
-          const quote = quoteGuestCharge(row);
           stay.hyp_intent = {
             purpose: quote.purpose,
             terminal: quote.terminal,
-            stage: 'confirm',
+            stage: quote.purpose === 'balance' ? 'checkin' : 'confirm',
             amount: quote.amount,
             status: 'redirected',
             at: new Date().toISOString()
@@ -1569,24 +1572,17 @@ async function handleCheckout(context) {
       updated_at: new Date().toISOString()
     };
 
-    if (!wantPay || hypAlreadyPaid(stored) || hypDepositPaid(stored)) {
+    const quote = quoteGuestCharge(stored);
+    const alreadySatisfied = hypAlreadyPaid(stored)
+      || (quote.purpose === 'deposit' ? hypDepositPaid(stored) : hypAlreadyPaid(stored));
+
+    if (!wantPay || alreadySatisfied || !quote.needsCharge) {
       if (stored.booking_status !== 'CHECKED_IN' && stored.booking_status !== 'CHECKED_OUT') {
         stored.booking_status = 'CONFIRMED';
       }
       if (!stored.payment_status || stored.payment_status === 'UNPAID') stored.payment_status = 'UNPAID';
       const savedConfirm = await persistGuestRow(env, token, stored);
       if (!savedConfirm) return json({ error: 'MAILBOX_WRITE_FAILED' }, 503);
-      await addInboxToken(env, token, stored);
-      return json(publicBooking(stored));
-    }
-
-    const quote = quoteGuestCharge(stored);
-    if (!quote.needsCharge) {
-      stored.booking_status = stored.booking_status === 'CHECKED_IN' || stored.booking_status === 'CHECKED_OUT'
-        ? stored.booking_status
-        : 'CONFIRMED';
-      const savedFree = await persistGuestRow(env, token, stored);
-      if (!savedFree) return json({ error: 'MAILBOX_WRITE_FAILED' }, 503);
       await addInboxToken(env, token, stored);
       return json(publicBooking(stored));
     }
@@ -1598,7 +1594,7 @@ async function handleCheckout(context) {
       hyp_intent: {
         purpose: quote.purpose,
         terminal: quote.terminal,
-        stage: 'confirm',
+        stage: quote.purpose === 'balance' ? 'checkin' : 'confirm',
         amount: quote.amount,
         status: 'redirected',
         at: new Date().toISOString()

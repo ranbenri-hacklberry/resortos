@@ -193,7 +193,7 @@ test('an operations manager is forbidden and Priority can read only the guest pa
   const issued = await tokenFor(priority.oauth, 'zuki');
   const listed = await call(priority.handler, { jsonrpc: '2.0', id: 1, method: 'tools/list' }, issued.access_token);
   const names = listed.json.result.tools.map((item) => item.name);
-  assert.deepEqual(names, ['resortos_guest_page', 'resortos_guest_page_print']);
+  assert.deepEqual(names, ['resortos_guest_page', 'resortos_guest_page_print', 'resortos_record_payment']);
   const page = await call(priority.handler, {
     jsonrpc: '2.0', id: 2, method: 'tools/call',
     params: { name: 'resortos_guest_page', arguments: { booking_id: 'b1' } }

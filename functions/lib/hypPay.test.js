@@ -74,6 +74,89 @@ test('guest card charge with no deposit opens the outstanding balance', () => {
   assert.equal(paid.amount, 0);
 });
 
+test('quoteGuestCharge: arrival today deposit unpaid charges full remaining balance', () => {
+  const now = new Date('2026-11-07T08:00:00Z');
+  const quote = quoteGuestCharge({
+    check_in_date: '2026-11-07',
+    total_price_agorot: 100000,
+    deposit_agorot: 25000,
+    payment_mode: 'CREDIT_DEPOSIT',
+    payment_status: 'UNPAID'
+  }, { now });
+  assert.equal(quote.purpose, 'balance');
+  assert.equal(quote.amount, 1000);
+  assert.equal(quote.needsCharge, true);
+});
+
+test('quoteGuestCharge: arrival today deposit paid charges remaining balance (total - deposit)', () => {
+  const now = new Date('2026-11-07T08:00:00Z');
+  const quote = quoteGuestCharge({
+    check_in_date: '2026-11-07',
+    total_price_agorot: 100000,
+    deposit_agorot: 25000,
+    payment_mode: 'CREDIT_DEPOSIT',
+    payment_status: 'DEPOSIT_PAID'
+  }, { now });
+  assert.equal(quote.purpose, 'balance');
+  assert.equal(quote.amount, 750);
+  assert.equal(quote.needsCharge, true);
+});
+
+test('quoteGuestCharge: 10 days away charges deposit only', () => {
+  const now = new Date('2026-11-07T08:00:00Z');
+  const quote = quoteGuestCharge({
+    check_in_date: '2026-11-17',
+    total_price_agorot: 100000,
+    deposit_agorot: 25000,
+    payment_mode: 'CREDIT_DEPOSIT',
+    payment_status: 'UNPAID'
+  }, { now });
+  assert.equal(quote.purpose, 'deposit');
+  assert.equal(quote.amount, 250);
+  assert.equal(quote.needsCharge, true);
+});
+
+test('quoteGuestCharge: check-in 24h away charges full remaining balance', () => {
+  const now = new Date('2026-11-07T13:00:00Z');
+  const quote = quoteGuestCharge({
+    check_in_date: '2026-11-08',
+    total_price_agorot: 100000,
+    deposit_agorot: 25000,
+    payment_mode: 'CREDIT_DEPOSIT',
+    payment_status: 'UNPAID'
+  }, { now });
+  assert.equal(quote.purpose, 'balance');
+  assert.equal(quote.amount, 1000);
+  assert.equal(quote.needsCharge, true);
+});
+
+test('quoteGuestCharge: CREDIT_FULL charges full balance regardless of arrival timing', () => {
+  const now = new Date('2026-11-07T08:00:00Z');
+  const quote = quoteGuestCharge({
+    check_in_date: '2026-11-20',
+    total_price_agorot: 120000,
+    deposit_agorot: 25000,
+    payment_mode: 'CREDIT_FULL',
+    payment_status: 'UNPAID'
+  }, { now });
+  assert.equal(quote.purpose, 'balance');
+  assert.equal(quote.amount, 1200);
+  assert.equal(quote.needsCharge, true);
+});
+
+test('quoteGuestCharge: fully paid booking requires no charge', () => {
+  const now = new Date('2026-11-07T08:00:00Z');
+  const quote = quoteGuestCharge({
+    check_in_date: '2026-11-07',
+    total_price_agorot: 100000,
+    deposit_agorot: 25000,
+    payment_mode: 'CREDIT_DEPOSIT',
+    payment_status: 'PAID'
+  }, { now });
+  assert.equal(quote.amount, 0);
+  assert.equal(quote.needsCharge, false);
+});
+
 test('purpose maps deposit to terminal B and balance/extra to A', () => {
   assert.equal(hypTerminalForPurpose('deposit'), 'B');
   assert.equal(hypTerminalForPurpose('balance'), 'A');
