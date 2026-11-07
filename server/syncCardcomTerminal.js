@@ -272,8 +272,33 @@ export async function pollCardcomTerminal({
     newMatches.push(matchRecord);
   }
 
+async function syncToSupabaseSettings(pendingMatches) {
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseKey) return;
+  try {
+    await fetch(`${supabaseUrl}/rest/v1/hotelos_runtime_settings`, {
+      method: 'POST',
+      headers: {
+        apikey: supabaseKey,
+        authorization: `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify({
+        key: 'cardcom_pending_matches',
+        value: JSON.stringify(pendingMatches),
+        updated_at: new Date().toISOString()
+      })
+    });
+  } catch (err) {
+    console.warn('[syncCardcomTerminal] Supabase runtime settings sync warning:', err.message);
+  }
+}
+
   writeJsonFile(LOCAL_SEEN_FILE, seenDeals);
   writeJsonFile(LOCAL_PENDING_FILE, pendingMatches);
+  await syncToSupabaseSettings(pendingMatches);
 
   return {
     ok: true,
@@ -286,19 +311,36 @@ export async function pollCardcomTerminal({
 // If executed directly from command line
 if (process.argv[1] && process.argv[1].endsWith('syncCardcomTerminal.js')) {
   const force = process.argv.includes('--force');
-  if (!isPollerEnabled() && !force) {
+  const isDaemon = process.argv.includes('--daemon') || process.env.CARDCOM_TERMINAL_SYNC_DAEMON === '1';
+
+  if (!isPollerEnabled() && !force && !isDaemon) {
     console.log('[syncCardcomTerminal] Poller is disabled by default (CARDCOM_TERMINAL_SYNC_ENABLED != 1).');
     console.log('To run once manually: CARDCOM_TERMINAL_SYNC_ENABLED=1 node server/syncCardcomTerminal.js (or pass --force).');
     process.exit(0);
   }
-  console.log('[syncCardcomTerminal] Starting terminal poller...');
-  pollCardcomTerminal({ force: true })
-    .then((res) => {
-      console.log('[syncCardcomTerminal] Result:', JSON.stringify(res, null, 2));
-      process.exit(0);
-    })
-    .catch((err) => {
-      console.error('[syncCardcomTerminal] Error:', err);
-      process.exit(1);
-    });
+
+  if (isDaemon) {
+    console.log('[syncCardcomTerminal] Starting terminal poller daemon (every 2 minutes)...');
+    const run = async () => {
+      try {
+        const res = await pollCardcomTerminal({ force: true });
+        console.log(`[syncCardcomTerminal] [${new Date().toLocaleTimeString('he-IL')}] Polled: ${res.totalPolled || 0} deals, ${res.newMatchesCount || 0} new matches.`);
+      } catch (err) {
+        console.error('[syncCardcomTerminal] Daemon poll error:', err.message);
+      }
+    };
+    run();
+    setInterval(run, 120000);
+  } else {
+    console.log('[syncCardcomTerminal] Starting terminal poller...');
+    pollCardcomTerminal({ force: true })
+      .then((res) => {
+        console.log('[syncCardcomTerminal] Result:', JSON.stringify(res, null, 2));
+        process.exit(0);
+      })
+      .catch((err) => {
+        console.error('[syncCardcomTerminal] Error:', err);
+        process.exit(1);
+      });
+  }
 }
