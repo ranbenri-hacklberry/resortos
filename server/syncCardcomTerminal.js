@@ -102,7 +102,7 @@ async function loadActiveBookings(fetchImpl = fetch) {
  * Sends a WhatsApp message via Chloe agent router.
  */
 async function sendWhatsAppMessage({ jid, text, fetchImpl = fetch }) {
-  const agentUrl = (process.env.CHLOE_AGENT_URL || 'http://127.0.0.1:3000').replace(/\/$/, '');
+  const agentUrl = (process.env.CHLOE_AGENT_URL || 'http://127.0.0.1:8787').replace(/\/$/, '');
   const agentToken = process.env.CHLOE_AGENT_TOKEN || process.env.RESORTOS_AGENT_TOKEN;
 
   // Rate limiter check
@@ -113,15 +113,17 @@ async function sendWhatsAppMessage({ jid, text, fetchImpl = fetch }) {
   }
 
   try {
-    const res = await fetchImpl(`${agentUrl}/api/whatsapp/send`, {
+    const res = await fetchImpl(`${agentUrl}/api/messages/send`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(agentToken ? { authorization: `Bearer ${agentToken}` } : {})
       },
       body: JSON.stringify({
+        channel_id: 'resortos',
         channel: 'resortos',
         jid,
+        phone: jid,
         text
       })
     });

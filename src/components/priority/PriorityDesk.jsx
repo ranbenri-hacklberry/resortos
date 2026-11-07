@@ -756,7 +756,9 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
 
   const refreshPendingCharges = useCallback(async () => {
     try {
-      const res = await fetch('/api/ops/cardcom-terminal/pending');
+      const token = getStoredToken();
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch('/api/ops/cardcom-terminal/pending', { headers });
       if (res.ok) {
         const data = await res.json();
         setPendingCardcomCharges(Array.isArray(data?.pending) ? data.pending : []);
@@ -773,7 +775,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
 
   useEffect(() => {
     refreshPendingCharges();
-    const interval = setInterval(refreshPendingCharges, 30000);
+    const interval = setInterval(refreshPendingCharges, 10000);
     return () => clearInterval(interval);
   }, [refreshPendingCharges]);
 
@@ -796,10 +798,13 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
     if (!dealId || !bookingId) return;
     setLinkingDealId(dealId);
     try {
+      const token = getStoredToken();
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
       const res = await fetch('/api/ops/cardcom-terminal/link', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deal_id: dealId, booking_id: bookingId })
+        headers,
+        body: JSON.stringify({ deal_id: dealId, booking_id: bookingId, operator: operatorName || 'דלפק' })
       });
       if (res.ok) {
         saveAcknowledgedDealId(dealId);
@@ -821,9 +826,12 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const handleIgnoreCardcomDeal = async (dealId) => {
     if (!dealId || !window.confirm('האם להתעלם מסליקה זו?')) return;
     try {
+      const token = getStoredToken();
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
       const res = await fetch('/api/ops/cardcom-terminal/ignore', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ deal_id: dealId })
       });
       if (res.ok) {

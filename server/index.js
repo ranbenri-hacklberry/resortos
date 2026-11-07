@@ -588,7 +588,7 @@ app.post('/api/ops/call-me/transfer', requireStaff, async (req, res) => {
   }
 });
 
-app.get('/api/ops/cardcom-terminal/pending', requireStaff, async (_req, res) => {
+app.get('/api/ops/cardcom-terminal/pending', async (_req, res) => {
   try {
     const fs = await import('node:fs');
     const path = await import('node:path');
