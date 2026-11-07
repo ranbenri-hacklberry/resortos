@@ -281,20 +281,39 @@ export async function onRequest(context) {
     // GET /api/ops/cardcom-terminal/pending
     if (sub === 'pending' && request.method === 'GET') {
       try {
-        const [pendingRes, approvedRes] = await Promise.all([
-          fetchPostgrest('/cardcom_pending_matches?status=eq.pending&order=created_at.desc', { method: 'GET' }, env),
-          fetchPostgrest('/cardcom_pending_matches?status=in.(approved,manual_linked)&order=approved_at.desc&limit=15', { method: 'GET' }, env)
-        ]);
         let pending = [];
         let recentlyApproved = [];
-        if (pendingRes && pendingRes.ok) {
-          const rows = await pendingRes.json();
-          if (Array.isArray(rows)) pending = rows;
+        try {
+          const [pendingRes, approvedRes] = await Promise.all([
+            fetchPostgrest('/cardcom_pending_matches?status=eq.pending&order=created_at.desc', { method: 'GET' }, env),
+            fetchPostgrest('/cardcom_pending_matches?status=in.(approved,manual_linked)&order=approved_at.desc&limit=15', { method: 'GET' }, env)
+          ]);
+          if (pendingRes && pendingRes.ok) {
+            const rows = await pendingRes.json();
+            if (Array.isArray(rows)) pending = rows;
+          }
+          if (approvedRes && approvedRes.ok) {
+            const rows = await approvedRes.json();
+            if (Array.isArray(rows)) recentlyApproved = rows;
+          }
+        } catch (_) {}
+
+        if (pending.length === 0 && recentlyApproved.length === 0) {
+          try {
+            const setRes = await fetchPostgrest('/hotelos_runtime_settings?key=eq.cardcom_pending_matches', { method: 'GET' }, env);
+            if (setRes && setRes.ok) {
+              const rows = await setRes.json();
+              if (Array.isArray(rows) && rows[0]?.value) {
+                const list = JSON.parse(rows[0].value);
+                if (Array.isArray(list)) {
+                  pending = list.filter((m) => m.status === 'pending');
+                  recentlyApproved = list.filter((m) => m.status === 'approved' || m.status === 'manual_linked').slice(0, 15);
+                }
+              }
+            }
+          } catch (_) {}
         }
-        if (approvedRes && approvedRes.ok) {
-          const rows = await approvedRes.json();
-          if (Array.isArray(rows)) recentlyApproved = rows;
-        }
+
         return json({ ok: true, pending, recently_approved: recentlyApproved });
       } catch (_) {}
       return json({ ok: true, pending: [], recently_approved: [] });
@@ -311,6 +330,7 @@ export async function onRequest(context) {
 
       // Fetch match
       let match = null;
+      let allRuntimeMatches = [];
       try {
         const mRes = await fetchPostgrest(`/cardcom_pending_matches?deal_id=eq.${encodeURIComponent(deal_id)}`, { method: 'GET' }, env);
         if (mRes && mRes.ok) {
@@ -318,6 +338,21 @@ export async function onRequest(context) {
           if (Array.isArray(mRows) && mRows[0]) match = mRows[0];
         }
       } catch (_) {}
+
+      if (!match) {
+        try {
+          const setRes = await fetchPostgrest('/hotelos_runtime_settings?key=eq.cardcom_pending_matches', { method: 'GET' }, env);
+          if (setRes && setRes.ok) {
+            const rows = await setRes.json();
+            if (Array.isArray(rows) && rows[0]?.value) {
+              allRuntimeMatches = JSON.parse(rows[0].value);
+              if (Array.isArray(allRuntimeMatches)) {
+                match = allRuntimeMatches.find((m) => String(m.deal_id) === String(deal_id));
+              }
+            }
+          }
+        } catch (_) {}
+      }
 
       // Fetch booking
       let booking = null;
@@ -451,6 +486,26 @@ export async function onRequest(context) {
           })
         }, env);
       } catch (_) {}
+
+      if (allRuntimeMatches.length > 0 && match) {
+        match.status = 'manual_linked';
+        match.selected_booking_id = booking_id;
+        match.guest_name = booking.guest_name || booking.invoice_name || null;
+        match.unit_name = booking.unit_name || booking.unit_id || null;
+        match.invoice_number = invoiceInfo?.documentNumber || null;
+        match.invoice_url = invoiceInfo?.documentUrl || null;
+        match.approved_at = new Date().toISOString();
+        match.payment_recorded_at = new Date().toISOString();
+        try {
+          await fetchPostgrest('/hotelos_runtime_settings?key=eq.cardcom_pending_matches', {
+            method: 'PATCH',
+            body: JSON.stringify({
+              value: JSON.stringify(allRuntimeMatches),
+              updated_at: new Date().toISOString()
+            })
+          }, env);
+        } catch (_) {}
+      }
 
       return json({ ok: true, booking_id, invoice: invoiceInfo, payment: paymentEntry });
     }

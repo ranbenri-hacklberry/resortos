@@ -156,6 +156,22 @@ export function normalizeCardcomDeal(raw = {}) {
   };
 }
 
+export function formatCardcomDate(d) {
+  if (!d) return '';
+  const str = String(d).trim();
+  if (/^\d{8}$/.test(str)) return str;
+  const m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[3]}${m[2]}${m[1]}`;
+  const dateObj = new Date(d);
+  if (!isNaN(dateObj.getTime())) {
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const year = String(dateObj.getFullYear());
+    return `${day}${month}${year}`;
+  }
+  return str;
+}
+
 /**
  * Calls Cardcom Transactions/ListTransactions API
  */
@@ -180,8 +196,8 @@ export async function fetchCardcomTransactions({
     ApiName: apiName,
     ApiPassword: apiPassword,
     TerminalNumber: Number(terminal),
-    FromDate: fromDate,
-    ToDate: toDate,
+    FromDate: formatCardcomDate(fromDate),
+    ToDate: formatCardcomDate(toDate),
     Page: 1,
     Page_size: 50
   };
