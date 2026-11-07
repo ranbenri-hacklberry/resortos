@@ -280,17 +280,36 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
   const unitName = localizedUnitName(viewedBooking.unit_id, t, t('GUEST_CABIN_FALLBACK'));
 
   const paymentMode = activeBooking.payment_mode || 'CREDIT_DEPOSIT';
-  const totalPriceIls = Math.round((activeBooking.total_price_agorot || 0) / 100);
-  const depositIls = Math.round((activeBooking.deposit_agorot || 0) / 100);
-  const payNowIls = paymentMode === 'CASH_TRUST' ? 0 : paymentMode === 'CREDIT_FULL' ? totalPriceIls : depositIls;
-  const cardChargeIls = paymentMode === 'CREDIT_FULL' || !(depositIls > 0.5) ? totalPriceIls : depositIls;
-  const balanceIls = Math.max(0, totalPriceIls - payNowIls);
+  const totalPriceIls = Math.round((Number(activeBooking.total_price_agorot) || 0) / 100);
+  const depositIls = Math.round((Number(activeBooking.deposit_agorot) || 0) / 100);
+
+  const serverQuote = activeBooking.charge_quote || activeBooking.payment?.quote || activeBooking.stay?.checkin_quote || null;
+  const cinYmd = String(activeBooking.check_in_date || '').slice(0, 10);
+  const todayYmd = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date());
+  const isArrivalDayOrLater = Boolean(cinYmd && /^\d{4}-\d{2}-\d{2}$/.test(cinYmd) && todayYmd >= cinYmd);
+
+  const depositPaid = Boolean(
+    activeBooking.stay?.hyp_deposit?.paid
+    || activeBooking.payment_status === 'DEPOSIT_PAID'
+    || activeBooking.payment_status === 'PARTIAL'
+  );
+
+  const isDepositCharge = serverQuote
+    ? serverQuote.purpose === 'deposit'
+    : (!isArrivalDayOrLater && !depositPaid && paymentMode !== 'CREDIT_FULL' && depositIls > 0.5);
+
+  const cardChargeIls = serverQuote && typeof serverQuote.amount === 'number'
+    ? serverQuote.amount
+    : (isDepositCharge ? depositIls : Math.max(0, totalPriceIls - (depositPaid ? depositIls : 0)));
+
+  const payNowIls = paymentMode === 'CASH_TRUST' ? 0 : cardChargeIls;
+  const balanceIls = Math.max(0, totalPriceIls - (depositPaid ? depositIls : 0) - payNowIls);
   const isPrepaid = activeBooking.payment_status === 'PAID'
     || activeBooking.payment_mode === 'BOOKING'
     || activeBooking.payment_mode === 'VOUCHER'
     || activeBooking.stay?.hyp?.paid
     || activeBooking.stay?.hyp_intent?.status === 'paid'
-    || (totalPriceIls > 0 && balanceIls <= 0.5);
+    || (totalPriceIls > 0 && Math.max(0, totalPriceIls - (depositPaid ? depositIls : 0)) <= 0.5);
   const nights = Math.max(
     1,
     Number(activeBooking.nights_count) || nightsBetween(activeBooking.check_in_date, activeBooking.check_out_date)
@@ -1428,7 +1447,7 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
                   {paying
                     ? t('GUEST_LOADING')
                     : (balancePref === 'CREDIT_CARD' && !isPrepaid && cardChargeIls > 0.5
-                      ? t(paymentMode === 'CREDIT_FULL' || !(depositIls > 0.5) ? 'CONFIRM_AND_PAY_FULL' : 'CONFIRM_AND_PAY_DEPOSIT', {
+                      ? t(isDepositCharge ? 'CONFIRM_AND_PAY_DEPOSIT' : 'CONFIRM_AND_PAY_FULL', {
                         amount: cardChargeIls.toLocaleString('he-IL')
                       })
                       : t('GUEST_STEP_3_CTA'))}

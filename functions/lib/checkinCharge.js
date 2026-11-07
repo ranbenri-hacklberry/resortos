@@ -7,7 +7,7 @@ import {
   hypPublicResult
 } from './hypPay.js';
 
-function recordedPaidAgorot(booking) {
+export function recordedPaidAgorot(booking) {
   const stored = Array.isArray(booking?.clearing_payments) ? booking.clearing_payments : [];
   const clearing = stored.reduce((sum, row) => sum + (Number(row.amount_agorot) || 0), 0);
   if (booking?.payment_status === 'PAID' || booking?.stay?.hyp?.paid) {
@@ -23,7 +23,7 @@ function recordedPaidAgorot(booking) {
   return clearing;
 }
 
-function bookingDueIls(booking) {
+export function bookingDueIls(booking) {
   const total = Number(booking?.total_price_agorot || 0);
   const due = Math.max(0, total - recordedPaidAgorot(booking)) / 100;
   return Math.round(due * 100) / 100;
@@ -43,21 +43,103 @@ export function resolveGuestTerminal(booking) {
   return booking?.payment_mode === 'CREDIT_FULL' ? 'A' : 'B';
 }
 
-export function quoteGuestCharge(booking) {
+function getCheckinHour(booking) {
+  const direct = booking?.checkin_time || booking?.stay?.estimated_arrival_time;
+  if (direct && /^\d{1,2}:\d{2}$/.test(String(direct).trim())) return String(direct).trim();
+  const sr = String(booking?.special_requests || '');
+  const m = sr.match(/\|in:(\d{1,2}:\d{2})/);
+  if (m) return m[1];
+  return '15:00';
+}
+
+function parseIsraelCheckinTime(cinYmd, hhmm = '15:00') {
+  if (!cinYmd || !/^\d{4}-\d{2}-\d{2}$/.test(cinYmd)) return null;
+  const match = String(hhmm || '').match(/^(\d{1,2}):(\d{2})$/);
+  const hh = match ? match[1].padStart(2, '0') : '15';
+  const mm = match ? match[2] : '00';
+  const guess = new Date(`${cinYmd}T${hh}:${mm}:00Z`);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Jerusalem',
+    timeZoneName: 'shortOffset'
+  }).formatToParts(guess);
+  const offsetPart = parts.find((p) => p.type === 'timeZoneName')?.value || '';
+  const m = offsetPart.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
+  const offsetMinutes = m ? (m[1] === '-' ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3] || 0)) : 180;
+  return new Date(guess.getTime() - offsetMinutes * 60000);
+}
+
+export function quoteGuestCharge(booking, opts = {}) {
+  const now = opts instanceof Date || typeof opts === 'string' || typeof opts === 'number'
+    ? new Date(opts)
+    : (opts?.now ? new Date(opts.now) : new Date());
+
   const mode = booking?.payment_mode || 'CREDIT_DEPOSIT';
   const total = Math.round((Number(booking?.total_price_agorot || 0) / 100) * 100) / 100;
   const deposit = Math.round((Number(booking?.deposit_agorot || 0) / 100) * 100) / 100;
   const terminal = resolveGuestTerminal(booking);
-  if (mode === 'CREDIT_FULL') {
+  const due = bookingDueIls(booking);
+  const paidAgorot = recordedPaidAgorot(booking);
+  const locked = booking?.hyp_terminal || booking?.stay?.hyp_terminal || booking?.stay?.hyp_intent?.terminal;
+  const balanceTerminal = locked ? terminal : 'A';
+
+  // Fully paid check
+  const isFullyPaid = stayFullyPaid(booking)
+    || (total > 0 && paidAgorot + 50 >= Number(booking?.total_price_agorot || 0))
+    || due <= 0.5;
+
+  if (isFullyPaid) {
     return {
-      amount: total,
+      amount: 0,
       purpose: 'balance',
-      terminal,
-      needsCharge: total > 0.5,
+      terminal: balanceTerminal,
+      needsCharge: false,
       label: 'שהייה'
     };
   }
-  if (deposit > 0.5) {
+
+  // CREDIT_FULL unchanged: charges remaining balance (or total), purpose 'balance'
+  if (mode === 'CREDIT_FULL') {
+    return {
+      amount: due,
+      purpose: 'balance',
+      terminal: balanceTerminal,
+      needsCharge: due > 0.5,
+      label: 'שהייה'
+    };
+  }
+
+  // Determine timing relative to check-in
+  const cinYmd = String(booking?.check_in_date || '').slice(0, 10);
+  const todayYmd = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(now);
+  const isArrivalDayOrLater = Boolean(cinYmd && /^\d{4}-\d{2}-\d{2}$/.test(cinYmd) && todayYmd >= cinYmd);
+
+  const checkinAt = parseIsraelCheckinTime(cinYmd, getCheckinHour(booking));
+  const hoursUntilCheckin = checkinAt ? (checkinAt.getTime() - now.getTime()) / (3600 * 1000) : null;
+  const isUnder48h = typeof hoursUntilCheckin === 'number' && hoursUntilCheckin <= 48;
+
+  const insideFlow = Boolean(
+    opts?.flow === 'checkin'
+    || opts?.flow === 'id'
+    || opts?.stage === 'checkin'
+    || opts?.insideCheckinFlow
+    || booking?.booking_status === 'CHECKED_IN'
+    || booking?.stay?.guest_checked_in_at
+    || booking?.stay?.hyp_intent?.stage === 'checkin'
+  );
+
+  const depositPaid = Boolean(
+    booking?.stay?.hyp_deposit?.paid
+    || booking?.payment_status === 'DEPOSIT_PAID'
+    || booking?.payment_status === 'PARTIAL'
+    || (deposit > 0.5 && paidAgorot >= (Number(booking?.deposit_agorot) || 0))
+  );
+
+  // Deposit only when check-in >48h away AND deposit not yet paid AND deposit configured.
+  // Otherwise (arrival day, inside ID/check-in flow, check-in <=48h, deposit already paid, or no deposit):
+  // charge FULL remaining balance, purpose 'balance'.
+  const canChargeDeposit = !isArrivalDayOrLater && !insideFlow && !isUnder48h && !depositPaid && deposit > 0.5;
+
+  if (canChargeDeposit) {
     return {
       amount: deposit,
       purpose: 'deposit',
@@ -66,13 +148,11 @@ export function quoteGuestCharge(booking) {
       label: 'מקדמה'
     };
   }
-  // No deposit on the booking: card checkout still has to open for the unpaid stay.
-  const due = bookingDueIls(booking);
-  const locked = booking?.hyp_terminal || booking?.stay?.hyp_terminal || booking?.stay?.hyp_intent?.terminal;
+
   return {
     amount: due,
     purpose: 'balance',
-    terminal: locked ? terminal : 'A',
+    terminal: balanceTerminal,
     needsCharge: due > 0.5,
     label: 'שהייה'
   };
@@ -206,8 +286,8 @@ export async function chargeSavedCardCheckin(booking, env) {
   };
 }
 
-export async function startGuestPayment(booking, env, { successUrl, failUrl, stayInFrame } = {}) {
-  const quote = quoteGuestCharge(booking);
+export async function startGuestPayment(booking, env, { successUrl, failUrl, stayInFrame, now, ...opts } = {}) {
+  const quote = quoteGuestCharge(booking, { now, ...opts });
   if (!quote.needsCharge) {
     return { quote, payUrl: null, skipped: true, purpose: quote.purpose, terminal: quote.terminal };
   }
