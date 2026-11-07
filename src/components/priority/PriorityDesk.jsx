@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, CheckCheck, ExternalLink, FileSpreadsheet, FileText, FolderOpen, Link2, MessageCircle, Phone, Printer, RefreshCw, Send, Table2, X } from 'lucide-react';
+import { AlertTriangle, Check, CheckCheck, ExternalLink, FileSpreadsheet, FileText, FolderOpen, Link2, MessageCircle, Phone, Printer, RefreshCw, Send, Table2, X } from 'lucide-react';
 import { formatIlsFromAgorot, normalizeClearingPayment, normalizeIsraeliId } from '../../lib/clearingPayments';
 import { previousCashWeek, printCashDayReport } from '../../lib/cashDayReport';
 import { calendarPartyLabel, dutyPrintAreaOf, dutyUnitGroup, printDailyDutyReport } from '../../lib/dailyDutyReport';
@@ -740,6 +740,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const [groundDrafts, setGroundDrafts] = useState({});
   const [horizonStart, setHorizonStart] = useState(today);
   const [showGuestPrintPicker, setShowGuestPrintPicker] = useState(false);
+  const [showSaveConfirmModal, setShowSaveConfirmModal] = useState(false);
   const queryRef = useRef(null);
   const viewRef = useRef('desk');
   viewRef.current = view;
@@ -1518,6 +1519,103 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
     }
   };
 
+  const discardDrafts = () => {
+    setDrafts({});
+    setGroundDrafts({});
+    setMessage('כל השינויים שטרם נשמרו בוטלו');
+    setShowSaveConfirmModal(false);
+  };
+
+  const handleConfirmSave = async () => {
+    setShowSaveConfirmModal(false);
+    await saveChanges();
+  };
+
+  useEffect(() => {
+    if (!showSaveConfirmModal) return undefined;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setShowSaveConfirmModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showSaveConfirmModal]);
+
+  const pendingSaveItems = useMemo(() => {
+    const list = [];
+    shown.forEach((row) => {
+      const draft = drafts[row.id];
+      if (!draft) return;
+      const changes = [];
+      if (row.cleanDirty) {
+        const newLabel = (CLEANING_CHOICES.find((c) => c.key === draft.clean) || {}).label || draft.clean;
+        changes.push({
+          field: 'סטטוס ניקיון',
+          from: row.clean,
+          to: newLabel,
+          tone: newLabel === 'מוכן' ? 'is-ready' : (newLabel === 'לניקוי' ? 'is-dirty' : '')
+        });
+      }
+      if (row.stayDirty) {
+        const newLabel = (LODGING_CHOICES.find((c) => c.key === draft.stay) || {}).label || draft.stay;
+        changes.push({
+          field: 'סטטוס אירוח',
+          from: row.stay,
+          to: newLabel,
+          tone: ''
+        });
+      }
+      if (row.weekDirty) {
+        const newLabel = (WEEK_STATUSES.find((c) => c.key === draft.weekMark) || {}).label || 'חסימה';
+        changes.push({
+          field: 'תצוגה שבועית / חסימה',
+          from: 'רגיל',
+          to: newLabel,
+          tone: 'is-dirty'
+        });
+      }
+      if (row.staffDirty) {
+        changes.push({
+          field: 'שיבוץ עובד',
+          from: row.staff || '—',
+          to: draft.staff || '—',
+          tone: ''
+        });
+      }
+      if (row.payDirty) {
+        changes.push({
+          field: 'פיננסים וגבייה',
+          from: 'לפני שינוי',
+          to: 'עדכון תשלום',
+          tone: ''
+        });
+      }
+      if (changes.length > 0) {
+        list.push({ id: row.id, name: row.name, changes });
+      }
+    });
+
+    Object.entries(groundDrafts).forEach(([id, draft]) => {
+      const current = groundsState[id]?.status || defaultGroundStatus(draft.kind);
+      const label = groundsState[id]?.label || id;
+      if (draft.status !== current) {
+        list.push({
+          id,
+          name: label,
+          changes: [{
+            field: 'מתחם / חצר',
+            from: current,
+            to: draft.status,
+            tone: draft.status === 'מוכן' ? 'is-ready' : 'is-dirty'
+          }]
+        });
+      }
+    });
+
+    return list;
+  }, [shown, drafts, groundDrafts, groundsState]);
+
   useEffect(() => {
     if (!selectedId && rows[0]) setSelectedId(rows[0].id);
   }, [rows, selectedId]);
@@ -1917,7 +2015,13 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         <span className="tb-sep" />
         <button type="button" className="tb-btn" onClick={exportExcel}><FileSpreadsheet size={14} /> ייצא לאקסל</button>
         {canEdit ? (
-          <button type="button" className={`tb-btn${dirtyCount ? ' is-dirty' : ''}`} disabled={!dirtyCount || saving} onClick={saveChanges}>
+          <button
+            type="button"
+            className={`tb-btn${dirtyCount ? ' is-dirty' : ''}`}
+            disabled={!dirtyCount || saving}
+            onClick={() => setShowSaveConfirmModal(true)}
+            title="שמירת שינויים (פותח חלון וידוא)"
+          >
             {saving ? 'שומר…' : `שמירה${dirtyCount ? ` (${dirtyCount})` : ''}`}
           </button>
         ) : null}
@@ -2462,6 +2566,91 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
           units={units}
           today={today}
         />
+      ) : null}
+      {showSaveConfirmModal ? (
+        <div
+          className="priority-save-confirm-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="priority-save-confirm-title"
+          onClick={() => setShowSaveConfirmModal(false)}
+        >
+          <div className="priority-save-confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="priority-save-confirm-header">
+              <div className="priority-save-confirm-title">
+                <AlertTriangle size={18} color="#b45309" />
+                <div>
+                  <h3 id="priority-save-confirm-title">וידוא שמירת שינויים בפריוריטי</h3>
+                  <p>נמצאו {dirtyCount} שינויים הממתינים לשמירה במערכת</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="priority-save-confirm-close"
+                onClick={() => setShowSaveConfirmModal(false)}
+                title="סגור חלון"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="priority-save-confirm-body">
+              {pendingSaveItems.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontSize: '13px' }}>
+                  אין שינויים הממתינים לשמירה
+                </div>
+              ) : (
+                pendingSaveItems.map((item) => (
+                  <div key={item.id} className="priority-save-confirm-card">
+                    <div className="priority-save-confirm-card-header">
+                      <span>🏠</span>
+                      <span>{item.name}</span>
+                    </div>
+                    {item.changes.map((ch, idx) => (
+                      <div key={idx} className="priority-save-confirm-change-row">
+                        <span className="priority-save-confirm-label">{ch.field}:</span>
+                        <div className="priority-save-confirm-values">
+                          <span className="priority-save-confirm-from">{ch.from}</span>
+                          <span className="priority-save-confirm-arrow">←</span>
+                          <span className={`priority-save-confirm-to ${ch.tone || ''}`}>{ch.to}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="priority-save-confirm-footer">
+              <button
+                type="button"
+                className="priority-save-confirm-btn-discard"
+                onClick={discardDrafts}
+                title="בטל את כל השינויים שטרם נשמרו והחזר למצב המקורי"
+              >
+                בטל את כל השינויים (איפוס)
+              </button>
+
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="priority-save-confirm-btn-cancel"
+                  onClick={() => setShowSaveConfirmModal(false)}
+                >
+                  המשך בעריכה
+                </button>
+                <button
+                  type="button"
+                  className="priority-save-confirm-btn-submit"
+                  onClick={handleConfirmSave}
+                  disabled={saving || !dirtyCount}
+                >
+                  {saving ? 'שומר…' : 'אישור ושמירה'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );
