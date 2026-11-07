@@ -297,6 +297,9 @@ export function rankCandidateBookings(deal, bookings = [], todayStr = new Date()
     } else if (totalIls > 0 && Math.abs(dealAmount - totalIls) < 0.05) {
       score += 40;
       reasons.push('exact_total');
+    } else if (dueIls > 0 && dealAmount < dueIls) {
+      score += 25;
+      reasons.push('partial_balance');
     } else if (dueIls > 0 && Math.abs(dealAmount - dueIls) / dueIls <= 0.1) {
       score += 20;
       reasons.push('close_balance');
@@ -392,7 +395,10 @@ export function formatRanApprovalPrompt(deal, candidate, alternativeCandidates =
 
   const unitDesc = candidate.unitName || candidate.unitId || '';
   const guestDesc = candidate.guestName || 'אורח ללא שם';
-  const balanceStr = candidate.dueIls != null ? `יתרה ₪${candidate.dueIls.toLocaleString('he-IL')}` : '';
+  const isPartial = candidate.dueIls != null && candidate.dueIls > Number(deal.amount);
+  const remIls = isPartial ? candidate.dueIls - Number(deal.amount) : 0;
+  const partialNote = isPartial ? ` (תשלום חלקי, תישאר יתרה ₪${remIls.toLocaleString('he-IL')})` : '';
+  const balanceStr = candidate.dueIls != null ? `יתרה ₪${candidate.dueIls.toLocaleString('he-IL')}${partialNote}` : '';
 
   let msg = `💳 *סליקה חדשה* ₪${amountFormatted}, 4 ספרות ${deal.last4 || '****'}, אישור ${deal.approval || 'אין'}, שעה ${time}.\n`;
   msg += `נראה שזה *${guestDesc}* – ${unitDesc}, ${dateFormatted}, ${balanceStr}.\n`;

@@ -281,15 +281,23 @@ export async function onRequest(context) {
     // GET /api/ops/cardcom-terminal/pending
     if (sub === 'pending' && request.method === 'GET') {
       try {
-        const res = await fetchPostgrest('/cardcom_pending_matches?status=eq.pending&order=created_at.desc', { method: 'GET' }, env);
-        if (res && res.ok) {
-          const rows = await res.json();
-          if (Array.isArray(rows)) {
-            return json({ ok: true, pending: rows });
-          }
+        const [pendingRes, approvedRes] = await Promise.all([
+          fetchPostgrest('/cardcom_pending_matches?status=eq.pending&order=created_at.desc', { method: 'GET' }, env),
+          fetchPostgrest('/cardcom_pending_matches?status=in.(approved,manual_linked)&order=approved_at.desc&limit=15', { method: 'GET' }, env)
+        ]);
+        let pending = [];
+        let recentlyApproved = [];
+        if (pendingRes && pendingRes.ok) {
+          const rows = await pendingRes.json();
+          if (Array.isArray(rows)) pending = rows;
         }
+        if (approvedRes && approvedRes.ok) {
+          const rows = await approvedRes.json();
+          if (Array.isArray(rows)) recentlyApproved = rows;
+        }
+        return json({ ok: true, pending, recently_approved: recentlyApproved });
       } catch (_) {}
-      return json({ ok: true, pending: [] });
+      return json({ ok: true, pending: [], recently_approved: [] });
     }
 
     // POST /api/ops/cardcom-terminal/link
@@ -433,6 +441,8 @@ export async function onRequest(context) {
           body: JSON.stringify({
             status: 'manual_linked',
             selected_booking_id: booking_id,
+            guest_name: booking.guest_name || booking.invoice_name || null,
+            unit_name: booking.unit_name || booking.unit_id || null,
             invoice_number: invoiceInfo?.documentNumber || null,
             invoice_url: invoiceInfo?.documentUrl || null,
             approved_at: new Date().toISOString(),

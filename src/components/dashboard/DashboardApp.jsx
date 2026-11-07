@@ -10,6 +10,13 @@ import FinancialCommandCenter from '../finance/FinancialCommandCenter';
 import ResortOSOperations from '../ResortOSOperations';
 import ChloeDashboardChat from '../chloe/ChloeDashboardChat';
 import Settings from '../Settings';
+import {
+  CardcomAutoApprovedModal,
+  CardcomMobilePill,
+  getAcknowledgedDealIds,
+  saveAcknowledgedDealId,
+  saveAcknowledgedDealIds
+} from '../priority/CardcomTerminalModal';
 
 const PriorityDesk = lazy(() => import('../priority/PriorityDesk'));
 
@@ -129,6 +136,34 @@ export default function DashboardApp() {
     if (role === 'FINANCE') return 'financials';
     return 'operations';
   });
+
+  const [dashRecentlyApproved, setDashRecentlyApproved] = useState([]);
+  const [dashShowAutoApproved, setDashShowAutoApproved] = useState(false);
+  const [dashPendingCharges, setDashPendingCharges] = useState([]);
+
+  useEffect(() => {
+    if (!token) return;
+    const checkCardcom = async () => {
+      try {
+        const res = await fetch('/api/ops/cardcom-terminal/pending');
+        if (res.ok) {
+          const data = await res.json();
+          const pending = Array.isArray(data?.pending) ? data.pending : [];
+          setDashPendingCharges(pending);
+          const approved = Array.isArray(data?.recently_approved) ? data.recently_approved : [];
+          const ackSet = getAcknowledgedDealIds();
+          const unacked = approved.filter((d) => d?.deal_id && !ackSet.has(String(d.deal_id)));
+          if (unacked.length > 0 && activeTab !== 'priority') {
+            setDashRecentlyApproved(unacked);
+            setDashShowAutoApproved(true);
+          }
+        }
+      } catch (_) {}
+    };
+    checkCardcom();
+    const interval = setInterval(checkCardcom, 30000);
+    return () => clearInterval(interval);
+  }, [token, activeTab]);
 
   // Auth form states
   const [authMode, setAuthMode] = useState('otp'); // 'otp' | 'password'
@@ -722,6 +757,33 @@ export default function DashboardApp() {
         fontFamily: phoneDash ? 'Tahoma, "Segoe UI", Arial, sans-serif' : 'Heebo, Assistant, system-ui, sans-serif'
       }}
     >
+      {phoneDash && dashPendingCharges.length > 0 && activeTab !== 'priority' ? (
+        <CardcomMobilePill
+          pendingCount={dashPendingCharges.length}
+          totalAmount={dashPendingCharges.reduce((s, c) => s + (Number(c.amount) || 0), 0)}
+          onClick={() => setActiveTab('priority')}
+        />
+      ) : null}
+
+      <CardcomAutoApprovedModal
+        isOpen={dashShowAutoApproved && activeTab !== 'priority'}
+        deals={dashRecentlyApproved}
+        onAcknowledge={(dealId) => {
+          saveAcknowledgedDealId(dealId);
+          setDashRecentlyApproved((prev) => {
+            const next = prev.filter((d) => d.deal_id !== dealId);
+            if (next.length === 0) setDashShowAutoApproved(false);
+            return next;
+          });
+        }}
+        onAcknowledgeAll={(dealIds) => {
+          saveAcknowledgedDealIds(dealIds);
+          setDashRecentlyApproved([]);
+          setDashShowAutoApproved(false);
+        }}
+        onClose={() => setDashShowAutoApproved(false)}
+      />
+
       {/* Top Header */}
       <header
         style={{

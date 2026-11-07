@@ -94,7 +94,10 @@ export function formatRanApprovalPrompt(deal: any, candidate: any, remainingCand
   if (candidate) {
     const dates = `${candidate.checkIn || ''} עד ${candidate.checkOut || ''}`;
     const dueFormatted = Number(candidate.dueIls ?? 0).toLocaleString('he-IL');
-    msg += `נראה שזה *${candidate.guestName}* – ${candidate.unitName}, ${dates}, יתרה ₪${dueFormatted}.\n\n`;
+    const isPartial = candidate.dueIls != null && candidate.dueIls > Number(deal.amount);
+    const remIls = isPartial ? candidate.dueIls - Number(deal.amount) : 0;
+    const partialNote = isPartial ? ` (תשלום חלקי, תישאר יתרה ₪${remIls.toLocaleString('he-IL')})` : '';
+    msg += `נראה שזה *${candidate.guestName}* – ${candidate.unitName}, ${dates}, יתרה ₪${dueFormatted}${partialNote}.\n\n`;
   } else {
     msg += `לא נמצאה התאמה אוטומטית מובהקת.\n\n`;
   }
@@ -409,6 +412,8 @@ export interface TerminalPendingMatch {
   invoice_url?: string;
   document_number?: string;
   document_url?: string;
+  guest_name?: string;
+  unit_name?: string;
   guest_notified_at?: string;
   guest_invoice_requested?: boolean;
   guest_invoice_sent_at?: string;
@@ -535,6 +540,8 @@ export async function handleRanTerminalInbound(
     match.status = 'approved';
     match.selected_booking_id = candidate.bookingId;
     match.approved_at = new Date().toISOString();
+    match.guest_name = candidate.guestName;
+    match.unit_name = candidate.unitName;
 
     // 1. Load booking & check for existing Cardcom document
     let booking = await deps.loadBooking(candidate.bookingId);
