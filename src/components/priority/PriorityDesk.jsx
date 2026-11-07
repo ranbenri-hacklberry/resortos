@@ -65,6 +65,13 @@ import PriorityCalendar from './PriorityCalendar';
 import PriorityWord from './PriorityWord';
 import PriorityForms from './PriorityForms';
 import GuestPrintModal from './GuestPrintModal';
+import CardcomTerminalModal, {
+  CardcomAutoApprovedModal,
+  CardcomMobilePill,
+  getAcknowledgedDealIds,
+  saveAcknowledgedDealId,
+  saveAcknowledgedDealIds
+} from './CardcomTerminalModal';
 import { formatManagerMeeting } from '../../lib/managerMeetings';
 import './priority.css';
 
@@ -742,9 +749,10 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const [showGuestPrintPicker, setShowGuestPrintPicker] = useState(false);
   const [showSaveConfirmModal, setShowSaveConfirmModal] = useState(false);
   const [pendingCardcomCharges, setPendingCardcomCharges] = useState([]);
+  const [recentlyApprovedCharges, setRecentlyApprovedCharges] = useState([]);
+  const [showAutoApprovedModal, setShowAutoApprovedModal] = useState(false);
   const [showUnlinkedChargesModal, setShowUnlinkedChargesModal] = useState(false);
   const [linkingDealId, setLinkingDealId] = useState(null);
-  const [manualBookingIdByDeal, setManualBookingIdByDeal] = useState({});
 
   const refreshPendingCharges = useCallback(async () => {
     try {
@@ -752,15 +760,37 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       if (res.ok) {
         const data = await res.json();
         setPendingCardcomCharges(Array.isArray(data?.pending) ? data.pending : []);
+        const approved = Array.isArray(data?.recently_approved) ? data.recently_approved : [];
+        const ackSet = getAcknowledgedDealIds();
+        const unacked = approved.filter((d) => d?.deal_id && !ackSet.has(String(d.deal_id)));
+        if (unacked.length > 0) {
+          setRecentlyApprovedCharges(unacked);
+          setShowAutoApprovedModal(true);
+        }
       }
     } catch (_) {}
   }, []);
 
   useEffect(() => {
     refreshPendingCharges();
-    const interval = setInterval(refreshPendingCharges, 60000);
+    const interval = setInterval(refreshPendingCharges, 30000);
     return () => clearInterval(interval);
   }, [refreshPendingCharges]);
+
+  const handleAcknowledgeApprovedDeal = (dealId) => {
+    saveAcknowledgedDealId(dealId);
+    setRecentlyApprovedCharges((prev) => {
+      const next = prev.filter((d) => d.deal_id !== dealId);
+      if (next.length === 0) setShowAutoApprovedModal(false);
+      return next;
+    });
+  };
+
+  const handleAcknowledgeAllApprovedDeals = (dealIds) => {
+    saveAcknowledgedDealIds(dealIds);
+    setRecentlyApprovedCharges([]);
+    setShowAutoApprovedModal(false);
+  };
 
   const handleLinkCardcomDeal = async (dealId, bookingId) => {
     if (!dealId || !bookingId) return;
@@ -772,7 +802,11 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         body: JSON.stringify({ deal_id: dealId, booking_id: bookingId })
       });
       if (res.ok) {
+        saveAcknowledgedDealId(dealId);
         await refreshPendingCharges();
+        if (refreshBoard) refreshBoard();
+        setShowUnlinkedChargesModal(false);
+        alert('הסליקה שויכה להזמנה בהצלחה והופקה חשבונית מס קבלה!');
       } else {
         const errData = await res.json().catch(() => ({}));
         alert(`שגיאה בשיוך סליקה: ${errData.error || res.statusText}`);
@@ -1965,6 +1999,13 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
 
   return (
     <div className={`priority-root${phone ? ' is-phone' : ''}`} dir="rtl">
+      {phone && pendingCardcomCharges?.length > 0 ? (
+        <CardcomMobilePill
+          pendingCount={pendingCardcomCharges.length}
+          totalAmount={pendingCardcomCharges.reduce((s, c) => s + (Number(c.amount) || 0), 0)}
+          onClick={() => setShowUnlinkedChargesModal(true)}
+        />
+      ) : null}
       {proofView ? (
         <button type="button" className="proof-lightbox" onClick={() => setProofView('')} aria-label="סגירת הצילום">
           <img src={proofView} alt="צילום מלא" />
@@ -2721,159 +2762,24 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
           </div>
         </div>
       ) : null}
-      {showUnlinkedChargesModal ? (
-        <div
-          className="priority-save-confirm-backdrop"
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setShowUnlinkedChargesModal(false)}
-        >
-          <div
-            className="priority-save-confirm-modal"
-            style={{ maxWidth: '780px' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="priority-save-confirm-header">
-              <div className="priority-save-confirm-title">
-                <CreditCard size={20} color="#b45309" />
-                <div>
-                  <h3>סליקות ידניות ממסוף קארדקום (184288)</h3>
-                  <p>סליקות שבוצעו באפליקציה/במסוף וממתינות לשיוך להזמנה והפקת חשבונית</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                className="priority-save-confirm-close"
-                onClick={() => setShowUnlinkedChargesModal(false)}
-                title="סגור חלון"
-              >
-                <X size={16} />
-              </button>
-            </div>
+      <CardcomAutoApprovedModal
+        isOpen={showAutoApprovedModal}
+        deals={recentlyApprovedCharges}
+        onAcknowledge={handleAcknowledgeApprovedDeal}
+        onAcknowledgeAll={handleAcknowledgeAllApprovedDeals}
+        onClose={() => setShowAutoApprovedModal(false)}
+      />
 
-            <div className="priority-save-confirm-body" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
-              {pendingCardcomCharges.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '32px', color: '#64748b', fontSize: '14px' }}>
-                  אין סליקות ממתינות לשיוך כרגע ✨
-                </div>
-              ) : (
-                pendingCardcomCharges.map((charge) => {
-                  const dealId = charge.deal_id;
-                  const topCandidate = Array.isArray(charge.candidates) ? charge.candidates[charge.current_candidate_index || 0] : null;
-                  const isBusy = linkingDealId === dealId;
-                  const selectedManualBookingId = manualBookingIdByDeal[dealId] || '';
-
-                  return (
-                    <div
-                      key={dealId}
-                      className="priority-save-confirm-card"
-                      style={{ padding: '14px 16px', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '14px', backgroundColor: '#fff' }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a' }}>
-                            ₪{Number(charge.amount || 0).toLocaleString('he-IL')}
-                          </span>
-                          <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '4px', backgroundColor: '#e2e8f0', color: '#334155' }}>
-                            4 ספרות: {charge.last4 || '????'}
-                          </span>
-                          <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '4px', backgroundColor: '#e0f2fe', color: '#0369a1' }}>
-                            אישור: {charge.approval || 'אין'}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#64748b' }}>
-                          עסקה {dealId} · {charge.deal_time ? new Date(charge.deal_time).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : ''}
-                        </div>
-                      </div>
-
-                      {charge.payer_name ? (
-                        <div style={{ fontSize: '13px', color: '#475569', marginBottom: '8px' }}>
-                          שם בעל כרטיס: <b>{charge.payer_name}</b>
-                        </div>
-                      ) : null}
-
-                      {topCandidate ? (
-                        <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '6px', padding: '10px 12px', marginBottom: '10px' }}>
-                          <div style={{ fontSize: '12px', fontWeight: 600, color: '#166534', marginBottom: '4px' }}>
-                            🌟 התאמה מומלצת:
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div>
-                              <div style={{ fontSize: '14px', fontWeight: 700, color: '#14532d' }}>
-                                {topCandidate.guestName} – {topCandidate.unitName}
-                              </div>
-                              <div style={{ fontSize: '12px', color: '#15803d' }}>
-                                תאריכים: {topCandidate.checkIn} עד {topCandidate.checkOut} · יתרה לתשלום: ₪{Number(topCandidate.dueIls || 0).toLocaleString('he-IL')}
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              className="priority-save-confirm-btn-submit"
-                              style={{ padding: '6px 14px', fontSize: '13px', backgroundColor: '#16a34a' }}
-                              disabled={isBusy}
-                              onClick={() => handleLinkCardcomDeal(dealId, topCandidate.bookingId)}
-                            >
-                              {isBusy ? 'משייך ומפיק חשבונית…' : 'שייך להמלצה זו'}
-                            </button>
-                          </div>
-                        </div>
-                      ) : null}
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
-                        <select
-                          className="priority-cell-input"
-                          style={{ flex: 1, padding: '6px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
-                          value={selectedManualBookingId}
-                          onChange={(e) => setManualBookingIdByDeal((prev) => ({ ...prev, [dealId]: e.target.value }))}
-                        >
-                          <option value="">בחר הזמנה אחרת לשיוך ידני…</option>
-                          {(bookings || [])
-                            .filter((b) => !b.deleted_at && b.booking_status !== 'CANCELED')
-                            .slice()
-                            .sort((a, b) => (b.check_in_date || '').localeCompare(a.check_in_date || ''))
-                            .map((b) => (
-                              <option key={b.id} value={b.id}>
-                                {b.guest_name || 'אורח'} – {b.unit_name || b.unit_id} ({b.check_in_date || ''} עד {b.check_out_date || ''})
-                              </option>
-                            ))}
-                        </select>
-                        <button
-                          type="button"
-                          className="tb-btn"
-                          disabled={!selectedManualBookingId || isBusy}
-                          onClick={() => handleLinkCardcomDeal(dealId, selectedManualBookingId)}
-                          style={{ padding: '6px 12px', fontSize: '13px' }}
-                        >
-                          שייך ידנית
-                        </button>
-                        <button
-                          type="button"
-                          className="priority-save-confirm-btn-cancel"
-                          disabled={isBusy}
-                          onClick={() => handleIgnoreCardcomDeal(dealId)}
-                          style={{ padding: '6px 12px', fontSize: '13px', color: '#94a3b8' }}
-                        >
-                          התעלם
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            <div className="priority-save-confirm-footer">
-              <button
-                type="button"
-                className="priority-save-confirm-btn-cancel"
-                onClick={() => setShowUnlinkedChargesModal(false)}
-              >
-                סגור
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <CardcomTerminalModal
+        isOpen={showUnlinkedChargesModal}
+        onClose={() => setShowUnlinkedChargesModal(false)}
+        pendingCharges={pendingCardcomCharges}
+        bookings={bookings}
+        units={units}
+        onLinkDeal={handleLinkCardcomDeal}
+        onIgnoreDeal={handleIgnoreCardcomDeal}
+        linkingDealId={linkingDealId}
+      />
     </div>
   );
 }
