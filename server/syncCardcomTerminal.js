@@ -50,14 +50,15 @@ export function isPollerEnabled() {
 
 /**
  * Loads bookings from Supabase PostgREST or local fallback.
+ * The date window follows sinceDate when specified (not fixed 14 days back).
  */
-export async function loadActiveBookings(fetchImpl = fetch, { fromDaysBack = 14, toDaysForward = 60 } = {}) {
+export async function loadActiveBookings(fetchImpl = fetch, { fromDaysBack = 14, toDaysForward = 60, sinceDate = null } = {}) {
   const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
   if (supabaseUrl && supabaseKey) {
     try {
-      const from = new Date(Date.now() - fromDaysBack * 24 * 3600 * 1000).toISOString().slice(0, 10);
+      const from = sinceDate ? String(sinceDate).slice(0, 10) : new Date(Date.now() - fromDaysBack * 24 * 3600 * 1000).toISOString().slice(0, 10);
       const to = new Date(Date.now() + toDaysForward * 24 * 3600 * 1000).toISOString().slice(0, 10);
 
       const url = `${supabaseUrl}/rest/v1/hotelos_bookings?deleted_at=is.null&check_in_date=lte.${to}&check_out_date=gte.${from}&select=*&limit=1000`;
@@ -72,7 +73,7 @@ export async function loadActiveBookings(fetchImpl = fetch, { fromDaysBack = 14,
         if (Array.isArray(rows)) return rows;
       }
     } catch (err) {
-      console.warn('[syncCardcomTerminal] Supabase bookings fetch warning:', err.message);
+      console.warn('[syncCardcomTerminal] Supabase bookings fetch warning:', err?.message || 'unknown');
     }
   }
 
@@ -90,6 +91,13 @@ export async function loadActiveBookings(fetchImpl = fetch, { fromDaysBack = 14,
 /**
  * Polls Cardcom ListTransactions for terminal, matches against bookings,
  * and persists to managed storage.
+ *
+ * Rules:
+ * - In dry-run mode, writes NOTHING (neither to Supabase nor local disk cache).
+ * - Suspected test transactions remain in status 'pending' (with is_test=true and 'maybe test' badge)
+ *   so they are never hidden from staff.
+ * - --force allows running on demand or via launchd even if CARDCOM_TERMINAL_SYNC_ENABLED != 1.
+ * - The launchd poller NEVER auto-links charges and NEVER issues invoices.
  */
 export async function pollCardcomTerminal({
   apiName = process.env.CARDCOM_API_NAME,
@@ -129,14 +137,17 @@ export async function pollCardcomTerminal({
       fetchImpl
     });
   } catch (err) {
-    console.error('[syncCardcomTerminal] Error fetching Cardcom transactions:', err.message);
-    return { ok: false, error: err.message };
+    console.error('[syncCardcomTerminal] Error fetching Cardcom transactions:', err?.message || 'unknown');
+    return { ok: false, error: err?.message || 'unknown' };
   }
 
-  const store = storage || new CardcomStorage({ fetchImpl });
+  const store = storage || new CardcomStorage({ fetchImpl, dryRun: isDryRun });
   await store.init();
 
-  const bookings = Array.isArray(initialBookings) ? initialBookings : await loadActiveBookings(fetchImpl);
+  const bookings = Array.isArray(initialBookings)
+    ? initialBookings
+    : await loadActiveBookings(fetchImpl, { sinceDate: fromDate });
+
   const newMatches = [];
   const dryRunResults = [];
 
@@ -175,6 +186,7 @@ export async function pollCardcomTerminal({
     const isTest = isTestTransaction(deal);
     const candidates = rankCandidateBookings(deal, bookings, todayIso);
 
+    // Suspected tests remain in pending status with is_test=true so staff can inspect & confirm
     const matchRecord = {
       id: `match_${dealId}_${Date.now()}`,
       deal_id: dealId,
@@ -189,7 +201,7 @@ export async function pollCardcomTerminal({
       is_test: isTest,
       candidates,
       current_candidate_index: 0,
-      status: isTest ? 'test_pending' : 'pending',
+      status: 'pending',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -223,7 +235,7 @@ export async function pollCardcomTerminal({
         card_owner_name: deal.cardOwnerName,
         entry_mode: deal.entryMode,
         deal_time: deal.dealTime,
-        status: isTest ? 'test' : 'seen'
+        status: isTest ? 'suspected_test' : 'seen'
       });
 
       store.addPendingMatch(matchRecord);

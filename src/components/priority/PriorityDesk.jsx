@@ -753,6 +753,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const [showAutoApprovedModal, setShowAutoApprovedModal] = useState(false);
   const [showUnlinkedChargesModal, setShowUnlinkedChargesModal] = useState(false);
   const [linkingDealId, setLinkingDealId] = useState(null);
+  const [cardcomFetchError, setCardcomFetchError] = useState(null);
 
   const refreshPendingCharges = useCallback(async () => {
     try {
@@ -760,10 +761,12 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const res = await fetch('/api/ops/cardcom-terminal/pending', { headers });
       if (res.ok) {
+        setCardcomFetchError(null);
         const data = await res.json();
         const pending = Array.isArray(data?.pending) ? data.pending : [];
         setPendingCardcomCharges(pending);
-        if (pending.length > 0) {
+        const isEscaped = Number(sessionStorage.getItem('cardcom_escape_until') || 0) > Date.now();
+        if (pending.length > 0 && !isEscaped) {
           setShowUnlinkedChargesModal(true);
         } else {
           setShowUnlinkedChargesModal(false);
@@ -775,9 +778,31 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
           setRecentlyApprovedCharges(unacked);
           setShowAutoApprovedModal(true);
         }
+      } else {
+        setCardcomFetchError(`שגיאת שרת (${res.status})`);
       }
-    } catch (_) {}
+    } catch (err) {
+      setCardcomFetchError(err?.message || 'שגיאת תקשורת');
+    }
   }, []);
+
+  const handleEmergencyEscape = async () => {
+    sessionStorage.setItem('cardcom_escape_until', Date.now() + 30 * 60 * 1000);
+    setShowUnlinkedChargesModal(false);
+    try {
+      const token = getStoredToken();
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      await fetch('/api/ops/cardcom-terminal/audit-escape', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          staff_name: operatorName || 'צוות דלפק',
+          reason: 'יציאת חירום ידנית מהמודל החוסם'
+        })
+      });
+    } catch (_) {}
+  };
 
   useEffect(() => {
     refreshPendingCharges();
@@ -2901,6 +2926,9 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         onLinkDeal={handleLinkCardcomDeal}
         onIgnoreDeal={handleIgnoreCardcomDeal}
         linkingDealId={linkingDealId}
+        loadError={cardcomFetchError}
+        onRetry={refreshPendingCharges}
+        onEmergencyEscape={handleEmergencyEscape}
       />
     </div>
   );

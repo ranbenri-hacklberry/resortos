@@ -134,10 +134,25 @@ export function normalizeCardcomDeal(raw = {}) {
     || raw.url
     || ''
   ).trim();
+  const isRefund = Boolean(
+    raw.IsRefund
+    || raw.isRefund
+    || raw.IsCredit
+    || raw.isCredit
+    || String(raw.DealType || raw.dealType || '').toLowerCase().includes('refund')
+    || String(raw.DealType || raw.dealType || '').toLowerCase().includes('credit')
+    || amount < 0
+  );
+
+  const rawCoin = String(raw.CoinId ?? raw.coinId ?? raw.ISOCoinID ?? raw.isoCoinId ?? raw.Currency ?? '1').trim();
+  const isIls = rawCoin === '1' || rawCoin === 'ILS';
+
+  const tranStatus = String(raw.TranStatus ?? raw.tranStatus ?? raw.Status ?? raw.status ?? '').trim();
+  const isTranStatusSuccess = !tranStatus || /success|approved|0|ok|הצליח/i.test(tranStatus);
   const statusStr = String(raw.Status || raw.status || raw.Description || '');
   const responseCode = Number(raw.ResponseCode ?? raw.responseCode ?? 0);
 
-  const isSuccess = responseCode === 0 && !/fail|declined|reject|cancel|בוטל|דחה/i.test(statusStr);
+  const isSuccess = responseCode === 0 && isTranStatusSuccess && !isRefund && isIls && !/fail|declined|reject|cancel|בוטל|דחה/i.test(statusStr);
 
   return {
     dealId,
@@ -152,6 +167,8 @@ export function normalizeCardcomDeal(raw = {}) {
     returnValue,
     documentNumber,
     documentUrl,
+    isRefund,
+    isIls,
     isSuccess
   };
 }
@@ -174,6 +191,7 @@ export function formatCardcomDate(d) {
 
 /**
  * Calls Cardcom Transactions/ListTransactions API
+ * Uses LimitForTerminal, checks ResponseCode, paginates beyond 50, and filters non-ILS/refunds.
  */
 export async function fetchCardcomTransactions({
   from,
@@ -182,7 +200,8 @@ export async function fetchCardcomTransactions({
   apiName,
   apiPassword,
   fetchImpl = fetch,
-  timeoutMs = 15000
+  timeoutMs = 15000,
+  maxPages = 50
 } = {}) {
   if (!apiName || !apiPassword) {
     throw new Error('MISSING_CARDCOM_CREDENTIALS');
@@ -191,37 +210,50 @@ export async function fetchCardcomTransactions({
   const todayIso = new Date().toISOString().slice(0, 10);
   const fromDate = from || todayIso;
   const toDate = to || todayIso;
+  const pageSize = 50;
 
-  const body = {
-    ApiName: apiName,
-    ApiPassword: apiPassword,
-    TerminalNumber: Number(terminal),
-    FromDate: formatCardcomDate(fromDate),
-    ToDate: formatCardcomDate(toDate),
-    Page: 1,
-    Page_size: 50
-  };
+  const allDeals = [];
+  let page = 1;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  while (page <= maxPages) {
+    const body = {
+      ApiName: apiName,
+      ApiPassword: apiPassword,
+      LimitForTerminal: Number(terminal),
+      TerminalNumber: Number(terminal),
+      FromDate: formatCardcomDate(fromDate),
+      ToDate: formatCardcomDate(toDate),
+      Page: page,
+      Page_size: pageSize
+    };
 
-  try {
-    const res = await fetchImpl(CARDCOM_LIST_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json'
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-    const data = await res.json().catch(() => null);
-    if (!res.ok || !data) {
-      const err = new Error(data?.Description || `Cardcom API returned ${res.status}`);
-      err.status = res.status;
-      err.data = data;
-      throw err;
+    let data;
+    try {
+      const res = await fetchImpl(CARDCOM_LIST_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      });
+
+      data = await res.json().catch(() => null);
+      if (!res.ok || !data) {
+        const err = new Error(data?.Description || `Cardcom API returned ${res.status}`);
+        err.status = res.status;
+        throw err;
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (data.ResponseCode !== undefined && data.ResponseCode !== null && data.ResponseCode !== 0 && data.ResponseCode !== '0') {
+      throw new Error(`Cardcom ListTransactions failed: ${data.Description || 'ResponseCode ' + data.ResponseCode}`);
     }
 
     const list = data.Transactions
@@ -229,12 +261,24 @@ export async function fetchCardcomTransactions({
       || data.Deals
       || (Array.isArray(data) ? data : []);
 
-    return list
+    if (!Array.isArray(list) || list.length === 0) {
+      break;
+    }
+
+    const normalized = list
       .map(normalizeCardcomDeal)
-      .filter((d) => d.dealId && d.isSuccess);
-  } finally {
-    clearTimeout(timer);
+      .filter((d) => d.dealId && d.isSuccess && !d.isRefund && d.isIls);
+
+    allDeals.push(...normalized);
+
+    if (list.length < pageSize) {
+      break;
+    }
+
+    page++;
   }
+
+  return allDeals;
 }
 
 /**
@@ -273,14 +317,15 @@ export function getBookingDueIls(booking) {
 }
 
 /**
- * Checks if a transaction is a test/verification charge (e.g. 1 ILS or "דניאל דניאל").
+ * Checks if a transaction is a suspected test charge (e.g. <= 5 ILS or name contains "בדיקה" / "test").
+ * No hardcoded personal names.
  */
 export function isTestTransaction(deal) {
   if (!deal) return false;
   const amt = Number(deal.amount || 0);
   const name = String(deal.cardOwnerName || '').toLowerCase();
   if (amt > 0 && amt <= 5) return true;
-  if (/בדיקה|test|ניסיון|דניאל דניאל/i.test(name)) return true;
+  if (/בדיקה|test|ניסיון/i.test(name)) return true;
   return false;
 }
 
@@ -700,6 +745,7 @@ export async function createCardcomInvoiceForDeal({
     IsSendSMS: false,
     Document: {
       DocumentTypeToCreate: 'TaxInvoiceAndReceipt',
+      ExternalId: `deal-${String(dealId)}`,
       Name: customerName,
       Email: invoiceEmail,
       Phone: customerPhone || undefined,
@@ -749,6 +795,14 @@ export async function createCardcomInvoiceForDeal({
       emailSentTo: invoiceEmail,
       hasGuestEmail
     };
+  } catch (err) {
+    if (err.name === 'AbortError' || err.code === 'ETIMEDOUT' || err.code === 'ECONNRESET') {
+      const timeoutErr = new Error(`Cardcom invoice creation timed out for deal ${dealId}. Reconciliation required before retrying.`);
+      timeoutErr.isTimeout = true;
+      timeoutErr.reconciliationRequired = true;
+      throw timeoutErr;
+    }
+    throw err;
   } finally {
     clearTimeout(timer);
   }

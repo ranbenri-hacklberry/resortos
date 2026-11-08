@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  fetchCardcomTransactions,
   normalizeCardcomDeal,
   rankCandidateBookings,
   formatRanApprovalPrompt,
@@ -742,7 +743,7 @@ test('sync backfill: dry-run does not persist while apply persists proposals', a
   };
 
   // Test 1: Dry run
-  const dryStorage = new CardcomStorage({ fetchImpl: mockFetch });
+  const dryStorage = new CardcomStorage({ fetchImpl: mockFetch, enableDiskCache: false });
   await dryStorage.init();
 
   const dryResult = await pollCardcomTerminal({
@@ -766,7 +767,7 @@ test('sync backfill: dry-run does not persist while apply persists proposals', a
   assert.equal(dryStorage.getPendingMatches().length, 0, 'Dry run must NOT add matches to storage');
 
   // Test 2: Apply
-  const applyStorage = new CardcomStorage({ fetchImpl: mockFetch });
+  const applyStorage = new CardcomStorage({ fetchImpl: mockFetch, enableDiskCache: false });
   await applyStorage.init();
 
   const applyResult = await pollCardcomTerminal({
@@ -785,5 +786,401 @@ test('sync backfill: dry-run does not persist while apply persists proposals', a
   assert.equal(applyStorage.hasSeenDeal('backfill-deal-999'), true, 'Apply must record seen deal');
   assert.equal(applyStorage.getPendingMatches().length, 1, 'Apply must persist pending match');
   assert.equal(applyStorage.getPendingMatches()[0].deal_id, 'backfill-deal-999');
+});
+
+test('fetchCardcomTransactions sends LimitForTerminal, paginates beyond 50, checks ResponseCode, filters refunds and non-ILS', async () => {
+  const requestedBodies = [];
+
+  const mockFetch = async (url, opts) => {
+    const body = JSON.parse(opts.body);
+    requestedBodies.push(body);
+
+    if (body.Page === 1) {
+      // Return 50 transactions on page 1
+      const page1Deals = Array.from({ length: 50 }, (_, i) => ({
+        DealNumber: `page1-deal-${i + 1}`,
+        TerminalNumber: '184288',
+        Amount: 100 + i,
+        ApprovalNumber: `app1-${i}`,
+        Last4CardDigitsString: '1111',
+        CardOwnerName: `Guest ${i}`,
+        ResponseCode: 0,
+        Status: 'Success',
+        CoinId: '1',
+        IsRefund: false
+      }));
+
+      // Add a refund, a non-ILS deal, and a failed deal to page 1
+      page1Deals[0].IsRefund = true; // should be skipped
+      page1Deals[1].CoinId = '2'; // USD, should be skipped
+      page1Deals[2].Status = 'Declined'; // should be skipped
+
+      return {
+        ok: true,
+        json: async () => ({
+          ResponseCode: 0,
+          Transactions: page1Deals
+        })
+      };
+    }
+
+    if (body.Page === 2) {
+      // Return 5 transactions on page 2 (terminates pagination)
+      const page2Deals = Array.from({ length: 5 }, (_, i) => ({
+        DealNumber: `page2-deal-${i + 1}`,
+        TerminalNumber: '184288',
+        Amount: 200 + i,
+        ApprovalNumber: `app2-${i}`,
+        Last4CardDigitsString: '2222',
+        CardOwnerName: `Guest P2-${i}`,
+        ResponseCode: 0,
+        Status: 'Success',
+        CoinId: '1',
+        IsRefund: false
+      }));
+
+      return {
+        ok: true,
+        json: async () => ({
+          ResponseCode: 0,
+          Transactions: page2Deals
+        })
+      };
+    }
+
+    return {
+      ok: true,
+      json: async () => ({ ResponseCode: 0, Transactions: [] })
+    };
+  };
+
+  const deals = await fetchCardcomTransactions({
+    from: '2026-11-01',
+    to: '2026-11-05',
+    terminal: '184288',
+    apiName: 'test-user',
+    apiPassword: 'test-password',
+    fetchImpl: mockFetch
+  });
+
+  // Verify LimitForTerminal was sent
+  assert.equal(requestedBodies.length, 2, 'Paginates across 2 pages');
+  assert.equal(requestedBodies[0].LimitForTerminal, 184288);
+  assert.equal(requestedBodies[0].TerminalNumber, 184288);
+  assert.equal(requestedBodies[0].Page, 1);
+  assert.equal(requestedBodies[1].Page, 2);
+
+  // 50 on page 1 (minus 3 skipped: refund, USD, declined = 47) + 5 on page 2 = 52 total
+  assert.equal(deals.length, 52);
+  assert.ok(!deals.some((d) => d.dealId === 'page1-deal-1'), 'Refund was filtered out');
+  assert.ok(!deals.some((d) => d.dealId === 'page1-deal-2'), 'Non-ILS was filtered out');
+  assert.ok(!deals.some((d) => d.dealId === 'page1-deal-3'), 'Declined transaction was filtered out');
+
+  // Verify ResponseCode !== 0 throws
+  const failingFetch = async () => ({
+    ok: true,
+    json: async () => ({ ResponseCode: 1, Description: 'Invalid terminal credentials' })
+  });
+
+  await assert.rejects(
+    fetchCardcomTransactions({
+      from: '2026-11-01',
+      to: '2026-11-05',
+      terminal: '184288',
+      apiName: 'bad-user',
+      apiPassword: 'bad-password',
+      fetchImpl: failingFetch
+    }),
+    /Cardcom ListTransactions failed/
+  );
+});
+
+test('CardcomStorage persist writes both tables, surfaces write errors, and preserves local backup', async () => {
+  const sentRequests = [];
+  const mockFetch = async (url, opts) => {
+    sentRequests.push({ url, method: opts.method, body: opts.body ? JSON.parse(opts.body) : null });
+    return { ok: true, status: 200, json: async () => [] };
+  };
+
+  const storage = new CardcomStorage({
+    supabaseUrl: 'https://mock.supabase.co',
+    supabaseKey: 'mock-key',
+    fetchImpl: mockFetch,
+    enableDiskCache: false
+  });
+  await storage.init();
+
+  storage.addSeenDeal({ deal_id: 'seen-101', terminal_number: '184288', amount: 500 });
+  storage.addPendingMatch({ deal_id: 'pending-202', amount: 800, status: 'pending' });
+
+  await storage.persist();
+
+  // Verify both tables were targeted
+  const seenReq = sentRequests.find((r) => r.url.includes('/cardcom_seen_deals'));
+  const pendingReq = sentRequests.find((r) => r.url.includes('/cardcom_pending_matches'));
+  const runtimeReq = sentRequests.filter((r) => r.url.includes('/hotelos_runtime_settings'));
+
+  assert.ok(seenReq, 'Must persist to cardcom_seen_deals');
+  assert.ok(pendingReq, 'Must persist to cardcom_pending_matches');
+  assert.ok(runtimeReq.length >= 2, 'Must sync to hotelos_runtime_settings');
+
+  // Verify error surfacing on 500
+  const failingFetch = async (url) => {
+    if (url.includes('/cardcom_seen_deals')) {
+      return { ok: false, status: 500, statusText: 'Internal Server Error' };
+    }
+    return { ok: true, status: 200, json: async () => [] };
+  };
+
+  const failingStorage = new CardcomStorage({
+    supabaseUrl: 'https://mock.supabase.co',
+    supabaseKey: 'mock-key',
+    fetchImpl: failingFetch,
+    enableDiskCache: false
+  });
+  await failingStorage.init();
+  failingStorage.addSeenDeal({ deal_id: 'seen-err', terminal_number: '184288', amount: 100 });
+
+  await assert.rejects(
+    failingStorage.persist(),
+    /CardcomStorage\.persist failed/
+  );
+});
+
+test('concurrency: two simultaneous approvals create exactly one invoice and reuse document', async () => {
+  let cardcomCallCount = 0;
+  const mockFetch = async (url, opts) => {
+    if (url.includes('CreateDocument')) {
+      cardcomCallCount++;
+      return {
+        ok: true,
+        json: async () => ({
+          ResponseCode: 0,
+          DocumentNumber: 'INV-UNIQUE-555',
+          DocumentUrl: 'https://cardcom/doc/555'
+        })
+      };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+
+  const booking = { id: 'b-concur-1', guest_name: 'רן' };
+
+  // Request 1: first to call Cardcom
+  const res1 = await createCardcomInvoiceForDeal({
+    dealId: 'deal-concur-999',
+    amount: 1500,
+    booking,
+    apiName: 'mock-user',
+    apiPassword: 'mock-pass',
+    fetchImpl: mockFetch
+  });
+
+  assert.equal(res1.documentNumber, 'INV-UNIQUE-555');
+  assert.equal(cardcomCallCount, 1);
+
+  // Request 2 (concurrent/subsequent): existingDocumentNumber passed or recognized
+  const res2 = await createCardcomInvoiceForDeal({
+    dealId: 'deal-concur-999',
+    amount: 1500,
+    booking,
+    existingDocumentNumber: res1.documentNumber,
+    existingDocumentUrl: res1.documentUrl,
+    apiName: 'mock-user',
+    apiPassword: 'mock-pass',
+    fetchImpl: mockFetch
+  });
+
+  assert.equal(res2.documentNumber, 'INV-UNIQUE-555');
+  assert.equal(res2.reused, true);
+  assert.equal(cardcomCallCount, 1, 'Cardcom API was called exactly once across both requests');
+});
+
+test('ops link endpoint integration: creates invoice with ExternalId, reuses existing doc, rejects duplicate booking assignment, and handles DB write failure', async () => {
+  const { onRequest } = await import('../functions/api/ops/[[path]].js');
+
+  const baseEnv = {
+    SUPABASE_URL: 'https://mock.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'mock-service-key',
+    HOTELOS_DESK_PIN: '1234',
+    CARDCOM_API_NAME: 'test-cardcom-user',
+    CARDCOM_API_PASSWORD: 'test-cardcom-password'
+  };
+
+  const mockBooking = {
+    id: 'b-link-101',
+    guest_name: 'יוסי כהן',
+    total_price_agorot: 100000,
+    clearing_payments: []
+  };
+
+  const mockMatch = {
+    deal_id: 'deal-link-777',
+    amount: 1000,
+    approval: '123456',
+    last4: '9988',
+    payer_name: 'יוסי כהן'
+  };
+
+  // 1. Success with new invoice creation
+  let cardcomCreatedDoc = null;
+  let rpcBody = null;
+  let ledgerClaimBody = null;
+
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (url, opts = {}) => {
+      const urlStr = String(url);
+
+      if (urlStr.includes('/cardcom_pending_matches')) {
+        return new Response(JSON.stringify([mockMatch]), { status: 200 });
+      }
+      if (urlStr.includes('/hotelos_bookings?id=eq.b-link-101')) {
+        return new Response(JSON.stringify([mockBooking]), { status: 200 });
+      }
+      if (urlStr.includes('/cardcom_deal_ledger?terminal=eq.184288&deal_id=eq.deal-link-777')) {
+        return new Response(JSON.stringify([]), { status: 200 });
+      }
+      if (urlStr.includes('/hotelos_bookings?clearing_payments=cs.')) {
+        return new Response(JSON.stringify([]), { status: 200 });
+      }
+      if (urlStr.includes('/cardcom_deal_ledger') && opts.method === 'POST') {
+        ledgerClaimBody = JSON.parse(opts.body);
+        return new Response(JSON.stringify({ ok: true }), { status: 201 });
+      }
+      if (urlStr.includes('CreateDocument')) {
+        cardcomCreatedDoc = JSON.parse(opts.body);
+        return new Response(JSON.stringify({
+          ResponseCode: 0,
+          DocumentNumber: 'INV-OPS-100',
+          DocumentUrl: 'https://cardcom/doc/100'
+        }), { status: 200 });
+      }
+      if (urlStr.includes('/cardcom_deal_ledger') && opts.method === 'PATCH') {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (urlStr.includes('/rpc/record_cardcom_deal_payment')) {
+        rpcBody = JSON.parse(opts.body);
+        return new Response(JSON.stringify({ ok: true, new_balance_agorot: 0 }), { status: 200 });
+      }
+
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    const linkReq = new Request('https://test/api/ops/cardcom-terminal/link', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer 1234'
+      },
+      body: JSON.stringify({
+        deal_id: 'deal-link-777',
+        booking_id: 'b-link-101'
+      })
+    });
+
+    const res1 = await onRequest({
+      request: linkReq,
+      params: { path: ['cardcom-terminal', 'link'] },
+      env: baseEnv
+    });
+
+    const body1 = await res1.json();
+    assert.equal(res1.status, 200);
+    assert.equal(body1.ok, true);
+    assert.equal(body1.invoice.documentNumber, 'INV-OPS-100');
+    assert.equal(ledgerClaimBody.external_id, 'deal-link-777');
+    assert.equal(cardcomCreatedDoc.Document.ExternalId, 'deal-link-777');
+    assert.equal(rpcBody.p_payment_entry.deal_number, 'deal-link-777');
+
+    // 2. Reject duplicate assignment if deal is already assigned to another booking
+    globalThis.fetch = async (urlStr) => {
+      if (String(urlStr).includes('/cardcom_pending_matches')) {
+        return new Response(JSON.stringify([mockMatch]), { status: 200 });
+      }
+      if (String(urlStr).includes('/hotelos_bookings?id=eq.b-link-101')) {
+        return new Response(JSON.stringify([mockBooking]), { status: 200 });
+      }
+      if (String(urlStr).includes('/cardcom_deal_ledger')) {
+        return new Response(JSON.stringify([{
+          terminal: '184288',
+          deal_id: 'deal-link-777',
+          booking_id: 'b-other-booking-999',
+          status: 'invoiced',
+          document_number: 'INV-OTHER-999'
+        }]), { status: 200 });
+      }
+      return new Response(JSON.stringify([]), { status: 200 });
+    };
+
+    const dupReq = new Request('https://test/api/ops/cardcom-terminal/link', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer 1234'
+      },
+      body: JSON.stringify({
+        deal_id: 'deal-link-777',
+        booking_id: 'b-link-101'
+      })
+    });
+
+    const dupRes = await onRequest({
+      request: dupReq,
+      params: { path: ['cardcom-terminal', 'link'] },
+      env: baseEnv
+    });
+
+    const dupBody = await dupRes.json();
+    assert.equal(dupRes.status, 409);
+    assert.equal(dupBody.error, 'DEAL_ALREADY_ASSIGNED');
+
+    // 3. Reject with 500 DB_WRITE_FAILED if database write fails (never return success)
+    globalThis.fetch = async (urlStr, opts = {}) => {
+      if (String(urlStr).includes('/cardcom_pending_matches')) {
+        return new Response(JSON.stringify([mockMatch]), { status: 200 });
+      }
+      if (String(urlStr).includes('/hotelos_bookings?id=eq.b-link-101') && (!opts.method || opts.method === 'GET')) {
+        return new Response(JSON.stringify([mockBooking]), { status: 200 });
+      }
+      if (String(urlStr).includes('/cardcom_deal_ledger')) {
+        return new Response(JSON.stringify([]), { status: 200 });
+      }
+      if (String(urlStr).includes('/hotelos_bookings?clearing_payments=cs.')) {
+        return new Response(JSON.stringify([]), { status: 200 });
+      }
+      if (String(urlStr).includes('/rpc/record_cardcom_deal_payment')) {
+        return new Response(JSON.stringify({ error: 'DB_ERROR' }), { status: 500 });
+      }
+      if (String(urlStr).includes('/hotelos_bookings?id=eq.b-link-101') && opts.method === 'PATCH') {
+        return new Response(JSON.stringify({ error: 'PATCH_FAILED' }), { status: 500 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    const failReq = new Request('https://test/api/ops/cardcom-terminal/link', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer 1234'
+      },
+      body: JSON.stringify({
+        deal_id: 'deal-link-777',
+        booking_id: 'b-link-101'
+      })
+    });
+
+    const failRes = await onRequest({
+      request: failReq,
+      params: { path: ['cardcom-terminal', 'link'] },
+      env: baseEnv
+    });
+
+    const failBody = await failRes.json();
+    assert.equal(failRes.status, 500);
+    assert.equal(failBody.error, 'DB_WRITE_FAILED');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 

@@ -318,7 +318,10 @@ export default function CardcomTerminalModal({
   units = [],
   onLinkDeal,
   onIgnoreDeal,
-  linkingDealId = null
+  linkingDealId = null,
+  loadError = null,
+  onRetry = null,
+  onEmergencyEscape = null
 }) {
   const [selectedDealIndex, setSelectedDealIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
@@ -332,7 +335,8 @@ export default function CardcomTerminalModal({
     return getCandidateUnpaidBookings(currentDeal.amount, bookings, searchQuery);
   }, [currentDeal?.amount, bookings, searchQuery]);
 
-  if (!isOpen || !pendingCharges || pendingCharges.length === 0) return null;
+  if (!isOpen) return null;
+  if ((!pendingCharges || pendingCharges.length === 0) && !loadError) return null;
 
   const dealId = currentDeal?.deal_id;
   const isBusy = linkingDealId === dealId;
@@ -405,6 +409,46 @@ export default function CardcomTerminalModal({
           </button>
         </div>
 
+        {/* Load Error & Retry Banner */}
+        {loadError ? (
+          <div
+            style={{
+              padding: '10px 16px',
+              backgroundColor: '#fee2e2',
+              color: '#991b1b',
+              borderBottom: '1px solid #fecaca',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontSize: '13px',
+              fontWeight: 600
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertCircle size={16} />
+              <span>שגיאה בטעינת עסקאות: {String(loadError)}</span>
+            </div>
+            {onRetry ? (
+              <button
+                type="button"
+                onClick={onRetry}
+                style={{
+                  padding: '4px 10px',
+                  backgroundColor: '#ffffff',
+                  color: '#991b1b',
+                  border: '1px solid #fca5a5',
+                  borderRadius: '6px',
+                  fontWeight: 700,
+                  fontSize: '12px',
+                  cursor: 'pointer'
+                }}
+              >
+                נסה שוב
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
         {/* Multi-deal tabs if more than one pending */}
         {pendingCharges.length > 1 ? (
           <div
@@ -476,6 +520,11 @@ export default function CardcomTerminalModal({
             {currentDeal?.payer_name ? (
               <span style={{ backgroundColor: '#fef9c3', padding: '2px 8px', borderRadius: '4px', border: '1px solid #fef08a' }}>
                 בעל כרטיס: <b>{currentDeal.payer_name}</b>
+              </span>
+            ) : null}
+            {currentDeal?.is_test ? (
+              <span style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '2px 8px', borderRadius: '4px', border: '1px solid #fecaca', fontWeight: 700 }}>
+                ⚠️ חשד לבדיקה (דורש אישור ידני)
               </span>
             ) : null}
           </div>
@@ -715,8 +764,28 @@ export default function CardcomTerminalModal({
             סמן כבדיקה (דורש אישור)
           </button>
 
-          <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>
-            כל שינוי סטטוס דורש אישור מפורש
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>
+              כל שינוי סטטוס דורש אישור מפורש
+            </span>
+            {onEmergencyEscape ? (
+              <button
+                type="button"
+                onClick={() => setPendingAction({ type: 'escape' })}
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: '#f1f5f9',
+                  color: '#475569',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                המשך לעת עתה (חירום)
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -754,23 +823,25 @@ export default function CardcomTerminalModal({
                   width: '48px',
                   height: '48px',
                   borderRadius: '50%',
-                  backgroundColor: pendingAction.type === 'test' ? '#fef3c7' : '#dcfce7',
-                  color: pendingAction.type === 'test' ? '#d97706' : '#16a34a',
+                  backgroundColor: pendingAction.type === 'escape' ? '#fee2e2' : (pendingAction.type === 'test' ? '#fef3c7' : '#dcfce7'),
+                  color: pendingAction.type === 'escape' ? '#dc2626' : (pendingAction.type === 'test' ? '#d97706' : '#16a34a'),
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   margin: '0 auto'
                 }}
               >
-                {pendingAction.type === 'test' ? <AlertCircle size={26} /> : <CheckCircle2 size={26} />}
+                {pendingAction.type === 'link' ? <CheckCircle2 size={26} /> : <AlertCircle size={26} />}
               </div>
 
               <div>
                 <h4 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: 800, color: '#0f172a' }}>
-                  {pendingAction.type === 'test' ? 'אישור סימון כבדיקה' : 'אישור שיוך סליקה'}
+                  {pendingAction.type === 'escape' ? 'אישור יציאת חירום (מניעת נעילה)' : (pendingAction.type === 'test' ? 'אישור סימון כבדיקה' : 'אישור שיוך סליקה')}
                 </h4>
                 <p style={{ margin: 0, fontSize: '14px', color: '#475569', lineHeight: 1.5 }}>
-                  {pendingAction.type === 'test' ? (
+                  {pendingAction.type === 'escape' ? (
+                    'האם להמשיך לעבוד בדסק לעת עתה? פעולה זו מתועדת ביומן הביקורת של המערכת (Audit Log) כדי למנוע נעילת צוות. יש לחזור ולשייך את הסליקות בהקדם.'
+                  ) : pendingAction.type === 'test' ? (
                     `האם לסמן את העסקה על סך ₪${pendingAction.amount} כבדיקה? העסקה תועבר לסטטוס בדיקה ולא תשויך להזמנה.`
                   ) : (
                     `האם לשייך את הסליקה על סך ₪${pendingAction.amount} להזמנה של ${pendingAction.guestName}? הפעולה תרשום תשלום ותפיק חשבונית מס קבלה אחת.`
@@ -784,7 +855,9 @@ export default function CardcomTerminalModal({
                   onClick={async () => {
                     const action = pendingAction;
                     setPendingAction(null);
-                    if (action.type === 'test') {
+                    if (action.type === 'escape') {
+                      onEmergencyEscape?.();
+                    } else if (action.type === 'test') {
                       onIgnoreDeal?.(action.dealId, 'test');
                     } else if (action.type === 'link') {
                       onLinkDeal?.(action.dealId, action.bookingId);
@@ -795,14 +868,14 @@ export default function CardcomTerminalModal({
                     padding: '12px',
                     borderRadius: '8px',
                     border: 'none',
-                    backgroundColor: pendingAction.type === 'test' ? '#d97706' : '#16a34a',
+                    backgroundColor: pendingAction.type === 'escape' ? '#dc2626' : (pendingAction.type === 'test' ? '#d97706' : '#16a34a'),
                     color: '#ffffff',
                     fontWeight: 800,
                     fontSize: '15px',
                     cursor: 'pointer'
                   }}
                 >
-                  אישור
+                  {pendingAction.type === 'escape' ? 'המשך לדסק' : 'אישור'}
                 </button>
                 <button
                   type="button"
