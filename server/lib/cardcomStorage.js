@@ -141,9 +141,16 @@ export class CardcomStorage {
       const sep = endpoint.includes('?') ? '&' : '?';
       const url = `${this.supabaseUrl}/rest/v1/${endpoint}${sep}limit=${pageSize}&offset=${offset}`;
       const res = await this.fetchImpl(url, { headers });
-      if (!res.ok) break;
-      const rows = await res.json().catch(() => null);
-      if (!Array.isArray(rows) || rows.length === 0) break;
+      if (!res.ok) {
+        throw new Error(`Failed to fetch from ${endpoint}: HTTP ${res.status}`);
+      }
+      const rows = await res.json().catch((err) => {
+        throw new Error(`Failed to parse JSON response from ${endpoint}: ${err?.message || err}`);
+      });
+      if (!Array.isArray(rows)) {
+        throw new Error(`Expected array response from ${endpoint}, received ${typeof rows}`);
+      }
+      if (rows.length === 0) break;
       results.push(...rows);
       if (rows.length < pageSize) break;
       offset += pageSize;
@@ -159,11 +166,13 @@ export class CardcomStorage {
 
     let dedicatedLoaded = false;
     let tablesEmpty = false;
+    let readSucceeded = false;
     try {
       const [seenRows, pendingRows] = await Promise.all([
         this._fetchPaged('cardcom_seen_deals?select=*', headers),
         this._fetchPaged('cardcom_pending_matches?select=*', headers)
       ]);
+      readSucceeded = true;
 
       if (Array.isArray(seenRows) && seenRows.length > 0) {
         for (const row of seenRows) {
@@ -181,11 +190,16 @@ export class CardcomStorage {
       } else {
         tablesEmpty = true;
       }
-    } catch (_) {}
+    } catch (readErr) {
+      console.warn('[CardcomStorage] Error reading dedicated tables from Supabase:', readErr?.message || readErr);
+      // When Supabase dedicated tables read fails, fall back to local disk cache, NEVER import or overwrite!
+      this._loadFromLocalCache();
+      return this.seenDeals.size > 0 || this.pendingMatches.size > 0;
+    }
 
     // Auto-import from runtime_settings must run once, idempotently, with pagination,
-    // and only when dedicated tables are empty (never override newer state).
-    if ((!dedicatedLoaded || tablesEmpty) && !this.importedFromRuntimeSettings) {
+    // and ONLY when read from dedicated tables succeeded AND dedicated tables are genuinely empty (never override newer state).
+    if (readSucceeded && tablesEmpty && !this.importedFromRuntimeSettings) {
       try {
         const rows = await this._fetchPaged('hotelos_runtime_settings?key=in.(cardcom_seen_deals,cardcom_pending_matches)&select=*', headers);
         if (Array.isArray(rows) && rows.length > 0) {
@@ -201,7 +215,9 @@ export class CardcomStorage {
           }
         }
         this.importedFromRuntimeSettings = true;
-      } catch (_) {}
+      } catch (importErr) {
+        console.warn('[CardcomStorage] Error importing from runtime_settings:', importErr?.message || importErr);
+      }
 
       // If still empty, load from local disk cache
       if (this.seenDeals.size === 0 && this.pendingMatches.size === 0) {

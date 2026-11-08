@@ -237,7 +237,9 @@ BEGIN
     -- If deal was already invoiced, keep it invoiced (for document reuse)
     IF v_ledger.status = 'invoiced' AND v_ledger.document_number IS NOT NULL THEN
       -- Keep as invoiced
-    ELSIF v_ledger.status IN ('pending_invoice', 'reconciliation_needed', 'claiming_retry') THEN
+    ELSIF v_ledger.status IN ('claiming_retry', 'reconciliation_needed') THEN
+      -- Do NOT reset active retry or reconciliation_needed back to pending_invoice: preserve state & ownership
+    ELSIF v_ledger.status = 'pending_invoice' THEN
       UPDATE public.cardcom_deal_ledger
       SET status = 'pending_invoice', updated_at = now()
       WHERE terminal = v_terminal AND deal_id = v_deal_number;
@@ -270,12 +272,33 @@ BEGIN
     v_clearing := '[]'::jsonb;
   END IF;
 
-  -- Merge receipt entry into clearing_payments
+  -- Merge receipt entry into clearing_payments while preserving finalized fields on replay
   FOR v_i IN 0 .. (jsonb_array_length(v_clearing) - 1) LOOP
     v_item := v_clearing->v_i;
     IF (v_item->>'deal_number' = v_deal_number OR v_item->>'txn' = v_deal_number) THEN
-      v_updated_clearing := v_updated_clearing || jsonb_build_array(v_item || p_receipt_entry);
-      v_found := true;
+      DECLARE
+        v_merged JSONB := v_item || p_receipt_entry;
+      BEGIN
+        IF (v_item->>'invoice_status' = 'invoiced' OR v_item->>'document_number' IS NOT NULL OR v_item->>'invoice' IS NOT NULL) THEN
+          v_merged := v_merged || jsonb_build_object(
+            'invoice_status', COALESCE(NULLIF(v_item->>'invoice_status', ''), 'invoiced'),
+            'document_number', COALESCE(v_item->>'document_number', v_item->>'invoice', v_merged->>'document_number'),
+            'invoice', COALESCE(v_item->>'invoice', v_item->>'document_number', v_merged->>'invoice'),
+            'document_url', COALESCE(v_item->>'document_url', v_item->>'invoice_url', v_merged->>'document_url'),
+            'invoice_url', COALESCE(v_item->>'invoice_url', v_item->>'document_url', v_merged->>'invoice_url')
+          );
+        ELSIF (v_ledger.status = 'invoiced' AND v_ledger.document_number IS NOT NULL) THEN
+          v_merged := v_merged || jsonb_build_object(
+            'invoice_status', 'invoiced',
+            'document_number', v_ledger.document_number,
+            'invoice', v_ledger.document_number,
+            'document_url', COALESCE(v_ledger.document_url, v_merged->>'document_url'),
+            'invoice_url', COALESCE(v_ledger.document_url, v_merged->>'invoice_url')
+          );
+        END IF;
+        v_updated_clearing := v_updated_clearing || jsonb_build_array(v_merged);
+        v_found := true;
+      END;
     ELSE
       v_updated_clearing := v_updated_clearing || jsonb_build_array(v_item);
     END IF;
@@ -421,50 +444,107 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 DECLARE
+  v_ledger RECORD;
   v_booking RECORD;
   v_clearing JSONB;
   v_i INT;
   v_item JSONB;
+  v_found_receipt BOOLEAN := false;
   v_updated_clearing JSONB := '[]'::jsonb;
 BEGIN
-  -- 1. Update ledger
+  -- 0. Validate input parameters
+  IF p_booking_id IS NULL OR TRIM(p_booking_id) = '' THEN
+    RAISE EXCEPTION 'INVALID_ARGUMENTS: p_booking_id is required';
+  END IF;
+  IF p_deal_number IS NULL OR TRIM(p_deal_number) = '' THEN
+    RAISE EXCEPTION 'INVALID_ARGUMENTS: p_deal_number is required';
+  END IF;
+  IF p_terminal IS NULL OR TRIM(p_terminal) = '' THEN
+    RAISE EXCEPTION 'INVALID_ARGUMENTS: p_terminal is required';
+  END IF;
+  IF p_document_number IS NULL OR TRIM(p_document_number) = '' THEN
+    RAISE EXCEPTION 'INVALID_ARGUMENTS: p_document_number is required';
+  END IF;
+
+  -- 1. Lock ledger row and verify booking_id & document identity atomically
+  SELECT * INTO v_ledger
+  FROM public.cardcom_deal_ledger
+  WHERE terminal = p_terminal AND deal_id = p_deal_number
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'LEDGER_ENTRY_NOT_FOUND: Terminal %, Deal % not found in ledger', p_terminal, p_deal_number;
+  END IF;
+
+  IF v_ledger.booking_id <> p_booking_id THEN
+    RAISE EXCEPTION 'BOOKING_MISMATCH: Deal % is assigned to booking %, not %', p_deal_number, v_ledger.booking_id, p_booking_id;
+  END IF;
+
+  IF v_ledger.document_number IS NOT NULL AND v_ledger.document_number <> p_document_number THEN
+    RAISE EXCEPTION 'DOCUMENT_MISMATCH: Deal % already finalized with doc %, cannot overwrite with %',
+      p_deal_number, v_ledger.document_number, p_document_number;
+  END IF;
+
   UPDATE public.cardcom_deal_ledger
   SET status = 'invoiced',
       document_number = p_document_number,
-      document_url = p_document_url,
+      document_url = COALESCE(p_document_url, document_url),
       invoiced_at = COALESCE(invoiced_at, now()),
       updated_at = now()
   WHERE terminal = p_terminal AND deal_id = p_deal_number;
 
-  -- 2. Update booking clearing payments
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'LEDGER_UPDATE_FAILED: Failed to update ledger for terminal %, deal %', p_terminal, p_deal_number;
+  END IF;
+
+  -- 2. Select and lock target booking row, verify matching receipt exists
   SELECT * INTO v_booking
   FROM public.hotelos_bookings
   WHERE id = p_booking_id
   FOR UPDATE;
 
-  IF FOUND THEN
-    v_clearing := COALESCE(v_booking.clearing_payments, '[]'::jsonb);
-    IF jsonb_typeof(v_clearing) = 'array' THEN
-      FOR v_i IN 0 .. (jsonb_array_length(v_clearing) - 1) LOOP
-        v_item := v_clearing->v_i;
-        IF (v_item->>'deal_number' = p_deal_number OR v_item->>'txn' = p_deal_number) THEN
-          v_updated_clearing := v_updated_clearing || jsonb_build_array(v_item || jsonb_build_object(
-            'invoice', p_document_number,
-            'invoice_url', p_document_url,
-            'document_number', p_document_number,
-            'document_url', p_document_url,
-            'invoice_status', 'invoiced'
-          ));
-        ELSE
-          v_updated_clearing := v_updated_clearing || jsonb_build_array(v_item);
-        END IF;
-      END LOOP;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'BOOKING_NOT_FOUND: Booking % not found', p_booking_id;
+  END IF;
 
-      UPDATE public.hotelos_bookings
-      SET clearing_payments = v_updated_clearing,
-          updated_at = now()
-      WHERE id = p_booking_id;
+  v_clearing := COALESCE(v_booking.clearing_payments, '[]'::jsonb);
+  IF jsonb_typeof(v_clearing) <> 'array' THEN
+    RAISE EXCEPTION 'INVALID_CLEARING_PAYMENTS: Booking % clearing_payments is not an array', p_booking_id;
+  END IF;
+
+  FOR v_i IN 0 .. (jsonb_array_length(v_clearing) - 1) LOOP
+    v_item := v_clearing->v_i;
+    IF (v_item->>'deal_number' = p_deal_number OR v_item->>'txn' = p_deal_number) THEN
+      IF (v_item->>'document_number' IS NOT NULL AND v_item->>'document_number' <> p_document_number)
+         OR (v_item->>'invoice' IS NOT NULL AND v_item->>'invoice' <> p_document_number) THEN
+        RAISE EXCEPTION 'DOCUMENT_MISMATCH: Receipt in booking % already has doc %, cannot overwrite with %',
+          p_booking_id, COALESCE(v_item->>'document_number', v_item->>'invoice'), p_document_number;
+      END IF;
+
+      v_updated_clearing := v_updated_clearing || jsonb_build_array(v_item || jsonb_build_object(
+        'invoice', p_document_number,
+        'invoice_url', COALESCE(p_document_url, v_item->>'invoice_url'),
+        'document_number', p_document_number,
+        'document_url', COALESCE(p_document_url, v_item->>'document_url'),
+        'invoice_status', 'invoiced'
+      ));
+      v_found_receipt := true;
+    ELSE
+      v_updated_clearing := v_updated_clearing || jsonb_build_array(v_item);
     END IF;
+  END LOOP;
+
+  IF NOT v_found_receipt THEN
+    RAISE EXCEPTION 'RECEIPT_NOT_FOUND: Deal % receipt not found in booking % clearing_payments', p_deal_number, p_booking_id;
+  END IF;
+
+  UPDATE public.hotelos_bookings
+  SET clearing_payments = v_updated_clearing,
+      updated_at = now()
+  WHERE id = p_booking_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'BOOKING_UPDATE_FAILED: Failed to update booking % clearing_payments', p_booking_id;
   END IF;
 
   -- 3. Update pending matches
@@ -472,9 +552,9 @@ BEGIN
   SET status = 'manual_linked',
       selected_booking_id = p_booking_id,
       invoice_number = p_document_number,
-      invoice_url = p_document_url,
+      invoice_url = COALESCE(p_document_url, invoice_url),
       document_number = p_document_number,
-      document_url = p_document_url,
+      document_url = COALESCE(p_document_url, document_url),
       approved_at = COALESCE(approved_at, now()),
       payment_recorded_at = COALESCE(payment_recorded_at, now()),
       updated_at = now()

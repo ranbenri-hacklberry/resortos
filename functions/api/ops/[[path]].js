@@ -63,12 +63,16 @@ function formatCardcomDate(d) {
 
 async function verifySessionToken(env, token) {
   if (!token || !token.includes('.')) return null;
+  const secret = String(env?.CHECKOUT_MAILBOX_SECRET || env?.HOTELOS_API_SECRET || '').trim();
+  if (!secret) return null;
   const [encoded, sig] = token.split('.');
-  const expected = await hmacHex(env.CHECKOUT_MAILBOX_SECRET || env.HOTELOS_DESK_PIN || 'dashboard_salt', encoded);
+  const expected = await hmacHex(secret, encoded);
   if (sig !== expected) return null;
   try {
     const payload = JSON.parse(decodeURIComponent(escape(atob(encoded))));
-    if (Number(payload.exp) < Date.now()) return null;
+    if (typeof payload?.exp !== 'number' || !Number.isFinite(payload.exp) || payload.exp <= Date.now()) {
+      return null;
+    }
     return payload;
   } catch {
     return null;
@@ -492,38 +496,68 @@ export async function onRequest(context) {
       }
 
       // 3. Reconciliation per Cardcom KB 499:
-      // Look up transaction by TranzactionId / ExternalId before creating a new document
-      if (!invoiceInfo) {
-        try {
-          const fromDateStr = formatCardcomDate(match?.deal_time || new Date(Date.now() - 30 * 86400000).toISOString());
-          const toDateStr = formatCardcomDate(new Date(Date.now() + 86400000).toISOString());
-          const listRes = await fetch('https://secure.cardcom.solutions/api/v11/Transactions/ListTransactions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              ApiName: apiName,
-              ApiPassword: apiPassword,
-              LimitForTerminal: Number(terminal),
-              TerminalNumber: Number(terminal),
-              FromDate: fromDateStr,
-              ToDate: toDateStr,
-              TranStatus: 'Success',
-              Page: 1,
-              Page_size: 100
-            })
-          });
+      // Look up transaction by TranzactionId / DealNumber before creating a new document
+      const wasAmbiguous = Boolean(
+        receiptData?.ledger_status === 'reconciliation_needed' ||
+        receiptData?.status === 'reconciliation_needed'
+      );
 
-          if (listRes.ok) {
-            const lData = await listRes.json().catch(() => null);
-            if (lData?.ResponseCode === 0 || lData?.ResponseCode === '0' || lData?.ResponseCode === undefined) {
-              const list = lData?.Tranzactions || lData?.Transactions || lData?.Deals || (Array.isArray(lData) ? lData : []);
-              const foundTxn = list.find((t) =>
-                String(t.TranzactionId || t.DealNumber || '') === dealIdStr ||
-                String(t.ExternalId || '') === externalId ||
-                String(t.ReturnValue || '') === externalId
-              );
-              const recDocNumber = foundTxn?.DocumentNumber || foundTxn?.DocNumber || foundTxn?.InvoiceNumber;
-              const recDocUrl = foundTxn?.DocumentUrl || foundTxn?.DocUrl;
+      let reconciliationError = null;
+      let totalPagesChecked = 0;
+      if (!invoiceInfo) {
+        const fromDateStr = formatCardcomDate(match?.deal_time || new Date(Date.now() - 30 * 86400000).toISOString());
+        const toDateStr = formatCardcomDate(new Date(Date.now() + 86400000).toISOString());
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        let page = 1;
+        const pageSize = 100;
+        const maxPages = 20;
+
+        try {
+          while (page <= maxPages) {
+            totalPagesChecked = page;
+            const listRes = await fetch('https://secure.cardcom.solutions/api/v11/Transactions/ListTransactions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ApiName: apiName,
+                ApiPassword: apiPassword,
+                LimitForTerminal: Number(terminal),
+                TerminalNumber: Number(terminal),
+                FromDate: fromDateStr,
+                ToDate: toDateStr,
+                TranStatus: 'Success',
+                Page: page,
+                Page_size: pageSize
+              }),
+              signal: controller.signal
+            });
+
+            if (!listRes.ok) {
+              throw new Error(`ListTransactions returned HTTP status ${listRes.status}`);
+            }
+
+            const lData = await listRes.json().catch((err) => {
+              throw new Error(`ListTransactions invalid JSON response: ${err?.message || err}`);
+            });
+
+            if (!lData || typeof lData !== 'object' || (lData.ResponseCode !== 0 && lData.ResponseCode !== '0')) {
+              throw new Error(`ListTransactions non-zero ResponseCode: ${lData?.ResponseCode} (${lData?.Description || 'no description'})`);
+            }
+
+            const list = lData.Tranzactions || lData.Transactions;
+            if (!Array.isArray(list)) {
+              throw new Error('ListTransactions response missing Tranzactions array');
+            }
+
+            // Strictly match by documented TranzactionId or DealNumber per KB 499
+            const foundTxn = list.find((t) =>
+              String(t.TranzactionId || t.DealNumber || '') === dealIdStr
+            );
+
+            if (foundTxn) {
+              const recDocNumber = foundTxn.DocumentNumber || foundTxn.DocNumber || foundTxn.InvoiceNumber;
+              const recDocUrl = foundTxn.DocumentUrl || foundTxn.DocUrl;
               if (recDocNumber) {
                 invoiceInfo = {
                   documentNumber: String(recDocNumber),
@@ -532,9 +566,50 @@ export async function onRequest(context) {
                   reused: true
                 };
               }
+              break;
             }
+
+            if (list.length < pageSize) {
+              break;
+            }
+            page += 1;
           }
-        } catch (_) {}
+        } catch (err) {
+          reconciliationError = err;
+        } finally {
+          clearTimeout(timeout);
+        }
+
+        // Fail-closed after ambiguous outcome:
+        // Any error, uncertainty, or missing match after an ambiguous outcome means STOP
+        // with reconciliation_needed and a staff alert, never an automatic CreateDocument.
+        if (wasAmbiguous && !invoiceInfo) {
+          const reason = reconciliationError
+            ? `Reconciliation error: ${reconciliationError.message}`
+            : `Reconciliation checked ${totalPagesChecked} page(s) and found no confirmed document for deal ${dealIdStr}`;
+
+          await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
+            method: 'POST',
+            body: JSON.stringify({
+              p_terminal: terminal,
+              p_deal_id: dealIdStr,
+              p_error_message: reason
+            })
+          }, env, { requireServiceRole: true });
+
+          console.error('[STAFF ALERT] Cardcom deal reconciliation required:', {
+            terminal,
+            dealId: dealIdStr,
+            bookingId: booking_id,
+            reason
+          });
+
+          return errorJson(
+            `Deal ${dealIdStr} is in an ambiguous state and requires staff reconciliation (${reason}).`,
+            409,
+            'RECONCILIATION_REQUIRED'
+          );
+        }
       }
 
       // 4. Create document in Cardcom if still not found

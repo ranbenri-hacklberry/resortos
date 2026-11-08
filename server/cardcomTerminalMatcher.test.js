@@ -1593,4 +1593,150 @@ test('migration 009 SQL upgrades existing schema and handles fresh schema', asyn
   assert.ok(lockIndex > 0 && globalCheckIndex > 0 && lockIndex < globalCheckIndex, 'Must lock ledger row with FOR UPDATE before checking global booking assignment');
 });
 
+test('auth: verifySessionToken requires configured secret and future numeric expiry', async () => {
+  const { onRequest } = await import('../functions/api/ops/[[path]].js');
+  const crypto = await import('node:crypto');
+
+  const sign = (secret, payload) => {
+    const encoded = Buffer.from(JSON.stringify(payload)).toString('base64');
+    const sig = crypto.createHmac('sha256', secret).update(encoded).digest('hex');
+    return `${encoded}.${sig}`;
+  };
+
+  const secret = 'valid-super-secret-key';
+
+  // 1. Valid token with future exp and configured secret: passes auth
+  const validToken = sign(secret, { user: 'manager', exp: Date.now() + 60000 });
+  const reqValid = new Request('https://test/api/ops/cardcom-terminal/pending', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${validToken}` }
+  });
+  const resValid = await onRequest({
+    request: reqValid,
+    params: { path: ['cardcom-terminal', 'pending'] },
+    env: { CHECKOUT_MAILBOX_SECRET: secret }
+  });
+  assert.notEqual(resValid.status, 401, 'Valid session token must not return 401');
+
+  // 2. Secret missing on server: must return 401 (no default salt fallback)
+  const fallbackToken = sign('dashboard_salt', { user: 'manager', exp: Date.now() + 60000 });
+  const reqNoSecret = new Request('https://test/api/ops/cardcom-terminal/pending', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${fallbackToken}` }
+  });
+  const resNoSecret = await onRequest({
+    request: reqNoSecret,
+    params: { path: ['cardcom-terminal', 'pending'] },
+    env: {} // missing secret
+  });
+  assert.equal(resNoSecret.status, 401, 'Missing secret must return 401 and not accept fallback salt');
+
+  // 3. Expired token: must return 401
+  const expiredToken = sign(secret, { user: 'manager', exp: Date.now() - 5000 });
+  const reqExpired = new Request('https://test/api/ops/cardcom-terminal/pending', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${expiredToken}` }
+  });
+  const resExpired = await onRequest({
+    request: reqExpired,
+    params: { path: ['cardcom-terminal', 'pending'] },
+    env: { CHECKOUT_MAILBOX_SECRET: secret }
+  });
+  assert.equal(resExpired.status, 401, 'Expired token must return 401');
+
+  // 4. Non-numeric or missing expiry: must return 401
+  const noExpToken = sign(secret, { user: 'manager' });
+  const reqNoExp = new Request('https://test/api/ops/cardcom-terminal/pending', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${noExpToken}` }
+  });
+  const resNoExp = await onRequest({
+    request: reqNoExp,
+    params: { path: ['cardcom-terminal', 'pending'] },
+    env: { CHECKOUT_MAILBOX_SECRET: secret }
+  });
+  assert.equal(resNoExp.status, 401, 'Token without numeric exp must return 401');
+});
+
+test('ops link reconciliation: fail-closed after ambiguous outcome (409 and never CreateDocument)', async () => {
+  const { onRequest } = await import('../functions/api/ops/[[path]].js');
+
+  const baseEnv = {
+    SUPABASE_URL: 'https://mock.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'mock-service-key',
+    CHECKOUT_MAILBOX_SECRET: 'test-secret',
+    CARDCOM_API_NAME: 'test-cardcom-user',
+    CARDCOM_API_PASSWORD: 'test-cardcom-password'
+  };
+
+  const mockBooking = { id: 'b-failclose-1', guest_name: 'שרה לוי', total_price_agorot: 40000, clearing_payments: [] };
+  const mockMatch = { deal_id: 'deal-failclose-1', amount: 400, approval: '112233' };
+
+  let createDocCalls = 0;
+  let markReconciliationCalls = 0;
+  const originalFetch = globalThis.fetch;
+
+  try {
+    globalThis.fetch = async (url, opts = {}) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/cardcom_pending_matches')) return new Response(JSON.stringify([mockMatch]), { status: 200 });
+      if (urlStr.includes('/hotelos_bookings?id=eq.b-failclose-1')) return new Response(JSON.stringify([mockBooking]), { status: 200 });
+      if (urlStr.includes('/rpc/record_cardcom_deal_receipt')) {
+        // Return status indicating deal was in ambiguous outcome (reconciliation_needed)
+        return new Response(JSON.stringify({
+          ok: true,
+          booking_id: 'b-failclose-1',
+          payment_status: 'PARTIAL',
+          ledger_status: 'reconciliation_needed'
+        }), { status: 200 });
+      }
+      if (urlStr.includes('/rpc/claim_cardcom_deal_retry')) {
+        return new Response(JSON.stringify({ ok: true, status: 'claiming_retry' }), { status: 200 });
+      }
+      if (urlStr.includes('ListTransactions')) {
+        // Return 0 transactions (no document found)
+        return new Response(JSON.stringify({
+          ResponseCode: 0,
+          Description: 'Success',
+          Page: 1,
+          Page_size: 100,
+          Tranzactions: []
+        }), { status: 200 });
+      }
+      if (urlStr.includes('CreateDocument')) {
+        createDocCalls += 1;
+        return new Response(JSON.stringify({ ResponseCode: 0, DocumentNumber: 'SHOULD-NOT-BE-CALLED' }), { status: 200 });
+      }
+      if (urlStr.includes('/rpc/mark_cardcom_deal_reconciliation_needed')) {
+        markReconciliationCalls += 1;
+        return new Response(JSON.stringify({ ok: true, status: 'reconciliation_needed' }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    const req = new Request('https://test/api/ops/cardcom-terminal/link', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer test-secret'
+      },
+      body: JSON.stringify({
+        deal_id: 'deal-failclose-1',
+        booking_id: 'b-failclose-1',
+        terminal: '184288'
+      })
+    });
+
+    const res = await onRequest({ request: req, params: { path: ['cardcom-terminal', 'link'] }, env: baseEnv });
+    assert.equal(res.status, 409, 'Ambiguous outcome without confirmed document must return 409 RECONCILIATION_REQUIRED');
+    const body = await res.json();
+    assert.equal(body.error, 'RECONCILIATION_REQUIRED');
+    assert.equal(createDocCalls, 0, 'CreateDocument must NEVER be called automatically after ambiguous outcome');
+    assert.ok(markReconciliationCalls >= 1, 'mark_cardcom_deal_reconciliation_needed must be called');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
 
