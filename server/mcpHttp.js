@@ -4,17 +4,24 @@ import {
   canReadGuestPage,
   fetchedAt,
   financeSummary,
+  isAuthorizedContactManager,
   isManager,
+  matchesHebrewName,
+  matchesKinId,
+  matchesPhone,
   pageOf,
   parseDate,
   projectBankAccount,
   projectBankTransaction,
   projectBooking,
+  projectBookingContact,
   projectBookingMoney,
   projectCatalog,
   projectDocument,
   projectExpense,
-  projectUnit
+  projectInvoiceDetails,
+  projectUnit,
+  resolveUnitHebrewName
 } from './mcpRead.js';
 import { productionDeps } from './mcpData.js';
 import { GUEST_PRINT_ABSENT, projectGuestPage, projectGuestPageSummary } from '../src/lib/guestPageRead.js';
@@ -28,7 +35,8 @@ const TOOLS = [
   tool('resortos_profile', 'מי מחובר לחיבור הזה. רק בעלים או מנהל.', { type: 'object', additionalProperties: false }, true),
   tool('resortos_catalog', 'קטלוג היחידות. המחיר הבסיסי בשקלים מתוך אגורות, 100 אגורות = 1 ש״ח.', filters(), true),
   tool('resortos_units', 'סטטוס תפעולי של החדרים.', filters(), true),
-  tool('resortos_bookings', 'הזמנות: שם, יחידה ותאריכים. בלי טלפון ובלי תשלום.', dateFilters(), true),
+  tool('resortos_bookings', 'הזמנות: שם, יחידה ותאריכים. טלפון מוחזר רק עם include_contact למנהלים מורשים.', dateFilters(), true),
+  tool('resortos_booking_contact', 'פרטי קשר של אורח (שם מלא, טלפון E.164 ומקומי, אימייל, פרטי חשבונית/ח.פ, מזהה הזמנה/כינורות, שם יחידה ותאריכים). מורשה למנהלים בלבד (רן, דניאל שוקרון, נטשה).', contactFilters(), true),
   tool('resortos_work_log', 'ניקיונות שנסגרו על ידי המנהל המחובר בלבד.', { type: 'object', additionalProperties: false }, true),
   tool('resortos_procedures', 'ספריית נהלי העבודה.', { type: 'object', additionalProperties: false }, true),
   tool('resortos_documents', 'ספריית המסמכים בפריוריטי. בלי id מוחזרת רשימה. עם id מוחזר טקסט המסמך.', {
@@ -127,6 +135,26 @@ function dateFilters() {
       to: { type: 'string' },
       property_id: { type: 'string' },
       unit_id: { type: 'string' },
+      include_contact: { type: 'boolean', description: 'הצגת פרטי קשר (טלפון, אימייל, חשבונית) למנהלים מורשים בלבד' },
+      limit: { type: 'integer' },
+      cursor: { type: 'string' }
+    },
+    additionalProperties: false
+  };
+}
+
+function contactFilters() {
+  return {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'חיפוש לפי שם אורח או שם בחשבונית (תומך בכתיב מלא/חסר, למשל סויסה/סוויסה)' },
+      phone: { type: 'string', description: 'חיפוש לפי מספר טלפון (חלקי או מלא, ספרות או פורמט בינלאומי)' },
+      kin_id: { type: 'string', description: 'חיפוש לפי מזהה כינורות (למשל 76154 או kin_76154)' },
+      booking_id: { type: 'string', description: 'מזהה הזמנה ספציפי' },
+      from: { type: 'string', description: 'מתאריך כניסה YYYY-MM-DD' },
+      to: { type: 'string', description: 'עד תאריך כניסה YYYY-MM-DD' },
+      unit_id: { type: 'string', description: 'סינון לפי יחידה' },
+      property_id: { type: 'string', description: 'סינון לפי מתחם' },
       limit: { type: 'integer' },
       cursor: { type: 'string' }
     },
@@ -231,8 +259,46 @@ export function createMcpHandler(deps) {
     }
     if (name === 'resortos_bookings') {
       const loaded = await deps.loadBookings(user, bookingQuery(args));
-      const rows = (await filterBookings(deps, user, loaded.rows, args)).map(projectBooking);
-      return { ...stamp, ...pageOf(rows, args), source_complete: !loaded.truncated, scope: 'operational_fields' };
+      const catalog = await deps.loadCatalog(user);
+      const filtered = await filterBookings(deps, user, loaded.rows, args);
+      const canSeeContact = Boolean(args.include_contact) && isAuthorizedContactManager(user);
+      if (args.include_contact && canSeeContact) {
+        const bookingIds = filtered.map((r) => r.id);
+        console.log(`[mcp] tool=resortos_bookings include_contact=true user=${user.username || user.id} timestamp=${now.toISOString()} bookings=${bookingIds.join(',')}`);
+      }
+      const rows = filtered.map((row) => {
+        const unitName = resolveUnitHebrewName(row.unit_id, catalog);
+        return projectBooking(row, { includeContact: canSeeContact, unitName });
+      });
+      return {
+        ...stamp,
+        ...pageOf(rows, args),
+        source_complete: !loaded.truncated,
+        scope: canSeeContact ? 'operational_fields_with_contact' : 'operational_fields'
+      };
+    }
+    if (name === 'resortos_booking_contact') {
+      if (!isAuthorizedContactManager(user)) {
+        const denied = new Error('FORBIDDEN');
+        denied.status = 403;
+        denied.expose = true;
+        throw denied;
+      }
+      const loaded = await deps.loadBookings(user, bookingQuery(args));
+      const catalog = await deps.loadCatalog(user);
+      const filtered = filterContactBookings(catalog, loaded.rows, args);
+      const bookingIds = filtered.map((r) => r.id);
+      console.log(`[mcp] tool=resortos_booking_contact user=${user.username || user.id} timestamp=${now.toISOString()} bookings=${bookingIds.join(',')}`);
+      const rows = filtered.map((row) => {
+        const unitName = resolveUnitHebrewName(row.unit_id, catalog);
+        return projectBookingContact(row, { unitName });
+      });
+      return {
+        ...stamp,
+        ...pageOf(rows, args),
+        source_complete: !loaded.truncated,
+        scope: 'authorized_manager_contact_access'
+      };
     }
     if (name === 'resortos_work_log') {
       const rows = await deps.loadWorkLog(user);
@@ -764,12 +830,49 @@ function filterProperty(rows, propertyId) {
 }
 
 function bookingQuery(args = {}) {
-  return {
+  const query = {
     from: parseDate(args.from, 'from'),
     to: parseDate(args.to, 'to'),
     property_id: String(args.property_id || ''),
     unit_id: String(args.unit_id || '')
   };
+  const bookingId = String(args.booking_id || args.id || '').trim();
+  if (bookingId) query.booking_id = bookingId;
+  return query;
+}
+
+function filterContactBookings(catalog, rows, args) {
+  const from = parseDate(args.from, 'from');
+  const to = parseDate(args.to, 'to');
+  const nameQuery = String(args.name || '').trim();
+  const phoneQuery = String(args.phone || '').trim();
+  const kinIdQuery = String(args.kin_id || '').trim();
+  const bookingIdQuery = String(args.booking_id || args.id || '').trim();
+
+  let allowed = null;
+  if (args.property_id && Array.isArray(catalog)) {
+    allowed = new Set(catalog.filter((row) => row.property_id === args.property_id).map((row) => row.id));
+  }
+
+  return rows.filter((row) => {
+    if (allowed && !allowed.has(row.unit_id)) return false;
+    if (args.unit_id && row.unit_id !== args.unit_id) return false;
+    if (bookingIdQuery && row.id !== bookingIdQuery && !String(row.id).includes(bookingIdQuery)) return false;
+    if (from && String(row.check_in_date) < from) return false;
+    if (to && String(row.check_in_date) > to) return false;
+
+    if (kinIdQuery && !matchesKinId(row, kinIdQuery)) return false;
+    if (phoneQuery && !matchesPhone(row.guest_phone || row.phone, phoneQuery)) return false;
+
+    if (nameQuery) {
+      const invoice = projectInvoiceDetails(row);
+      const nameMatch = matchesHebrewName(row.guest_name, nameQuery)
+        || matchesHebrewName(invoice.invoice_name, nameQuery)
+        || matchesHebrewName(invoice.company_name, nameQuery);
+      if (!nameMatch) return false;
+    }
+    return true;
+  });
 }
 
 async function filterBookings(deps, user, rows, args) {
@@ -788,6 +891,7 @@ async function filterBookings(deps, user, rows, args) {
     return true;
   });
 }
+
 
 function projectProcedure(row) {
   const steps = Array.isArray(row.steps) ? row.steps.slice(0, 30) : [];

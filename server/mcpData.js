@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { toMicropayPhone } from '../src/lib/micropaySms.js';
 import { unitAllowed, visibleOpsRows } from './opsAuthz.js';
 import { readExpenses } from './expenses.js';
@@ -54,7 +56,7 @@ export async function loadUnits(user) {
 }
 
 const BOOKING_PAGE_SIZE = 1000;
-const BOOKING_COLUMNS = 'id,unit_id,guest_name,check_in_date,check_out_date,adults_count,children_count,booking_status,payment_status,payment_mode,total_price_agorot,deposit_agorot,clearing_payments,channel_source,special_requests,deleted_at,cash_receipt_at,is_birthday,birthday_note,upsell_description,upsell_price';
+const BOOKING_COLUMNS = 'id,unit_id,guest_name,guest_phone,guest_email,check_in_date,check_out_date,adults_count,children_count,booking_status,payment_status,payment_mode,total_price_agorot,deposit_agorot,clearing_payments,channel_source,special_requests,deleted_at,cash_receipt_at,is_birthday,birthday_note,upsell_description,upsell_price';
 
 export async function collectPages(fetchPage, { pageSize = BOOKING_PAGE_SIZE, maxRows = pageSize * 100 } = {}) {
   const rows = [];
@@ -85,6 +87,7 @@ function bookingPath(user, query, offset) {
     `limit=${BOOKING_PAGE_SIZE}`,
     `offset=${offset}`
   ];
+  if (query.booking_id) parts.push(`id=eq.${encodeURIComponent(query.booking_id)}`);
   if (query.from) parts.push(`check_in_date=gte.${query.from}`);
   if (query.to) parts.push(`check_in_date=lte.${query.to}`);
   if (query.unit_id) parts.push(`unit_id=eq.${encodeURIComponent(query.unit_id)}`);
@@ -92,6 +95,29 @@ function bookingPath(user, query, offset) {
     parts.push(`unit_id=in.(${query.unit_ids.map((id) => encodeURIComponent(id)).join(',')})`);
   }
   return `hotelos_bookings?${parts.join('&')}`;
+}
+
+async function loadKinorotFallbackBookings(user, query = {}) {
+  const candidates = [
+    process.env.KINOROT_BACKUP_FILE,
+    path.join(process.cwd(), 'data', 'kinorot-bookings.json'),
+    '/tmp/resortos-kinorot-bookings.json'
+  ].filter(Boolean);
+
+  for (const filePath of candidates) {
+    try {
+      if (fs.existsSync(filePath)) {
+        const text = fs.readFileSync(filePath, 'utf8');
+        const data = JSON.parse(text);
+        const rows = Array.isArray(data) ? data : (data.rows || []);
+        const filtered = rows.filter((row) => unitAllowed(user, row.unit_id));
+        return { rows: filtered, truncated: false };
+      }
+    } catch {
+      // continue
+    }
+  }
+  return null;
 }
 
 export async function loadBookings(user, query = {}) {
@@ -109,17 +135,25 @@ export async function loadBookings(user, query = {}) {
       if (!unitIds.length) return { rows: [], truncated: false };
     }
   }
-  const collected = await collectPages((offset) => rest(bookingPath(user, {
-    from,
-    to,
-    unit_id: unitId,
-    unit_ids: unitIds
-  }, offset)));
-  return {
-    rows: collected.rows.filter((row) => unitAllowed(user, row.unit_id)),
-    truncated: collected.truncated
-  };
+  try {
+    const collected = await collectPages((offset) => rest(bookingPath(user, {
+      from,
+      to,
+      unit_id: unitId,
+      unit_ids: unitIds,
+      booking_id: query.booking_id || query.id
+    }, offset)));
+    return {
+      rows: collected.rows.filter((row) => unitAllowed(user, row.unit_id)),
+      truncated: collected.truncated
+    };
+  } catch (err) {
+    const fallback = await loadKinorotFallbackBookings(user, query);
+    if (fallback) return fallback;
+    throw err;
+  }
 }
+
 
 export async function loadWorkLog(user) {
   const rows = await rest(

@@ -53,18 +53,38 @@ function priorityToken(handlerOauth) {
   }));
 }
 
+function tokenForUser(handlerOauth, username) {
+  const client = handlerOauth.register({ redirectUris: ['https://grok.com/callback'], name: 'grok' });
+  return handlerOauth.issueCode({
+    clientId: client.id,
+    redirectUri: 'https://grok.com/callback',
+    codeChallenge: s256('verifier-verifier-verifier-verifier'),
+    method: 'S256',
+    username,
+    password: 'secret',
+    resource: 'https://studio.example/mcp'
+  }).then((code) => handlerOauth.exchange({
+    code,
+    verifier: 'verifier-verifier-verifier-verifier',
+    clientId: client.id,
+    redirectUri: 'https://grok.com/callback',
+    resource: 'https://studio.example/mcp'
+  }));
+}
+
 function harness(extra = {}) {
   const calls = [];
   const patchedBookings = new Map();
   const oauth = createOauthService({
     store: createMemoryOauthStore(),
-    verifyStaff: async (username) => (
-      username === 'daniel'
-        ? { id: 'daniel', username: 'daniel', role: 'MANAGER', display_name: 'דניאל', tenant_id: 't', is_active: true }
-        : username === 'priority'
-          ? { id: 'priority', username: 'priority', role: 'PRIORITY', display_name: 'פריוריטי', tenant_id: 't', is_active: true }
-          : { id: 'h', username, role: 'HOUSEKEEPING', is_active: true }
-    )
+    verifyStaff: async (username) => {
+      if (username === 'daniel') return { id: 'daniel', username: 'daniel', role: 'MANAGER', display_name: 'דניאל שוקרון', tenant_id: 't', is_active: true };
+      if (username === 'ran') return { id: 'ran', username: 'ran', role: 'MANAGER', display_name: 'רן', tenant_id: 't', is_active: true };
+      if (username === 'natasha') return { id: 'natasha', username: 'natashamcp', role: 'MANAGER', display_name: 'נטשה', tenant_id: 't', is_active: true };
+      if (username === 'adam') return { id: 'adam', username: 'adam', role: 'MANAGER', display_name: 'אדם', tenant_id: 't', is_active: true };
+      if (username === 'priority') return { id: 'priority', username: 'priority', role: 'PRIORITY', display_name: 'פריוריטי', tenant_id: 't', is_active: true };
+      return { id: 'h', username, role: 'HOUSEKEEPING', is_active: true };
+    }
   });
   const bookings = {
     rows: [{
@@ -86,7 +106,7 @@ function harness(extra = {}) {
   const handler = createMcpHandler({
     oauth,
     now: () => new Date('2026-10-23T06:00:00Z'),
-    loadCatalog: async () => [{ id: 'k680', name: 'מול הנוף 1', property_id: 'mool', base_price_agorot: 120000 }],
+    loadCatalog: extra.loadCatalog || (async () => [{ id: 'k680', name: 'מול הנוף 1', property_id: 'mool', base_price_agorot: 120000 }]),
     loadUnits: async () => [{ id: 'k680', name: 'מול הנוף 1', operational_status: 'READY' }],
     loadBookings: extra.loadBookings || (async () => bookings),
     loadBookingById: extra.loadBookingById || (async (_user, id) => {
@@ -112,6 +132,9 @@ function harness(extra = {}) {
     loadBankTransactions: async () => ({ items: [{ id: 'tx1', amount: 12.5, currency: 'ILS', transactionDate: '2026-10-20' }], nextPage: null }),
     loadStaff: extra.loadStaff || (async (id) => {
       if (id === 'priority') return { id: 'priority', role: 'PRIORITY', is_active: true, allowed_units: [] };
+      if (id === 'adam') return { id: 'adam', role: 'MANAGER', is_active: true, allowed_units: [] };
+      if (id === 'ran') return { id: 'ran', role: 'MANAGER', is_active: true, allowed_units: [] };
+      if (id === 'natasha') return { id: 'natasha', role: 'MANAGER', is_active: true, allowed_units: [] };
       return { id: 'daniel', role: 'MANAGER', is_active: true, allowed_units: [] };
     }),
     refreshBanks: async () => {
@@ -436,3 +459,338 @@ test('resortos_record_payment rejects unauthenticated callers', async () => {
   }, '');
   assert.equal(result.status, 401);
 });
+
+test('resortos_booking_contact allows Daniel, Ran, and Natasha and returns all contact fields', async () => {
+  const sampleBookings = {
+    rows: [
+      {
+        id: 'kin_76154',
+        unit_id: 'k680',
+        guest_name: 'יוסי סוויסה',
+        guest_phone: '0541112233',
+        guest_email: 'swissa@example.com',
+        company_name: 'אלפא הייטק בע"מ',
+        tax_id: '515998877',
+        check_in_date: '2026-11-10',
+        check_out_date: '2026-11-12',
+        special_requests: 'kinorot:76154'
+      }
+    ],
+    truncated: false
+  };
+
+  const { handler, oauth } = harness({
+    loadBookings: async () => sampleBookings,
+    loadCatalog: async () => [{ id: 'k680', name: 'Ⓐ29 מול הנוף · בקתה 1', property_id: 'mool' }]
+  });
+
+  for (const user of ['daniel', 'ran', 'natasha']) {
+    const token = await tokenForUser(oauth, user);
+    const result = await call(handler, {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: {
+        name: 'resortos_booking_contact',
+        arguments: {}
+      }
+    }, token.access_token);
+
+    assert.equal(result.status, 200, `User ${user} should be authorized`);
+    const page = result.json.result.structuredContent;
+    assert.equal(page.count, 1);
+    const item = page.items[0];
+
+    // Guest full name
+    assert.equal(item.guest_name, 'יוסי סוויסה');
+
+    // Phone (E.164 + local format)
+    assert.equal(item.phone.e164, '+972541112233');
+    assert.equal(item.phone.local, '054-111-2233');
+    assert.equal(item.phone_e164, '+972541112233');
+    assert.equal(item.phone_local, '054-111-2233');
+
+    // Email
+    assert.equal(item.email, 'swissa@example.com');
+
+    // Invoice name/company + ח.פ. if set
+    assert.equal(item.invoice_details.company_name, 'אלפא הייטק בע"מ');
+    assert.equal(item.invoice_details.tax_id, '515998877');
+    assert.equal(item.invoice_details.formatted, 'אלפא הייטק בע"מ ח.פ. 515998877');
+    assert.equal(item.company_name, 'אלפא הייטק בע"מ');
+    assert.equal(item.tax_id, '515998877');
+
+    // Booking id / kin id
+    assert.equal(item.booking_id, 'kin_76154');
+    assert.equal(item.id, 'kin_76154');
+    assert.equal(item.kin_id, '76154');
+
+    // Unit (Hebrew name)
+    assert.equal(item.unit_id, 'k680');
+    assert.equal(item.unit_name, 'Ⓐ29 מול הנוף · בקתה 1');
+
+    // Dates
+    assert.equal(item.check_in_date, '2026-11-10');
+    assert.equal(item.check_out_date, '2026-11-12');
+  }
+});
+
+test('resortos_booking_contact denies unauthorized managers and non-managers', async () => {
+  const { handler, oauth } = harness();
+
+  // Adam is a MANAGER, but not in authorized list (Ran, Daniel, Natasha)
+  const adamToken = await tokenForUser(oauth, 'adam');
+  const adamRes = await call(handler, {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'tools/call',
+    params: { name: 'resortos_booking_contact', arguments: {} }
+  }, adamToken.access_token);
+  assert.equal(adamRes.status, 403);
+
+  // Priority user
+  const priorityTokenObj = await priorityToken(oauth);
+  const prioRes = await call(handler, {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'tools/call',
+    params: { name: 'resortos_booking_contact', arguments: {} }
+  }, priorityTokenObj.access_token);
+  assert.equal(prioRes.status, 403);
+});
+
+test('resortos_bookings with include_contact returns phone only to authorized managers', async () => {
+  const sampleBookings = {
+    rows: [
+      {
+        id: 'b10',
+        unit_id: 'k680',
+        guest_name: 'שרה כהן',
+        guest_phone: '0529998877',
+        guest_email: 'sara@example.com',
+        check_in_date: '2026-11-10',
+        check_out_date: '2026-11-12'
+      }
+    ],
+    truncated: false
+  };
+
+  const { handler, oauth } = harness({
+    loadBookings: async () => sampleBookings,
+    loadCatalog: async () => [{ id: 'k680', name: 'מול הנוף 1', property_id: 'mool' }]
+  });
+
+  // 1. Authorized manager (Daniel) gets phone
+  const danielToken = await tokenForUser(oauth, 'daniel');
+  const authRes = await call(handler, {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'tools/call',
+    params: {
+      name: 'resortos_bookings',
+      arguments: { include_contact: true }
+    }
+  }, danielToken.access_token);
+  assert.equal(authRes.status, 200);
+  const authItem = authRes.json.result.structuredContent.items[0];
+  assert.equal(authItem.phone.e164, '+972529998877');
+  assert.equal(authItem.phone.local, '052-999-8877');
+  assert.equal(authItem.email, 'sara@example.com');
+
+  // 2. Unauthorized caller (Adam) gets NO phone
+  const adamToken = await tokenForUser(oauth, 'adam');
+  const unauthRes = await call(handler, {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'tools/call',
+    params: {
+      name: 'resortos_bookings',
+      arguments: { include_contact: true }
+    }
+  }, adamToken.access_token);
+  assert.equal(unauthRes.status, 200);
+  const unauthItem = unauthRes.json.result.structuredContent.items[0];
+  assert.equal(unauthItem.phone, undefined);
+  assert.equal(unauthItem.guest_phone, undefined);
+  assert.equal(unauthItem.email, undefined);
+});
+
+test('resortos_booking_contact searches by Hebrew name spelling variants (סויסה / סוויסה)', async () => {
+  const sampleBookings = {
+    rows: [
+      {
+        id: 'b1',
+        unit_id: 'k680',
+        guest_name: 'יוסי סוויסה',
+        guest_phone: '0541112233',
+        check_in_date: '2026-11-10',
+        check_out_date: '2026-11-12'
+      },
+      {
+        id: 'b2',
+        unit_id: 'k680',
+        guest_name: 'משה סויסה',
+        guest_phone: '0542223344',
+        check_in_date: '2026-11-10',
+        check_out_date: '2026-11-12'
+      },
+      {
+        id: 'b3',
+        unit_id: 'k680',
+        guest_name: 'אבי כהן',
+        guest_phone: '0543334455',
+        check_in_date: '2026-11-10',
+        check_out_date: '2026-11-12'
+      }
+    ],
+    truncated: false
+  };
+
+  const { handler, oauth } = harness({
+    loadBookings: async () => sampleBookings
+  });
+  const token = await tokenForUser(oauth, 'daniel');
+
+  // Query "סויסה" (single vav) matches both "יוסי סוויסה" and "משה סויסה"
+  const res1 = await call(handler, {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'tools/call',
+    params: {
+      name: 'resortos_booking_contact',
+      arguments: { name: 'סויסה' }
+    }
+  }, token.access_token);
+  assert.equal(res1.status, 200);
+  const items1 = res1.json.result.structuredContent.items;
+  assert.equal(items1.length, 2);
+  assert.deepEqual(items1.map((i) => i.id).sort(), ['b1', 'b2']);
+
+  // Query "סוויסה" (double vav) also matches both
+  const res2 = await call(handler, {
+    jsonrpc: '2.0',
+    id: 2,
+    method: 'tools/call',
+    params: {
+      name: 'resortos_booking_contact',
+      arguments: { name: 'סוויסה' }
+    }
+  }, token.access_token);
+  assert.equal(res2.status, 200);
+  const items2 = res2.json.result.structuredContent.items;
+  assert.equal(items2.length, 2);
+  assert.deepEqual(items2.map((i) => i.id).sort(), ['b1', 'b2']);
+});
+
+test('resortos_booking_contact searches by phone, kin_id, and dates', async () => {
+  const sampleBookings = {
+    rows: [
+      {
+        id: 'kin_76154',
+        unit_id: 'k680',
+        guest_name: 'אביגיל',
+        guest_phone: '054-998-1122',
+        check_in_date: '2026-11-05',
+        check_out_date: '2026-11-07',
+        special_requests: 'kinorot:76154'
+      },
+      {
+        id: 'b20',
+        unit_id: 'k680',
+        guest_name: 'יונתן',
+        guest_phone: '050-123-4567',
+        check_in_date: '2026-11-20',
+        check_out_date: '2026-11-22'
+      }
+    ],
+    truncated: false
+  };
+
+  const { handler, oauth } = harness({
+    loadBookings: async () => sampleBookings
+  });
+  const token = await tokenForUser(oauth, 'daniel');
+
+  // Search by phone digits
+  const resPhone = await call(handler, {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'tools/call',
+    params: { name: 'resortos_booking_contact', arguments: { phone: '0549981122' } }
+  }, token.access_token);
+  assert.equal(resPhone.json.result.structuredContent.items.length, 1);
+  assert.equal(resPhone.json.result.structuredContent.items[0].id, 'kin_76154');
+
+  // Search by kin_id
+  const resKin = await call(handler, {
+    jsonrpc: '2.0',
+    id: 2,
+    method: 'tools/call',
+    params: { name: 'resortos_booking_contact', arguments: { kin_id: '76154' } }
+  }, token.access_token);
+  assert.equal(resKin.json.result.structuredContent.items.length, 1);
+  assert.equal(resKin.json.result.structuredContent.items[0].id, 'kin_76154');
+
+  // Search by date range
+  const resDate = await call(handler, {
+    jsonrpc: '2.0',
+    id: 3,
+    method: 'tools/call',
+    params: { name: 'resortos_booking_contact', arguments: { from: '2026-11-15', to: '2026-11-25' } }
+  }, token.access_token);
+  assert.equal(resDate.json.result.structuredContent.items.length, 1);
+  assert.equal(resDate.json.result.structuredContent.items[0].id, 'b20');
+});
+
+test('resortos_booking_contact logs access with booking IDs without logging the phone number', async () => {
+  const sampleBookings = {
+    rows: [
+      {
+        id: 'b99',
+        unit_id: 'k680',
+        guest_name: 'יוסי',
+        guest_phone: '0547778899',
+        check_in_date: '2026-11-10',
+        check_out_date: '2026-11-12'
+      }
+    ],
+    truncated: false
+  };
+
+  const { handler, oauth } = harness({
+    loadBookings: async () => sampleBookings
+  });
+  const token = await tokenForUser(oauth, 'daniel');
+
+  const logs = [];
+  const originalLog = console.log;
+  console.log = (...args) => {
+    logs.push(args.join(' '));
+    originalLog(...args);
+  };
+
+  try {
+    const res = await call(handler, {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: { name: 'resortos_booking_contact', arguments: {} }
+    }, token.access_token);
+    assert.equal(res.status, 200);
+
+    // Verify audit log exists
+    const auditLog = logs.find((l) => l.includes('tool=resortos_booking_contact'));
+    assert.ok(auditLog, 'Audit log must be emitted');
+    assert.ok(auditLog.includes('user=daniel'), 'Must include user');
+    assert.ok(auditLog.includes('timestamp='), 'Must include timestamp');
+    assert.ok(auditLog.includes('bookings=b99'), 'Must include booking id');
+
+    // Strictly ensure phone is NEVER in the log
+    assert.ok(!auditLog.includes('0547778899'), 'Phone must not be logged');
+    assert.ok(!auditLog.includes('054-777-8899'), 'Phone must not be logged');
+    assert.ok(!auditLog.includes('972547778899'), 'Phone must not be logged');
+  } finally {
+    console.log = originalLog;
+  }
+});
+

@@ -1,5 +1,6 @@
 import { dueAgorotOf, kinorotSettlementKind, recordedClearingPayments, recordedPaidAgorot } from '../src/lib/bookingPaid.js';
 import { docWordCount } from '../src/lib/priorityDocs.js';
+import { DEFAULT_RESORT_UNITS } from '../src/lib/units.js';
 
 /** Booking money is stored in agorot. 120000 agorot = 1200.00 ILS. */
 export function ilsFromAgorot(agorot) {
@@ -33,6 +34,52 @@ export function htmlToText(html, max = 8000) {
 
 export function isManager(user) {
   return String(user?.role || '').toUpperCase() === 'MANAGER' && user?.is_active !== false && Boolean(user?.id);
+}
+
+/**
+ * Contact info authorization: Allowed only for authorized manager callers
+ * (Ran, Daniel Shukron, Natasha's MCP token). Others still get no phone.
+ */
+export function isAuthorizedContactManager(user) {
+  if (!user || user.is_active === false || !user.id) return false;
+  const role = String(user.role || '').toUpperCase();
+  if (role !== 'MANAGER') return false;
+
+  const id = String(user.id || '').toLowerCase().trim();
+  const username = String(user.username || '').toLowerCase().trim();
+  const name = String(user.display_name || user.name || '').toLowerCase().trim();
+
+  // Environment override if specified
+  const envList = String(process.env.RESORTOS_CONTACT_MANAGERS || '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  if (envList.length > 0 && (envList.includes(id) || envList.includes(username))) {
+    return true;
+  }
+
+  // 1. Ran (rani, ran, ranbenri, רן)
+  const isRan = ['ran', 'rani', 'ranbenri'].includes(id)
+    || ['ran', 'rani', 'ranbenri'].includes(username)
+    || /\b(ran|rani)\b/i.test(name)
+    || /רן|רני/.test(name);
+  if (isRan) return true;
+
+  // 2. Daniel Shukron (daniel, daniels, shukron, daniel_shukron, דניאל שוקרון)
+  const isDaniel = ['daniel', 'daniels', 'shukron', 'daniel_shukron'].includes(id)
+    || ['daniel', 'daniels', 'shukron', 'daniel_shukron'].includes(username)
+    || /\b(daniel|shukron)\b/i.test(name)
+    || /דניאל|שוקרון/.test(name);
+  if (isDaniel) return true;
+
+  // 3. Natasha (natasha, natasha_mcp, natashamcp, נטשה)
+  const isNatasha = ['natasha', 'natashamcp', 'natasha_mcp'].includes(id)
+    || ['natasha', 'natashamcp', 'natasha_mcp'].includes(username)
+    || /\bnatasha\b/i.test(name)
+    || /נטשה/.test(name);
+  if (isNatasha) return true;
+
+  return false;
 }
 
 /** Guest-page reads: every manager, and the Priority user. Not the operations manager. */
@@ -107,8 +154,252 @@ export function projectUnit(row) {
   };
 }
 
-export function projectBooking(row) {
+/**
+ * Normalizes Hebrew text by stripping nikud, quote marks, and standardizing final letters.
+ */
+export function normalizeHebrewText(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/[\u0591-\u05C7]/g, '')
+    .replace(/["'״׳`]/g, '')
+    .replace(/ך/g, 'כ')
+    .replace(/ם/g, 'מ')
+    .replace(/ן/g, 'נ')
+    .replace(/ף/g, 'פ')
+    .replace(/ץ/g, 'צ')
+    .replace(/[^\u05D0-\u05EAa-zA-Z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Normalizes Hebrew text for fuzzy spelling matching (כתיב מלא / כתיב חסר),
+ * collapsing double vav and double yod (e.g. סוויסה <-> סויסה).
+ */
+export function hebrewFuzzyKey(str) {
+  const norm = normalizeHebrewText(str);
+  return norm
+    .replace(/וו+/g, 'ו')
+    .replace(/יי+/g, 'י')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Matches a candidate name against a search query, supporting partial matching
+ * and Hebrew spelling variants (כתיב מלא / כתיב חסר like סויסה / סוויסה).
+ */
+export function matchesHebrewName(candidate, query) {
+  if (!query) return true;
+  if (!candidate) return false;
+
+  const cNorm = normalizeHebrewText(candidate);
+  const qNorm = normalizeHebrewText(query);
+  if (cNorm.includes(qNorm)) return true;
+
+  const cFuzzy = hebrewFuzzyKey(candidate);
+  const qFuzzy = hebrewFuzzyKey(query);
+  if (cFuzzy.includes(qFuzzy)) return true;
+
+  const qWords = qFuzzy.split(/\s+/).filter(Boolean);
+  if (qWords.length > 0 && qWords.every((word) => cFuzzy.includes(word))) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Formats a phone number into E.164 and local Israeli formats.
+ */
+export function formatGuestPhone(raw) {
+  if (!raw) return { e164: '', local: '', raw: '' };
+  const str = String(raw).trim();
+  const digits = str.replace(/\D/g, '');
+  if (!digits) return { e164: '', local: '', raw: str };
+
+  let national = '';
+  let e164 = '';
+  if (digits.startsWith('972')) {
+    const rest = digits.slice(3);
+    national = `0${rest}`;
+    e164 = `+${digits}`;
+  } else if (digits.startsWith('0')) {
+    national = digits;
+    e164 = `+972${digits.slice(1)}`;
+  } else if (digits.length === 9 && digits.startsWith('5')) {
+    national = `0${digits}`;
+    e164 = `+972${digits}`;
+  } else {
+    e164 = str.startsWith('+') ? `+${digits}` : digits;
+    return { e164, local: str, raw: str };
+  }
+
+  let local = national;
+  if (national.length === 10 && national.startsWith('05')) {
+    local = `${national.slice(0, 3)}-${national.slice(3, 6)}-${national.slice(6)}`;
+  } else if (national.length === 9 && /^0[23489]/.test(national)) {
+    local = `${national.slice(0, 2)}-${national.slice(2, 5)}-${national.slice(5)}`;
+  }
+
+  return { e164, local, raw: str };
+}
+
+/**
+ * Matches a phone candidate against a search query.
+ */
+export function matchesPhone(candidatePhone, queryPhone) {
+  if (!queryPhone) return true;
+  if (!candidatePhone) return false;
+  const qDigits = String(queryPhone).replace(/\D/g, '');
+  if (!qDigits) return false;
+  const cDigits = String(candidatePhone).replace(/\D/g, '');
+  if (!cDigits) return false;
+
+  if (cDigits.includes(qDigits) || qDigits.includes(cDigits)) return true;
+
+  const toNat = (d) => (d.startsWith('972') ? `0${d.slice(3)}` : d);
+  const qNat = toNat(qDigits);
+  const cNat = toNat(cDigits);
+  if (cNat.includes(qNat) || qNat.includes(cNat)) return true;
+
+  const qTail = qDigits.slice(-7);
+  const cTail = cDigits.slice(-7);
+  if (qTail.length >= 7 && cTail === qTail) return true;
+
+  return false;
+}
+
+/**
+ * Extracts Kinorot ID from booking (from id like kin_76154, or special_requests kinorot:76154).
+ */
+export function extractKinId(booking) {
+  if (!booking) return '';
+  if (booking.kin_id) return String(booking.kin_id);
+  if (booking.kinorot_id) return String(booking.kinorot_id);
+  const idStr = String(booking.id || '');
+  const matchId = idStr.match(/^kin_(\d+)$/i) || idStr.match(/_(\d+)$/);
+  if (matchId) return matchId[1];
+  const reqStr = String(booking.special_requests || '');
+  const matchReq = reqStr.match(/kinorot:(\d+)/i);
+  if (matchReq) return matchReq[1];
+  return '';
+}
+
+/**
+ * Matches kin_id filter against booking.
+ */
+export function matchesKinId(booking, queryKinId) {
+  if (!queryKinId) return true;
+  const qStr = String(queryKinId).trim();
+  const qClean = qStr.replace(/^kin_?/i, '');
+  const kinId = extractKinId(booking);
+  if (kinId && (kinId === qClean || kinId === qStr)) return true;
+  const idStr = String(booking?.id || '').trim();
+  if (idStr === qStr || idStr.toLowerCase().includes(qStr.toLowerCase())) return true;
+  return false;
+}
+
+export const DEFAULT_UNIT_NAMES = new Map(
+  (DEFAULT_RESORT_UNITS || []).map((u) => [u.id, u.name])
+);
+
+/**
+ * Resolves the Hebrew display name of a unit.
+ */
+export function resolveUnitHebrewName(unitId, catalog = []) {
+  if (!unitId) return '';
+  if (Array.isArray(catalog)) {
+    const found = catalog.find((row) => row.id === unitId);
+    if (found?.name) return found.name;
+  }
+  return DEFAULT_UNIT_NAMES.get(unitId) || unitId;
+}
+
+/**
+ * Projects invoice details (invoice name, company name, tax ID / ח.פ.).
+ */
+export function projectInvoiceDetails(booking = {}) {
+  const companyName = String(
+    booking.company_name
+    || booking.invoice_company
+    || booking.business_name
+    || ''
+  ).trim();
+
+  let taxId = String(
+    booking.tax_id
+    || booking.company_hp
+    || booking.hp
+    || booking.vat_id
+    || booking.business_id
+    || booking.company_id
+    || ''
+  ).trim();
+
+  if (!taxId && booking.special_requests) {
+    const match = String(booking.special_requests).match(/(?:hp|vat|ח\.פ|חפ|tz|ת\.ז|תז)[:\s]+([0-9]{8,9})/i);
+    if (match) taxId = match[1];
+  }
+
+  const invoiceName = String(
+    booking.invoice_name
+    || companyName
+    || ''
+  ).trim();
+
+  let formatted = '';
+  if (companyName || invoiceName) {
+    const name = invoiceName || companyName;
+    formatted = taxId ? `${name} ח.פ. ${taxId}` : name;
+  } else if (taxId) {
+    formatted = `ח.פ. ${taxId}`;
+  }
+
   return {
+    invoice_name: invoiceName || null,
+    company_name: companyName || null,
+    tax_id: taxId || null,
+    hp: taxId || null,
+    formatted: formatted || null
+  };
+}
+
+/**
+ * Detailed contact projection for resortos_booking_contact.
+ */
+export function projectBookingContact(booking, { unitName = '' } = {}) {
+  const phone = formatGuestPhone(booking.guest_phone || booking.phone);
+  const kinId = extractKinId(booking);
+  const invoice = projectInvoiceDetails(booking);
+
+  return {
+    id: booking.id,
+    booking_id: booking.id,
+    kin_id: kinId || null,
+    guest_name: booking.guest_name || '',
+    phone: {
+      e164: phone.e164 || null,
+      local: phone.local || null
+    },
+    phone_e164: phone.e164 || null,
+    phone_local: phone.local || null,
+    email: booking.guest_email || booking.email || null,
+    invoice_details: invoice,
+    invoice_name: invoice.invoice_name,
+    company_name: invoice.company_name,
+    tax_id: invoice.tax_id,
+    hp: invoice.tax_id,
+    unit_id: booking.unit_id || '',
+    unit_name: unitName || booking.unit_name || booking.unit_id || '',
+    check_in_date: booking.check_in_date || '',
+    check_out_date: booking.check_out_date || '',
+    booking_status: booking.booking_status || ''
+  };
+}
+
+export function projectBooking(row, { includeContact = false, unitName = '' } = {}) {
+  const base = {
     id: row.id,
     unit_id: row.unit_id,
     guest_name: row.guest_name || '',
@@ -123,7 +414,27 @@ export function projectBooking(row) {
     upsell_description: row.upsell_description || null,
     upsell_price: row.upsell_price != null ? Number(row.upsell_price) : null
   };
+  if (!includeContact) return base;
+
+  const phone = formatGuestPhone(row.guest_phone || row.phone);
+  const kinId = extractKinId(row);
+  const invoice = projectInvoiceDetails(row);
+
+  return {
+    ...base,
+    unit_name: unitName || row.unit_name || row.unit_id || '',
+    kin_id: kinId || null,
+    phone: {
+      e164: phone.e164 || null,
+      local: phone.local || null
+    },
+    phone_e164: phone.e164 || null,
+    phone_local: phone.local || null,
+    email: row.guest_email || row.email || null,
+    invoice_details: invoice
+  };
 }
+
 
 export function projectPayment(raw) {
   const row = recordedClearingPayments({ clearing_payments: [raw] })[0] || {};
