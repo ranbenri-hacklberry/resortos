@@ -754,6 +754,47 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const [showUnlinkedChargesModal, setShowUnlinkedChargesModal] = useState(false);
   const [linkingDealId, setLinkingDealId] = useState(null);
   const [cardcomFetchError, setCardcomFetchError] = useState(null);
+  const [degradedAuditing, setDegradedAuditing] = useState(false);
+
+  const flushQueuedAudits = useCallback(async () => {
+    try {
+      const raw = localStorage.getItem('cardcom_failed_audit_escapes');
+      if (!raw) {
+        setDegradedAuditing(false);
+        return;
+      }
+      const queue = JSON.parse(raw);
+      if (!Array.isArray(queue) || queue.length === 0) {
+        setDegradedAuditing(false);
+        return;
+      }
+      setDegradedAuditing(true);
+      const token = getStoredToken();
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const remaining = [];
+      for (const item of queue) {
+        try {
+          const res = await fetch('/api/ops/cardcom-terminal/audit-escape', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(item)
+          });
+          if (!res.ok) remaining.push(item);
+        } catch (_) {
+          remaining.push(item);
+        }
+      }
+      if (remaining.length > 0) {
+        localStorage.setItem('cardcom_failed_audit_escapes', JSON.stringify(remaining));
+        setDegradedAuditing(true);
+      } else {
+        localStorage.removeItem('cardcom_failed_audit_escapes');
+        setDegradedAuditing(false);
+      }
+    } catch (_) {}
+  }, []);
 
   const refreshPendingCharges = useCallback(async () => {
     try {
@@ -789,26 +830,45 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const handleEmergencyEscape = async () => {
     sessionStorage.setItem('cardcom_escape_until', Date.now() + 30 * 60 * 1000);
     setShowUnlinkedChargesModal(false);
+    const auditPayload = {
+      staff_name: operatorName || 'צוות דלפק',
+      reason: 'יציאת חירום ידנית מהמודל החוסם',
+      timestamp: new Date().toISOString()
+    };
+    let auditOk = false;
     try {
       const token = getStoredToken();
       const headers = { 'Content-Type': 'application/json' };
       if (token) headers.Authorization = `Bearer ${token}`;
-      await fetch('/api/ops/cardcom-terminal/audit-escape', {
+      const res = await fetch('/api/ops/cardcom-terminal/audit-escape', {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          staff_name: operatorName || 'צוות דלפק',
-          reason: 'יציאת חירום ידנית מהמודל החוסם'
-        })
+        body: JSON.stringify(auditPayload)
       });
+      if (res.ok) {
+        auditOk = true;
+      }
     } catch (_) {}
+
+    if (!auditOk) {
+      try {
+        const queue = JSON.parse(localStorage.getItem('cardcom_failed_audit_escapes') || '[]');
+        queue.push(auditPayload);
+        localStorage.setItem('cardcom_failed_audit_escapes', JSON.stringify(queue));
+      } catch (_) {}
+      setDegradedAuditing(true);
+    }
   };
 
   useEffect(() => {
     refreshPendingCharges();
-    const interval = setInterval(refreshPendingCharges, 10000);
+    flushQueuedAudits();
+    const interval = setInterval(() => {
+      refreshPendingCharges();
+      flushQueuedAudits();
+    }, 10000);
     return () => clearInterval(interval);
-  }, [refreshPendingCharges]);
+  }, [refreshPendingCharges, flushQueuedAudits]);
 
   const handleAcknowledgeApprovedDeal = (dealId) => {
     saveAcknowledgedDealId(dealId);
@@ -2907,6 +2967,33 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
           }}
         >
           {saveError || message}
+        </div>
+      ) : null}
+
+      {degradedAuditing ? (
+        <div
+          role="alert"
+          style={{
+            position: 'fixed',
+            bottom: '72px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 9999,
+            padding: '10px 20px',
+            borderRadius: '999px',
+            background: '#fffbeb',
+            border: '1px solid #fde68a',
+            color: '#92400e',
+            fontSize: '13px',
+            fontWeight: 700,
+            textAlign: 'center',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}
+        >
+          <span>⚠️ רישום ביקורת במצב מוגבל (Degraded Auditing) - יציאות חירום שמורות מקומית וממתינות לסנכרון</span>
         </div>
       ) : null}
       <CardcomAutoApprovedModal

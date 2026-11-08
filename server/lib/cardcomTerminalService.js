@@ -148,11 +148,27 @@ export function normalizeCardcomDeal(raw = {}) {
   const isIls = rawCoin === '1' || rawCoin === 'ILS';
 
   const tranStatus = String(raw.TranStatus ?? raw.tranStatus ?? raw.Status ?? raw.status ?? '').trim();
-  const isTranStatusSuccess = !tranStatus || /success|approved|0|ok|הצליח/i.test(tranStatus);
+  const isTranStatusSuccess = tranStatus.toLowerCase() === 'success';
   const statusStr = String(raw.Status || raw.status || raw.Description || '');
   const responseCode = Number(raw.ResponseCode ?? raw.responseCode ?? 0);
 
-  const isSuccess = responseCode === 0 && isTranStatusSuccess && !isRefund && isIls && !/fail|declined|reject|cancel|בוטל|דחה/i.test(statusStr);
+  const dealType = String(raw.DealType ?? raw.dealType ?? '').trim().toLowerCase();
+  const isExcludedDealType = (
+    dealType.includes('cancel')
+    || dealType.includes('information')
+    || dealType.includes('balancequery')
+    || dealType.includes('balance')
+    || dealType.includes('j5')
+    || dealType.includes('hold')
+    || dealType.includes('frame')
+    || dealType.includes('auth')
+    || Boolean(raw.IsJ5 || raw.isJ5 || raw.J5)
+    || Boolean(raw.IsHold || raw.isHold)
+    || Boolean(raw.IsFrame || raw.isFrame)
+    || Boolean(raw.IsAuthorizationOnly || raw.isAuthorizationOnly)
+  );
+
+  const isSuccess = responseCode === 0 && isTranStatusSuccess && !isRefund && isIls && !isExcludedDealType && !/fail|declined|reject|cancel|בוטל|דחה/i.test(statusStr);
 
   return {
     dealId,
@@ -273,6 +289,10 @@ export async function fetchCardcomTransactions({
 
     if (list.length < pageSize) {
       break;
+    }
+
+    if (page === maxPages) {
+      throw new Error(`PAGE_CAP_EXCEEDED: Cardcom ListTransactions exceeded max pages limit (${maxPages}) without completing`);
     }
 
     page++;

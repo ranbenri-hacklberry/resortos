@@ -140,6 +140,7 @@ export class CardcomStorage {
     };
 
     let dedicatedLoaded = false;
+    let tablesEmpty = false;
     try {
       const [seenRes, pendingRes] = await Promise.all([
         this.fetchImpl(`${this.supabaseUrl}/rest/v1/cardcom_seen_deals?select=*`, { headers }),
@@ -149,22 +150,26 @@ export class CardcomStorage {
       if (seenRes.ok && pendingRes.ok) {
         const seenRows = await seenRes.json();
         const pendingRows = await pendingRes.json();
-        if (Array.isArray(seenRows)) {
+        if (Array.isArray(seenRows) && seenRows.length > 0) {
           for (const row of seenRows) {
             if (row?.deal_id) this.seenDeals.set(String(row.deal_id), row);
           }
         }
-        if (Array.isArray(pendingRows)) {
+        if (Array.isArray(pendingRows) && pendingRows.length > 0) {
           for (const row of pendingRows) {
             if (row?.deal_id) this.pendingMatches.set(String(row.deal_id), row);
           }
         }
-        dedicatedLoaded = true;
+        if (this.seenDeals.size > 0 || this.pendingMatches.size > 0) {
+          dedicatedLoaded = true;
+        } else {
+          tablesEmpty = true;
+        }
       }
     } catch (_) {}
 
-    // Fallback to runtime settings if dedicated tables not yet loaded
-    if (!dedicatedLoaded) {
+    // Fallback/import from runtime settings or local cache if dedicated tables not yet loaded or empty
+    if (!dedicatedLoaded || tablesEmpty) {
       try {
         const setRes = await this.fetchImpl(`${this.supabaseUrl}/rest/v1/hotelos_runtime_settings?key=in.(cardcom_seen_deals,cardcom_pending_matches)&select=*`, { headers });
         if (setRes.ok) {
@@ -180,10 +185,23 @@ export class CardcomStorage {
                 if (Array.isArray(list)) list.forEach((m) => m?.deal_id && this.pendingMatches.set(String(m.deal_id), m));
               }
             }
-            return true;
           }
         }
       } catch (_) {}
+
+      // If still empty, load from local disk cache
+      if (this.seenDeals.size === 0 && this.pendingMatches.size === 0) {
+        this._loadFromLocalCache();
+      }
+
+      // If we imported state into previously empty dedicated tables, populate them
+      if (tablesEmpty && (this.seenDeals.size > 0 || this.pendingMatches.size > 0)) {
+        try {
+          await this.persist();
+        } catch (_) {}
+      }
+
+      return this.seenDeals.size > 0 || this.pendingMatches.size > 0;
     }
 
     return dedicatedLoaded;
@@ -216,6 +234,24 @@ export class CardcomStorage {
 
   addPendingMatch(matchObj) {
     const id = String(matchObj.deal_id || matchObj.dealId);
+    const existing = this.pendingMatches.get(id);
+    const resolvedStatuses = ['manual_linked', 'test', 'ignored', 'approved'];
+    if (existing && resolvedStatuses.includes(existing.status) && matchObj.status === 'pending') {
+      // Do not let whole-snapshot write revert already-resolved statuses
+      matchObj = {
+        ...matchObj,
+        status: existing.status,
+        selected_booking_id: existing.selected_booking_id || matchObj.selected_booking_id,
+        guest_name: existing.guest_name || matchObj.guest_name,
+        unit_name: existing.unit_name || matchObj.unit_name,
+        invoice_number: existing.invoice_number || matchObj.invoice_number,
+        invoice_url: existing.invoice_url || matchObj.invoice_url,
+        document_number: existing.document_number || matchObj.document_number,
+        document_url: existing.document_url || matchObj.document_url,
+        approved_at: existing.approved_at || matchObj.approved_at,
+        payment_recorded_at: existing.payment_recorded_at || matchObj.payment_recorded_at
+      };
+    }
     this.pendingMatches.set(id, {
       ...matchObj,
       deal_id: id,
@@ -258,15 +294,26 @@ export class CardcomStorage {
       Prefer: 'resolution=merge-duplicates'
     };
 
-    const seenList = Array.from(this.seenDeals.values());
-    const pendingList = Array.from(this.pendingMatches.values());
+    const seenList = Array.from(this.seenDeals.values()).map((d) => ({
+      ...d,
+      deal_id: String(d.deal_id || d.dealId),
+      terminal_number: String(d.terminal_number || d.terminalNumber || '184288'),
+      updated_at: new Date().toISOString()
+    }));
+
+    const pendingList = Array.from(this.pendingMatches.values()).map((m) => ({
+      ...m,
+      deal_id: String(m.deal_id || m.dealId),
+      terminal_number: String(m.terminal_number || m.terminalNumber || '184288'),
+      updated_at: new Date().toISOString()
+    }));
 
     const writeErrors = [];
 
-    // 1. Persist to dedicated tables (BOTH seen and pending)
+    // 1. Persist to dedicated tables using on_conflict=terminal_number,deal_id
     try {
       if (seenList.length > 0) {
-        const sRes = await this.fetchImpl(`${this.supabaseUrl}/rest/v1/cardcom_seen_deals`, {
+        const sRes = await this.fetchImpl(`${this.supabaseUrl}/rest/v1/cardcom_seen_deals?on_conflict=terminal_number,deal_id`, {
           method: 'POST',
           headers,
           body: JSON.stringify(seenList)
@@ -281,7 +328,7 @@ export class CardcomStorage {
 
     try {
       if (pendingList.length > 0) {
-        const pRes = await this.fetchImpl(`${this.supabaseUrl}/rest/v1/cardcom_pending_matches`, {
+        const pRes = await this.fetchImpl(`${this.supabaseUrl}/rest/v1/cardcom_pending_matches?on_conflict=terminal_number,deal_id`, {
           method: 'POST',
           headers,
           body: JSON.stringify(pendingList)
@@ -293,6 +340,18 @@ export class CardcomStorage {
     } catch (err) {
       writeErrors.push(`cardcom_pending_matches exception: ${err?.message || 'unknown'}`);
     }
+
+    // Try transactional RPC persist as well if available
+    try {
+      await this.fetchImpl(`${this.supabaseUrl}/rest/v1/rpc/persist_cardcom_sync`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          p_seen: seenList,
+          p_pending: pendingList
+        })
+      });
+    } catch (_) {}
 
     // 2. Always maintain runtime settings sync for edge API consistency
     try {

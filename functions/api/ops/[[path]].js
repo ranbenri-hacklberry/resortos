@@ -279,6 +279,10 @@ export async function onRequest(context) {
       return errorJson('לא מורשה', 401, 'UNAUTHORIZED');
     }
 
+    if (!env?.SUPABASE_SERVICE_ROLE_KEY) {
+      return errorJson('SUPABASE_SERVICE_ROLE_KEY is required for Cardcom terminal operations', 500, 'SERVICE_ROLE_KEY_REQUIRED');
+    }
+
     // GET /api/ops/cardcom-terminal/pending
     if (sub === 'pending' && request.method === 'GET') {
       try {
@@ -286,8 +290,8 @@ export async function onRequest(context) {
         let recentlyApproved = [];
         try {
           const [pendingRes, approvedRes] = await Promise.all([
-            fetchPostgrest('/cardcom_pending_matches?status=eq.pending&order=created_at.desc', { method: 'GET' }, env),
-            fetchPostgrest('/cardcom_pending_matches?status=in.(approved,manual_linked)&order=approved_at.desc&limit=15', { method: 'GET' }, env)
+            fetchPostgrest('/cardcom_pending_matches?status=eq.pending&order=created_at.desc', { method: 'GET' }, env, { requireServiceRole: true }),
+            fetchPostgrest('/cardcom_pending_matches?status=in.(approved,manual_linked)&order=approved_at.desc&limit=15', { method: 'GET' }, env, { requireServiceRole: true })
           ]);
           if (pendingRes && pendingRes.ok) {
             const rows = await pendingRes.json();
@@ -301,7 +305,7 @@ export async function onRequest(context) {
 
         if (pending.length === 0 && recentlyApproved.length === 0) {
           try {
-            const setRes = await fetchPostgrest('/hotelos_runtime_settings?key=eq.cardcom_pending_matches', { method: 'GET' }, env);
+            const setRes = await fetchPostgrest('/hotelos_runtime_settings?key=eq.cardcom_pending_matches', { method: 'GET' }, env, { requireServiceRole: true });
             if (setRes && setRes.ok) {
               const rows = await setRes.json();
               if (Array.isArray(rows) && rows[0]?.value) {
@@ -329,11 +333,21 @@ export async function onRequest(context) {
         return errorJson('Missing deal_id or booking_id', 400, 'MISSING_DEAL_OR_BOOKING_ID');
       }
 
+      const dealIdStr = String(deal_id);
+      const externalId = dealIdStr.startsWith('deal-') ? dealIdStr : `deal-${dealIdStr}`;
+      const terminal = '184288';
+      const apiName = env.CARDCOM_API_NAME;
+      const apiPassword = env.CARDCOM_API_PASSWORD;
+
+      if (!apiName || !apiPassword) {
+        return errorJson('Cardcom API credentials not configured', 500, 'MISSING_CARDCOM_CREDENTIALS');
+      }
+
       // Fetch match
       let match = null;
       let allRuntimeMatches = [];
       try {
-        const mRes = await fetchPostgrest(`/cardcom_pending_matches?deal_id=eq.${encodeURIComponent(deal_id)}`, { method: 'GET' }, env);
+        const mRes = await fetchPostgrest(`/cardcom_pending_matches?deal_id=eq.${encodeURIComponent(deal_id)}`, { method: 'GET' }, env, { requireServiceRole: true });
         if (mRes && mRes.ok) {
           const mRows = await mRes.json();
           if (Array.isArray(mRows) && mRows[0]) match = mRows[0];
@@ -342,7 +356,7 @@ export async function onRequest(context) {
 
       if (!match) {
         try {
-          const setRes = await fetchPostgrest('/hotelos_runtime_settings?key=eq.cardcom_pending_matches', { method: 'GET' }, env);
+          const setRes = await fetchPostgrest('/hotelos_runtime_settings?key=eq.cardcom_pending_matches', { method: 'GET' }, env, { requireServiceRole: true });
           if (setRes && setRes.ok) {
             const rows = await setRes.json();
             if (Array.isArray(rows) && rows[0]?.value) {
@@ -355,10 +369,14 @@ export async function onRequest(context) {
         } catch (_) {}
       }
 
+      if (!match) {
+        return errorJson('Match proposal not found for deal', 404, 'MATCH_NOT_FOUND');
+      }
+
       // Fetch booking
       let booking = null;
       try {
-        const bRes = await fetchPostgrest(`/hotelos_bookings?id=eq.${encodeURIComponent(booking_id)}`, { method: 'GET' }, env);
+        const bRes = await fetchPostgrest(`/hotelos_bookings?id=eq.${encodeURIComponent(booking_id)}`, { method: 'GET' }, env, { requireServiceRole: true });
         if (bRes && bRes.ok) {
           const bRows = await bRes.json();
           if (Array.isArray(bRows) && bRows[0]) booking = bRows[0];
@@ -369,168 +387,74 @@ export async function onRequest(context) {
         return errorJson('Booking not found', 404, 'BOOKING_NOT_FOUND');
       }
 
-      const amount = match ? Number(match.amount) : 0;
+      const amount = Number(match?.amount || 0);
+      if (!amount || amount <= 0) {
+        return errorJson('Invalid deal amount', 400, 'INVALID_AMOUNT');
+      }
+
       const existingPayments = Array.isArray(booking.clearing_payments) ? [...booking.clearing_payments] : [];
-      const dealIdStr = String(deal_id);
-      const externalId = dealIdStr.startsWith('deal-') ? dealIdStr : `deal-${dealIdStr}`;
-      const terminal = '184288';
       let invoiceInfo = null;
-      const apiName = env.CARDCOM_API_NAME;
-      const apiPassword = env.CARDCOM_API_PASSWORD;
 
-      // 1. Global uniqueness check: Ensure deal is not assigned to a different booking
-      try {
-        const ledgerCheck = await fetchPostgrest(`/cardcom_deal_ledger?terminal=eq.${terminal}&deal_id=eq.${encodeURIComponent(dealIdStr)}`, { method: 'GET' }, env);
-        if (ledgerCheck && ledgerCheck.ok) {
-          const rows = await ledgerCheck.json();
-          if (Array.isArray(rows) && rows[0]) {
-            const existingLedger = rows[0];
-            if (String(existingLedger.booking_id) !== String(booking_id)) {
-              return errorJson('Deal is already assigned to another booking', 409, 'DEAL_ALREADY_ASSIGNED');
-            }
-            if (existingLedger.status === 'invoiced' && existingLedger.document_number) {
-              invoiceInfo = {
-                documentNumber: existingLedger.document_number,
-                documentUrl: existingLedger.document_url || '',
-                dealId: dealIdStr,
-                reused: true
-              };
-            }
-          }
-        }
-      } catch (_) {}
-
-      try {
-        const otherBookings = await fetchPostgrest(`/hotelos_bookings?clearing_payments=cs.[{"deal_number":"${encodeURIComponent(dealIdStr)}"}]&select=id`, { method: 'GET' }, env);
-        if (otherBookings && otherBookings.ok) {
-          const rows = await otherBookings.json();
-          if (Array.isArray(rows) && rows.some((r) => String(r.id) !== String(booking_id))) {
-            return errorJson('Deal is already recorded on another booking', 409, 'DEAL_ALREADY_ASSIGNED');
-          }
-        }
-      } catch (_) {}
-
-      // 2. Exactly-one invoice per deal: Check if document already exists on match or booking
+      // Check if document already exists on match or booking
       const existingDocNumber = String(
         match?.document_number ||
         match?.invoice_number ||
         existingPayments.find((p) => String(p.deal_number || p.txn || '') === dealIdStr)?.invoice ||
         ''
       ).trim();
-
       const existingDocUrl = String(match?.document_url || match?.invoice_url || '');
 
-      if (existingDocNumber && !invoiceInfo) {
-        invoiceInfo = {
-          documentNumber: existingDocNumber,
-          documentUrl: existingDocUrl,
-          dealId: dealIdStr,
-          reused: true
-        };
-      }
+      // 1. Atomic claim in ledger before calling Cardcom or writing booking
+      // The existing-document reuse path must also go through the claim!
+      let existingLedger = null;
+      try {
+        const ledgerCheck = await fetchPostgrest(`/cardcom_deal_ledger?terminal=eq.${terminal}&deal_id=eq.${encodeURIComponent(dealIdStr)}`, { method: 'GET' }, env, { requireServiceRole: true });
+        if (ledgerCheck && ledgerCheck.ok) {
+          const rows = await ledgerCheck.json();
+          if (Array.isArray(rows) && rows[0]) existingLedger = rows[0];
+        }
+      } catch (_) {}
 
-      // 3. Atomic claim in ledger before calling Cardcom
-      if (!invoiceInfo) {
-        try {
-          const claimRes = await fetchPostgrest('/cardcom_deal_ledger', {
-            method: 'POST',
-            body: JSON.stringify({
-              terminal,
-              deal_id: dealIdStr,
-              booking_id,
-              amount,
-              currency: 'ILS',
-              external_id: externalId,
-              status: 'claiming',
-              claimed_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            })
-          }, env);
+      if (existingLedger) {
+        if (String(existingLedger.booking_id) !== String(booking_id)) {
+          return errorJson('Deal is already assigned to another booking', 409, 'DEAL_ALREADY_ASSIGNED');
+        }
 
-          if (!claimRes || !claimRes.ok) {
-            // Already claimed or conflict
-            const checkRes = await fetchPostgrest(`/cardcom_deal_ledger?terminal=eq.${terminal}&deal_id=eq.${encodeURIComponent(dealIdStr)}`, { method: 'GET' }, env);
-            if (checkRes && checkRes.ok) {
-              const rows = await checkRes.json();
-              if (Array.isArray(rows) && rows[0]) {
-                const existingLedger = rows[0];
-                if (String(existingLedger.booking_id) !== String(booking_id)) {
-                  return errorJson('Deal is already assigned to another booking', 409, 'DEAL_ALREADY_ASSIGNED');
-                }
-                if (existingLedger.status === 'invoiced' && existingLedger.document_number) {
-                  invoiceInfo = {
-                    documentNumber: existingLedger.document_number,
-                    documentUrl: existingLedger.document_url || '',
-                    dealId: dealIdStr,
-                    reused: true
-                  };
-                } else if (existingLedger.status === 'claiming') {
-                  return errorJson('Deal invoice creation in progress', 409, 'DEAL_CLAIM_IN_PROGRESS');
-                }
-              }
-            }
-          }
-        } catch (_) {}
-      }
-
-      // 4. Create document in Cardcom if needed
-      if (!invoiceInfo && apiName && apiPassword && amount > 0) {
-        try {
-          const companyName = String(booking.company_name || booking.invoice_company || booking.business_name || '').trim();
-          const taxId = String(booking.tax_id || booking.company_hp || booking.hp || booking.vat_id || booking.business_id || '').trim();
-          let customerName = String(booking.invoice_name || companyName || booking.guest_name || 'אורח').trim();
-          if (taxId && !customerName.includes(taxId)) {
-            customerName = `${customerName} ח.פ. ${taxId}`;
-          }
-          const customLine = String(booking.custom_invoice_line || booking.invoice_line || booking.custom_line || booking.invoice_description || '').trim();
-          const unit = booking.unit_name || booking.unit_id || '';
-          const invoiceDesc = customLine || (unit ? `אירוח ב-${unit}` : 'אירוח');
-
-          const docBody = {
-            ApiName: apiName,
-            ApiPassword: apiPassword,
-            IsSendSMS: false,
-            Document: {
-              DocumentTypeToCreate: 'TaxInvoiceAndReceipt',
-              ExternalId: externalId,
-              Name: customerName,
-              Email: booking.guest_email || 'mialeesresort@mialees.com',
-              Phone: booking.guest_phone || undefined,
-              IsSendByEmail: true,
-              Products: [
-                {
-                  Description: invoiceDesc,
-                  UnitCost: Math.round(amount * 100) / 100,
-                  Quantity: 1,
-                  IsVatFree: false
-                }
-              ],
-              ISOCoinID: '1'
-            },
-            DealNumbers: [{ DealNumber: dealIdStr }]
+        if (existingLedger.status === 'invoiced' && existingLedger.document_number) {
+          invoiceInfo = {
+            documentNumber: existingLedger.document_number,
+            documentUrl: existingLedger.document_url || '',
+            dealId: dealIdStr,
+            reused: true
           };
-
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 15000);
-
+        } else if (existingLedger.status === 'claiming' || existingLedger.status === 'reconciliation_needed') {
+          // Reconcile: Look up transaction in Cardcom by DealNumber / ExternalId before creating a new document
           try {
-            const cardcomRes = await fetch('https://secure.cardcom.solutions/api/v11/Documents/CreateDocument', {
+            const listRes = await fetch('https://secure.cardcom.solutions/api/v11/Transactions/ListTransactions', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(docBody),
-              signal: controller.signal
+              body: JSON.stringify({
+                ApiName: apiName,
+                ApiPassword: apiPassword,
+                LimitForTerminal: Number(terminal),
+                TerminalNumber: Number(terminal),
+                DealNumber: dealIdStr
+              })
             });
-            const cData = await cardcomRes.json().catch(() => null);
-            if (cardcomRes.ok && (cData?.ResponseCode === 0 || cData?.ResponseCode === '0')) {
-              invoiceInfo = {
-                documentNumber: String(cData.DocumentNumber || cData.DocNumber || ''),
-                documentUrl: String(cData.DocumentUrl || cData.DocUrl || cData.Url || ''),
-                dealId: dealIdStr
-              };
-
-              // Update ledger to invoiced
-              try {
-                await fetchPostgrest(`/cardcom_deal_ledger?terminal=eq.${terminal}&deal_id=eq.${encodeURIComponent(dealIdStr)}`, {
+            if (listRes.ok) {
+              const lData = await listRes.json().catch(() => null);
+              const list = lData?.Transactions || lData?.Deals || (Array.isArray(lData) ? lData : []);
+              const foundTxn = list.find((t) => String(t.DealNumber || t.dealNumber || '') === dealIdStr);
+              const recDocNumber = foundTxn?.DocumentNumber || foundTxn?.DocNumber || foundTxn?.InvoiceNumber;
+              const recDocUrl = foundTxn?.DocumentUrl || foundTxn?.DocUrl;
+              if (recDocNumber) {
+                invoiceInfo = {
+                  documentNumber: String(recDocNumber),
+                  documentUrl: String(recDocUrl || ''),
+                  dealId: dealIdStr,
+                  reused: true
+                };
+                const patchRes = await fetchPostgrest(`/cardcom_deal_ledger?terminal=eq.${terminal}&deal_id=eq.${encodeURIComponent(dealIdStr)}`, {
                   method: 'PATCH',
                   body: JSON.stringify({
                     status: 'invoiced',
@@ -539,30 +463,228 @@ export async function onRequest(context) {
                     invoiced_at: new Date().toISOString(),
                     updated_at: new Date().toISOString()
                   })
-                }, env);
-              } catch (_) {}
+                }, env, { requireServiceRole: true });
+                if (!patchRes || !patchRes.ok) {
+                  return errorJson('Failed to update deal ledger with reconciled invoice', 500, 'LEDGER_UPDATE_FAILED');
+                }
+              }
             }
-          } catch (fetchErr) {
-            if (fetchErr.name === 'AbortError') {
-              try {
-                await fetchPostgrest(`/cardcom_deal_ledger?terminal=eq.${terminal}&deal_id=eq.${encodeURIComponent(dealIdStr)}`, {
-                  method: 'PATCH',
-                  body: JSON.stringify({
-                    status: 'reconciliation_needed',
-                    error_message: 'Cardcom timeout',
-                    updated_at: new Date().toISOString()
-                  })
-                }, env);
-              } catch (_) {}
-              return errorJson('Cardcom invoice request timed out. Reconciliation required.', 504, 'CARDCOM_TIMEOUT');
-            }
-            console.warn('[Cloudflare Ops Link] Cardcom Invoice network warning:', fetchErr?.message || 'unknown');
-          } finally {
-            clearTimeout(timer);
+          } catch (_) {}
+
+          if (!invoiceInfo) {
+            return errorJson(`Deal is in ${existingLedger.status} state. Document lookup by ExternalId did not find existing document; manual reconciliation required.`, 409, 'RECONCILIATION_REQUIRED');
           }
-        } catch (err) {
-          console.warn('[Cloudflare Ops Link] Cardcom Invoice error:', err?.message || 'unknown');
+        } else if (existingDocNumber) {
+          const patchClaim = await fetchPostgrest(`/cardcom_deal_ledger?terminal=eq.${terminal}&deal_id=eq.${encodeURIComponent(dealIdStr)}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              status: 'invoiced',
+              document_number: existingDocNumber,
+              document_url: existingDocUrl,
+              invoiced_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+          }, env, { requireServiceRole: true });
+          if (!patchClaim || !patchClaim.ok) {
+            return errorJson('Failed to update deal claim in ledger', 500, 'CLAIM_FAILED');
+          }
+          invoiceInfo = {
+            documentNumber: existingDocNumber,
+            documentUrl: existingDocUrl,
+            dealId: dealIdStr,
+            reused: true
+          };
         }
+      } else {
+        // Ledger row does not exist yet. Claim it atomically.
+        const claimStatus = existingDocNumber ? 'invoiced' : 'claiming';
+        const claimBody = {
+          terminal,
+          deal_id: dealIdStr,
+          booking_id,
+          amount,
+          currency: 'ILS',
+          external_id: externalId,
+          status: claimStatus,
+          document_number: existingDocNumber || null,
+          document_url: existingDocUrl || null,
+          claimed_at: new Date().toISOString(),
+          invoiced_at: existingDocNumber ? new Date().toISOString() : null,
+          updated_at: new Date().toISOString()
+        };
+
+        const claimRes = await fetchPostgrest('/cardcom_deal_ledger', {
+          method: 'POST',
+          body: JSON.stringify(claimBody)
+        }, env, { requireServiceRole: true });
+
+        if (!claimRes || !claimRes.ok) {
+          // Claim conflict or failure: verify ledger row
+          const checkRes = await fetchPostgrest(`/cardcom_deal_ledger?terminal=eq.${terminal}&deal_id=eq.${encodeURIComponent(dealIdStr)}`, { method: 'GET' }, env, { requireServiceRole: true });
+          const rows = (checkRes && checkRes.ok) ? await checkRes.json() : null;
+          if (rows && rows[0]) {
+            const row = rows[0];
+            if (String(row.booking_id) !== String(booking_id)) {
+              return errorJson('Deal is already assigned to another booking', 409, 'DEAL_ALREADY_ASSIGNED');
+            }
+            if (row.status === 'claiming') {
+              return errorJson('Deal invoice creation in progress by another request', 409, 'DEAL_CLAIM_IN_PROGRESS');
+            }
+            if (row.status === 'invoiced' && row.document_number) {
+              invoiceInfo = {
+                documentNumber: row.document_number,
+                documentUrl: row.document_url || '',
+                dealId: dealIdStr,
+                reused: true
+              };
+            }
+          }
+          if (!invoiceInfo) {
+            return errorJson('Failed to acquire atomic claim in ledger', 500, 'CLAIM_FAILED');
+          }
+        } else if (existingDocNumber) {
+          invoiceInfo = {
+            documentNumber: existingDocNumber,
+            documentUrl: existingDocUrl,
+            dealId: dealIdStr,
+            reused: true
+          };
+        }
+      }
+
+      // Check global assignment in other bookings
+      try {
+        const otherBookings = await fetchPostgrest(`/hotelos_bookings?clearing_payments=cs.[{"deal_number":"${encodeURIComponent(dealIdStr)}"}]&select=id`, { method: 'GET' }, env, { requireServiceRole: true });
+        if (otherBookings && otherBookings.ok) {
+          const rows = await otherBookings.json();
+          if (Array.isArray(rows) && rows.some((r) => String(r.id) !== String(booking_id))) {
+            return errorJson('Deal is already recorded on another booking', 409, 'DEAL_ALREADY_ASSIGNED');
+          }
+        }
+      } catch (_) {}
+
+      // 2. Create document in Cardcom if needed
+      if (!invoiceInfo) {
+        const companyName = String(booking.company_name || booking.invoice_company || booking.business_name || '').trim();
+        const taxId = String(booking.tax_id || booking.company_hp || booking.hp || booking.vat_id || booking.business_id || '').trim();
+        let customerName = String(booking.invoice_name || companyName || booking.guest_name || 'אורח').trim();
+        if (taxId && !customerName.includes(taxId)) {
+          customerName = `${customerName} ח.פ. ${taxId}`;
+        }
+        const customLine = String(booking.custom_invoice_line || booking.invoice_line || booking.custom_line || booking.invoice_description || '').trim();
+        const unit = booking.unit_name || booking.unit_id || '';
+        const invoiceDesc = customLine || (unit ? `אירוח ב-${unit}` : 'אירוח');
+
+        const docBody = {
+          ApiName: apiName,
+          ApiPassword: apiPassword,
+          IsSendSMS: false,
+          Document: {
+            DocumentTypeToCreate: 'TaxInvoiceAndReceipt',
+            ExternalId: externalId,
+            Name: customerName,
+            Email: booking.guest_email || 'mialeesresort@mialees.com',
+            Phone: booking.guest_phone || undefined,
+            IsSendByEmail: true,
+            Products: [
+              {
+                Description: invoiceDesc,
+                UnitCost: Math.round(amount * 100) / 100,
+                Quantity: 1,
+                IsVatFree: false
+              }
+            ],
+            ISOCoinID: '1'
+          },
+          DealNumbers: [{ DealNumber: dealIdStr }]
+        };
+
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 15000);
+
+        try {
+          const cardcomRes = await fetch('https://secure.cardcom.solutions/api/v11/Documents/CreateDocument', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(docBody),
+            signal: controller.signal
+          });
+          const cData = await cardcomRes.json().catch(() => null);
+
+          if (!cardcomRes.ok || (cData?.ResponseCode !== undefined && cData?.ResponseCode !== 0 && cData?.ResponseCode !== '0')) {
+            const errMsg = cData?.Description || `Cardcom document creation failed with code ${cData?.ResponseCode}`;
+            await fetchPostgrest(`/cardcom_deal_ledger?terminal=eq.${terminal}&deal_id=eq.${encodeURIComponent(dealIdStr)}`, {
+              method: 'PATCH',
+              body: JSON.stringify({
+                status: 'failed',
+                error_message: errMsg,
+                updated_at: new Date().toISOString()
+              })
+            }, env, { requireServiceRole: true });
+            return errorJson(errMsg, 400, 'CARDCOM_CREATE_DOCUMENT_FAILED');
+          }
+
+          const docNumber = String(cData?.DocumentNumber || cData?.DocNumber || '').trim();
+          if (!docNumber) {
+            await fetchPostgrest(`/cardcom_deal_ledger?terminal=eq.${terminal}&deal_id=eq.${encodeURIComponent(dealIdStr)}`, {
+              method: 'PATCH',
+              body: JSON.stringify({
+                status: 'failed',
+                error_message: 'Cardcom returned empty document number',
+                updated_at: new Date().toISOString()
+              })
+            }, env, { requireServiceRole: true });
+            return errorJson('Cardcom returned empty document number', 502, 'CARDCOM_INVALID_RESPONSE');
+          }
+
+          invoiceInfo = {
+            documentNumber: docNumber,
+            documentUrl: String(cData?.DocumentUrl || cData?.DocUrl || cData?.Url || '').trim(),
+            dealId: dealIdStr
+          };
+
+          const patchLedger = await fetchPostgrest(`/cardcom_deal_ledger?terminal=eq.${terminal}&deal_id=eq.${encodeURIComponent(dealIdStr)}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              status: 'invoiced',
+              document_number: invoiceInfo.documentNumber,
+              document_url: invoiceInfo.documentUrl,
+              invoiced_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+          }, env, { requireServiceRole: true });
+
+          if (!patchLedger || !patchLedger.ok) {
+            return errorJson('Failed to update deal ledger with generated invoice', 500, 'LEDGER_UPDATE_FAILED');
+          }
+        } catch (fetchErr) {
+          if (fetchErr.name === 'AbortError') {
+            await fetchPostgrest(`/cardcom_deal_ledger?terminal=eq.${terminal}&deal_id=eq.${encodeURIComponent(dealIdStr)}`, {
+              method: 'PATCH',
+              body: JSON.stringify({
+                status: 'reconciliation_needed',
+                error_message: 'Cardcom timeout',
+                updated_at: new Date().toISOString()
+              })
+            }, env, { requireServiceRole: true });
+            return errorJson('Cardcom invoice request timed out. Reconciliation required.', 504, 'CARDCOM_TIMEOUT');
+          }
+          await fetchPostgrest(`/cardcom_deal_ledger?terminal=eq.${terminal}&deal_id=eq.${encodeURIComponent(dealIdStr)}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              status: 'failed',
+              error_message: fetchErr?.message || 'Network error',
+              updated_at: new Date().toISOString()
+            })
+          }, env, { requireServiceRole: true });
+          return errorJson(`Cardcom network error: ${fetchErr?.message || 'unknown'}`, 502, 'CARDCOM_NETWORK_ERROR');
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+
+      if (!invoiceInfo || !invoiceInfo.documentNumber) {
+        return errorJson('No invoice generated or found for deal', 500, 'INVOICE_REQUIRED');
       }
 
       const paymentEntry = {
@@ -574,86 +696,69 @@ export async function onRequest(context) {
         approval: match?.approval || undefined,
         last4: match?.last4 || undefined,
         payer_name: match?.payer_name || undefined,
-        invoice: invoiceInfo?.documentNumber || undefined,
-        invoice_url: invoiceInfo?.documentUrl || undefined,
+        invoice: invoiceInfo.documentNumber,
+        invoice_url: invoiceInfo.documentUrl || undefined,
+        document_number: invoiceInfo.documentNumber,
+        document_url: invoiceInfo.documentUrl || undefined,
         terminal,
         recorded_at: new Date().toISOString()
       };
 
-      // 5. Atomic Booking update & DB Write Verification
-      let dbWriteSuccess = false;
-      try {
-        const rpcRes = await fetchPostgrest('/rpc/record_cardcom_deal_payment', {
-          method: 'POST',
-          body: JSON.stringify({
-            p_booking_id: booking_id,
-            p_payment_entry: paymentEntry
-          })
-        }, env);
-        if (rpcRes && rpcRes.ok) {
-          dbWriteSuccess = true;
-        }
-      } catch (_) {}
+      // 3. Atomic Booking update & DB Write Verification via RPC
+      // No fallback read-modify-write! Propagate RPC error directly.
+      const rpcRes = await fetchPostgrest('/rpc/record_cardcom_deal_payment', {
+        method: 'POST',
+        body: JSON.stringify({
+          p_booking_id: booking_id,
+          p_payment_entry: paymentEntry
+        })
+      }, env, { requireServiceRole: true });
 
-      if (!dbWriteSuccess) {
-        const existingIdx = existingPayments.findIndex((p) => String(p.deal_number || p.txn || '') === dealIdStr);
-        if (existingIdx >= 0) {
-          existingPayments[existingIdx] = { ...existingPayments[existingIdx], ...paymentEntry };
-        } else {
-          existingPayments.push(paymentEntry);
+      if (!rpcRes || !rpcRes.ok) {
+        let errBody = null;
+        try { errBody = await rpcRes.json(); } catch (_) {}
+        const errMsg = errBody?.message || errBody?.error || 'Database write failed';
+        if (String(errMsg).includes('DEAL_ALREADY_ASSIGNED')) {
+          return errorJson(errMsg, 409, 'DEAL_ALREADY_ASSIGNED');
         }
-
-        const totalPriceAgorot = Number(booking.total_price_agorot || 0);
-        const totalPaidAgorot = existingPayments.reduce((sum, p) => sum + (Number(p.amount_agorot) || Math.round((Number(p.amount_ils) || 0) * 100)), 0);
-        let paymentStatus = booking.payment_status || 'UNPAID';
-        if (totalPriceAgorot > 0) {
-          if (totalPaidAgorot >= totalPriceAgorot) paymentStatus = 'PAID';
-          else if (totalPaidAgorot > 0) paymentStatus = 'PARTIAL';
-        } else if (totalPaidAgorot > 0) {
-          paymentStatus = 'PAID';
+        if (String(errMsg).includes('BOOKING_NOT_FOUND')) {
+          return errorJson(errMsg, 404, 'BOOKING_NOT_FOUND');
         }
-
-        const bUpdateRes = await fetchPostgrest(`/hotelos_bookings?id=eq.${encodeURIComponent(booking_id)}`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            clearing_payments: existingPayments,
-            payment_status: paymentStatus,
-            payment_mode: 'CARD'
-          })
-        }, env);
-
-        if (!bUpdateRes || !bUpdateRes.ok) {
-          console.error('[Cloudflare Ops Link] Database write failed for booking:', booking_id, bUpdateRes?.status);
-          return errorJson('Database write failed', 500, 'DB_WRITE_FAILED');
-        }
-        dbWriteSuccess = true;
+        return errorJson(errMsg, 500, 'DB_WRITE_FAILED');
       }
 
-      // Update pending match
-      try {
-        await fetchPostgrest(`/cardcom_pending_matches?deal_id=eq.${encodeURIComponent(deal_id)}`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            status: 'manual_linked',
-            selected_booking_id: booking_id,
-            guest_name: booking.guest_name || booking.invoice_name || null,
-            unit_name: booking.unit_name || booking.unit_id || null,
-            invoice_number: invoiceInfo?.documentNumber || null,
-            invoice_url: invoiceInfo?.documentUrl || null,
-            approved_at: new Date().toISOString(),
-            payment_recorded_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-        }, env);
-      } catch (_) {}
+      // 4. Update pending match record and check result
+      const matchUpdateRes = await fetchPostgrest(`/cardcom_pending_matches?deal_id=eq.${encodeURIComponent(deal_id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'manual_linked',
+          selected_booking_id: booking_id,
+          guest_name: booking.guest_name || booking.invoice_name || null,
+          unit_name: booking.unit_name || booking.unit_id || null,
+          invoice_number: invoiceInfo.documentNumber,
+          invoice_url: invoiceInfo.documentUrl || null,
+          document_number: invoiceInfo.documentNumber,
+          document_url: invoiceInfo.documentUrl || null,
+          approved_at: new Date().toISOString(),
+          payment_recorded_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+      }, env, { requireServiceRole: true });
+
+      if (!matchUpdateRes || !matchUpdateRes.ok) {
+        console.error('[Cloudflare Ops Link] Failed to update cardcom_pending_matches:', matchUpdateRes?.status);
+        return errorJson('Failed to update pending match record', 500, 'PENDING_MATCH_UPDATE_FAILED');
+      }
 
       if (allRuntimeMatches.length > 0 && match) {
         match.status = 'manual_linked';
         match.selected_booking_id = booking_id;
         match.guest_name = booking.guest_name || booking.invoice_name || null;
         match.unit_name = booking.unit_name || booking.unit_id || null;
-        match.invoice_number = invoiceInfo?.documentNumber || null;
-        match.invoice_url = invoiceInfo?.documentUrl || null;
+        match.invoice_number = invoiceInfo.documentNumber;
+        match.invoice_url = invoiceInfo.documentUrl || null;
+        match.document_number = invoiceInfo.documentNumber;
+        match.document_url = invoiceInfo.documentUrl || null;
         match.approved_at = new Date().toISOString();
         match.payment_recorded_at = new Date().toISOString();
         try {
@@ -663,7 +768,7 @@ export async function onRequest(context) {
               value: JSON.stringify(allRuntimeMatches),
               updated_at: new Date().toISOString()
             })
-          }, env);
+          }, env, { requireServiceRole: true });
         } catch (_) {}
       }
 
@@ -676,17 +781,23 @@ export async function onRequest(context) {
       try { body = await request.json(); } catch {}
       const staffName = body.staff_name || 'צוות';
       const reason = body.reason || 'חירום: עקיפת מודל חוסם להמשך עבודה בדסק';
+      let auditRes = null;
       try {
-        await fetchPostgrest('/cardcom_terminal_audit_log', {
+        auditRes = await fetchPostgrest('/cardcom_terminal_audit_log', {
           method: 'POST',
           body: JSON.stringify({
             action: 'EMERGENCY_ESCAPE',
             staff_name: staffName,
             details: { reason, timestamp: new Date().toISOString() }
           })
-        }, env);
+        }, env, { requireServiceRole: true });
       } catch (err) {
-        console.warn('[Cardcom Audit] Escape note:', err?.message || 'ok');
+        console.error('[Cardcom Audit] Escape insert error:', err?.message || 'unknown');
+        return errorJson('Failed to record emergency escape audit log', 500, 'AUDIT_INSERT_FAILED');
+      }
+
+      if (!auditRes || !auditRes.ok) {
+        return errorJson('Failed to record emergency escape audit log in database', 500, 'AUDIT_INSERT_FAILED');
       }
       return json({ ok: true, escaped_at: new Date().toISOString() });
     }
@@ -698,18 +809,20 @@ export async function onRequest(context) {
       const { deal_id, reason, status } = body;
       const targetStatus = status || (reason === 'test' ? 'test' : 'ignored');
       if (deal_id) {
-        try {
-          await fetchPostgrest(`/cardcom_pending_matches?deal_id=eq.${encodeURIComponent(deal_id)}`, {
-            method: 'PATCH',
-            body: JSON.stringify({
-              status: targetStatus,
-              updated_at: new Date().toISOString()
-            })
-          }, env);
-        } catch (_) {}
+        const patchRes = await fetchPostgrest(`/cardcom_pending_matches?deal_id=eq.${encodeURIComponent(deal_id)}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            status: targetStatus,
+            updated_at: new Date().toISOString()
+          })
+        }, env, { requireServiceRole: true });
+
+        if (!patchRes || !patchRes.ok) {
+          return errorJson('Failed to update deal status', 500, 'STATUS_UPDATE_FAILED');
+        }
 
         try {
-          const setRes = await fetchPostgrest('/hotelos_runtime_settings?key=eq.cardcom_pending_matches', { method: 'GET' }, env);
+          const setRes = await fetchPostgrest('/hotelos_runtime_settings?key=eq.cardcom_pending_matches', { method: 'GET' }, env, { requireServiceRole: true });
           if (setRes && setRes.ok) {
             const rows = await setRes.json();
             if (Array.isArray(rows) && rows[0]?.value) {
@@ -725,7 +838,7 @@ export async function onRequest(context) {
                       value: JSON.stringify(allRuntime),
                       updated_at: new Date().toISOString()
                     })
-                  }, env);
+                  }, env, { requireServiceRole: true });
                 }
               }
             }

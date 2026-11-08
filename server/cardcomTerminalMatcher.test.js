@@ -1135,7 +1135,8 @@ test('ops link endpoint integration: creates invoice with ExternalId, reuses exi
     assert.equal(dupRes.status, 409);
     assert.equal(dupBody.error, 'DEAL_ALREADY_ASSIGNED');
 
-    // 3. Reject with 500 DB_WRITE_FAILED if database write fails (never return success)
+    // 3. Reject with 500 DB_WRITE_FAILED if database write fails (never return success and NEVER fallback to read-modify-write PATCH)
+    let bookingPatchCalled = false;
     globalThis.fetch = async (urlStr, opts = {}) => {
       if (String(urlStr).includes('/cardcom_pending_matches')) {
         return new Response(JSON.stringify([mockMatch]), { status: 200 });
@@ -1146,6 +1147,13 @@ test('ops link endpoint integration: creates invoice with ExternalId, reuses exi
       if (String(urlStr).includes('/cardcom_deal_ledger')) {
         return new Response(JSON.stringify([]), { status: 200 });
       }
+      if (String(urlStr).includes('CreateDocument')) {
+        return new Response(JSON.stringify({
+          ResponseCode: 0,
+          DocumentNumber: 'INV-TEST-FAIL',
+          DocumentUrl: 'https://cardcom/doc/fail'
+        }), { status: 200 });
+      }
       if (String(urlStr).includes('/hotelos_bookings?clearing_payments=cs.')) {
         return new Response(JSON.stringify([]), { status: 200 });
       }
@@ -1153,6 +1161,7 @@ test('ops link endpoint integration: creates invoice with ExternalId, reuses exi
         return new Response(JSON.stringify({ error: 'DB_ERROR' }), { status: 500 });
       }
       if (String(urlStr).includes('/hotelos_bookings?id=eq.b-link-101') && opts.method === 'PATCH') {
+        bookingPatchCalled = true;
         return new Response(JSON.stringify({ error: 'PATCH_FAILED' }), { status: 500 });
       }
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
@@ -1179,8 +1188,304 @@ test('ops link endpoint integration: creates invoice with ExternalId, reuses exi
     const failBody = await failRes.json();
     assert.equal(failRes.status, 500);
     assert.equal(failBody.error, 'DB_WRITE_FAILED');
+    assert.equal(bookingPatchCalled, false, 'Must NOT fallback to read-modify-write PATCH on bookings table');
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('concurrent link requests (Promise.all) produce exactly one Cardcom document', async () => {
+  const { onRequest } = await import('../functions/api/ops/[[path]].js');
+
+  const baseEnv = {
+    SUPABASE_URL: 'https://mock.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'mock-service-key',
+    HOTELOS_DESK_PIN: '1234',
+    CARDCOM_API_NAME: 'test-cardcom-user',
+    CARDCOM_API_PASSWORD: 'test-cardcom-password'
+  };
+
+  const mockBooking = {
+    id: 'b-conc-1',
+    guest_name: 'שרה לוי',
+    total_price_agorot: 80000,
+    clearing_payments: []
+  };
+
+  const mockMatch = {
+    deal_id: 'deal-conc-123',
+    amount: 800,
+    approval: '887766',
+    last4: '4321',
+    payer_name: 'שרה לוי'
+  };
+
+  let cardcomDocCount = 0;
+  let ledgerState = null;
+
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (url, opts = {}) => {
+      const urlStr = String(url);
+
+      if (urlStr.includes('/cardcom_pending_matches')) {
+        return new Response(JSON.stringify([mockMatch]), { status: 200 });
+      }
+      if (urlStr.includes('/hotelos_bookings?id=eq.b-conc-1')) {
+        return new Response(JSON.stringify([mockBooking]), { status: 200 });
+      }
+      if (urlStr.includes('/hotelos_bookings?clearing_payments=cs.')) {
+        return new Response(JSON.stringify([]), { status: 200 });
+      }
+      if (urlStr.includes('/cardcom_deal_ledger') && (!opts.method || opts.method === 'GET')) {
+        return new Response(JSON.stringify(ledgerState ? [ledgerState] : []), { status: 200 });
+      }
+      if (urlStr.includes('/cardcom_deal_ledger') && opts.method === 'POST') {
+        if (ledgerState) {
+          // Conflict
+          return new Response(JSON.stringify({ error: 'Conflict' }), { status: 409 });
+        }
+        ledgerState = { ...JSON.parse(opts.body), status: 'claiming' };
+        return new Response(JSON.stringify(ledgerState), { status: 201 });
+      }
+      if (urlStr.includes('/cardcom_deal_ledger') && opts.method === 'PATCH') {
+        const patch = JSON.parse(opts.body);
+        ledgerState = { ...ledgerState, ...patch };
+        return new Response(JSON.stringify(ledgerState), { status: 200 });
+      }
+      if (urlStr.includes('CreateDocument')) {
+        cardcomDocCount++;
+        // Small delay to simulate network latency
+        await new Promise((r) => setTimeout(r, 20));
+        return new Response(JSON.stringify({
+          ResponseCode: 0,
+          DocumentNumber: 'INV-CONC-888',
+          DocumentUrl: 'https://cardcom/doc/888'
+        }), { status: 200 });
+      }
+      if (urlStr.includes('/rpc/record_cardcom_deal_payment')) {
+        return new Response(JSON.stringify({ ok: true, new_balance_agorot: 0 }), { status: 200 });
+      }
+
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    const makeReq = () => new Request('https://test/api/ops/cardcom-terminal/link', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer 1234'
+      },
+      body: JSON.stringify({
+        deal_id: 'deal-conc-123',
+        booking_id: 'b-conc-1'
+      })
+    });
+
+    const [res1, res2] = await Promise.all([
+      onRequest({ request: makeReq(), params: { path: ['cardcom-terminal', 'link'] }, env: baseEnv }),
+      onRequest({ request: makeReq(), params: { path: ['cardcom-terminal', 'link'] }, env: baseEnv })
+    ]);
+
+    const body1 = await res1.json();
+    const body2 = await res2.json();
+
+    // Exactly one Cardcom document creation was called
+    assert.equal(cardcomDocCount, 1, 'Cardcom CreateDocument was called exactly once');
+
+    // One request succeeded with 200; the other either succeeded or returned 409 DEAL_CLAIM_IN_PROGRESS
+    const statuses = [res1.status, res2.status].sort();
+    assert.ok(statuses.includes(200), 'At least one request succeeded');
+    if (res1.status === 200 && res2.status === 200) {
+      assert.equal(body1.invoice.documentNumber, 'INV-CONC-888');
+      assert.equal(body2.invoice.documentNumber, 'INV-CONC-888');
+    } else {
+      const rejected = res1.status !== 200 ? body1 : body2;
+      assert.equal(rejected.error, 'DEAL_CLAIM_IN_PROGRESS');
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('ops link fails immediately before Cardcom or booking write if atomic claim fails', async () => {
+  const { onRequest } = await import('../functions/api/ops/[[path]].js');
+
+  const baseEnv = {
+    SUPABASE_URL: 'https://mock.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'mock-service-key',
+    HOTELOS_DESK_PIN: '1234',
+    CARDCOM_API_NAME: 'test-cardcom-user',
+    CARDCOM_API_PASSWORD: 'test-cardcom-password'
+  };
+
+  const mockBooking = { id: 'b-claim-fail', guest_name: 'משה דוד', total_price_agorot: 50000, clearing_payments: [] };
+  const mockMatch = { deal_id: 'deal-claim-fail-99', amount: 500, approval: '112233' };
+
+  let cardcomCalled = false;
+  let rpcCalled = false;
+
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (url, opts = {}) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/cardcom_pending_matches')) return new Response(JSON.stringify([mockMatch]), { status: 200 });
+      if (urlStr.includes('/hotelos_bookings?id=eq.b-claim-fail')) return new Response(JSON.stringify([mockBooking]), { status: 200 });
+      if (urlStr.includes('/cardcom_deal_ledger') && (!opts.method || opts.method === 'GET')) {
+        return new Response(JSON.stringify([]), { status: 200 });
+      }
+      if (urlStr.includes('/cardcom_deal_ledger') && opts.method === 'POST') {
+        // Claim POST fails with 500 and verify returns empty
+        return new Response(JSON.stringify({ error: 'DB_ERROR' }), { status: 500 });
+      }
+      if (urlStr.includes('CreateDocument')) {
+        cardcomCalled = true;
+        return new Response(JSON.stringify({ ResponseCode: 0 }), { status: 200 });
+      }
+      if (urlStr.includes('/rpc/record_cardcom_deal_payment')) {
+        rpcCalled = true;
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    const req = new Request('https://test/api/ops/cardcom-terminal/link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer 1234' },
+      body: JSON.stringify({ deal_id: 'deal-claim-fail-99', booking_id: 'b-claim-fail' })
+    });
+
+    const res = await onRequest({ request: req, params: { path: ['cardcom-terminal', 'link'] }, env: baseEnv });
+    const body = await res.json();
+
+    assert.equal(res.status, 500);
+    assert.equal(body.error, 'CLAIM_FAILED');
+    assert.equal(cardcomCalled, false, 'Cardcom CreateDocument must NOT be called when claim fails');
+    assert.equal(rpcCalled, false, 'RPC must NOT be called when claim fails');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('ops link timeout reconciliation looks up document by ExternalId and avoids duplicate CreateDocument', async () => {
+  const { onRequest } = await import('../functions/api/ops/[[path]].js');
+
+  const baseEnv = {
+    SUPABASE_URL: 'https://mock.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'mock-service-key',
+    HOTELOS_DESK_PIN: '1234',
+    CARDCOM_API_NAME: 'test-cardcom-user',
+    CARDCOM_API_PASSWORD: 'test-cardcom-password'
+  };
+
+  const mockBooking = { id: 'b-rec-1', guest_name: 'יונתן כהן', total_price_agorot: 50000, clearing_payments: [] };
+  const mockMatch = { deal_id: 'deal-rec-555', amount: 500, approval: '998877' };
+
+  let createDocCalled = false;
+  let listTxnsCalled = false;
+
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (url, opts = {}) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/cardcom_pending_matches')) return new Response(JSON.stringify([mockMatch]), { status: 200 });
+      if (urlStr.includes('/hotelos_bookings?id=eq.b-rec-1')) return new Response(JSON.stringify([mockBooking]), { status: 200 });
+      if (urlStr.includes('/cardcom_deal_ledger') && (!opts.method || opts.method === 'GET')) {
+        // Deal is in reconciliation_needed state
+        return new Response(JSON.stringify([{
+          terminal: '184288',
+          deal_id: 'deal-rec-555',
+          booking_id: 'b-rec-1',
+          status: 'reconciliation_needed',
+          external_id: 'deal-deal-rec-555'
+        }]), { status: 200 });
+      }
+      if (urlStr.includes('/cardcom_deal_ledger') && opts.method === 'PATCH') {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (urlStr.includes('ListTransactions')) {
+        listTxnsCalled = true;
+        return new Response(JSON.stringify({
+          ResponseCode: 0,
+          Transactions: [{
+            DealNumber: 'deal-rec-555',
+            DocumentNumber: 'INV-RECONCILED-77',
+            DocumentUrl: 'https://cardcom/doc/reconciled-77'
+          }]
+        }), { status: 200 });
+      }
+      if (urlStr.includes('CreateDocument')) {
+        createDocCalled = true;
+        return new Response(JSON.stringify({ ResponseCode: 0 }), { status: 200 });
+      }
+      if (urlStr.includes('/rpc/record_cardcom_deal_payment')) {
+        return new Response(JSON.stringify({ ok: true, new_balance_agorot: 0 }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    const req = new Request('https://test/api/ops/cardcom-terminal/link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer 1234' },
+      body: JSON.stringify({ deal_id: 'deal-rec-555', booking_id: 'b-rec-1' })
+    });
+
+    const res = await onRequest({ request: req, params: { path: ['cardcom-terminal', 'link'] }, env: baseEnv });
+    const body = await res.json();
+
+    assert.equal(res.status, 200);
+    assert.equal(body.ok, true);
+    assert.equal(body.invoice.documentNumber, 'INV-RECONCILED-77');
+    assert.equal(body.invoice.reused, true);
+    assert.equal(listTxnsCalled, true, 'Must query Cardcom for existing document');
+    assert.equal(createDocCalled, false, 'Must NOT call CreateDocument again during reconciliation');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('migration 009 SQL upgrades existing schema and handles fresh schema', async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const migPath = path.join(__dirname, '..', 'migrations', '009_cardcom_terminal_sync_and_ledger.sql');
+
+  assert.ok(fs.existsSync(migPath), '009 migration file must exist');
+  const sql = fs.readFileSync(migPath, 'utf8');
+
+  // Verify search_path and security definer
+  assert.ok(sql.includes('SET search_path = public, pg_temp'), 'Must set search_path = public, pg_temp');
+  assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.record_cardcom_deal_payment(TEXT, JSONB) FROM PUBLIC, anon, authenticated;'), 'Must revoke execute from PUBLIC, anon, authenticated');
+  assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.record_cardcom_deal_payment(TEXT, JSONB) TO service_role;'), 'Must grant execute to service_role');
+
+  // Verify additive ALTER TABLE statements for upgrading existing schema
+  assert.ok(sql.includes('ALTER TABLE public.cardcom_seen_deals ADD COLUMN IF NOT EXISTS updated_at'), 'Must add updated_at to seen_deals');
+  assert.ok(sql.includes('ALTER TABLE public.cardcom_pending_matches ALTER COLUMN id TYPE TEXT;'), 'Must alter pending_matches id column to text');
+  assert.ok(sql.includes('ALTER TABLE public.cardcom_pending_matches ADD COLUMN IF NOT EXISTS document_number TEXT;'), 'Must add document_number column');
+  assert.ok(sql.includes('ALTER TABLE public.cardcom_pending_matches ADD COLUMN IF NOT EXISTS document_url TEXT;'), 'Must add document_url column');
+  assert.ok(sql.includes('ALTER TABLE public.cardcom_pending_matches ADD COLUMN IF NOT EXISTS is_test BOOLEAN DEFAULT false;'), 'Must add is_test column');
+  assert.ok(sql.includes('ALTER TABLE public.cardcom_pending_matches ADD COLUMN IF NOT EXISTS guest_name TEXT;'), 'Must add guest_name column');
+  assert.ok(sql.includes('ALTER TABLE public.cardcom_pending_matches ADD COLUMN IF NOT EXISTS unit_name TEXT;'), 'Must add unit_name column');
+
+  // Verify unique indexes
+  assert.ok(sql.includes('CREATE UNIQUE INDEX IF NOT EXISTS uq_cardcom_seen_deals ON public.cardcom_seen_deals (terminal_number, deal_id);'), 'Must create unique index for seen deals');
+  assert.ok(sql.includes('CREATE UNIQUE INDEX IF NOT EXISTS uq_cardcom_pending_matches ON public.cardcom_pending_matches (terminal_number, deal_id);'), 'Must create unique index for pending matches');
+  assert.ok(sql.includes('CREATE UNIQUE INDEX IF NOT EXISTS uq_cardcom_deal_ledger ON public.cardcom_deal_ledger (terminal, deal_id);'), 'Must create unique index for deal ledger');
+
+  // Verify old permissive policy removal and restrictive grants
+  assert.ok(sql.includes('DROP POLICY IF EXISTS "lan_cardcom_seen_deals_all" ON public.cardcom_seen_deals;'), 'Must drop permissive seen deals policy');
+  assert.ok(sql.includes('DROP POLICY IF EXISTS "lan_cardcom_pending_matches_all" ON public.cardcom_pending_matches;'), 'Must drop permissive pending matches policy');
+  assert.ok(sql.includes('REVOKE ALL ON public.cardcom_seen_deals FROM anon, authenticated, PUBLIC;'), 'Must revoke anon/authenticated from seen deals');
+  assert.ok(sql.includes('REVOKE ALL ON public.cardcom_pending_matches FROM anon, authenticated, PUBLIC;'), 'Must revoke anon/authenticated from pending matches');
+  assert.ok(sql.includes('GRANT ALL ON public.cardcom_seen_deals TO service_role;'), 'Must grant seen deals to service_role only');
+  assert.ok(sql.includes('GRANT ALL ON public.cardcom_pending_matches TO service_role;'), 'Must grant pending matches to service_role only');
+
+  // Verify FOR UPDATE locking on ledger row before checking global assignment in RPC
+  const lockIndex = sql.indexOf('FOR UPDATE');
+  const globalCheckIndex = sql.indexOf('v_existing_booking_id');
+  assert.ok(lockIndex > 0 && globalCheckIndex > 0 && lockIndex < globalCheckIndex, 'Must lock ledger row with FOR UPDATE before checking global booking assignment');
 });
 

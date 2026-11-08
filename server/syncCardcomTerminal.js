@@ -154,11 +154,10 @@ export async function pollCardcomTerminal({
   for (const deal of deals) {
     const dealId = String(deal.dealId);
 
-    // Check if deal is already recorded in any booking
+    // Check if deal is already recorded in any booking (dedupe strictly by exact dealId, never by approval number)
     const alreadyLinkedBooking = bookings.find((b) => (
       (Array.isArray(b.clearing_payments) ? b.clearing_payments : []).some((row) => (
         String(row.deal_number || row.txn || '').trim() === dealId
-        || (deal.approval && String(row.approval || row.ref || '').trim() === deal.approval)
       ))
     ));
 
@@ -178,9 +177,16 @@ export async function pollCardcomTerminal({
       continue;
     }
 
-    // If deal has already been seen and processed
+    // If deal has already been seen, verify it doesn't need repair (seen without pending)
     if (store.hasSeenDeal(dealId)) {
-      continue;
+      const existingMatch = store.pendingMatches.get(dealId);
+      const existingSeen = store.seenDeals.get(dealId);
+      const isResolved = existingSeen?.status === 'linked' || existingSeen?.status === 'ignored' || existingSeen?.status === 'test';
+      if (existingMatch || isResolved) {
+        continue;
+      }
+      // "Seen without pending" detected - repair by re-evaluating candidates and generating proposal
+      console.log(`[syncCardcomTerminal] Repairing seen-without-pending deal ${dealId}`);
     }
 
     const isTest = isTestTransaction(deal);
