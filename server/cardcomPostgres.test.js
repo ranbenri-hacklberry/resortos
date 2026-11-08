@@ -13,7 +13,10 @@ const migLegacyPath = path.join(__dirname, 'migration_cardcom_terminal_matches.s
 
 const DATABASE_URL = process.env.DATABASE_URL;
 
-test('PostgreSQL Real Integration Tests for Cardcom Terminal Sync & Ledger', { skip: !DATABASE_URL }, async (t) => {
+test('PostgreSQL Real Integration Tests for Cardcom Terminal Sync & Ledger', async (t) => {
+  if (!DATABASE_URL) {
+    throw new Error('DATABASE_URL is required for PostgreSQL integration tests');
+  }
   const { Client } = pg;
   const adminClient = new Client({ connectionString: DATABASE_URL });
   await adminClient.connect();
@@ -333,7 +336,7 @@ test('PostgreSQL Real Integration Tests for Cardcom Terminal Sync & Ledger', { s
       };
 
       try {
-        const mockRequest = new Request('https://resortos.internal/api/ops/matches/link', {
+        const mockRequest = new Request('https://resortos.internal/api/ops/cardcom-terminal/link', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -348,6 +351,7 @@ test('PostgreSQL Real Integration Tests for Cardcom Terminal Sync & Ledger', { s
 
         const mockEnv = {
           CHECKOUT_MAILBOX_SECRET: 'test-secret',
+          SUPABASE_SERVICE_ROLE_KEY: 'test-service-key',
           CARDCOM_TERMINAL: '184288',
           CARDCOM_API_NAME: 'test_api',
           CARDCOM_API_PASSWORD: 'test_pass'
@@ -355,13 +359,13 @@ test('PostgreSQL Real Integration Tests for Cardcom Terminal Sync & Ledger', { s
 
         const response = await onRequest({
           request: mockRequest,
-          params: { path: ['matches', 'link'] },
+          params: { path: ['cardcom-terminal', 'link'] },
           env: mockEnv
         });
 
         assert.equal(response.status, 409, 'Handler must return 409 on DB conflict');
         const body = await response.json();
-        assert.equal(body.code, 'DEAL_ALREADY_ASSIGNED');
+        assert.equal(body.error, 'DEAL_ALREADY_ASSIGNED');
         assert.equal(cardcomCreateDocCalls, 0, 'Cardcom CreateDocument must be called exactly ZERO times when DB fails');
       } finally {
         globalThis.fetch = originalFetch;

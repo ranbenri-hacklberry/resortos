@@ -48,5 +48,9 @@ jobs:
       - name: Run Test Suite
         run: npm test
 
+      - name: Run PostgreSQL Integration Tests
+        if: always()
+        run: node --test server/cardcomPostgres.test.js
+
       - name: Build Guest Portal
         run: npm run build:guest

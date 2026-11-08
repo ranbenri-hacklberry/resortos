@@ -450,11 +450,26 @@ export async function onRequest(context) {
       const receiptData = await receiptRpcRes.json().catch(() => ({}));
       let invoiceInfo = null;
 
-      // If already invoiced in ledger, reuse document directly
-      if (receiptData?.ledger_status === 'invoiced' && receiptData?.document_number) {
+      // 1. If document_number is already known (from imported proposal or ledger), validate and reuse it, never create a new one
+      const knownDocNumber = String(
+        receiptData?.document_number ||
+        match?.document_number ||
+        match?.invoice_number ||
+        match?.invoice ||
+        ''
+      ).trim();
+
+      const knownDocUrl = String(
+        receiptData?.document_url ||
+        match?.document_url ||
+        match?.invoice_url ||
+        ''
+      ).trim();
+
+      if (knownDocNumber) {
         invoiceInfo = {
-          documentNumber: String(receiptData.document_number),
-          documentUrl: String(receiptData.document_url || ''),
+          documentNumber: knownDocNumber,
+          documentUrl: knownDocUrl,
           dealId: dealIdStr,
           reused: true
         };
@@ -485,7 +500,7 @@ export async function onRequest(context) {
         }
 
         const claimData = await claimRes.json().catch(() => ({}));
-        if (claimData?.status === 'invoiced' && claimData?.document_number) {
+        if (claimData?.document_number) {
           invoiceInfo = {
             documentNumber: String(claimData.document_number),
             documentUrl: String(claimData.document_url || ''),
@@ -495,15 +510,14 @@ export async function onRequest(context) {
         }
       }
 
-      // 3. Reconciliation per Cardcom KB 499:
-      // Look up transaction by TranzactionId / DealNumber before creating a new document
+      // 3. Cardcom lookup per KB 499: fail-closed ALWAYS, not only when wasAmbiguous
       const wasAmbiguous = Boolean(
         receiptData?.ledger_status === 'reconciliation_needed' ||
         receiptData?.status === 'reconciliation_needed'
       );
 
-      let reconciliationError = null;
-      let totalPagesChecked = 0;
+      let lookupError = null;
+      let hitPageCap = false;
       if (!invoiceInfo) {
         const fromDateStr = formatCardcomDate(match?.deal_time || new Date(Date.now() - 30 * 86400000).toISOString());
         const toDateStr = formatCardcomDate(new Date(Date.now() + 86400000).toISOString());
@@ -515,7 +529,6 @@ export async function onRequest(context) {
 
         try {
           while (page <= maxPages) {
-            totalPagesChecked = page;
             const listRes = await fetch('https://secure.cardcom.solutions/api/v11/Transactions/ListTransactions', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -542,12 +555,12 @@ export async function onRequest(context) {
             });
 
             if (!lData || typeof lData !== 'object' || (lData.ResponseCode !== 0 && lData.ResponseCode !== '0')) {
-              throw new Error(`ListTransactions non-zero ResponseCode: ${lData?.ResponseCode} (${lData?.Description || 'no description'})`);
+              throw new Error(`ListTransactions non-zero ResponseCode: ${lData?.ResponseCode} (${lData?.Description || 'malformed response'})`);
             }
 
             const list = lData.Tranzactions || lData.Transactions;
             if (!Array.isArray(list)) {
-              throw new Error('ListTransactions response missing Tranzactions array');
+              throw new Error('ListTransactions response missing Tranzactions array (malformed response)');
             }
 
             // Strictly match by documented TranzactionId or DealNumber per KB 499
@@ -572,22 +585,51 @@ export async function onRequest(context) {
             if (list.length < pageSize) {
               break;
             }
+
+            if (page === maxPages) {
+              hitPageCap = true;
+            }
             page += 1;
           }
         } catch (err) {
-          reconciliationError = err;
+          lookupError = err;
         } finally {
           clearTimeout(timeout);
         }
 
-        // Fail-closed after ambiguous outcome:
-        // Any error, uncertainty, or missing match after an ambiguous outcome means STOP
-        // with reconciliation_needed and a staff alert, never an automatic CreateDocument.
-        if (wasAmbiguous && !invoiceInfo) {
-          const reason = reconciliationError
-            ? `Reconciliation error: ${reconciliationError.message}`
-            : `Reconciliation checked ${totalPagesChecked} page(s) and found no confirmed document for deal ${dealIdStr}`;
+        // Fail-closed ALWAYS:
+        // Any lookup error, malformed response or page cap means reconciliation_needed plus a staff alert, with no CreateDocument.
+        if (lookupError || hitPageCap) {
+          const reason = lookupError
+            ? `Cardcom lookup error: ${lookupError.message}`
+            : `Cardcom lookup reached page cap (${maxPages} pages) without resolving deal ${dealIdStr}`;
 
+          await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
+            method: 'POST',
+            body: JSON.stringify({
+              p_terminal: terminal,
+              p_deal_id: dealIdStr,
+              p_error_message: reason
+            })
+          }, env, { requireServiceRole: true });
+
+          console.error('[STAFF ALERT] Cardcom deal reconciliation required:', {
+            terminal,
+            dealId: dealIdStr,
+            bookingId: booking_id,
+            reason
+          });
+
+          return errorJson(
+            `Deal ${dealIdStr} requires staff reconciliation (${reason}).`,
+            409,
+            'RECONCILIATION_REQUIRED'
+          );
+        }
+
+        // Also if the deal was in an ambiguous state and lookup did not confirm an existing document:
+        if (wasAmbiguous && !invoiceInfo) {
+          const reason = `Reconciliation completed without finding confirmed document after ambiguous outcome for deal ${dealIdStr}`;
           await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
             method: 'POST',
             body: JSON.stringify({

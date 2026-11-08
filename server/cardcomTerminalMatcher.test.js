@@ -1738,5 +1738,160 @@ test('ops link reconciliation: fail-closed after ambiguous outcome (409 and neve
   }
 });
 
+test('ops link document reuse: already known document_number on proposal is reused without Cardcom calls', async () => {
+  const { onRequest } = await import('../functions/api/ops/[[path]].js');
+
+  const baseEnv = {
+    SUPABASE_URL: 'https://mock.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'mock-service-key',
+    CHECKOUT_MAILBOX_SECRET: 'test-secret',
+    CARDCOM_API_NAME: 'test-cardcom-user',
+    CARDCOM_API_PASSWORD: 'test-cardcom-password'
+  };
+
+  const mockBooking = { id: 'b-reuse-known-1', guest_name: 'דוד לוי', total_price_agorot: 30000, clearing_payments: [] };
+  const mockMatch = {
+    deal_id: 'deal-reuse-known-1',
+    amount: 300,
+    document_number: 'INV-KNOWN-PROPOSAL-42',
+    document_url: 'https://cardcom/doc/known-42'
+  };
+
+  let listTxnsCalls = 0;
+  let createDocCalls = 0;
+  let finalizeCalls = 0;
+  const originalFetch = globalThis.fetch;
+
+  try {
+    globalThis.fetch = async (url) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/cardcom_pending_matches')) return new Response(JSON.stringify([mockMatch]), { status: 200 });
+      if (urlStr.includes('/hotelos_bookings?id=eq.b-reuse-known-1')) return new Response(JSON.stringify([mockBooking]), { status: 200 });
+      if (urlStr.includes('/rpc/record_cardcom_deal_receipt')) {
+        return new Response(JSON.stringify({
+          ok: true,
+          booking_id: 'b-reuse-known-1',
+          payment_status: 'PARTIAL',
+          ledger_status: 'pending_invoice'
+        }), { status: 200 });
+      }
+      if (urlStr.includes('ListTransactions')) {
+        listTxnsCalls += 1;
+        return new Response(JSON.stringify({ ResponseCode: 0, Tranzactions: [] }), { status: 200 });
+      }
+      if (urlStr.includes('CreateDocument')) {
+        createDocCalls += 1;
+        return new Response(JSON.stringify({ ResponseCode: 0 }), { status: 200 });
+      }
+      if (urlStr.includes('/rpc/finalize_cardcom_deal_invoice')) {
+        finalizeCalls += 1;
+        return new Response(JSON.stringify({ ok: true, status: 'invoiced', document_number: 'INV-KNOWN-PROPOSAL-42' }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    const req = new Request('https://test/api/ops/cardcom-terminal/link', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer test-secret'
+      },
+      body: JSON.stringify({
+        deal_id: 'deal-reuse-known-1',
+        booking_id: 'b-reuse-known-1',
+        terminal: '184288'
+      })
+    });
+
+    const res = await onRequest({ request: req, params: { path: ['cardcom-terminal', 'link'] }, env: baseEnv });
+    assert.equal(res.status, 200, 'Must succeed when document is reused');
+    const body = await res.json();
+    assert.equal(body.invoice?.reused, true);
+    assert.equal(body.invoice?.documentNumber, 'INV-KNOWN-PROPOSAL-42');
+    assert.equal(listTxnsCalls, 0, 'Must NOT query ListTransactions when document is already known');
+    assert.equal(createDocCalls, 0, 'Must NEVER call CreateDocument when document is already known');
+    assert.equal(finalizeCalls, 1, 'Must finalize with known document number');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('ops link lookup: fail-closed ALWAYS on lookup error (non-zero ResponseCode or malformed response)', async () => {
+  const { onRequest } = await import('../functions/api/ops/[[path]].js');
+
+  const baseEnv = {
+    SUPABASE_URL: 'https://mock.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'mock-service-key',
+    CHECKOUT_MAILBOX_SECRET: 'test-secret',
+    CARDCOM_API_NAME: 'test-cardcom-user',
+    CARDCOM_API_PASSWORD: 'test-cardcom-password'
+  };
+
+  const mockBooking = { id: 'b-always-fail-1', guest_name: 'אבי כהן', total_price_agorot: 20000, clearing_payments: [] };
+  const mockMatch = { deal_id: 'deal-always-fail-1', amount: 200 };
+
+  let createDocCalls = 0;
+  let markReconCalls = 0;
+  const originalFetch = globalThis.fetch;
+
+  try {
+    globalThis.fetch = async (url) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/cardcom_pending_matches')) return new Response(JSON.stringify([mockMatch]), { status: 200 });
+      if (urlStr.includes('/hotelos_bookings?id=eq.b-always-fail-1')) return new Response(JSON.stringify([mockBooking]), { status: 200 });
+      if (urlStr.includes('/rpc/record_cardcom_deal_receipt')) {
+        return new Response(JSON.stringify({
+          ok: true,
+          booking_id: 'b-always-fail-1',
+          payment_status: 'PARTIAL',
+          ledger_status: 'pending_invoice'
+        }), { status: 200 });
+      }
+      if (urlStr.includes('/rpc/claim_cardcom_deal_retry')) {
+        return new Response(JSON.stringify({ ok: true, status: 'claiming_retry' }), { status: 200 });
+      }
+      if (urlStr.includes('ListTransactions')) {
+        // Return non-zero ResponseCode to trigger lookup error on fresh deal
+        return new Response(JSON.stringify({
+          ResponseCode: 5,
+          Description: 'Internal Cardcom Error'
+        }), { status: 200 });
+      }
+      if (urlStr.includes('CreateDocument')) {
+        createDocCalls += 1;
+        return new Response(JSON.stringify({ ResponseCode: 0 }), { status: 200 });
+      }
+      if (urlStr.includes('/rpc/mark_cardcom_deal_reconciliation_needed')) {
+        markReconCalls += 1;
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    const req = new Request('https://test/api/ops/cardcom-terminal/link', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer test-secret'
+      },
+      body: JSON.stringify({
+        deal_id: 'deal-always-fail-1',
+        booking_id: 'b-always-fail-1',
+        terminal: '184288'
+      })
+    });
+
+    const res = await onRequest({ request: req, params: { path: ['cardcom-terminal', 'link'] }, env: baseEnv });
+    assert.equal(res.status, 409, 'Lookup error must fail-closed ALWAYS with 409');
+    const body = await res.json();
+    assert.equal(body.error, 'RECONCILIATION_REQUIRED');
+    assert.equal(createDocCalls, 0, 'CreateDocument must NEVER be called when lookup errors');
+    assert.equal(markReconCalls, 1, 'Must mark reconciliation_needed on lookup error');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
 
 
