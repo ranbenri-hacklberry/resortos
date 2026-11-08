@@ -653,6 +653,347 @@ test('PostgreSQL Real Integration Tests for Cardcom Terminal Sync & Ledger', asy
       }
     });
 
+    // Test 7: Deterministic endpoint + PostgreSQL interleaving tests for both duplicate invoice race scenarios
+    await t.test('Test 7: Deterministic interleaving race: assert exactly one CreateDocument and one receipt', async (t7) => {
+      // Scenario 1: A validates "no document" -> B issues invoice -> A claims, re-verifies and reuses (0 duplicate CreateDocument)
+      await t7.test('Scenario 1: Concurrent worker B issues invoice before worker A claims; worker A re-verifies and reuses', async () => {
+        const { dbName, client } = await createFreshDb('interleave_scen1');
+        const originalFetch = globalThis.fetch;
+        let createDocCalls = 0;
+        let cardcomHasDoc = false;
+
+        try {
+          await client.query(`
+            CREATE TABLE IF NOT EXISTS public.hotelos_bookings (
+              id TEXT PRIMARY KEY,
+              guest_name TEXT,
+              total_price_agorot BIGINT DEFAULT 0,
+              clearing_payments JSONB DEFAULT '[]'::jsonb,
+              payment_status TEXT DEFAULT 'UNPAID',
+              payment_mode TEXT,
+              updated_at TIMESTAMPTZ DEFAULT now()
+            );
+          `);
+          await client.query(mig009Sql);
+
+          await client.query(`
+            INSERT INTO public.hotelos_bookings (id, guest_name, total_price_agorot, clearing_payments, payment_status)
+            VALUES ('b-scen1', 'משה כהן', 50000, '[]'::jsonb, 'UNPAID');
+          `);
+
+          await client.query(`
+            INSERT INTO public.cardcom_pending_matches (id, deal_id, terminal_number, amount, status)
+            VALUES ('match-scen1', 'deal-scen1', '184288', 500, 'pending');
+          `);
+
+          globalThis.fetch = async (url, options = {}) => {
+            const urlStr = String(url);
+
+            if (urlStr.includes('/api/v11/Transactions/ListTransactions')) {
+              const baseTxn = {
+                TranzactionId: 'deal-scen1',
+                TerminalNumber: 184288,
+                Amount: 500,
+                CoinId: '1'
+              };
+              if (cardcomHasDoc) {
+                baseTxn.DocumentNumber = 'INV-SCEN1-999';
+                baseTxn.DocumentUrl = 'https://cardcom/doc/scen1';
+              }
+              return new Response(JSON.stringify({
+                ResponseCode: 0,
+                Tranzactions: [baseTxn]
+              }), { status: 200 });
+            }
+
+            if (urlStr.includes('/api/v11/Documents/CreateDocument')) {
+              createDocCalls += 1;
+              cardcomHasDoc = true;
+              return new Response(JSON.stringify({
+                ResponseCode: 0,
+                DocumentNumber: 'INV-SCEN1-999',
+                DocumentUrl: 'https://cardcom/doc/scen1'
+              }), { status: 200 });
+            }
+
+            // Real PostgREST DB bridge executing against Postgres client
+            if (urlStr.includes('/cardcom_pending_matches?deal_id=eq.')) {
+              const res = await client.query(`SELECT * FROM public.cardcom_pending_matches WHERE deal_id = $1;`, ['deal-scen1']);
+              return new Response(JSON.stringify(res.rows), { status: 200 });
+            }
+
+            if (urlStr.includes('/hotelos_bookings?id=eq.')) {
+              const res = await client.query(`SELECT * FROM public.hotelos_bookings WHERE id = $1;`, ['b-scen1']);
+              return new Response(JSON.stringify(res.rows), { status: 200 });
+            }
+
+            if (urlStr.includes('/rpc/record_cardcom_deal_receipt')) {
+              const payload = JSON.parse(options.body || '{}');
+              const rpcRes = await client.query(
+                'SELECT record_cardcom_deal_receipt($1, $2::jsonb) AS result;',
+                [payload.p_booking_id, JSON.stringify(payload.p_receipt_entry)]
+              );
+
+              // Interleaving trigger: right after Request A records its receipt, Request B interleaves!
+              // Request B claims, creates invoice in Cardcom, and finalizes invoice in Postgres
+              createDocCalls += 1;
+              cardcomHasDoc = true;
+              await client.query(`
+                SELECT finalize_cardcom_deal_invoice('b-scen1', 'deal-scen1', '184288', 'INV-SCEN1-999', 'https://cardcom/doc/scen1');
+              `);
+
+              return new Response(JSON.stringify(rpcRes.rows[0].result), { status: 200 });
+            }
+
+            if (urlStr.includes('/rpc/claim_cardcom_deal_retry')) {
+              const payload = JSON.parse(options.body || '{}');
+              try {
+                const rpcRes = await client.query(
+                  'SELECT claim_cardcom_deal_retry($1, $2, $3) AS result;',
+                  [payload.p_terminal, payload.p_deal_id, payload.p_booking_id]
+                );
+                return new Response(JSON.stringify(rpcRes.rows[0].result), { status: 200 });
+              } catch (err) {
+                return new Response(JSON.stringify({ error: err.message, message: err.message }), { status: 409 });
+              }
+            }
+
+            if (urlStr.includes('/rpc/finalize_cardcom_deal_invoice')) {
+              const payload = JSON.parse(options.body || '{}');
+              const rpcRes = await client.query(
+                'SELECT finalize_cardcom_deal_invoice($1, $2, $3, $4, $5) AS result;',
+                [payload.p_booking_id, payload.p_deal_number, payload.p_terminal, payload.p_document_number, payload.p_document_url]
+              );
+              return new Response(JSON.stringify(rpcRes.rows[0].result), { status: 200 });
+            }
+
+            if (urlStr.includes('/rpc/mark_cardcom_deal_reconciliation_needed')) {
+              const payload = JSON.parse(options.body || '{}');
+              const rpcRes = await client.query(
+                'SELECT mark_cardcom_deal_reconciliation_needed($1, $2, $3, $4, $5) AS result;',
+                [payload.p_terminal, payload.p_deal_id, payload.p_error_message, payload.p_booking_id || null, payload.p_amount || null]
+              );
+              return new Response(JSON.stringify(rpcRes.rows[0].result), { status: 200 });
+            }
+
+            if (urlStr.includes('/cardcom_terminal_audit_log')) {
+              return new Response(JSON.stringify({ ok: true }), { status: 201 });
+            }
+
+            return originalFetch(url, options);
+          };
+
+          const mockEnv = {
+            CHECKOUT_MAILBOX_SECRET: 'test-secret',
+            SUPABASE_SERVICE_ROLE_KEY: 'test-service-key',
+            SUPABASE_URL: 'https://mock.supabase.co',
+            CARDCOM_TERMINAL: '184288',
+            CARDCOM_API_NAME: 'test_api',
+            CARDCOM_API_PASSWORD: 'test_pass'
+          };
+
+          const reqA = new Request('https://resortos.internal/api/ops/cardcom-terminal/link', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-hotelos-mailbox': 'test-secret'
+            },
+            body: JSON.stringify({
+              deal_id: 'deal-scen1',
+              booking_id: 'b-scen1',
+              terminal: '184288'
+            })
+          });
+
+          // Request A executes
+          const resA = await onRequest({
+            request: reqA,
+            params: { path: ['cardcom-terminal', 'link'] },
+            env: mockEnv
+          });
+
+          assert.equal(resA.status, 200, 'Request A must succeed with 200 on verified reuse');
+          const bodyA = await resA.json();
+          assert.equal(bodyA.ok, true);
+          assert.equal(bodyA.invoice.documentNumber, 'INV-SCEN1-999');
+          assert.equal(bodyA.invoice.reused, true, 'Invoice must be marked reused by Request A');
+
+          // Strict assertions:
+          // 1. Exactly ONE CreateDocument call was made across the entire test
+          assert.equal(createDocCalls, 1, 'Exactly ONE CreateDocument call must be made across the entire test (no duplicate invoice)');
+
+          // 2. Exactly ONE receipt in hotelos_bookings.clearing_payments
+          const bCheck = await client.query(`SELECT payment_status, clearing_payments FROM public.hotelos_bookings WHERE id = 'b-scen1';`);
+          assert.equal(bCheck.rows[0].payment_status, 'PAID');
+          assert.equal(bCheck.rows[0].clearing_payments.length, 1, 'Booking must have exactly ONE receipt');
+          assert.equal(bCheck.rows[0].clearing_payments[0].document_number, 'INV-SCEN1-999');
+          assert.equal(bCheck.rows[0].clearing_payments[0].invoice_status, 'invoiced');
+        } finally {
+          globalThis.fetch = originalFetch;
+          await dropDb(dbName, client);
+        }
+      });
+
+      // Scenario 2: A validates "no document" -> B times out and marks reconciliation_needed -> A's claim is rejected, A never creates
+      await t7.test('Scenario 2: Concurrent worker B marks reconciliation_needed; worker A claim is rejected and never creates', async () => {
+        const { dbName, client } = await createFreshDb('interleave_scen2');
+        const originalFetch = globalThis.fetch;
+        let createDocCalls = 0;
+
+        try {
+          await client.query(`
+            CREATE TABLE IF NOT EXISTS public.hotelos_bookings (
+              id TEXT PRIMARY KEY,
+              guest_name TEXT,
+              total_price_agorot BIGINT DEFAULT 0,
+              clearing_payments JSONB DEFAULT '[]'::jsonb,
+              payment_status TEXT DEFAULT 'UNPAID',
+              payment_mode TEXT,
+              updated_at TIMESTAMPTZ DEFAULT now()
+            );
+          `);
+          await client.query(mig009Sql);
+
+          await client.query(`
+            INSERT INTO public.hotelos_bookings (id, guest_name, total_price_agorot, clearing_payments, payment_status)
+            VALUES ('b-scen2', 'רחל לוי', 50000, '[]'::jsonb, 'UNPAID');
+          `);
+
+          await client.query(`
+            INSERT INTO public.cardcom_pending_matches (id, deal_id, terminal_number, amount, status)
+            VALUES ('match-scen2', 'deal-scen2', '184288', 500, 'pending');
+          `);
+
+          globalThis.fetch = async (url, options = {}) => {
+            const urlStr = String(url);
+
+            if (urlStr.includes('/api/v11/Transactions/ListTransactions')) {
+              return new Response(JSON.stringify({
+                ResponseCode: 0,
+                Tranzactions: [{
+                  TranzactionId: 'deal-scen2',
+                  TerminalNumber: 184288,
+                  Amount: 500,
+                  CoinId: '1'
+                }]
+              }), { status: 200 });
+            }
+
+            if (urlStr.includes('/api/v11/Documents/CreateDocument')) {
+              createDocCalls += 1;
+              return new Response(JSON.stringify({
+                ResponseCode: 0,
+                DocumentNumber: 'INV-SCEN2-DUPE'
+              }), { status: 200 });
+            }
+
+            if (urlStr.includes('/cardcom_pending_matches?deal_id=eq.')) {
+              const res = await client.query(`SELECT * FROM public.cardcom_pending_matches WHERE deal_id = $1;`, ['deal-scen2']);
+              return new Response(JSON.stringify(res.rows), { status: 200 });
+            }
+
+            if (urlStr.includes('/hotelos_bookings?id=eq.')) {
+              const res = await client.query(`SELECT * FROM public.hotelos_bookings WHERE id = $1;`, ['b-scen2']);
+              return new Response(JSON.stringify(res.rows), { status: 200 });
+            }
+
+            if (urlStr.includes('/rpc/record_cardcom_deal_receipt')) {
+              const payload = JSON.parse(options.body || '{}');
+              const rpcRes = await client.query(
+                'SELECT record_cardcom_deal_receipt($1, $2::jsonb) AS result;',
+                [payload.p_booking_id, JSON.stringify(payload.p_receipt_entry)]
+              );
+
+              // Interleaving trigger: Request B timed out at Cardcom and marked reconciliation_needed
+              createDocCalls += 1; // Simulated Request B's attempt that timed out
+              await client.query(`
+                SELECT mark_cardcom_deal_reconciliation_needed('184288', 'deal-scen2', 'Cardcom timeout during Request B', 'b-scen2', 500);
+              `);
+
+              return new Response(JSON.stringify(rpcRes.rows[0].result), { status: 200 });
+            }
+
+            if (urlStr.includes('/rpc/claim_cardcom_deal_retry')) {
+              const payload = JSON.parse(options.body || '{}');
+              try {
+                const rpcRes = await client.query(
+                  'SELECT claim_cardcom_deal_retry($1, $2, $3) AS result;',
+                  [payload.p_terminal, payload.p_deal_id, payload.p_booking_id]
+                );
+                return new Response(JSON.stringify(rpcRes.rows[0].result), { status: 200 });
+              } catch (err) {
+                return new Response(JSON.stringify({ error: err.message, message: err.message }), { status: 409 });
+              }
+            }
+
+            if (urlStr.includes('/rpc/mark_cardcom_deal_reconciliation_needed')) {
+              const payload = JSON.parse(options.body || '{}');
+              const rpcRes = await client.query(
+                'SELECT mark_cardcom_deal_reconciliation_needed($1, $2, $3, $4, $5) AS result;',
+                [payload.p_terminal, payload.p_deal_id, payload.p_error_message, payload.p_booking_id || null, payload.p_amount || null]
+              );
+              return new Response(JSON.stringify(rpcRes.rows[0].result), { status: 200 });
+            }
+
+            if (urlStr.includes('/cardcom_terminal_audit_log')) {
+              return new Response(JSON.stringify({ ok: true }), { status: 201 });
+            }
+
+            return originalFetch(url, options);
+          };
+
+          const mockEnv = {
+            CHECKOUT_MAILBOX_SECRET: 'test-secret',
+            SUPABASE_SERVICE_ROLE_KEY: 'test-service-key',
+            SUPABASE_URL: 'https://mock.supabase.co',
+            CARDCOM_TERMINAL: '184288',
+            CARDCOM_API_NAME: 'test_api',
+            CARDCOM_API_PASSWORD: 'test_pass'
+          };
+
+          const reqA = new Request('https://resortos.internal/api/ops/cardcom-terminal/link', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-hotelos-mailbox': 'test-secret'
+            },
+            body: JSON.stringify({
+              deal_id: 'deal-scen2',
+              booking_id: 'b-scen2',
+              terminal: '184288'
+            })
+          });
+
+          // Request A executes: its stale pre-claim snapshot thought it wasn't ambiguous,
+          // but the claim RPC must reject claiming reconciliation_needed!
+          const resA = await onRequest({
+            request: reqA,
+            params: { path: ['cardcom-terminal', 'link'] },
+            env: mockEnv
+          });
+
+          assert.equal(resA.status, 409, 'Request A must be rejected with 409 RECONCILIATION_REQUIRED');
+          const bodyA = await resA.json();
+          assert.equal(bodyA.error, 'RECONCILIATION_REQUIRED');
+
+          // Strict assertions:
+          // 1. Exactly ONE CreateDocument call was made (Request B's attempt); Request A NEVER called CreateDocument!
+          assert.equal(createDocCalls, 1, 'Request A must NEVER call CreateDocument after ambiguous outcome (exactly one CreateDocument call)');
+
+          // 2. Exactly ONE receipt in hotelos_bookings.clearing_payments
+          const bCheck = await client.query(`SELECT payment_status, clearing_payments FROM public.hotelos_bookings WHERE id = 'b-scen2';`);
+          assert.equal(bCheck.rows[0].clearing_payments.length, 1, 'Booking must have exactly ONE receipt');
+
+          // 3. Ledger status remains reconciliation_needed
+          const lCheck = await client.query(`SELECT status FROM public.cardcom_deal_ledger WHERE deal_id = 'deal-scen2';`);
+          assert.equal(lCheck.rows[0].status, 'reconciliation_needed');
+        } finally {
+          globalThis.fetch = originalFetch;
+          await dropDb(dbName, client);
+        }
+      });
+    });
+
   } finally {
     await adminClient.end();
   }

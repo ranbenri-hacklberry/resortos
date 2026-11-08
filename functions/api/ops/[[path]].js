@@ -885,20 +885,145 @@ export async function onRequest(context) {
         if (cErrCombined.includes('DEAL_CLAIM_IN_PROGRESS')) {
           return errorJson(cErr?.message || 'DEAL_CLAIM_IN_PROGRESS', 409, 'DEAL_CLAIM_IN_PROGRESS');
         }
+        if (cErrCombined.includes('RECONCILIATION_REQUIRED')) {
+          return errorJson(cErr?.message || 'Deal is in reconciliation_needed state and requires staff resolution', 409, 'RECONCILIATION_REQUIRED');
+        }
         return errorJson(cErr?.message || cErr?.error || 'Failed to claim deal for invoice generation', 500, 'CLAIM_FAILED');
       }
 
-      const claimData = await claimRes.json().catch(() => ({}));
-      if (claimData?.document_number) {
-        const claimDoc = String(claimData.document_number).trim();
-        if (matchCheck.docNumber && matchCheck.docNumber === claimDoc) {
-          invoiceInfo = {
-            documentNumber: claimDoc,
-            documentUrl: matchCheck.docUrl || String(claimData.document_url || ''),
-            dealId: dealIdStr,
-            reused: true
-          };
+      const claimData = await claimRes.json().catch(() => null);
+      if (!claimData || typeof claimData !== 'object' || claimData.ok !== true) {
+        return errorJson('Malformed or invalid response from claim RPC', 500, 'CLAIM_FAILED');
+      }
+
+      // Check if the claim returned an existing document (Scenario 1: another worker created/finalized it in the meantime)
+      const claimedDocNumber = String(claimData.document_number || '').trim();
+      const isAlreadyInvoiced = claimData.status === 'invoiced' || claimData.outcome === 'already_invoiced' || Boolean(claimedDocNumber);
+
+      if (isAlreadyInvoiced) {
+        if (!claimedDocNumber) {
+          return errorJson(`Deal ${dealIdStr} is marked invoiced but document number is missing`, 409, 'RECONCILIATION_REQUIRED');
         }
+
+        // Re-verify the existing document against Cardcom (KB 499 lookup)
+        const recheck = await searchCardcomTransaction({
+          terminal,
+          dealIdStr,
+          apiName,
+          apiPassword,
+          dealTime: match?.deal_time
+        });
+
+        if (recheck.error || recheck.hitPageCap || !recheck.txn) {
+          const reason = recheck.error
+            ? `Cardcom lookup error during document reuse verification: ${recheck.error.message}`
+            : (recheck.hitPageCap
+                ? `Cardcom lookup reached page cap during document reuse verification`
+                : `Cardcom transaction not found during document reuse verification`);
+
+          await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
+            method: 'POST',
+            body: JSON.stringify({
+              p_terminal: terminal,
+              p_deal_id: dealIdStr,
+              p_error_message: reason,
+              p_booking_id: booking_id,
+              p_amount: amount
+            })
+          }, env, { requireServiceRole: true });
+
+          console.error('[STAFF ALERT] Cardcom deal reconciliation required:', {
+            terminal,
+            dealId: dealIdStr,
+            bookingId: booking_id,
+            reason
+          });
+
+          return errorJson(`Deal ${dealIdStr} document reuse verification failed (${reason}).`, 409, 'RECONCILIATION_REQUIRED');
+        }
+
+        const recheckMatch = validateCardcomTransactionMatch({
+          txn: recheck.txn,
+          terminal,
+          dealIdStr,
+          expectedAmount: amount,
+          expectedDocNumber: claimedDocNumber
+        });
+
+        if (!recheckMatch.valid) {
+          await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
+            method: 'POST',
+            body: JSON.stringify({
+              p_terminal: terminal,
+              p_deal_id: dealIdStr,
+              p_error_message: recheckMatch.reason,
+              p_booking_id: booking_id,
+              p_amount: amount
+            })
+          }, env, { requireServiceRole: true });
+
+          console.error('[STAFF ALERT] Cardcom deal reconciliation required:', {
+            terminal,
+            dealId: dealIdStr,
+            bookingId: booking_id,
+            reason: recheckMatch.reason
+          });
+
+          return errorJson(`Deal ${dealIdStr} document reuse verification failed (${recheckMatch.reason}).`, 409, 'RECONCILIATION_REQUIRED');
+        }
+
+        // Authoritatively verified! Reuse the document, finalize it in the booking, and NEVER create
+        invoiceInfo = {
+          documentNumber: claimedDocNumber,
+          documentUrl: recheckMatch.docUrl || String(claimData.document_url || ''),
+          dealId: dealIdStr,
+          reused: true
+        };
+
+        const finalizeRes = await fetchPostgrest('/rpc/finalize_cardcom_deal_invoice', {
+          method: 'POST',
+          body: JSON.stringify({
+            p_booking_id: booking_id,
+            p_deal_number: dealIdStr,
+            p_terminal: terminal,
+            p_document_number: String(invoiceInfo.documentNumber),
+            p_document_url: String(invoiceInfo.documentUrl || '')
+          })
+        }, env, { requireServiceRole: true });
+
+        if (!finalizeRes || !finalizeRes.ok) {
+          let fErr = null;
+          try { fErr = await finalizeRes.json(); } catch (_) {}
+          console.error('[STAFF ALERT] finalize_cardcom_deal_invoice failed on verified reuse:', fErr);
+          return errorJson('Failed to finalize verified invoice in booking', 500, 'FINALIZE_FAILED');
+        }
+
+        return json({
+          ok: true,
+          booking_id,
+          deal_id: dealIdStr,
+          payment: {
+            status: receiptData?.payment_status || 'PARTIAL',
+            amount,
+            currency: 'ILS',
+            terminal
+          },
+          invoice: invoiceInfo
+        });
+      }
+
+      // Check for explicit safe-to-create claim acquisition (Requirement 1)
+      const isClaimAcquired = (
+        (claimData.outcome === 'claim_acquired' || claimData.status === 'claiming_retry') &&
+        !claimData.document_number
+      );
+
+      if (!isClaimAcquired) {
+        return errorJson(
+          `Unexpected claim outcome for deal ${dealIdStr}. Only a successfully acquired claim authorizes invoice creation.`,
+          409,
+          'INVALID_CLAIM_OUTCOME'
+        );
       }
 
       // 4. Create document in Cardcom if still not found

@@ -387,46 +387,62 @@ AS $$
 DECLARE
   v_ledger RECORD;
 BEGIN
+  -- Only pending_invoice can transition to claiming_retry.
+  -- Stale pre-claim evidence from reconciliation_needed must NOT authorize automatic creation.
   UPDATE public.cardcom_deal_ledger
   SET status = 'claiming_retry', updated_at = now()
   WHERE terminal = p_terminal
     AND deal_id = p_deal_id
-    AND status IN ('pending_invoice', 'reconciliation_needed')
+    AND status = 'pending_invoice'
     AND booking_id = p_booking_id
   RETURNING * INTO v_ledger;
 
-  IF NOT FOUND THEN
-    -- Check if it exists with other status or other booking
-    SELECT * INTO v_ledger
-    FROM public.cardcom_deal_ledger
-    WHERE terminal = p_terminal AND deal_id = p_deal_id;
-
-    IF NOT FOUND THEN
-      RAISE EXCEPTION 'LEDGER_ENTRY_NOT_FOUND: Deal % not found in ledger', p_deal_id;
-    END IF;
-
-    IF v_ledger.booking_id <> p_booking_id THEN
-      RAISE EXCEPTION 'DEAL_ALREADY_ASSIGNED: Deal % belongs to booking %', p_deal_id, v_ledger.booking_id;
-    END IF;
-
-    IF v_ledger.status = 'invoiced' THEN
-      RETURN jsonb_build_object('ok', true, 'status', 'invoiced', 'document_number', v_ledger.document_number, 'document_url', v_ledger.document_url);
-    END IF;
-
-    IF v_ledger.status = 'claiming_retry' THEN
-      RAISE EXCEPTION 'DEAL_CLAIM_IN_PROGRESS: Deal % is currently being retried by another worker', p_deal_id;
-    END IF;
-
-    RAISE EXCEPTION 'INVALID_CLAIM_STATE: Deal % is in status %', p_deal_id, v_ledger.status;
+  IF FOUND THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'outcome', 'claim_acquired',
+      'status', v_ledger.status,
+      'terminal', v_ledger.terminal,
+      'deal_id', v_ledger.deal_id,
+      'booking_id', v_ledger.booking_id
+    );
   END IF;
 
-  RETURN jsonb_build_object(
-    'ok', true,
-    'status', v_ledger.status,
-    'terminal', v_ledger.terminal,
-    'deal_id', v_ledger.deal_id,
-    'booking_id', v_ledger.booking_id
-  );
+  -- Not found in pending_invoice for this booking: inspect current state in ledger
+  SELECT * INTO v_ledger
+  FROM public.cardcom_deal_ledger
+  WHERE terminal = p_terminal AND deal_id = p_deal_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'LEDGER_ENTRY_NOT_FOUND: Deal % not found in ledger', p_deal_id;
+  END IF;
+
+  IF v_ledger.booking_id <> p_booking_id THEN
+    RAISE EXCEPTION 'DEAL_ALREADY_ASSIGNED: Deal % belongs to booking %', p_deal_id, v_ledger.booking_id;
+  END IF;
+
+  IF v_ledger.status = 'invoiced' THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'outcome', 'already_invoiced',
+      'status', 'invoiced',
+      'terminal', v_ledger.terminal,
+      'deal_id', v_ledger.deal_id,
+      'booking_id', v_ledger.booking_id,
+      'document_number', v_ledger.document_number,
+      'document_url', v_ledger.document_url
+    );
+  END IF;
+
+  IF v_ledger.status = 'reconciliation_needed' THEN
+    RAISE EXCEPTION 'RECONCILIATION_REQUIRED: Deal % is in reconciliation_needed state and requires staff resolution', p_deal_id;
+  END IF;
+
+  IF v_ledger.status = 'claiming_retry' THEN
+    RAISE EXCEPTION 'DEAL_CLAIM_IN_PROGRESS: Deal % is currently being retried by another worker', p_deal_id;
+  END IF;
+
+  RAISE EXCEPTION 'INVALID_CLAIM_STATE: Deal % is in status %', p_deal_id, v_ledger.status;
 END;
 $$;
 

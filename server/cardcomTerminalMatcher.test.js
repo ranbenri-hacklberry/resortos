@@ -2798,3 +2798,170 @@ test('ops link: rejected deal validation (missing in Cardcom) stops with 409 and
     globalThis.fetch = originalFetch;
   }
 });
+
+test('ops link: race scenario 1 - claim returns existing document, worker re-verifies and reuses without calling CreateDocument', async () => {
+  const { onRequest } = await import('../functions/api/ops/[[path]].js');
+
+  const baseEnv = {
+    SUPABASE_URL: 'https://mock.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'mock-service-key',
+    CHECKOUT_MAILBOX_SECRET: 'test-secret',
+    CARDCOM_API_NAME: 'test-cardcom-user',
+    CARDCOM_API_PASSWORD: 'test-cardcom-password',
+    CARDCOM_TERMINAL: '184288'
+  };
+
+  const mockBooking = { id: 'b-race-u1', guest_name: 'דן', total_price_agorot: 50000, clearing_payments: [] };
+  const mockMatch = { deal_id: 'deal-race-u1', amount: 500, terminal: '184288' };
+
+  let createDocCalls = 0;
+  let finalizeCalls = 0;
+  let cardcomHasDoc = false;
+  const originalFetch = globalThis.fetch;
+
+  try {
+    globalThis.fetch = async (url, options = {}) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/cardcom_pending_matches')) return new Response(JSON.stringify([mockMatch]), { status: 200 });
+      if (urlStr.includes('/hotelos_bookings?id=eq.b-race-u1')) return new Response(JSON.stringify([mockBooking]), { status: 200 });
+      if (urlStr.includes('ListTransactions')) {
+        const txn = {
+          TranzactionId: 'deal-race-u1',
+          TerminalNumber: 184288,
+          Amount: 500,
+          CoinId: '1'
+        };
+        if (cardcomHasDoc) {
+          txn.DocumentNumber = 'INV-RACE-U1';
+          txn.DocumentUrl = 'https://cardcom/doc/u1';
+        }
+        return new Response(JSON.stringify({
+          ResponseCode: 0,
+          Tranzactions: [txn]
+        }), { status: 200 });
+      }
+      if (urlStr.includes('/rpc/record_cardcom_deal_receipt')) {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (urlStr.includes('/rpc/claim_cardcom_deal_retry')) {
+        // Simulates worker B having finalized the invoice in the meantime
+        cardcomHasDoc = true;
+        return new Response(JSON.stringify({
+          ok: true,
+          status: 'invoiced',
+          outcome: 'already_invoiced',
+          document_number: 'INV-RACE-U1',
+          document_url: 'https://cardcom/doc/u1'
+        }), { status: 200 });
+      }
+      if (urlStr.includes('/rpc/finalize_cardcom_deal_invoice')) {
+        finalizeCalls += 1;
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (urlStr.includes('CreateDocument')) {
+        createDocCalls += 1;
+        return new Response(JSON.stringify({ ResponseCode: 0 }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    const req = new Request('https://test/api/ops/cardcom-terminal/link', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer test-secret'
+      },
+      body: JSON.stringify({
+        deal_id: 'deal-race-u1',
+        booking_id: 'b-race-u1',
+        terminal: '184288'
+      })
+    });
+
+    const res = await onRequest({ request: req, params: { path: ['cardcom-terminal', 'link'] }, env: baseEnv });
+    assert.equal(res.status, 200, 'Must return 200 on verified reuse');
+    const body = await res.json();
+    assert.equal(body.ok, true);
+    assert.equal(body.invoice.documentNumber, 'INV-RACE-U1');
+    assert.equal(body.invoice.reused, true);
+    assert.equal(createDocCalls, 0, 'Must NEVER call CreateDocument when claim returns existing document');
+    assert.equal(finalizeCalls, 1, 'Must finalize verified reused document in booking');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('ops link: race scenario 2 - worker B marks reconciliation_needed, worker A claim is rejected and never calls CreateDocument', async () => {
+  const { onRequest } = await import('../functions/api/ops/[[path]].js');
+
+  const baseEnv = {
+    SUPABASE_URL: 'https://mock.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'mock-service-key',
+    CHECKOUT_MAILBOX_SECRET: 'test-secret',
+    CARDCOM_API_NAME: 'test-cardcom-user',
+    CARDCOM_API_PASSWORD: 'test-cardcom-password',
+    CARDCOM_TERMINAL: '184288'
+  };
+
+  const mockBooking = { id: 'b-race-u2', guest_name: 'רחל', total_price_agorot: 50000, clearing_payments: [] };
+  const mockMatch = { deal_id: 'deal-race-u2', amount: 500, terminal: '184288' };
+
+  let createDocCalls = 0;
+  const originalFetch = globalThis.fetch;
+
+  try {
+    globalThis.fetch = async (url, options = {}) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/cardcom_pending_matches')) return new Response(JSON.stringify([mockMatch]), { status: 200 });
+      if (urlStr.includes('/hotelos_bookings?id=eq.b-race-u2')) return new Response(JSON.stringify([mockBooking]), { status: 200 });
+      if (urlStr.includes('ListTransactions')) {
+        return new Response(JSON.stringify({
+          ResponseCode: 0,
+          Tranzactions: [{
+            TranzactionId: 'deal-race-u2',
+            TerminalNumber: 184288,
+            Amount: 500,
+            CoinId: '1'
+          }]
+        }), { status: 200 });
+      }
+      if (urlStr.includes('/rpc/record_cardcom_deal_receipt')) {
+        return new Response(JSON.stringify({ ok: true, ledger_status: 'pending_invoice' }), { status: 200 });
+      }
+      if (urlStr.includes('/rpc/claim_cardcom_deal_retry')) {
+        // Simulates worker B having marked reconciliation_needed; claim RPC rejects with RECONCILIATION_REQUIRED
+        return new Response(JSON.stringify({
+          error: 'RECONCILIATION_REQUIRED',
+          message: 'Deal deal-race-u2 is in reconciliation_needed state and requires staff resolution'
+        }), { status: 409 });
+      }
+      if (urlStr.includes('CreateDocument')) {
+        createDocCalls += 1;
+        return new Response(JSON.stringify({ ResponseCode: 0 }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    const req = new Request('https://test/api/ops/cardcom-terminal/link', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer test-secret'
+      },
+      body: JSON.stringify({
+        deal_id: 'deal-race-u2',
+        booking_id: 'b-race-u2',
+        terminal: '184288'
+      })
+    });
+
+    const res = await onRequest({ request: req, params: { path: ['cardcom-terminal', 'link'] }, env: baseEnv });
+    assert.equal(res.status, 409, 'Must return 409 RECONCILIATION_REQUIRED when claim is rejected');
+    const body = await res.json();
+    assert.equal(body.error, 'RECONCILIATION_REQUIRED');
+    assert.equal(createDocCalls, 0, 'Must NEVER call CreateDocument after ambiguous outcome');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
