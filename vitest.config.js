@@ -8,10 +8,6 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: path.resolve(__dirname, 'services/resortos-agent/src/pipeline.js'),
-        replacement: path.resolve(__dirname, 'services/resortos-agent/src/mockPipeline.js')
-      },
-      {
         find: '@whiskeysockets/baileys',
         replacement: path.resolve(__dirname, 'services/resortos-agent/src/whatsapp/mockBaileys.js')
       },

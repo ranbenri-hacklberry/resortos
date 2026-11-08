@@ -48,6 +48,12 @@ jobs:
       - name: Run Test Suite
         run: npm test
 
+      - name: Type-check and test resortos-agent pipeline
+        run: |
+          npm --prefix services/resortos-agent ci
+          npm --prefix services/resortos-agent run typecheck
+          npm --prefix services/resortos-agent test src/pipelineOtherPending.test.ts src/wrongQr20261022.test.ts src/chloeKulam20261028.test.ts
+
       - name: Run PostgreSQL Integration Tests
         if: always()
         run: node --test server/cardcomPostgres.test.js

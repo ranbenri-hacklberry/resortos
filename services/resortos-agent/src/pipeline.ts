@@ -438,7 +438,8 @@ function intlPhone(raw?: string | null): string {
 const NO_CALL_RE = /לא\s*(?:ל|ת)?התקשר|בלי\s*(?:שיחה|טלפון)|אל\s*תתקשר|בוו?א?טס?א?פ|no\s*calls?|don'?t\s*call|whatsapp\s*only|by\s*whatsapp|не\s*звоните|только\s*(?:в\s*)?whatsapp|لا\s*تتصل|بدون\s*اتصال|عبر\s*واتساب/i;
 
 const LOCKBOX_QUERY_REGEX = /קוד|כספת|מפתח|רหัส|เซฟ|كود|خزنة|مفتاح/i;
-export { formatRoomDisplay } from './formatRoomDisplay.js';
+import { formatRoomDisplay } from './formatRoomDisplay.js';
+export { formatRoomDisplay };
 
 /** Guest units with no stay tonight. A checkout today is free for a new arrival. */
 export function formatVacantToday(rooms: RoomEntry[], bookings: BookingRow[], today: string): string {

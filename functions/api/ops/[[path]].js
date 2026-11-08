@@ -142,26 +142,79 @@ function validateCardcomTransactionMatch({ txn, terminal, dealIdStr, expectedAmo
     return { valid: false, reason: `Cardcom transaction not found for deal ${dealIdStr} on terminal ${terminal}` };
   }
 
-  // 1. Verify terminal
-  const txnTerminal = String(txn.TerminalNumber ?? txn.terminalNumber ?? terminal).trim();
-  if (txn.TerminalNumber !== undefined && txnTerminal !== String(terminal).trim()) {
+  // 1. Verify terminal: explicitly present with no defaults (check TerminalNumber and terminalNumber)
+  const rawTerminal = (txn.TerminalNumber !== undefined && txn.TerminalNumber !== null && String(txn.TerminalNumber).trim() !== '')
+    ? txn.TerminalNumber
+    : ((txn.terminalNumber !== undefined && txn.terminalNumber !== null && String(txn.terminalNumber).trim() !== '')
+        ? txn.terminalNumber
+        : null);
+
+  if (rawTerminal === null) {
+    return { valid: false, reason: `Missing terminal in Cardcom transaction for deal ${dealIdStr}` };
+  }
+
+  const txnTerminal = String(rawTerminal).trim();
+  if (txnTerminal !== String(terminal).trim()) {
     return { valid: false, reason: `Terminal mismatch for deal ${dealIdStr}: expected ${terminal}, got ${txnTerminal}` };
   }
 
   // 2. Verify deal (TranzactionId / DealNumber)
-  const txnDealId = String(txn.TranzactionId || txn.DealNumber || txn.TransactionId || txn.dealNumber || '').trim();
+  const rawDeal = txn.TranzactionId ?? txn.DealNumber ?? txn.TransactionId ?? txn.dealNumber;
+  if (rawDeal === undefined || rawDeal === null || String(rawDeal).trim() === '') {
+    return { valid: false, reason: `Missing deal id in Cardcom transaction for deal ${dealIdStr}` };
+  }
+  const txnDealId = String(rawDeal).trim();
   if (txnDealId !== dealIdStr) {
     return { valid: false, reason: `Deal mismatch for deal ${dealIdStr}: expected ${dealIdStr}, got ${txnDealId}` };
   }
 
-  // 3. Verify amount
-  const txnAmount = Number(txn.Amount ?? txn.Sum ?? txn.amount ?? 0);
-  if (Math.abs(txnAmount - expectedAmount) >= 0.01) {
-    return { valid: false, reason: `Amount mismatch for deal ${dealIdStr}: expected ${expectedAmount}, got ${txnAmount}` };
+  // 3. Verify amount: must be finite and positive; compare in integer agorot
+  const rawAmount = txn.Amount !== undefined && txn.Amount !== null && txn.Amount !== ''
+    ? txn.Amount
+    : (txn.Sum !== undefined && txn.Sum !== null && txn.Sum !== ''
+        ? txn.Sum
+        : (txn.amount !== undefined && txn.amount !== null && txn.amount !== ''
+            ? txn.amount
+            : null));
+
+  if (rawAmount === null) {
+    return { valid: false, reason: `Missing amount in Cardcom transaction for deal ${dealIdStr}` };
   }
 
-  // 4. Verify currency (CoinId = 1 or ILS)
-  const txnCoin = String(txn.CoinId ?? txn.coinId ?? txn.ISOCoinID ?? txn.Currency ?? '1').trim();
+  const txnAmount = Number(rawAmount);
+  if (!Number.isFinite(txnAmount) || txnAmount <= 0) {
+    return { valid: false, reason: `Non-numeric or non-positive amount in Cardcom transaction for deal ${dealIdStr}: got ${rawAmount}` };
+  }
+
+  const expectedNum = Number(expectedAmount);
+  if (!Number.isFinite(expectedNum) || expectedNum <= 0) {
+    return { valid: false, reason: `Invalid expected amount for deal ${dealIdStr}: got ${expectedAmount}` };
+  }
+
+  const txnAgorot = Math.round(txnAmount * 100);
+  const expectedAgorot = Math.round(expectedNum * 100);
+  if (txnAgorot !== expectedAgorot) {
+    return { valid: false, reason: `Amount mismatch for deal ${dealIdStr}: expected ${expectedNum}, got ${txnAmount}` };
+  }
+
+  // 4. Verify currency: explicitly present with no defaults (CoinId = 1 or ILS)
+  const rawCoin = (txn.CoinId !== undefined && txn.CoinId !== null && String(txn.CoinId).trim() !== '')
+    ? txn.CoinId
+    : ((txn.coinId !== undefined && txn.coinId !== null && String(txn.coinId).trim() !== '')
+        ? txn.coinId
+        : ((txn.ISOCoinID !== undefined && txn.ISOCoinID !== null && String(txn.ISOCoinID).trim() !== '')
+            ? txn.ISOCoinID
+            : ((txn.Currency !== undefined && txn.Currency !== null && String(txn.Currency).trim() !== '')
+                ? txn.Currency
+                : ((txn.currency !== undefined && txn.currency !== null && String(txn.currency).trim() !== '')
+                    ? txn.currency
+                    : null))));
+
+  if (rawCoin === null) {
+    return { valid: false, reason: `Missing currency in Cardcom transaction for deal ${dealIdStr}` };
+  }
+
+  const txnCoin = String(rawCoin).trim();
   if (txnCoin !== '1' && txnCoin !== 'ILS') {
     return { valid: false, reason: `Currency mismatch for deal ${dealIdStr}: expected ILS (1), got ${txnCoin}` };
   }
@@ -516,6 +569,14 @@ export async function onRequest(context) {
 
       if (!match) {
         return errorJson('Match proposal not found for deal', 404, 'MATCH_NOT_FOUND');
+      }
+
+      const proposalTerminal = String(match?.terminal_number ?? match?.terminal ?? '184288').trim();
+      if (proposalTerminal !== '184288' ||
+          (match?.terminal && String(match.terminal).trim() !== '184288') ||
+          (match?.terminal_number && String(match.terminal_number).trim() !== '184288') ||
+          (body?.terminal && String(body.terminal).trim() !== '184288')) {
+        return errorJson('Proposal terminal mismatch (must be 184288)', 400, 'INVALID_TERMINAL');
       }
 
       // Fetch booking

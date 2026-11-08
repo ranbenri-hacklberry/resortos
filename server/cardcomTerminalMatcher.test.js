@@ -2183,6 +2183,418 @@ test('ops link lookup: fail-closed ALWAYS on lookup error (non-zero ResponseCode
   }
 });
 
+test('ops link verification: negative test - missing terminal in Cardcom transaction stops with 409 and never creates or reuses', async () => {
+  const { onRequest } = await import('../functions/api/ops/[[path]].js');
+
+  const baseEnv = {
+    SUPABASE_URL: 'https://mock.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'mock-service-key',
+    CHECKOUT_MAILBOX_SECRET: 'test-secret',
+    CARDCOM_API_NAME: 'test-cardcom-user',
+    CARDCOM_API_PASSWORD: 'test-cardcom-password'
+  };
+
+  const mockBooking = { id: 'b-neg-no-term-1', guest_name: 'שרה', total_price_agorot: 50000, clearing_payments: [] };
+  const mockMatch = {
+    deal_id: 'deal-neg-no-term-1',
+    amount: 500,
+    document_number: 'INV-NEG-TERM-1'
+  };
+
+  let listTxnsCalls = 0;
+  let createDocCalls = 0;
+  let markReconCalls = 0;
+  const originalFetch = globalThis.fetch;
+
+  try {
+    globalThis.fetch = async (url) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/cardcom_pending_matches')) return new Response(JSON.stringify([mockMatch]), { status: 200 });
+      if (urlStr.includes('/hotelos_bookings?id=eq.b-neg-no-term-1')) return new Response(JSON.stringify([mockBooking]), { status: 200 });
+      if (urlStr.includes('/rpc/record_cardcom_deal_receipt')) {
+        return new Response(JSON.stringify({
+          ok: true,
+          booking_id: 'b-neg-no-term-1',
+          payment_status: 'PARTIAL',
+          ledger_status: 'pending_invoice'
+        }), { status: 200 });
+      }
+      if (urlStr.includes('ListTransactions')) {
+        listTxnsCalls += 1;
+        // Missing TerminalNumber and terminalNumber
+        return new Response(JSON.stringify({
+          ResponseCode: 0,
+          Tranzactions: [{
+            TranzactionId: 'deal-neg-no-term-1',
+            Amount: 500,
+            CoinId: '1',
+            DocumentNumber: 'INV-NEG-TERM-1',
+            DocumentUrl: 'https://cardcom/doc/term-1'
+          }]
+        }), { status: 200 });
+      }
+      if (urlStr.includes('CreateDocument')) {
+        createDocCalls += 1;
+        return new Response(JSON.stringify({ ResponseCode: 0 }), { status: 200 });
+      }
+      if (urlStr.includes('/rpc/mark_cardcom_deal_reconciliation_needed')) {
+        markReconCalls += 1;
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    const req = new Request('https://test/api/ops/cardcom-terminal/link', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer test-secret'
+      },
+      body: JSON.stringify({
+        deal_id: 'deal-neg-no-term-1',
+        booking_id: 'b-neg-no-term-1',
+        terminal: '184288'
+      })
+    });
+
+    const res = await onRequest({ request: req, params: { path: ['cardcom-terminal', 'link'] }, env: baseEnv });
+    assert.equal(res.status, 409, 'Must fail closed with 409 when terminal is missing from Cardcom txn');
+    const body = await res.json();
+    assert.equal(body.error, 'RECONCILIATION_REQUIRED');
+    assert.ok(body.message.includes('Missing terminal'), 'Message must indicate missing terminal');
+    assert.equal(listTxnsCalls, 1);
+    assert.equal(createDocCalls, 0);
+    assert.equal(markReconCalls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('ops link verification: negative test - mismatched terminal in Cardcom transaction stops with 409 and never creates or reuses', async () => {
+  const { onRequest } = await import('../functions/api/ops/[[path]].js');
+
+  const baseEnv = {
+    SUPABASE_URL: 'https://mock.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'mock-service-key',
+    CHECKOUT_MAILBOX_SECRET: 'test-secret',
+    CARDCOM_API_NAME: 'test-cardcom-user',
+    CARDCOM_API_PASSWORD: 'test-cardcom-password'
+  };
+
+  const mockBooking = { id: 'b-neg-wrong-term-1', guest_name: 'שרה', total_price_agorot: 50000, clearing_payments: [] };
+  const mockMatch = {
+    deal_id: 'deal-neg-wrong-term-1',
+    amount: 500,
+    document_number: 'INV-NEG-TERM-2'
+  };
+
+  let listTxnsCalls = 0;
+  let createDocCalls = 0;
+  let markReconCalls = 0;
+  const originalFetch = globalThis.fetch;
+
+  try {
+    globalThis.fetch = async (url) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/cardcom_pending_matches')) return new Response(JSON.stringify([mockMatch]), { status: 200 });
+      if (urlStr.includes('/hotelos_bookings?id=eq.b-neg-wrong-term-1')) return new Response(JSON.stringify([mockBooking]), { status: 200 });
+      if (urlStr.includes('/rpc/record_cardcom_deal_receipt')) {
+        return new Response(JSON.stringify({
+          ok: true,
+          booking_id: 'b-neg-wrong-term-1',
+          payment_status: 'PARTIAL',
+          ledger_status: 'pending_invoice'
+        }), { status: 200 });
+      }
+      if (urlStr.includes('ListTransactions')) {
+        listTxnsCalls += 1;
+        // TerminalNumber is 999999 (not 184288)
+        return new Response(JSON.stringify({
+          ResponseCode: 0,
+          Tranzactions: [{
+            TranzactionId: 'deal-neg-wrong-term-1',
+            TerminalNumber: 999999,
+            Amount: 500,
+            CoinId: '1',
+            DocumentNumber: 'INV-NEG-TERM-2',
+            DocumentUrl: 'https://cardcom/doc/term-2'
+          }]
+        }), { status: 200 });
+      }
+      if (urlStr.includes('CreateDocument')) {
+        createDocCalls += 1;
+        return new Response(JSON.stringify({ ResponseCode: 0 }), { status: 200 });
+      }
+      if (urlStr.includes('/rpc/mark_cardcom_deal_reconciliation_needed')) {
+        markReconCalls += 1;
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    const req = new Request('https://test/api/ops/cardcom-terminal/link', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer test-secret'
+      },
+      body: JSON.stringify({
+        deal_id: 'deal-neg-wrong-term-1',
+        booking_id: 'b-neg-wrong-term-1',
+        terminal: '184288'
+      })
+    });
+
+    const res = await onRequest({ request: req, params: { path: ['cardcom-terminal', 'link'] }, env: baseEnv });
+    assert.equal(res.status, 409, 'Must fail closed with 409 when terminal mismatches in Cardcom txn');
+    const body = await res.json();
+    assert.equal(body.error, 'RECONCILIATION_REQUIRED');
+    assert.ok(body.message.includes('Terminal mismatch'), 'Message must indicate terminal mismatch');
+    assert.equal(listTxnsCalls, 1);
+    assert.equal(createDocCalls, 0);
+    assert.equal(markReconCalls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('ops link verification: negative test - missing currency in Cardcom transaction stops with 409 and never creates or reuses', async () => {
+  const { onRequest } = await import('../functions/api/ops/[[path]].js');
+
+  const baseEnv = {
+    SUPABASE_URL: 'https://mock.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'mock-service-key',
+    CHECKOUT_MAILBOX_SECRET: 'test-secret',
+    CARDCOM_API_NAME: 'test-cardcom-user',
+    CARDCOM_API_PASSWORD: 'test-cardcom-password'
+  };
+
+  const mockBooking = { id: 'b-neg-no-cur-1', guest_name: 'מיכל', total_price_agorot: 50000, clearing_payments: [] };
+  const mockMatch = {
+    deal_id: 'deal-neg-no-cur-1',
+    amount: 500,
+    document_number: 'INV-NEG-CUR-1'
+  };
+
+  let listTxnsCalls = 0;
+  let createDocCalls = 0;
+  let markReconCalls = 0;
+  const originalFetch = globalThis.fetch;
+
+  try {
+    globalThis.fetch = async (url) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/cardcom_pending_matches')) return new Response(JSON.stringify([mockMatch]), { status: 200 });
+      if (urlStr.includes('/hotelos_bookings?id=eq.b-neg-no-cur-1')) return new Response(JSON.stringify([mockBooking]), { status: 200 });
+      if (urlStr.includes('/rpc/record_cardcom_deal_receipt')) {
+        return new Response(JSON.stringify({
+          ok: true,
+          booking_id: 'b-neg-no-cur-1',
+          payment_status: 'PARTIAL',
+          ledger_status: 'pending_invoice'
+        }), { status: 200 });
+      }
+      if (urlStr.includes('ListTransactions')) {
+        listTxnsCalls += 1;
+        // Missing CoinId, coinId, ISOCoinID, Currency
+        return new Response(JSON.stringify({
+          ResponseCode: 0,
+          Tranzactions: [{
+            TranzactionId: 'deal-neg-no-cur-1',
+            TerminalNumber: 184288,
+            Amount: 500,
+            DocumentNumber: 'INV-NEG-CUR-1',
+            DocumentUrl: 'https://cardcom/doc/cur-1'
+          }]
+        }), { status: 200 });
+      }
+      if (urlStr.includes('CreateDocument')) {
+        createDocCalls += 1;
+        return new Response(JSON.stringify({ ResponseCode: 0 }), { status: 200 });
+      }
+      if (urlStr.includes('/rpc/mark_cardcom_deal_reconciliation_needed')) {
+        markReconCalls += 1;
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    const req = new Request('https://test/api/ops/cardcom-terminal/link', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer test-secret'
+      },
+      body: JSON.stringify({
+        deal_id: 'deal-neg-no-cur-1',
+        booking_id: 'b-neg-no-cur-1',
+        terminal: '184288'
+      })
+    });
+
+    const res = await onRequest({ request: req, params: { path: ['cardcom-terminal', 'link'] }, env: baseEnv });
+    assert.equal(res.status, 409, 'Must fail closed with 409 when currency is missing from Cardcom txn');
+    const body = await res.json();
+    assert.equal(body.error, 'RECONCILIATION_REQUIRED');
+    assert.ok(body.message.includes('Missing currency'), 'Message must indicate missing currency');
+    assert.equal(listTxnsCalls, 1);
+    assert.equal(createDocCalls, 0);
+    assert.equal(markReconCalls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('ops link verification: negative test - non-numeric or non-positive amount in Cardcom transaction stops with 409 and never creates or reuses', async () => {
+  const { onRequest } = await import('../functions/api/ops/[[path]].js');
+
+  const baseEnv = {
+    SUPABASE_URL: 'https://mock.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'mock-service-key',
+    CHECKOUT_MAILBOX_SECRET: 'test-secret',
+    CARDCOM_API_NAME: 'test-cardcom-user',
+    CARDCOM_API_PASSWORD: 'test-cardcom-password'
+  };
+
+  const mockBooking = { id: 'b-neg-nan-amt-1', guest_name: 'יונתן', total_price_agorot: 50000, clearing_payments: [] };
+  const mockMatch = {
+    deal_id: 'deal-neg-nan-amt-1',
+    amount: 500,
+    document_number: 'INV-NEG-AMT-1'
+  };
+
+  let listTxnsCalls = 0;
+  let createDocCalls = 0;
+  let markReconCalls = 0;
+  const originalFetch = globalThis.fetch;
+
+  try {
+    globalThis.fetch = async (url) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/cardcom_pending_matches')) return new Response(JSON.stringify([mockMatch]), { status: 200 });
+      if (urlStr.includes('/hotelos_bookings?id=eq.b-neg-nan-amt-1')) return new Response(JSON.stringify([mockBooking]), { status: 200 });
+      if (urlStr.includes('/rpc/record_cardcom_deal_receipt')) {
+        return new Response(JSON.stringify({
+          ok: true,
+          booking_id: 'b-neg-nan-amt-1',
+          payment_status: 'PARTIAL',
+          ledger_status: 'pending_invoice'
+        }), { status: 200 });
+      }
+      if (urlStr.includes('ListTransactions')) {
+        listTxnsCalls += 1;
+        // Non-numeric amount string
+        return new Response(JSON.stringify({
+          ResponseCode: 0,
+          Tranzactions: [{
+            TranzactionId: 'deal-neg-nan-amt-1',
+            TerminalNumber: 184288,
+            Amount: 'not-a-number',
+            CoinId: '1',
+            DocumentNumber: 'INV-NEG-AMT-1',
+            DocumentUrl: 'https://cardcom/doc/amt-1'
+          }]
+        }), { status: 200 });
+      }
+      if (urlStr.includes('CreateDocument')) {
+        createDocCalls += 1;
+        return new Response(JSON.stringify({ ResponseCode: 0 }), { status: 200 });
+      }
+      if (urlStr.includes('/rpc/mark_cardcom_deal_reconciliation_needed')) {
+        markReconCalls += 1;
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    const req = new Request('https://test/api/ops/cardcom-terminal/link', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer test-secret'
+      },
+      body: JSON.stringify({
+        deal_id: 'deal-neg-nan-amt-1',
+        booking_id: 'b-neg-nan-amt-1',
+        terminal: '184288'
+      })
+    });
+
+    const res = await onRequest({ request: req, params: { path: ['cardcom-terminal', 'link'] }, env: baseEnv });
+    assert.equal(res.status, 409, 'Must fail closed with 409 when amount is non-numeric in Cardcom txn');
+    const body = await res.json();
+    assert.equal(body.error, 'RECONCILIATION_REQUIRED');
+    assert.ok(body.message.includes('Non-numeric or non-positive amount'), 'Message must indicate non-numeric amount');
+    assert.equal(listTxnsCalls, 1);
+    assert.equal(createDocCalls, 0);
+    assert.equal(markReconCalls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('ops link: reject proposal whose terminal isn\'t 184288 with 400 INVALID_TERMINAL', async () => {
+  const { onRequest } = await import('../functions/api/ops/[[path]].js');
+
+  const baseEnv = {
+    SUPABASE_URL: 'https://mock.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'mock-service-key',
+    CHECKOUT_MAILBOX_SECRET: 'test-secret',
+    CARDCOM_API_NAME: 'test-cardcom-user',
+    CARDCOM_API_PASSWORD: 'test-cardcom-password'
+  };
+
+  const mockBooking = { id: 'b-wrong-prop-term-1', guest_name: 'דני', total_price_agorot: 50000, clearing_payments: [] };
+  const mockMatch = {
+    deal_id: 'deal-wrong-prop-term-1',
+    amount: 500,
+    terminal: '999999' // Proposal terminal is NOT 184288!
+  };
+
+  let receiptRpcCalls = 0;
+  let cardcomCalls = 0;
+  const originalFetch = globalThis.fetch;
+
+  try {
+    globalThis.fetch = async (url) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/cardcom_pending_matches')) return new Response(JSON.stringify([mockMatch]), { status: 200 });
+      if (urlStr.includes('/hotelos_bookings?id=eq.b-wrong-prop-term-1')) return new Response(JSON.stringify([mockBooking]), { status: 200 });
+      if (urlStr.includes('/rpc/record_cardcom_deal_receipt')) {
+        receiptRpcCalls += 1;
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (urlStr.includes('cardcom.solutions') || urlStr.includes('ListTransactions') || urlStr.includes('CreateDocument')) {
+        cardcomCalls += 1;
+        return new Response(JSON.stringify({ ResponseCode: 0 }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    const req = new Request('https://test/api/ops/cardcom-terminal/link', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer test-secret'
+      },
+      body: JSON.stringify({
+        deal_id: 'deal-wrong-prop-term-1',
+        booking_id: 'b-wrong-prop-term-1'
+      })
+    });
+
+    const res = await onRequest({ request: req, params: { path: ['cardcom-terminal', 'link'] }, env: baseEnv });
+    assert.equal(res.status, 400, 'Must return 400 when proposal terminal is not 184288');
+    const body = await res.json();
+    assert.equal(body.error, 'INVALID_TERMINAL');
+    assert.equal(receiptRpcCalls, 0, 'Must not call record_cardcom_deal_receipt when proposal terminal is invalid');
+    assert.equal(cardcomCalls, 0, 'Must not call Cardcom when proposal terminal is invalid');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
 
 
 
