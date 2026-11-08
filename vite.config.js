@@ -1583,19 +1583,7 @@ export default defineConfig(({ mode }) => {
         '/api/ops/cardcom-terminal': {
           target: env.HOTELOS_BACKEND_URL || 'https://resortos.app',
           changeOrigin: true,
-          secure: true,
-          configure: (proxy, _options) => {
-            proxy.on('proxyReq', (proxyReq, req, _res) => {
-              const mailboxSecret = String(process.env.CHECKOUT_MAILBOX_SECRET || env.CHECKOUT_MAILBOX_SECRET || '').trim();
-              if (mailboxSecret && !req.headers['x-hotelos-mailbox']) {
-                proxyReq.setHeader('x-hotelos-mailbox', mailboxSecret);
-              }
-              const bridgeSecret = String(process.env.HOTELOS_API_SECRET || env.HOTELOS_API_SECRET || '').trim();
-              if (bridgeSecret && !req.headers['x-hotelos-bridge-secret']) {
-                proxyReq.setHeader('x-hotelos-bridge-secret', bridgeSecret);
-              }
-            });
-          }
+          secure: true
         }
       }
     },
@@ -1645,19 +1633,7 @@ export default defineConfig(({ mode }) => {
         '/api/ops/cardcom-terminal': {
           target: env.HOTELOS_BACKEND_URL || 'https://resortos.app',
           changeOrigin: true,
-          secure: true,
-          configure: (proxy, _options) => {
-            proxy.on('proxyReq', (proxyReq, req, _res) => {
-              const mailboxSecret = String(process.env.CHECKOUT_MAILBOX_SECRET || env.CHECKOUT_MAILBOX_SECRET || '').trim();
-              if (mailboxSecret && !req.headers['x-hotelos-mailbox']) {
-                proxyReq.setHeader('x-hotelos-mailbox', mailboxSecret);
-              }
-              const bridgeSecret = String(process.env.HOTELOS_API_SECRET || env.HOTELOS_API_SECRET || '').trim();
-              if (bridgeSecret && !req.headers['x-hotelos-bridge-secret']) {
-                proxyReq.setHeader('x-hotelos-bridge-secret', bridgeSecret);
-              }
-            });
-          }
+          secure: true
         }
       }
     },

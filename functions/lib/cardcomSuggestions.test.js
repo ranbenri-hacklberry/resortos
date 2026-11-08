@@ -272,3 +272,60 @@ test('rule 7: manual search by name/phone stays available as explicit fallback o
   assert.equal(phoneQueryResults.length, 1);
   assert.equal(phoneQueryResults[0].bookingId, 'b-far-future');
 });
+
+test('deal on Nov 8 -> no booking with check_in after Nov 9 in the default list', () => {
+  const deal = {
+    dealId: 'deal-nov-8',
+    amount: 500,
+    dealTime: '2026-11-08T15:00:00Z' // Deal on Nov 8
+  };
+
+  const bookings = [
+    {
+      id: 'b-nov-9',
+      guest_name: 'אורח נוב 9',
+      check_in_date: '2026-11-09', // check_in = Nov 9 (<= D+1) -> allowed
+      check_out_date: '2026-11-10',
+      total_price_agorot: 50000,
+      clearing_payments: []
+    },
+    {
+      id: 'b-nov-10',
+      guest_name: 'אורח נוב 10',
+      check_in_date: '2026-11-10', // check_in = Nov 10 (> Nov 9) -> strictly forbidden
+      check_out_date: '2026-11-12',
+      total_price_agorot: 50000,
+      clearing_payments: []
+    },
+    {
+      id: 'b-nov-11',
+      guest_name: 'אורח נוב 11',
+      check_in_date: '2026-11-11', // check_in = Nov 11 (> Nov 9) -> strictly forbidden
+      check_out_date: '2026-11-13',
+      total_price_agorot: 50000,
+      clearing_payments: []
+    },
+    {
+      id: 'b-dec-01',
+      guest_name: 'אורח דצמבר',
+      check_in_date: '2026-12-01', // far future -> strictly forbidden
+      check_out_date: '2026-12-03',
+      total_price_agorot: 50000,
+      clearing_payments: []
+    }
+  ];
+
+  const results = suggestBookingsForDeal(deal, bookings);
+  const ids = results.map((r) => r.bookingId);
+
+  assert.ok(ids.includes('b-nov-9'), 'Booking with check_in on Nov 9 (D+1) may be shown');
+  assert.ok(!ids.includes('b-nov-10'), 'Booking with check_in on Nov 10 (after Nov 9) must NOT be in the default list');
+  assert.ok(!ids.includes('b-nov-11'), 'Booking with check_in on Nov 11 (after Nov 9) must NOT be in the default list');
+  assert.ok(!ids.includes('b-dec-01'), 'Booking with check_in in Dec must NOT be in the default list');
+
+  // Verify none of the returned results have check_in > '2026-11-09'
+  for (const candidate of results) {
+    assert.ok(candidate.checkIn <= '2026-11-09', `Candidate check_in ${candidate.checkIn} must be <= 2026-11-09`);
+  }
+});
+

@@ -1598,6 +1598,102 @@ test('auth: missing config fails closed, pending route requires auth, and dev to
   }
 });
 
+test('auth: suggestions and candidates routes require staff auth (same as pending)', async () => {
+  const { onRequest } = await import('../functions/api/ops/[[path]].js');
+
+  const envWithSecrets = {
+    HOTELOS_DESK_PIN: '1234',
+    CHECKOUT_MAILBOX_SECRET: 'test-secret',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-key',
+    SUPABASE_URL: 'https://mock.supabase.co'
+  };
+
+  const routes = [
+    { url: 'https://test/api/ops/cardcom-terminal/suggestions', path: ['cardcom-terminal', 'suggestions'] },
+    { url: 'https://test/api/ops/cardcom-terminal/candidates', path: ['cardcom-terminal', 'candidates'] },
+    { url: 'https://test/api/ops/suggestions', path: ['suggestions'] },
+    { url: 'https://test/api/ops/candidates', path: ['candidates'] }
+  ];
+
+  for (const { url, path } of routes) {
+    // 1. Unauthenticated -> 401
+    const reqUnauth = new Request(url, { method: 'GET' });
+    const res1 = await onRequest({ request: reqUnauth, params: { path }, env: envWithSecrets });
+    assert.equal(res1.status, 401, `${url} must reject unauthenticated requests with 401`);
+    const body1 = await res1.json();
+    assert.equal(body1.error, 'UNAUTHORIZED');
+
+    // 2. Wrong token -> 401
+    const reqBad = new Request(url, {
+      method: 'GET',
+      headers: { Authorization: 'Bearer wrong-token' }
+    });
+    const res2 = await onRequest({ request: reqBad, params: { path }, env: envWithSecrets });
+    assert.equal(res2.status, 401, `${url} must reject invalid auth with 401`);
+
+    // 3. Valid staff auth -> 200
+    const reqGood = new Request(url, {
+      method: 'GET',
+      headers: { Authorization: 'Bearer test-secret' }
+    });
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async () => new Response(JSON.stringify([]), { status: 200 });
+      const res3 = await onRequest({ request: reqGood, params: { path }, env: envWithSecrets });
+      assert.equal(res3.status, 200, `${url} must accept valid staff auth with 200`);
+      const body3 = await res3.json();
+      assert.equal(body3.ok, true);
+      assert.ok(Array.isArray(body3.candidates));
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  }
+});
+
+test('candidate window rule: deal on Nov 8 -> no booking with check_in after Nov 9 in default list', async () => {
+  const { suggestBookingsForDeal } = await import('../functions/lib/cardcomSuggestions.js');
+
+  const deal = {
+    dealId: 'deal-nov-8',
+    amount: 500,
+    dealTime: '2026-11-08T15:00:00Z'
+  };
+
+  const bookings = [
+    {
+      id: 'b-nov-9',
+      guest_name: 'אורח נוב 9',
+      check_in_date: '2026-11-09',
+      check_out_date: '2026-11-10',
+      total_price_agorot: 50000,
+      clearing_payments: []
+    },
+    {
+      id: 'b-nov-10',
+      guest_name: 'אורח נוב 10',
+      check_in_date: '2026-11-10',
+      check_out_date: '2026-11-12',
+      total_price_agorot: 50000,
+      clearing_payments: []
+    },
+    {
+      id: 'b-nov-11',
+      guest_name: 'אורח נוב 11',
+      check_in_date: '2026-11-11',
+      check_out_date: '2026-11-13',
+      total_price_agorot: 50000,
+      clearing_payments: []
+    }
+  ];
+
+  const candidates = suggestBookingsForDeal(deal, bookings);
+  const ids = candidates.map((c) => c.bookingId);
+
+  assert.ok(ids.includes('b-nov-9'), 'check_in Nov 9 must be included');
+  assert.ok(!ids.includes('b-nov-10'), 'check_in Nov 10 must NOT be included');
+  assert.ok(!ids.includes('b-nov-11'), 'check_in Nov 11 must NOT be included');
+});
+
 test('migration 009 SQL upgrades existing schema and handles fresh schema', async () => {
   const fs = await import('node:fs');
   const path = await import('node:path');
