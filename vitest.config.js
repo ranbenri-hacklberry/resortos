@@ -6,9 +6,20 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   resolve: {
-    alias: {
-      '@whiskeysockets/baileys': path.resolve(__dirname, 'services/resortos-agent/src/whatsapp/mockBaileys.js')
-    }
+    alias: [
+      {
+        find: /.*\/pipeline(\.js)?$/,
+        replacement: path.resolve(__dirname, 'services/resortos-agent/src/mockPipeline.js')
+      },
+      {
+        find: '@whiskeysockets/baileys',
+        replacement: path.resolve(__dirname, 'services/resortos-agent/src/whatsapp/mockBaileys.js')
+      },
+      {
+        find: 'qrcode-terminal',
+        replacement: path.resolve(__dirname, 'services/resortos-agent/src/whatsapp/mockQrcodeTerminal.js')
+      }
+    ]
   },
   test: {
     include: ['src/**/*.test.js'],

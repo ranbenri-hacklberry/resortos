@@ -352,6 +352,7 @@ test('PostgreSQL Real Integration Tests for Cardcom Terminal Sync & Ledger', asy
         const mockEnv = {
           CHECKOUT_MAILBOX_SECRET: 'test-secret',
           SUPABASE_SERVICE_ROLE_KEY: 'test-service-key',
+          SUPABASE_URL: 'https://mock.supabase.co',
           CARDCOM_TERMINAL: '184288',
           CARDCOM_API_NAME: 'test_api',
           CARDCOM_API_PASSWORD: 'test_pass'
