@@ -226,3 +226,55 @@ test('calculateBookingBalances discounts unverified Kinorot note payments and fl
   assert.ok(classification.description.includes('מאמת תשלום קינורות'));
 });
 
+test('candidate rules: deal on 8th -> booking 8-9 shown; month ahead not shown; paid not shown; checkout 5 days earlier shown', () => {
+  const dealDate = '2026-11-08';
+  const deal = { amount: 1000, deal_time: '2026-11-08T12:00:00Z', payer_name: 'יובל' };
+
+  const bookingStay8to9 = {
+    id: 'b-8-9',
+    guest_name: 'יובל כהן',
+    check_in_date: '2026-11-08',
+    check_out_date: '2026-11-09',
+    total_price_agorot: 100000,
+    clearing_payments: []
+  };
+
+  const bookingMonthAhead = {
+    id: 'b-month-ahead',
+    guest_name: 'יוסי',
+    check_in_date: '2026-12-08',
+    check_out_date: '2026-12-10',
+    total_price_agorot: 100000,
+    clearing_payments: []
+  };
+
+  const bookingPaid = {
+    id: 'b-paid',
+    guest_name: 'דניאל',
+    check_in_date: '2026-11-08',
+    check_out_date: '2026-11-09',
+    total_price_agorot: 100000,
+    payment_status: 'PAID',
+    clearing_payments: [{ amount_ils: 1000, method: 'CASH' }]
+  };
+
+  const bookingCheckout5DaysAgo = {
+    id: 'b-checkout-5d-ago',
+    guest_name: 'עומר',
+    check_in_date: '2026-10-31',
+    check_out_date: '2026-11-03',
+    total_price_agorot: 100000,
+    clearing_payments: []
+  };
+
+  const allBookings = [bookingStay8to9, bookingMonthAhead, bookingPaid, bookingCheckout5DaysAgo];
+  const candidates = getCandidateUnpaidBookings(1000, allBookings, '', deal);
+
+  assert.equal(candidates.length, 2);
+  const ids = candidates.map((c) => c.bookingId);
+  assert.ok(ids.includes('b-8-9'), 'Stay 8->9 must be shown');
+  assert.ok(ids.includes('b-checkout-5d-ago'), 'Checkout 5 days earlier must be shown');
+  assert.ok(!ids.includes('b-month-ahead'), 'Booking starting in a month must NOT be shown');
+  assert.ok(!ids.includes('b-paid'), 'Paid booking must NOT be shown');
+});
+

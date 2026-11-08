@@ -326,14 +326,47 @@ export default function CardcomTerminalModal({
   const [selectedDealIndex, setSelectedDealIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [pendingAction, setPendingAction] = useState(null);
+  const [serverSuggestions, setServerSuggestions] = useState(null);
 
   const currentDeal = pendingCharges[Math.min(selectedDealIndex, pendingCharges.length - 1)] || pendingCharges[0];
 
+  useEffect(() => {
+    let active = true;
+    const fetchServerSuggestions = async () => {
+      if (!currentDeal?.amount) {
+        setServerSuggestions(null);
+        return;
+      }
+      try {
+        const token = (typeof window !== 'undefined' ? (localStorage.getItem('hotelos-session-token') || localStorage.getItem('resortos_dashboard_token_v1')) : '') || '';
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const qParam = searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : '';
+        const dealIdParam = currentDeal.deal_id ? `&deal_id=${encodeURIComponent(currentDeal.deal_id)}` : '';
+        const amountParam = currentDeal.amount ? `&amount=${encodeURIComponent(currentDeal.amount)}` : '';
+        const timeParam = (currentDeal.deal_time || currentDeal.dealTime) ? `&deal_time=${encodeURIComponent(currentDeal.deal_time || currentDeal.dealTime)}` : '';
+        const nameParam = (currentDeal.payer_name || currentDeal.cardOwnerName) ? `&payer_name=${encodeURIComponent(currentDeal.payer_name || currentDeal.cardOwnerName)}` : '';
+        const res = await fetch(`/api/ops/cardcom-terminal/suggestions?${dealIdParam}${amountParam}${timeParam}${nameParam}${qParam}`, { headers });
+        if (res.ok && active) {
+          const data = await res.json();
+          const list = Array.isArray(data?.candidates) ? data.candidates : (Array.isArray(data?.suggestions) ? data.suggestions : []);
+          setServerSuggestions(list);
+        }
+      } catch (_) {
+        // Fallback to client computation
+      }
+    };
+    fetchServerSuggestions();
+    return () => { active = false; };
+  }, [currentDeal?.deal_id, currentDeal?.amount, currentDeal?.deal_time, searchQuery]);
+
   // Candidates for the current deal
   const candidateBookings = useMemo(() => {
+    if (serverSuggestions !== null) {
+      return serverSuggestions;
+    }
     if (!currentDeal?.amount) return [];
-    return getCandidateUnpaidBookings(currentDeal.amount, bookings, searchQuery);
-  }, [currentDeal?.amount, bookings, searchQuery]);
+    return getCandidateUnpaidBookings(currentDeal.amount, bookings, searchQuery, currentDeal);
+  }, [serverSuggestions, currentDeal, bookings, searchQuery]);
 
   if (!isOpen) return null;
   if ((!pendingCharges || pendingCharges.length === 0) && !loadError) return null;

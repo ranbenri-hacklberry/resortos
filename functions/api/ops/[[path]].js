@@ -1,5 +1,6 @@
 import { json, errorJson, fetchPostgrest, getPostgrestConfig } from '../_db.js';
 import { loadCalendarReplica } from '../../lib/calendarReplica.js';
+import { suggestBookingsForDeal } from '../../lib/cardcomSuggestions.js';
 
 const DEMO_TENANT_ID = '22222222-2222-2222-2222-222222222222';
 
@@ -520,6 +521,61 @@ export async function onRequest(context) {
         return json({ ok: true, pending, recently_approved: recentlyApproved });
       } catch (_) {}
       return json({ ok: true, pending: [], recently_approved: [] });
+    }
+
+    // GET /api/ops/cardcom-terminal/suggestions
+    if ((sub === 'suggestions' || sub === 'candidates') && request.method === 'GET') {
+      try {
+        const url = new URL(request.url);
+        const dealId = url.searchParams.get('deal_id') || url.searchParams.get('dealId');
+        let amount = Number(url.searchParams.get('amount'));
+        let dealTime = url.searchParams.get('deal_time') || url.searchParams.get('date');
+        let payerName = url.searchParams.get('payer_name') || url.searchParams.get('name') || '';
+        const query = url.searchParams.get('q') || '';
+
+        if (dealId && (!Number.isFinite(amount) || amount <= 0 || !dealTime)) {
+          try {
+            const mRes = await fetchPostgrest(`/cardcom_pending_matches?deal_id=eq.${encodeURIComponent(dealId)}`, { method: 'GET' }, env, { requireServiceRole: true });
+            if (mRes && mRes.ok) {
+              const mRows = await mRes.json();
+              if (Array.isArray(mRows) && mRows[0]) {
+                if (!Number.isFinite(amount) || amount <= 0) amount = Number(mRows[0].amount);
+                if (!dealTime) dealTime = mRows[0].deal_time;
+                if (!payerName) payerName = mRows[0].payer_name || '';
+              }
+            }
+          } catch (_) {}
+        }
+
+        let bookings = [];
+        try {
+          const bRes = await fetchPostgrest(
+            '/hotelos_bookings?booking_status=neq.CANCELED&order=check_in_date.desc&limit=1000',
+            { method: 'GET' },
+            env,
+            { requireServiceRole: true }
+          );
+          if (bRes && bRes.ok) {
+            const bRows = await bRes.json();
+            if (Array.isArray(bRows)) bookings = bRows;
+          }
+        } catch (_) {}
+
+        const deal = {
+          dealId,
+          deal_id: dealId,
+          amount,
+          dealTime,
+          deal_time: dealTime,
+          payer_name: payerName,
+          cardOwnerName: payerName
+        };
+
+        const candidates = suggestBookingsForDeal(deal, bookings, { query, limit: 10 });
+        return json({ ok: true, candidates, suggestions: candidates });
+      } catch (err) {
+        return errorJson(err?.message || 'FAILED_TO_GET_SUGGESTIONS', 500, 'SUGGESTIONS_ERROR');
+      }
     }
 
     // POST /api/ops/cardcom-terminal/link
