@@ -1,5 +1,5 @@
 import type { RoomEntry } from '../config.js';
-import { formatRoomDisplay } from '../pipeline.js';
+import { formatRoomDisplay } from '../formatRoomDisplay.js';
 import { resolveRoomByAlias } from '../llm/client.js';
 
 export interface ComplexDefinition {

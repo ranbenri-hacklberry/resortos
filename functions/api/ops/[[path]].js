@@ -61,6 +61,135 @@ function formatCardcomDate(d) {
   return str;
 }
 
+async function searchCardcomTransaction({
+  terminal,
+  dealIdStr,
+  apiName,
+  apiPassword,
+  dealTime
+}) {
+  const fromDateStr = formatCardcomDate(dealTime || new Date(Date.now() - 30 * 86400000).toISOString());
+  const toDateStr = formatCardcomDate(new Date(Date.now() + 86400000).toISOString());
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  let page = 1;
+  const pageSize = 100;
+  const maxPages = 20;
+
+  try {
+    while (page <= maxPages) {
+      const listRes = await fetch('https://secure.cardcom.solutions/api/v11/Transactions/ListTransactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ApiName: apiName,
+          ApiPassword: apiPassword,
+          LimitForTerminal: Number(terminal),
+          TerminalNumber: Number(terminal),
+          FromDate: fromDateStr,
+          ToDate: toDateStr,
+          TranStatus: 'Success',
+          Page: page,
+          Page_size: pageSize
+        }),
+        signal: controller.signal
+      });
+
+      if (!listRes.ok) {
+        throw new Error(`ListTransactions returned HTTP status ${listRes.status}`);
+      }
+
+      const lData = await listRes.json().catch((err) => {
+        throw new Error(`ListTransactions invalid JSON response: ${err?.message || err}`);
+      });
+
+      if (!lData || typeof lData !== 'object' || (lData.ResponseCode !== 0 && lData.ResponseCode !== '0')) {
+        throw new Error(`ListTransactions non-zero ResponseCode: ${lData?.ResponseCode} (${lData?.Description || 'malformed response'})`);
+      }
+
+      const list = lData.Tranzactions || lData.Transactions;
+      if (!Array.isArray(list)) {
+        throw new Error('ListTransactions response missing Tranzactions array (malformed response)');
+      }
+
+      const foundTxn = list.find((t) =>
+        String(t.TranzactionId || t.DealNumber || t.TransactionId || t.dealNumber || '') === dealIdStr
+      );
+
+      if (foundTxn) {
+        return { txn: foundTxn, error: null, hitPageCap: false };
+      }
+
+      if (list.length < pageSize) {
+        break;
+      }
+
+      if (page === maxPages) {
+        return { txn: null, error: null, hitPageCap: true };
+      }
+      page += 1;
+    }
+    return { txn: null, error: null, hitPageCap: false };
+  } catch (err) {
+    return { txn: null, error: err, hitPageCap: false };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function validateCardcomTransactionMatch({ txn, terminal, dealIdStr, expectedAmount, expectedDocNumber = null }) {
+  if (!txn) {
+    return { valid: false, reason: `Cardcom transaction not found for deal ${dealIdStr} on terminal ${terminal}` };
+  }
+
+  // 1. Verify terminal
+  const txnTerminal = String(txn.TerminalNumber ?? txn.terminalNumber ?? terminal).trim();
+  if (txn.TerminalNumber !== undefined && txnTerminal !== String(terminal).trim()) {
+    return { valid: false, reason: `Terminal mismatch for deal ${dealIdStr}: expected ${terminal}, got ${txnTerminal}` };
+  }
+
+  // 2. Verify deal (TranzactionId / DealNumber)
+  const txnDealId = String(txn.TranzactionId || txn.DealNumber || txn.TransactionId || txn.dealNumber || '').trim();
+  if (txnDealId !== dealIdStr) {
+    return { valid: false, reason: `Deal mismatch for deal ${dealIdStr}: expected ${dealIdStr}, got ${txnDealId}` };
+  }
+
+  // 3. Verify amount
+  const txnAmount = Number(txn.Amount ?? txn.Sum ?? txn.amount ?? 0);
+  if (Math.abs(txnAmount - expectedAmount) >= 0.01) {
+    return { valid: false, reason: `Amount mismatch for deal ${dealIdStr}: expected ${expectedAmount}, got ${txnAmount}` };
+  }
+
+  // 4. Verify currency (CoinId = 1 or ILS)
+  const txnCoin = String(txn.CoinId ?? txn.coinId ?? txn.ISOCoinID ?? txn.Currency ?? '1').trim();
+  if (txnCoin !== '1' && txnCoin !== 'ILS') {
+    return { valid: false, reason: `Currency mismatch for deal ${dealIdStr}: expected ILS (1), got ${txnCoin}` };
+  }
+
+  // 5. If verifying against a known document_number
+  const txnDocNumber = String(
+    txn.DocumentNumber
+    || txn.DocNumber
+    || txn.InvoiceNumber
+    || txn.documentNumber
+    || txn.docNumber
+    || txn.invoiceNumber
+    || ''
+  ).trim();
+
+  if (expectedDocNumber) {
+    if (!txnDocNumber) {
+      return { valid: false, reason: `Document missing in Cardcom for deal ${dealIdStr}: expected document ${expectedDocNumber}, got none` };
+    }
+    if (txnDocNumber !== String(expectedDocNumber).trim()) {
+      return { valid: false, reason: `Document mismatch for deal ${dealIdStr}: expected document ${expectedDocNumber}, got ${txnDocNumber}` };
+    }
+  }
+
+  const txnDocUrl = String(txn.DocumentUrl || txn.DocUrl || txn.Url || txn.url || '').trim();
+  return { valid: true, docNumber: txnDocNumber, docUrl: txnDocUrl };
+}
+
 async function verifySessionToken(env, token) {
   if (!token || !token.includes('.')) return null;
   const secret = String(env?.CHECKOUT_MAILBOX_SECRET || env?.HOTELOS_API_SECRET || '').trim();
@@ -450,7 +579,7 @@ export async function onRequest(context) {
       const receiptData = await receiptRpcRes.json().catch(() => ({}));
       let invoiceInfo = null;
 
-      // 1. If document_number is already known (from imported proposal or ledger), validate and reuse it, never create a new one
+      // 1. If document_number is already known (from imported proposal or ledger), authoritatively verify against Cardcom before reuse
       const knownDocNumber = String(
         receiptData?.document_number ||
         match?.document_number ||
@@ -467,9 +596,77 @@ export async function onRequest(context) {
       ).trim();
 
       if (knownDocNumber) {
+        const { txn, error, hitPageCap } = await searchCardcomTransaction({
+          terminal,
+          dealIdStr,
+          apiName,
+          apiPassword,
+          dealTime: match?.deal_time
+        });
+
+        if (error || hitPageCap) {
+          const reason = error
+            ? `Cardcom verification error: ${error.message}`
+            : `Cardcom verification reached page cap (20 pages) without resolving deal ${dealIdStr}`;
+
+          await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
+            method: 'POST',
+            body: JSON.stringify({
+              p_terminal: terminal,
+              p_deal_id: dealIdStr,
+              p_error_message: reason
+            })
+          }, env, { requireServiceRole: true });
+
+          console.error('[STAFF ALERT] Cardcom deal reconciliation required:', {
+            terminal,
+            dealId: dealIdStr,
+            bookingId: booking_id,
+            reason
+          });
+
+          return errorJson(
+            `Deal ${dealIdStr} requires staff reconciliation (${reason}).`,
+            409,
+            'RECONCILIATION_REQUIRED'
+          );
+        }
+
+        const matchCheck = validateCardcomTransactionMatch({
+          txn,
+          terminal,
+          dealIdStr,
+          expectedAmount: amount,
+          expectedDocNumber: knownDocNumber
+        });
+
+        if (!matchCheck.valid) {
+          await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
+            method: 'POST',
+            body: JSON.stringify({
+              p_terminal: terminal,
+              p_deal_id: dealIdStr,
+              p_error_message: matchCheck.reason
+            })
+          }, env, { requireServiceRole: true });
+
+          console.error('[STAFF ALERT] Cardcom deal reconciliation required:', {
+            terminal,
+            dealId: dealIdStr,
+            bookingId: booking_id,
+            reason: matchCheck.reason
+          });
+
+          return errorJson(
+            `Deal ${dealIdStr} document reuse verification failed (${matchCheck.reason}).`,
+            409,
+            'RECONCILIATION_REQUIRED'
+          );
+        }
+
         invoiceInfo = {
           documentNumber: knownDocNumber,
-          documentUrl: knownDocUrl,
+          documentUrl: matchCheck.docUrl || knownDocUrl,
           dealId: dealIdStr,
           reused: true
         };
@@ -501,9 +698,62 @@ export async function onRequest(context) {
 
         const claimData = await claimRes.json().catch(() => ({}));
         if (claimData?.document_number) {
+          const claimDoc = String(claimData.document_number).trim();
+          const { txn, error, hitPageCap } = await searchCardcomTransaction({
+            terminal,
+            dealIdStr,
+            apiName,
+            apiPassword,
+            dealTime: match?.deal_time
+          });
+
+          if (error || hitPageCap) {
+            const reason = error
+              ? `Cardcom verification error: ${error.message}`
+              : `Cardcom verification reached page cap (20 pages) without resolving deal ${dealIdStr}`;
+
+            await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
+              method: 'POST',
+              body: JSON.stringify({ p_terminal: terminal, p_deal_id: dealIdStr, p_error_message: reason })
+            }, env, { requireServiceRole: true });
+
+            console.error('[STAFF ALERT] Cardcom deal reconciliation required:', {
+              terminal,
+              dealId: dealIdStr,
+              bookingId: booking_id,
+              reason
+            });
+
+            return errorJson(`Deal ${dealIdStr} requires staff reconciliation (${reason}).`, 409, 'RECONCILIATION_REQUIRED');
+          }
+
+          const matchCheck = validateCardcomTransactionMatch({
+            txn,
+            terminal,
+            dealIdStr,
+            expectedAmount: amount,
+            expectedDocNumber: claimDoc
+          });
+
+          if (!matchCheck.valid) {
+            await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
+              method: 'POST',
+              body: JSON.stringify({ p_terminal: terminal, p_deal_id: dealIdStr, p_error_message: matchCheck.reason })
+            }, env, { requireServiceRole: true });
+
+            console.error('[STAFF ALERT] Cardcom deal reconciliation required:', {
+              terminal,
+              dealId: dealIdStr,
+              bookingId: booking_id,
+              reason: matchCheck.reason
+            });
+
+            return errorJson(`Deal ${dealIdStr} document reuse verification failed (${matchCheck.reason}).`, 409, 'RECONCILIATION_REQUIRED');
+          }
+
           invoiceInfo = {
-            documentNumber: String(claimData.document_number),
-            documentUrl: String(claimData.document_url || ''),
+            documentNumber: claimDoc,
+            documentUrl: matchCheck.docUrl || String(claimData.document_url || ''),
             dealId: dealIdStr,
             reused: true
           };
@@ -516,93 +766,19 @@ export async function onRequest(context) {
         receiptData?.status === 'reconciliation_needed'
       );
 
-      let lookupError = null;
-      let hitPageCap = false;
       if (!invoiceInfo) {
-        const fromDateStr = formatCardcomDate(match?.deal_time || new Date(Date.now() - 30 * 86400000).toISOString());
-        const toDateStr = formatCardcomDate(new Date(Date.now() + 86400000).toISOString());
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10000);
-        let page = 1;
-        const pageSize = 100;
-        const maxPages = 20;
+        const { txn, error, hitPageCap } = await searchCardcomTransaction({
+          terminal,
+          dealIdStr,
+          apiName,
+          apiPassword,
+          dealTime: match?.deal_time
+        });
 
-        try {
-          while (page <= maxPages) {
-            const listRes = await fetch('https://secure.cardcom.solutions/api/v11/Transactions/ListTransactions', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                ApiName: apiName,
-                ApiPassword: apiPassword,
-                LimitForTerminal: Number(terminal),
-                TerminalNumber: Number(terminal),
-                FromDate: fromDateStr,
-                ToDate: toDateStr,
-                TranStatus: 'Success',
-                Page: page,
-                Page_size: pageSize
-              }),
-              signal: controller.signal
-            });
-
-            if (!listRes.ok) {
-              throw new Error(`ListTransactions returned HTTP status ${listRes.status}`);
-            }
-
-            const lData = await listRes.json().catch((err) => {
-              throw new Error(`ListTransactions invalid JSON response: ${err?.message || err}`);
-            });
-
-            if (!lData || typeof lData !== 'object' || (lData.ResponseCode !== 0 && lData.ResponseCode !== '0')) {
-              throw new Error(`ListTransactions non-zero ResponseCode: ${lData?.ResponseCode} (${lData?.Description || 'malformed response'})`);
-            }
-
-            const list = lData.Tranzactions || lData.Transactions;
-            if (!Array.isArray(list)) {
-              throw new Error('ListTransactions response missing Tranzactions array (malformed response)');
-            }
-
-            // Strictly match by documented TranzactionId or DealNumber per KB 499
-            const foundTxn = list.find((t) =>
-              String(t.TranzactionId || t.DealNumber || '') === dealIdStr
-            );
-
-            if (foundTxn) {
-              const recDocNumber = foundTxn.DocumentNumber || foundTxn.DocNumber || foundTxn.InvoiceNumber;
-              const recDocUrl = foundTxn.DocumentUrl || foundTxn.DocUrl;
-              if (recDocNumber) {
-                invoiceInfo = {
-                  documentNumber: String(recDocNumber),
-                  documentUrl: String(recDocUrl || ''),
-                  dealId: dealIdStr,
-                  reused: true
-                };
-              }
-              break;
-            }
-
-            if (list.length < pageSize) {
-              break;
-            }
-
-            if (page === maxPages) {
-              hitPageCap = true;
-            }
-            page += 1;
-          }
-        } catch (err) {
-          lookupError = err;
-        } finally {
-          clearTimeout(timeout);
-        }
-
-        // Fail-closed ALWAYS:
-        // Any lookup error, malformed response or page cap means reconciliation_needed plus a staff alert, with no CreateDocument.
-        if (lookupError || hitPageCap) {
-          const reason = lookupError
-            ? `Cardcom lookup error: ${lookupError.message}`
-            : `Cardcom lookup reached page cap (${maxPages} pages) without resolving deal ${dealIdStr}`;
+        if (error || hitPageCap) {
+          const reason = error
+            ? `Cardcom lookup error: ${error.message}`
+            : `Cardcom lookup reached page cap (20 pages) without resolving deal ${dealIdStr}`;
 
           await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
             method: 'POST',
@@ -627,7 +803,49 @@ export async function onRequest(context) {
           );
         }
 
-        // Also if the deal was in an ambiguous state and lookup did not confirm an existing document:
+        if (txn) {
+          const matchCheck = validateCardcomTransactionMatch({
+            txn,
+            terminal,
+            dealIdStr,
+            expectedAmount: amount
+          });
+
+          if (!matchCheck.valid) {
+            await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
+              method: 'POST',
+              body: JSON.stringify({
+                p_terminal: terminal,
+                p_deal_id: dealIdStr,
+                p_error_message: matchCheck.reason
+              })
+            }, env, { requireServiceRole: true });
+
+            console.error('[STAFF ALERT] Cardcom deal reconciliation required:', {
+              terminal,
+              dealId: dealIdStr,
+              bookingId: booking_id,
+              reason: matchCheck.reason
+            });
+
+            return errorJson(
+              `Deal ${dealIdStr} transaction validation failed (${matchCheck.reason}).`,
+              409,
+              'RECONCILIATION_REQUIRED'
+            );
+          }
+
+          if (matchCheck.docNumber) {
+            invoiceInfo = {
+              documentNumber: matchCheck.docNumber,
+              documentUrl: matchCheck.docUrl,
+              dealId: dealIdStr,
+              reused: true
+            };
+          }
+        }
+
+        // If the deal was in an ambiguous state and lookup did not confirm an existing document:
         if (wasAmbiguous && !invoiceInfo) {
           const reason = `Reconciliation completed without finding confirmed document after ambiguous outcome for deal ${dealIdStr}`;
           await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {

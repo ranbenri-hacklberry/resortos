@@ -8,7 +8,7 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: /.*\/pipeline(\.js)?$/,
+        find: path.resolve(__dirname, 'services/resortos-agent/src/pipeline.js'),
         replacement: path.resolve(__dirname, 'services/resortos-agent/src/mockPipeline.js')
       },
       {
