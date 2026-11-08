@@ -2,12 +2,24 @@
 -- ResortOS Cardcom Terminal (184288) Sync, Pending Matches & Deal Ledger
 -- Migration: 009_cardcom_terminal_sync_and_ledger.sql
 -- Enforces:
--- 1. Upgrades existing schema from server/migration_cardcom_terminal_matches.sql
---    (additive ALTER TABLE for seen_deals and pending_matches, converts pending_matches.id to text)
--- 2. Restrictive RLS & revoked permissions (service_role only, no anon/authenticated access)
--- 3. Atomic booking clearing_payment update RPC record_cardcom_deal_payment with FOR UPDATE locks
---    (ledger claimed and locked BEFORE checking global assignment)
+-- 1. Receipt before invoice (hard rule): persist receipt first in booking (status pending_invoice),
+--    then call Cardcom CreateDocument, then finalize with document number.
+-- 2. Retry/duplicates: ambiguous outcomes become reconciliation_needed (never failed).
+--    Retries require an atomic ownership claim (UPDATE ... WHERE status IN (...) RETURNING).
+-- 3. Idempotent migration that upgrades existing schema from server/migration_cardcom_terminal_matches.sql
+-- 4. Restrictive RLS & revoked permissions (service_role only, no anon/authenticated access)
 -- ============================================================================
+
+-- Prerequisites for standalone / testing environments
+CREATE TABLE IF NOT EXISTS public.hotelos_bookings (
+  id TEXT PRIMARY KEY,
+  guest_name TEXT,
+  total_price_agorot BIGINT DEFAULT 0,
+  clearing_payments JSONB DEFAULT '[]'::jsonb,
+  payment_status TEXT DEFAULT 'UNPAID',
+  payment_mode TEXT,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
 
 -- 1. Cardcom Deal Ledger (Atomic claim & exactly-one invoice per deal)
 CREATE TABLE IF NOT EXISTS public.cardcom_deal_ledger (
@@ -18,7 +30,7 @@ CREATE TABLE IF NOT EXISTS public.cardcom_deal_ledger (
   amount NUMERIC(10, 2) NOT NULL,
   currency TEXT NOT NULL DEFAULT 'ILS',
   external_id TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'claiming', -- 'claiming', 'invoiced', 'reconciliation_needed', 'failed'
+  status TEXT NOT NULL DEFAULT 'pending_invoice', -- 'pending_invoice', 'claiming_retry', 'invoiced', 'reconciliation_needed'
   document_number TEXT,
   document_url TEXT,
   error_message TEXT,
@@ -95,6 +107,7 @@ CREATE INDEX IF NOT EXISTS idx_cardcom_pending_matches_deal ON public.cardcom_pe
 -- 4. Audit Log for Emergency Escapes & Terminal Actions
 CREATE TABLE IF NOT EXISTS public.cardcom_terminal_audit_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id TEXT,
   action TEXT NOT NULL,
   staff_id TEXT,
   staff_name TEXT,
@@ -103,6 +116,9 @@ CREATE TABLE IF NOT EXISTS public.cardcom_terminal_audit_log (
   details JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE public.cardcom_terminal_audit_log ADD COLUMN IF NOT EXISTS event_id TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_cardcom_terminal_audit_log_event_id ON public.cardcom_terminal_audit_log (event_id) WHERE event_id IS NOT NULL;
 
 -- 5. Revoke permissive access & enforce strict service_role-only security
 DROP POLICY IF EXISTS "lan_cardcom_seen_deals_all" ON public.cardcom_seen_deals;
@@ -139,11 +155,12 @@ DROP POLICY IF EXISTS "Service role only cardcom_terminal_audit_log" ON public.c
 CREATE POLICY "Service role only cardcom_terminal_audit_log"
 ON public.cardcom_terminal_audit_log FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- 6. Atomic Booking Clearing Payment Append Function
--- Avoids read-modify-write races when recording payments on hotelos_bookings
-CREATE OR REPLACE FUNCTION public.record_cardcom_deal_payment(
+-- 6. Receipt Before Invoice (Hard Rule) RPC
+-- Persists the receipt in the booking and claims the deal in the ledger with status 'pending_invoice'
+-- BEFORE any Cardcom CreateDocument API call is made.
+CREATE OR REPLACE FUNCTION public.record_cardcom_deal_receipt(
   p_booking_id TEXT,
-  p_payment_entry JSONB
+  p_receipt_entry JSONB
 ) RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -157,10 +174,7 @@ DECLARE
   v_terminal TEXT;
   v_amount_ils NUMERIC;
   v_amount_agorot BIGINT;
-  v_doc_number TEXT;
-  v_doc_url TEXT;
   v_external_id TEXT;
-  v_idx INT;
   v_i INT;
   v_updated_clearing JSONB := '[]'::jsonb;
   v_found BOOLEAN := false;
@@ -175,18 +189,18 @@ BEGIN
     RAISE EXCEPTION 'INVALID_ARGUMENT: booking_id is required';
   END IF;
 
-  v_deal_number := COALESCE(p_payment_entry->>'deal_number', p_payment_entry->>'txn');
+  v_deal_number := COALESCE(p_receipt_entry->>'deal_number', p_receipt_entry->>'txn');
   IF v_deal_number IS NULL OR trim(v_deal_number) = '' THEN
     RAISE EXCEPTION 'INVALID_ARGUMENT: deal_number is required';
   END IF;
 
-  v_terminal := COALESCE(p_payment_entry->>'terminal', '184288');
+  v_terminal := COALESCE(p_receipt_entry->>'terminal', '184288');
   IF v_terminal IS NULL OR trim(v_terminal) = '' THEN
     RAISE EXCEPTION 'INVALID_ARGUMENT: terminal is required';
   END IF;
 
-  v_amount_ils := (p_payment_entry->>'amount_ils')::NUMERIC;
-  v_amount_agorot := (p_payment_entry->>'amount_agorot')::BIGINT;
+  v_amount_ils := (p_receipt_entry->>'amount_ils')::NUMERIC;
+  v_amount_agorot := (p_receipt_entry->>'amount_agorot')::BIGINT;
   IF (v_amount_ils IS NULL OR v_amount_ils <= 0) AND (v_amount_agorot IS NULL OR v_amount_agorot <= 0) THEN
     RAISE EXCEPTION 'INVALID_ARGUMENT: amount must be greater than zero';
   END IF;
@@ -198,9 +212,7 @@ BEGIN
     v_amount_agorot := ROUND(v_amount_ils * 100)::BIGINT;
   END IF;
 
-  v_doc_number := COALESCE(p_payment_entry->>'document_number', p_payment_entry->>'invoice');
-  v_doc_url := COALESCE(p_payment_entry->>'document_url', p_payment_entry->>'invoice_url');
-  v_external_id := COALESCE(p_payment_entry->>'external_id', 'deal-' || v_deal_number);
+  v_external_id := COALESCE(p_receipt_entry->>'external_id', 'deal-' || v_deal_number);
 
   -- 1. Lock the ledger row for the deal (claim) BEFORE checking global assignment
   SELECT * INTO v_ledger
@@ -211,13 +223,10 @@ BEGIN
   IF NOT FOUND THEN
     INSERT INTO public.cardcom_deal_ledger (
       terminal, deal_id, booking_id, amount, currency, external_id, status,
-      document_number, document_url, claimed_at, invoiced_at, updated_at
+      claimed_at, updated_at
     ) VALUES (
       v_terminal, v_deal_number, p_booking_id, v_amount_ils, 'ILS', v_external_id,
-      CASE WHEN v_doc_number IS NOT NULL AND v_doc_number <> '' THEN 'invoiced' ELSE 'claiming' END,
-      v_doc_number, v_doc_url, now(),
-      CASE WHEN v_doc_number IS NOT NULL AND v_doc_number <> '' THEN now() ELSE NULL END,
-      now()
+      'pending_invoice', now(), now()
     )
     RETURNING * INTO v_ledger;
   ELSE
@@ -225,13 +234,14 @@ BEGIN
       RAISE EXCEPTION 'DEAL_ALREADY_ASSIGNED: Deal % is already claimed by booking %', v_deal_number, v_ledger.booking_id;
     END IF;
 
-    UPDATE public.cardcom_deal_ledger
-    SET document_number = COALESCE(v_doc_number, v_ledger.document_number),
-        document_url = COALESCE(v_doc_url, v_ledger.document_url),
-        status = CASE WHEN COALESCE(v_doc_number, v_ledger.document_number) IS NOT NULL THEN 'invoiced' ELSE v_ledger.status END,
-        invoiced_at = CASE WHEN COALESCE(v_doc_number, v_ledger.document_number) IS NOT NULL AND v_ledger.invoiced_at IS NULL THEN now() ELSE v_ledger.invoiced_at END,
-        updated_at = now()
-    WHERE terminal = v_terminal AND deal_id = v_deal_number;
+    -- If deal was already invoiced, keep it invoiced (for document reuse)
+    IF v_ledger.status = 'invoiced' AND v_ledger.document_number IS NOT NULL THEN
+      -- Keep as invoiced
+    ELSIF v_ledger.status IN ('pending_invoice', 'reconciliation_needed', 'claiming_retry') THEN
+      UPDATE public.cardcom_deal_ledger
+      SET status = 'pending_invoice', updated_at = now()
+      WHERE terminal = v_terminal AND deal_id = v_deal_number;
+    END IF;
   END IF;
 
   -- 2. Check global assignment in hotelos_bookings
@@ -260,11 +270,11 @@ BEGIN
     v_clearing := '[]'::jsonb;
   END IF;
 
-  -- Check if deal already exists in clearing_payments array
+  -- Merge receipt entry into clearing_payments
   FOR v_i IN 0 .. (jsonb_array_length(v_clearing) - 1) LOOP
     v_item := v_clearing->v_i;
     IF (v_item->>'deal_number' = v_deal_number OR v_item->>'txn' = v_deal_number) THEN
-      v_updated_clearing := v_updated_clearing || jsonb_build_array(v_item || p_payment_entry);
+      v_updated_clearing := v_updated_clearing || jsonb_build_array(v_item || p_receipt_entry);
       v_found := true;
     ELSE
       v_updated_clearing := v_updated_clearing || jsonb_build_array(v_item);
@@ -272,7 +282,7 @@ BEGIN
   END LOOP;
 
   IF NOT v_found THEN
-    v_updated_clearing := v_updated_clearing || jsonb_build_array(p_payment_entry);
+    v_updated_clearing := v_updated_clearing || jsonb_build_array(p_receipt_entry);
   END IF;
 
   -- Calculate total paid agorot
@@ -309,15 +319,201 @@ BEGIN
     'booking_id', p_booking_id,
     'payment_status', v_status,
     'total_paid_agorot', v_total_paid_agorot,
-    'clearing_payments', v_updated_clearing
+    'clearing_payments', v_updated_clearing,
+    'ledger_status', v_ledger.status,
+    'document_number', v_ledger.document_number,
+    'document_url', v_ledger.document_url
   );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.record_cardcom_deal_receipt(TEXT, JSONB) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.record_cardcom_deal_receipt(TEXT, JSONB) TO service_role;
+
+-- Backward compatible alias for record_cardcom_deal_payment
+CREATE OR REPLACE FUNCTION public.record_cardcom_deal_payment(
+  p_booking_id TEXT,
+  p_payment_entry JSONB
+) RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+  RETURN public.record_cardcom_deal_receipt(p_booking_id, p_payment_entry);
 END;
 $$;
 
 REVOKE ALL ON FUNCTION public.record_cardcom_deal_payment(TEXT, JSONB) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.record_cardcom_deal_payment(TEXT, JSONB) TO service_role;
 
--- 7. Transactional Storage Persistence RPC (persist seen + pending together)
+-- 7. Atomic Retry Claim
+-- Any retry needs an atomic ownership claim in the DB before CreateDocument
+CREATE OR REPLACE FUNCTION public.claim_cardcom_deal_retry(
+  p_terminal TEXT,
+  p_deal_id TEXT,
+  p_booking_id TEXT
+) RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_ledger RECORD;
+BEGIN
+  UPDATE public.cardcom_deal_ledger
+  SET status = 'claiming_retry', updated_at = now()
+  WHERE terminal = p_terminal
+    AND deal_id = p_deal_id
+    AND status IN ('pending_invoice', 'reconciliation_needed')
+    AND booking_id = p_booking_id
+  RETURNING * INTO v_ledger;
+
+  IF NOT FOUND THEN
+    -- Check if it exists with other status or other booking
+    SELECT * INTO v_ledger
+    FROM public.cardcom_deal_ledger
+    WHERE terminal = p_terminal AND deal_id = p_deal_id;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'LEDGER_ENTRY_NOT_FOUND: Deal % not found in ledger', p_deal_id;
+    END IF;
+
+    IF v_ledger.booking_id <> p_booking_id THEN
+      RAISE EXCEPTION 'DEAL_ALREADY_ASSIGNED: Deal % belongs to booking %', p_deal_id, v_ledger.booking_id;
+    END IF;
+
+    IF v_ledger.status = 'invoiced' THEN
+      RETURN jsonb_build_object('ok', true, 'status', 'invoiced', 'document_number', v_ledger.document_number, 'document_url', v_ledger.document_url);
+    END IF;
+
+    IF v_ledger.status = 'claiming_retry' THEN
+      RAISE EXCEPTION 'DEAL_CLAIM_IN_PROGRESS: Deal % is currently being retried by another worker', p_deal_id;
+    END IF;
+
+    RAISE EXCEPTION 'INVALID_CLAIM_STATE: Deal % is in status %', p_deal_id, v_ledger.status;
+  END IF;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'status', v_ledger.status,
+    'terminal', v_ledger.terminal,
+    'deal_id', v_ledger.deal_id,
+    'booking_id', v_ledger.booking_id
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.claim_cardcom_deal_retry(TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.claim_cardcom_deal_retry(TEXT, TEXT, TEXT) TO service_role;
+
+-- 8. Finalize Invoice Document RPC
+-- Saves the document number and document url on the ledger, booking clearing_payments, and pending matches
+CREATE OR REPLACE FUNCTION public.finalize_cardcom_deal_invoice(
+  p_booking_id TEXT,
+  p_deal_number TEXT,
+  p_terminal TEXT,
+  p_document_number TEXT,
+  p_document_url TEXT
+) RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_booking RECORD;
+  v_clearing JSONB;
+  v_i INT;
+  v_item JSONB;
+  v_updated_clearing JSONB := '[]'::jsonb;
+BEGIN
+  -- 1. Update ledger
+  UPDATE public.cardcom_deal_ledger
+  SET status = 'invoiced',
+      document_number = p_document_number,
+      document_url = p_document_url,
+      invoiced_at = COALESCE(invoiced_at, now()),
+      updated_at = now()
+  WHERE terminal = p_terminal AND deal_id = p_deal_number;
+
+  -- 2. Update booking clearing payments
+  SELECT * INTO v_booking
+  FROM public.hotelos_bookings
+  WHERE id = p_booking_id
+  FOR UPDATE;
+
+  IF FOUND THEN
+    v_clearing := COALESCE(v_booking.clearing_payments, '[]'::jsonb);
+    IF jsonb_typeof(v_clearing) = 'array' THEN
+      FOR v_i IN 0 .. (jsonb_array_length(v_clearing) - 1) LOOP
+        v_item := v_clearing->v_i;
+        IF (v_item->>'deal_number' = p_deal_number OR v_item->>'txn' = p_deal_number) THEN
+          v_updated_clearing := v_updated_clearing || jsonb_build_array(v_item || jsonb_build_object(
+            'invoice', p_document_number,
+            'invoice_url', p_document_url,
+            'document_number', p_document_number,
+            'document_url', p_document_url,
+            'invoice_status', 'invoiced'
+          ));
+        ELSE
+          v_updated_clearing := v_updated_clearing || jsonb_build_array(v_item);
+        END IF;
+      END LOOP;
+
+      UPDATE public.hotelos_bookings
+      SET clearing_payments = v_updated_clearing,
+          updated_at = now()
+      WHERE id = p_booking_id;
+    END IF;
+  END IF;
+
+  -- 3. Update pending matches
+  UPDATE public.cardcom_pending_matches
+  SET status = 'manual_linked',
+      selected_booking_id = p_booking_id,
+      invoice_number = p_document_number,
+      invoice_url = p_document_url,
+      document_number = p_document_number,
+      document_url = p_document_url,
+      approved_at = COALESCE(approved_at, now()),
+      payment_recorded_at = COALESCE(payment_recorded_at, now()),
+      updated_at = now()
+  WHERE terminal_number = p_terminal AND deal_id = p_deal_number;
+
+  RETURN jsonb_build_object('ok', true, 'status', 'invoiced', 'document_number', p_document_number);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.finalize_cardcom_deal_invoice(TEXT, TEXT, TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.finalize_cardcom_deal_invoice(TEXT, TEXT, TEXT, TEXT, TEXT) TO service_role;
+
+-- 9. Mark Reconciliation Needed RPC
+-- Ambiguous outcomes (timeout, network error, missing doc number) become reconciliation_needed (never failed)
+CREATE OR REPLACE FUNCTION public.mark_cardcom_deal_reconciliation_needed(
+  p_terminal TEXT,
+  p_deal_id TEXT,
+  p_error_message TEXT
+) RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+  UPDATE public.cardcom_deal_ledger
+  SET status = 'reconciliation_needed',
+      error_message = p_error_message,
+      updated_at = now()
+  WHERE terminal = p_terminal AND deal_id = p_deal_id;
+
+  RETURN jsonb_build_object('ok', true, 'status', 'reconciliation_needed');
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.mark_cardcom_deal_reconciliation_needed(TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.mark_cardcom_deal_reconciliation_needed(TEXT, TEXT, TEXT) TO service_role;
+
+-- 10. Transactional Storage Persistence RPC (persist seen + pending together)
+-- Preserves staff statuses (manual_linked, test, ignored, approved)
 CREATE OR REPLACE FUNCTION public.persist_cardcom_sync(
   p_seen JSONB,
   p_pending JSONB
@@ -367,7 +563,7 @@ BEGIN
     END LOOP;
   END IF;
 
-  -- Upsert pending matches (preserving already-resolved statuses)
+  -- Upsert pending matches (strictly preserving staff-assigned statuses)
   IF p_pending IS NOT NULL AND jsonb_typeof(p_pending) = 'array' THEN
     FOR v_item IN SELECT * FROM jsonb_array_elements(p_pending) LOOP
       INSERT INTO public.cardcom_pending_matches (

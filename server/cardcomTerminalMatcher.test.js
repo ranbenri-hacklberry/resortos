@@ -895,10 +895,10 @@ test('fetchCardcomTransactions sends LimitForTerminal, paginates beyond 50, chec
   );
 });
 
-test('CardcomStorage persist writes both tables, surfaces write errors, and preserves local backup', async () => {
+test('CardcomStorage persist writes both tables via persist_cardcom_sync RPC, surfaces write errors, and preserves local backup', async () => {
   const sentRequests = [];
   const mockFetch = async (url, opts) => {
-    sentRequests.push({ url, method: opts.method, body: opts.body ? JSON.parse(opts.body) : null });
+    sentRequests.push({ url: String(url), method: opts.method, body: opts.body ? JSON.parse(opts.body) : null });
     return { ok: true, status: 200, json: async () => [] };
   };
 
@@ -915,19 +915,19 @@ test('CardcomStorage persist writes both tables, surfaces write errors, and pres
 
   await storage.persist();
 
-  // Verify both tables were targeted
-  const seenReq = sentRequests.find((r) => r.url.includes('/cardcom_seen_deals'));
-  const pendingReq = sentRequests.find((r) => r.url.includes('/cardcom_pending_matches'));
+  // Verify persist_cardcom_sync RPC was targeted with both arrays
+  const rpcReq = sentRequests.find((r) => r.url.includes('/rpc/persist_cardcom_sync'));
   const runtimeReq = sentRequests.filter((r) => r.url.includes('/hotelos_runtime_settings'));
 
-  assert.ok(seenReq, 'Must persist to cardcom_seen_deals');
-  assert.ok(pendingReq, 'Must persist to cardcom_pending_matches');
+  assert.ok(rpcReq, 'Must persist to dedicated tables via persist_cardcom_sync RPC');
+  assert.ok(Array.isArray(rpcReq.body.p_seen) && rpcReq.body.p_seen.length > 0, 'Must include seen deals in RPC');
+  assert.ok(Array.isArray(rpcReq.body.p_pending) && rpcReq.body.p_pending.length > 0, 'Must include pending matches in RPC');
   assert.ok(runtimeReq.length >= 2, 'Must sync to hotelos_runtime_settings');
 
-  // Verify error surfacing on 500
+  // Verify error surfacing on RPC failure
   const failingFetch = async (url) => {
-    if (url.includes('/cardcom_seen_deals')) {
-      return { ok: false, status: 500, statusText: 'Internal Server Error' };
+    if (String(url).includes('/rpc/persist_cardcom_sync')) {
+      return { ok: false, status: 500, statusText: 'Internal Server Error', text: async () => 'DB RPC error' };
     }
     return { ok: true, status: 200, json: async () => [] };
   };
@@ -1022,10 +1022,11 @@ test('ops link endpoint integration: creates invoice with ExternalId, reuses exi
     payer_name: 'יוסי כהן'
   };
 
-  // 1. Success with new invoice creation
+  // 1. Success with new invoice creation: receipt before invoice!
+  let receiptRpcBody = null;
   let cardcomCreatedDoc = null;
-  let rpcBody = null;
-  let ledgerClaimBody = null;
+  let finalizeRpcBody = null;
+  let claimRetryCalled = false;
 
   const originalFetch = globalThis.fetch;
   try {
@@ -1038,15 +1039,23 @@ test('ops link endpoint integration: creates invoice with ExternalId, reuses exi
       if (urlStr.includes('/hotelos_bookings?id=eq.b-link-101')) {
         return new Response(JSON.stringify([mockBooking]), { status: 200 });
       }
-      if (urlStr.includes('/cardcom_deal_ledger?terminal=eq.184288&deal_id=eq.deal-link-777')) {
-        return new Response(JSON.stringify([]), { status: 200 });
+      if (urlStr.includes('/rpc/record_cardcom_deal_receipt')) {
+        receiptRpcBody = JSON.parse(opts.body);
+        return new Response(JSON.stringify({
+          ok: true,
+          booking_id: 'b-link-101',
+          payment_status: 'PARTIAL',
+          total_paid_agorot: 100000,
+          ledger_status: 'pending_invoice'
+        }), { status: 200 });
       }
-      if (urlStr.includes('/hotelos_bookings?clearing_payments=cs.')) {
-        return new Response(JSON.stringify([]), { status: 200 });
+      if (urlStr.includes('/rpc/claim_cardcom_deal_retry')) {
+        claimRetryCalled = true;
+        return new Response(JSON.stringify({ ok: true, status: 'claiming_retry' }), { status: 200 });
       }
-      if (urlStr.includes('/cardcom_deal_ledger') && opts.method === 'POST') {
-        ledgerClaimBody = JSON.parse(opts.body);
-        return new Response(JSON.stringify({ ok: true }), { status: 201 });
+      if (urlStr.includes('ListTransactions')) {
+        // Not yet created in Cardcom
+        return new Response(JSON.stringify({ ResponseCode: 0, Tranzactions: [] }), { status: 200 });
       }
       if (urlStr.includes('CreateDocument')) {
         cardcomCreatedDoc = JSON.parse(opts.body);
@@ -1056,12 +1065,9 @@ test('ops link endpoint integration: creates invoice with ExternalId, reuses exi
           DocumentUrl: 'https://cardcom/doc/100'
         }), { status: 200 });
       }
-      if (urlStr.includes('/cardcom_deal_ledger') && opts.method === 'PATCH') {
-        return new Response(JSON.stringify({ ok: true }), { status: 200 });
-      }
-      if (urlStr.includes('/rpc/record_cardcom_deal_payment')) {
-        rpcBody = JSON.parse(opts.body);
-        return new Response(JSON.stringify({ ok: true, new_balance_agorot: 0 }), { status: 200 });
+      if (urlStr.includes('/rpc/finalize_cardcom_deal_invoice')) {
+        finalizeRpcBody = JSON.parse(opts.body);
+        return new Response(JSON.stringify({ ok: true, status: 'invoiced', document_number: 'INV-OPS-100' }), { status: 200 });
       }
 
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
@@ -1089,9 +1095,13 @@ test('ops link endpoint integration: creates invoice with ExternalId, reuses exi
     assert.equal(res1.status, 200);
     assert.equal(body1.ok, true);
     assert.equal(body1.invoice.documentNumber, 'INV-OPS-100');
-    assert.equal(ledgerClaimBody.external_id, 'deal-link-777');
+    assert.ok(receiptRpcBody, 'Must call record_cardcom_deal_receipt FIRST');
+    assert.equal(receiptRpcBody.p_receipt_entry.deal_number, 'deal-link-777');
+    assert.equal(receiptRpcBody.p_receipt_entry.external_id, 'deal-link-777');
+    assert.equal(receiptRpcBody.p_receipt_entry.invoice_status, 'pending_invoice');
+    assert.equal(claimRetryCalled, true, 'Must call claim_cardcom_deal_retry before Cardcom');
     assert.equal(cardcomCreatedDoc.Document.ExternalId, 'deal-link-777');
-    assert.equal(rpcBody.p_payment_entry.deal_number, 'deal-link-777');
+    assert.equal(finalizeRpcBody.p_document_number, 'INV-OPS-100');
 
     // 2. Reject duplicate assignment if deal is already assigned to another booking
     globalThis.fetch = async (urlStr) => {
@@ -1101,14 +1111,11 @@ test('ops link endpoint integration: creates invoice with ExternalId, reuses exi
       if (String(urlStr).includes('/hotelos_bookings?id=eq.b-link-101')) {
         return new Response(JSON.stringify([mockBooking]), { status: 200 });
       }
-      if (String(urlStr).includes('/cardcom_deal_ledger')) {
-        return new Response(JSON.stringify([{
-          terminal: '184288',
-          deal_id: 'deal-link-777',
-          booking_id: 'b-other-booking-999',
-          status: 'invoiced',
-          document_number: 'INV-OTHER-999'
-        }]), { status: 200 });
+      if (String(urlStr).includes('/rpc/record_cardcom_deal_receipt')) {
+        return new Response(JSON.stringify({
+          error: 'DEAL_ALREADY_ASSIGNED',
+          message: 'Deal deal-link-777 is already claimed by booking b-other-999'
+        }), { status: 409 });
       }
       return new Response(JSON.stringify([]), { status: 200 });
     };
@@ -1135,34 +1142,21 @@ test('ops link endpoint integration: creates invoice with ExternalId, reuses exi
     assert.equal(dupRes.status, 409);
     assert.equal(dupBody.error, 'DEAL_ALREADY_ASSIGNED');
 
-    // 3. Reject with 500 DB_WRITE_FAILED if database write fails (never return success and NEVER fallback to read-modify-write PATCH)
-    let bookingPatchCalled = false;
-    globalThis.fetch = async (urlStr, opts = {}) => {
+    // 3. Reject with 500 DB_WRITE_FAILED if database receipt write fails: ZERO Cardcom calls!
+    let cardcomDocCalledOnDbFail = false;
+    globalThis.fetch = async (urlStr) => {
       if (String(urlStr).includes('/cardcom_pending_matches')) {
         return new Response(JSON.stringify([mockMatch]), { status: 200 });
       }
-      if (String(urlStr).includes('/hotelos_bookings?id=eq.b-link-101') && (!opts.method || opts.method === 'GET')) {
+      if (String(urlStr).includes('/hotelos_bookings?id=eq.b-link-101')) {
         return new Response(JSON.stringify([mockBooking]), { status: 200 });
       }
-      if (String(urlStr).includes('/cardcom_deal_ledger')) {
-        return new Response(JSON.stringify([]), { status: 200 });
+      if (String(urlStr).includes('/rpc/record_cardcom_deal_receipt')) {
+        return new Response(JSON.stringify({ error: 'DB_RECEIPT_ERROR' }), { status: 500 });
       }
       if (String(urlStr).includes('CreateDocument')) {
-        return new Response(JSON.stringify({
-          ResponseCode: 0,
-          DocumentNumber: 'INV-TEST-FAIL',
-          DocumentUrl: 'https://cardcom/doc/fail'
-        }), { status: 200 });
-      }
-      if (String(urlStr).includes('/hotelos_bookings?clearing_payments=cs.')) {
-        return new Response(JSON.stringify([]), { status: 200 });
-      }
-      if (String(urlStr).includes('/rpc/record_cardcom_deal_payment')) {
-        return new Response(JSON.stringify({ error: 'DB_ERROR' }), { status: 500 });
-      }
-      if (String(urlStr).includes('/hotelos_bookings?id=eq.b-link-101') && opts.method === 'PATCH') {
-        bookingPatchCalled = true;
-        return new Response(JSON.stringify({ error: 'PATCH_FAILED' }), { status: 500 });
+        cardcomDocCalledOnDbFail = true;
+        return new Response(JSON.stringify({ ResponseCode: 0 }), { status: 200 });
       }
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     };
@@ -1188,7 +1182,7 @@ test('ops link endpoint integration: creates invoice with ExternalId, reuses exi
     const failBody = await failRes.json();
     assert.equal(failRes.status, 500);
     assert.equal(failBody.error, 'DB_WRITE_FAILED');
-    assert.equal(bookingPatchCalled, false, 'Must NOT fallback to read-modify-write PATCH on bookings table');
+    assert.equal(cardcomDocCalledOnDbFail, false, 'Hard rule: Cardcom CreateDocument must NOT be called if DB receipt write fails');
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -1221,7 +1215,7 @@ test('concurrent link requests (Promise.all) produce exactly one Cardcom documen
   };
 
   let cardcomDocCount = 0;
-  let ledgerState = null;
+  let claimState = null;
 
   const originalFetch = globalThis.fetch;
   try {
@@ -1234,28 +1228,30 @@ test('concurrent link requests (Promise.all) produce exactly one Cardcom documen
       if (urlStr.includes('/hotelos_bookings?id=eq.b-conc-1')) {
         return new Response(JSON.stringify([mockBooking]), { status: 200 });
       }
-      if (urlStr.includes('/hotelos_bookings?clearing_payments=cs.')) {
-        return new Response(JSON.stringify([]), { status: 200 });
+      if (urlStr.includes('/rpc/record_cardcom_deal_receipt')) {
+        return new Response(JSON.stringify({
+          ok: true,
+          booking_id: 'b-conc-1',
+          payment_status: 'PARTIAL',
+          total_paid_agorot: 80000,
+          ledger_status: 'pending_invoice'
+        }), { status: 200 });
       }
-      if (urlStr.includes('/cardcom_deal_ledger') && (!opts.method || opts.method === 'GET')) {
-        return new Response(JSON.stringify(ledgerState ? [ledgerState] : []), { status: 200 });
-      }
-      if (urlStr.includes('/cardcom_deal_ledger') && opts.method === 'POST') {
-        if (ledgerState) {
-          // Conflict
-          return new Response(JSON.stringify({ error: 'Conflict' }), { status: 409 });
+      if (urlStr.includes('/rpc/claim_cardcom_deal_retry')) {
+        if (claimState === 'claiming_retry') {
+          return new Response(JSON.stringify({
+            error: 'DEAL_CLAIM_IN_PROGRESS',
+            message: 'Deal deal-conc-123 is currently being retried by another worker'
+          }), { status: 409 });
         }
-        ledgerState = { ...JSON.parse(opts.body), status: 'claiming' };
-        return new Response(JSON.stringify(ledgerState), { status: 201 });
+        claimState = 'claiming_retry';
+        return new Response(JSON.stringify({ ok: true, status: 'claiming_retry' }), { status: 200 });
       }
-      if (urlStr.includes('/cardcom_deal_ledger') && opts.method === 'PATCH') {
-        const patch = JSON.parse(opts.body);
-        ledgerState = { ...ledgerState, ...patch };
-        return new Response(JSON.stringify(ledgerState), { status: 200 });
+      if (urlStr.includes('ListTransactions')) {
+        return new Response(JSON.stringify({ ResponseCode: 0, Tranzactions: [] }), { status: 200 });
       }
       if (urlStr.includes('CreateDocument')) {
         cardcomDocCount++;
-        // Small delay to simulate network latency
         await new Promise((r) => setTimeout(r, 20));
         return new Response(JSON.stringify({
           ResponseCode: 0,
@@ -1263,8 +1259,8 @@ test('concurrent link requests (Promise.all) produce exactly one Cardcom documen
           DocumentUrl: 'https://cardcom/doc/888'
         }), { status: 200 });
       }
-      if (urlStr.includes('/rpc/record_cardcom_deal_payment')) {
-        return new Response(JSON.stringify({ ok: true, new_balance_agorot: 0 }), { status: 200 });
+      if (urlStr.includes('/rpc/finalize_cardcom_deal_invoice')) {
+        return new Response(JSON.stringify({ ok: true, status: 'invoiced', document_number: 'INV-CONC-888' }), { status: 200 });
       }
 
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
@@ -1293,14 +1289,11 @@ test('concurrent link requests (Promise.all) produce exactly one Cardcom documen
     // Exactly one Cardcom document creation was called
     assert.equal(cardcomDocCount, 1, 'Cardcom CreateDocument was called exactly once');
 
-    // One request succeeded with 200; the other either succeeded or returned 409 DEAL_CLAIM_IN_PROGRESS
+    // One request succeeded with 200; the other returned 409 DEAL_CLAIM_IN_PROGRESS
     const statuses = [res1.status, res2.status].sort();
     assert.ok(statuses.includes(200), 'At least one request succeeded');
-    if (res1.status === 200 && res2.status === 200) {
-      assert.equal(body1.invoice.documentNumber, 'INV-CONC-888');
-      assert.equal(body2.invoice.documentNumber, 'INV-CONC-888');
-    } else {
-      const rejected = res1.status !== 200 ? body1 : body2;
+    const rejected = res1.status !== 200 ? body1 : body2;
+    if (rejected?.error) {
       assert.equal(rejected.error, 'DEAL_CLAIM_IN_PROGRESS');
     }
   } finally {
@@ -1308,7 +1301,7 @@ test('concurrent link requests (Promise.all) produce exactly one Cardcom documen
   }
 });
 
-test('ops link fails immediately before Cardcom or booking write if atomic claim fails', async () => {
+test('ops link fails immediately before Cardcom or booking write if receipt write fails', async () => {
   const { onRequest } = await import('../functions/api/ops/[[path]].js');
 
   const baseEnv = {
@@ -1323,28 +1316,19 @@ test('ops link fails immediately before Cardcom or booking write if atomic claim
   const mockMatch = { deal_id: 'deal-claim-fail-99', amount: 500, approval: '112233' };
 
   let cardcomCalled = false;
-  let rpcCalled = false;
 
   const originalFetch = globalThis.fetch;
   try {
-    globalThis.fetch = async (url, opts = {}) => {
+    globalThis.fetch = async (url) => {
       const urlStr = String(url);
       if (urlStr.includes('/cardcom_pending_matches')) return new Response(JSON.stringify([mockMatch]), { status: 200 });
       if (urlStr.includes('/hotelos_bookings?id=eq.b-claim-fail')) return new Response(JSON.stringify([mockBooking]), { status: 200 });
-      if (urlStr.includes('/cardcom_deal_ledger') && (!opts.method || opts.method === 'GET')) {
-        return new Response(JSON.stringify([]), { status: 200 });
-      }
-      if (urlStr.includes('/cardcom_deal_ledger') && opts.method === 'POST') {
-        // Claim POST fails with 500 and verify returns empty
+      if (urlStr.includes('/rpc/record_cardcom_deal_receipt')) {
         return new Response(JSON.stringify({ error: 'DB_ERROR' }), { status: 500 });
       }
       if (urlStr.includes('CreateDocument')) {
         cardcomCalled = true;
         return new Response(JSON.stringify({ ResponseCode: 0 }), { status: 200 });
-      }
-      if (urlStr.includes('/rpc/record_cardcom_deal_payment')) {
-        rpcCalled = true;
-        return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     };
@@ -1359,9 +1343,8 @@ test('ops link fails immediately before Cardcom or booking write if atomic claim
     const body = await res.json();
 
     assert.equal(res.status, 500);
-    assert.equal(body.error, 'CLAIM_FAILED');
-    assert.equal(cardcomCalled, false, 'Cardcom CreateDocument must NOT be called when claim fails');
-    assert.equal(rpcCalled, false, 'RPC must NOT be called when claim fails');
+    assert.equal(body.error, 'DB_WRITE_FAILED');
+    assert.equal(cardcomCalled, false, 'Cardcom CreateDocument must NOT be called when DB receipt fails');
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -1383,6 +1366,7 @@ test('ops link timeout reconciliation looks up document by ExternalId and avoids
 
   let createDocCalled = false;
   let listTxnsCalled = false;
+  let listRequestBody = null;
 
   const originalFetch = globalThis.fetch;
   try {
@@ -1390,27 +1374,38 @@ test('ops link timeout reconciliation looks up document by ExternalId and avoids
       const urlStr = String(url);
       if (urlStr.includes('/cardcom_pending_matches')) return new Response(JSON.stringify([mockMatch]), { status: 200 });
       if (urlStr.includes('/hotelos_bookings?id=eq.b-rec-1')) return new Response(JSON.stringify([mockBooking]), { status: 200 });
-      if (urlStr.includes('/cardcom_deal_ledger') && (!opts.method || opts.method === 'GET')) {
-        // Deal is in reconciliation_needed state
-        return new Response(JSON.stringify([{
-          terminal: '184288',
-          deal_id: 'deal-rec-555',
+      if (urlStr.includes('/rpc/record_cardcom_deal_receipt')) {
+        return new Response(JSON.stringify({
+          ok: true,
           booking_id: 'b-rec-1',
-          status: 'reconciliation_needed',
-          external_id: 'deal-deal-rec-555'
-        }]), { status: 200 });
+          payment_status: 'PARTIAL',
+          total_paid_agorot: 50000,
+          ledger_status: 'pending_invoice'
+        }), { status: 200 });
       }
-      if (urlStr.includes('/cardcom_deal_ledger') && opts.method === 'PATCH') {
-        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      if (urlStr.includes('/rpc/claim_cardcom_deal_retry')) {
+        return new Response(JSON.stringify({ ok: true, status: 'claiming_retry' }), { status: 200 });
       }
       if (urlStr.includes('ListTransactions')) {
         listTxnsCalled = true;
+        listRequestBody = opts.body ? JSON.parse(opts.body) : null;
+        // Documented Cardcom KB 499 response structure
         return new Response(JSON.stringify({
           ResponseCode: 0,
-          Transactions: [{
-            DealNumber: 'deal-rec-555',
+          Description: 'Success',
+          Page: 1,
+          Page_size: 100,
+          Tranzactions: [{
+            TranzactionId: 'deal-rec-555',
+            TerminalNumber: 184288,
+            Amount: 500.0,
+            CoinId: 1,
             DocumentNumber: 'INV-RECONCILED-77',
-            DocumentUrl: 'https://cardcom/doc/reconciled-77'
+            DocumentUrl: 'https://cardcom/doc/reconciled-77',
+            ExternalId: 'deal-deal-rec-555',
+            DealType: 1,
+            IsRefund: false,
+            JParameter: 0
           }]
         }), { status: 200 });
       }
@@ -1418,8 +1413,8 @@ test('ops link timeout reconciliation looks up document by ExternalId and avoids
         createDocCalled = true;
         return new Response(JSON.stringify({ ResponseCode: 0 }), { status: 200 });
       }
-      if (urlStr.includes('/rpc/record_cardcom_deal_payment')) {
-        return new Response(JSON.stringify({ ok: true, new_balance_agorot: 0 }), { status: 200 });
+      if (urlStr.includes('/rpc/finalize_cardcom_deal_invoice')) {
+        return new Response(JSON.stringify({ ok: true, status: 'invoiced', document_number: 'INV-RECONCILED-77' }), { status: 200 });
       }
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     };
@@ -1438,7 +1433,110 @@ test('ops link timeout reconciliation looks up document by ExternalId and avoids
     assert.equal(body.invoice.documentNumber, 'INV-RECONCILED-77');
     assert.equal(body.invoice.reused, true);
     assert.equal(listTxnsCalled, true, 'Must query Cardcom for existing document');
+    assert.equal(listRequestBody.TranStatus, 'Success', 'Must send TranStatus: Success in ListTransactions request');
     assert.equal(createDocCalled, false, 'Must NOT call CreateDocument again during reconciliation');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('ops link timeout or network error marks reconciliation_needed (never failed)', async () => {
+  const { onRequest } = await import('../functions/api/ops/[[path]].js');
+
+  const baseEnv = {
+    SUPABASE_URL: 'https://mock.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'mock-service-key',
+    HOTELOS_DESK_PIN: '1234',
+    CARDCOM_API_NAME: 'test-cardcom-user',
+    CARDCOM_API_PASSWORD: 'test-cardcom-password'
+  };
+
+  const mockBooking = { id: 'b-timeout-1', guest_name: 'יוסי', total_price_agorot: 50000, clearing_payments: [] };
+  const mockMatch = { deal_id: 'deal-timeout-99', amount: 500 };
+
+  let markReconPayload = null;
+
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (url, opts = {}) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/cardcom_pending_matches')) return new Response(JSON.stringify([mockMatch]), { status: 200 });
+      if (urlStr.includes('/hotelos_bookings?id=eq.b-timeout-1')) return new Response(JSON.stringify([mockBooking]), { status: 200 });
+      if (urlStr.includes('/rpc/record_cardcom_deal_receipt')) {
+        return new Response(JSON.stringify({ ok: true, booking_id: 'b-timeout-1', ledger_status: 'pending_invoice' }), { status: 200 });
+      }
+      if (urlStr.includes('/rpc/claim_cardcom_deal_retry')) {
+        return new Response(JSON.stringify({ ok: true, status: 'claiming_retry' }), { status: 200 });
+      }
+      if (urlStr.includes('ListTransactions')) {
+        return new Response(JSON.stringify({ ResponseCode: 0, Tranzactions: [] }), { status: 200 });
+      }
+      if (urlStr.includes('CreateDocument')) {
+        // Simulate network error / timeout
+        throw new Error('Cardcom network timeout');
+      }
+      if (urlStr.includes('/rpc/mark_cardcom_deal_reconciliation_needed')) {
+        markReconPayload = JSON.parse(opts.body);
+        return new Response(JSON.stringify({ ok: true, status: 'reconciliation_needed' }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    const req = new Request('https://test/api/ops/cardcom-terminal/link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer 1234' },
+      body: JSON.stringify({ deal_id: 'deal-timeout-99', booking_id: 'b-timeout-1' })
+    });
+
+    const res = await onRequest({ request: req, params: { path: ['cardcom-terminal', 'link'] }, env: baseEnv });
+    assert.equal(res.status, 502);
+    assert.ok(markReconPayload, 'Must call mark_cardcom_deal_reconciliation_needed RPC on error');
+    assert.equal(markReconPayload.p_deal_id, 'deal-timeout-99');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('auth: missing config fails closed, pending route requires auth, and dev token rejected in non-development', async () => {
+  const { onRequest } = await import('../functions/api/ops/[[path]].js');
+
+  // 1. Missing secrets: fails closed
+  const reqUnauth = new Request('https://test/api/ops/cardcom-terminal/pending', { method: 'GET' });
+  const res1 = await onRequest({ request: reqUnauth, params: { path: ['cardcom-terminal', 'pending'] }, env: {} });
+  assert.equal(res1.status, 401, 'Must fail closed when no secrets configured');
+
+  // 2. Pending route requires authentication
+  const envWithSecrets = {
+    HOTELOS_DESK_PIN: '1234',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-key',
+    SUPABASE_URL: 'https://mock.supabase.co'
+  };
+  const res2 = await onRequest({ request: reqUnauth, params: { path: ['cardcom-terminal', 'pending'] }, env: envWithSecrets });
+  assert.equal(res2.status, 401, 'Pending route must require authorization');
+
+  // 3. dev-local-token rejected in non-development
+  const reqDevToken = new Request('https://test/api/ops/cardcom-terminal/pending', {
+    method: 'GET',
+    headers: { Authorization: 'Bearer dev-local-token' }
+  });
+  const res3 = await onRequest({ request: reqDevToken, params: { path: ['cardcom-terminal', 'pending'] }, env: { ...envWithSecrets, ENVIRONMENT: 'production' } });
+  assert.equal(res3.status, 401, 'dev-local-token must be rejected in non-development');
+
+  // 4. dev-local-token accepted in development
+  let pendingFetchCalled = false;
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => {
+      pendingFetchCalled = true;
+      return new Response(JSON.stringify([]), { status: 200 });
+    };
+    const reqDevTokenDev = new Request('https://test/api/ops/cardcom-terminal/pending', {
+      method: 'GET',
+      headers: { Authorization: 'Bearer dev-local-token' }
+    });
+    const res4 = await onRequest({ request: reqDevTokenDev, params: { path: ['cardcom-terminal', 'pending'] }, env: { ...envWithSecrets, ENVIRONMENT: 'development' } });
+    assert.equal(res4.status, 200, 'dev-local-token must be accepted in development');
+    assert.equal(pendingFetchCalled, true);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -1458,8 +1556,12 @@ test('migration 009 SQL upgrades existing schema and handles fresh schema', asyn
 
   // Verify search_path and security definer
   assert.ok(sql.includes('SET search_path = public, pg_temp'), 'Must set search_path = public, pg_temp');
-  assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.record_cardcom_deal_payment(TEXT, JSONB) FROM PUBLIC, anon, authenticated;'), 'Must revoke execute from PUBLIC, anon, authenticated');
-  assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.record_cardcom_deal_payment(TEXT, JSONB) TO service_role;'), 'Must grant execute to service_role');
+  assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.record_cardcom_deal_receipt(TEXT, JSONB) FROM PUBLIC, anon, authenticated;'), 'Must revoke execute on record_cardcom_deal_receipt');
+  assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.record_cardcom_deal_receipt(TEXT, JSONB) TO service_role;'), 'Must grant execute to service_role');
+  assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.claim_cardcom_deal_retry(TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;'), 'Must revoke execute on claim_cardcom_deal_retry');
+  assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.claim_cardcom_deal_retry(TEXT, TEXT, TEXT) TO service_role;'), 'Must grant claim_cardcom_deal_retry to service_role');
+  assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.finalize_cardcom_deal_invoice(TEXT, TEXT, TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;'), 'Must revoke execute on finalize_cardcom_deal_invoice');
+  assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.finalize_cardcom_deal_invoice(TEXT, TEXT, TEXT, TEXT, TEXT) TO service_role;'), 'Must grant finalize_cardcom_deal_invoice to service_role');
 
   // Verify additive ALTER TABLE statements for upgrading existing schema
   assert.ok(sql.includes('ALTER TABLE public.cardcom_seen_deals ADD COLUMN IF NOT EXISTS updated_at'), 'Must add updated_at to seen_deals');
@@ -1469,11 +1571,13 @@ test('migration 009 SQL upgrades existing schema and handles fresh schema', asyn
   assert.ok(sql.includes('ALTER TABLE public.cardcom_pending_matches ADD COLUMN IF NOT EXISTS is_test BOOLEAN DEFAULT false;'), 'Must add is_test column');
   assert.ok(sql.includes('ALTER TABLE public.cardcom_pending_matches ADD COLUMN IF NOT EXISTS guest_name TEXT;'), 'Must add guest_name column');
   assert.ok(sql.includes('ALTER TABLE public.cardcom_pending_matches ADD COLUMN IF NOT EXISTS unit_name TEXT;'), 'Must add unit_name column');
+  assert.ok(sql.includes('ALTER TABLE public.cardcom_terminal_audit_log ADD COLUMN IF NOT EXISTS event_id TEXT;'), 'Must add event_id to audit log');
 
   // Verify unique indexes
   assert.ok(sql.includes('CREATE UNIQUE INDEX IF NOT EXISTS uq_cardcom_seen_deals ON public.cardcom_seen_deals (terminal_number, deal_id);'), 'Must create unique index for seen deals');
   assert.ok(sql.includes('CREATE UNIQUE INDEX IF NOT EXISTS uq_cardcom_pending_matches ON public.cardcom_pending_matches (terminal_number, deal_id);'), 'Must create unique index for pending matches');
   assert.ok(sql.includes('CREATE UNIQUE INDEX IF NOT EXISTS uq_cardcom_deal_ledger ON public.cardcom_deal_ledger (terminal, deal_id);'), 'Must create unique index for deal ledger');
+  assert.ok(sql.includes('CREATE UNIQUE INDEX IF NOT EXISTS uq_cardcom_terminal_audit_log_event_id ON public.cardcom_terminal_audit_log (event_id) WHERE event_id IS NOT NULL;'), 'Must create unique index for audit event_id');
 
   // Verify old permissive policy removal and restrictive grants
   assert.ok(sql.includes('DROP POLICY IF EXISTS "lan_cardcom_seen_deals_all" ON public.cardcom_seen_deals;'), 'Must drop permissive seen deals policy');
@@ -1485,7 +1589,8 @@ test('migration 009 SQL upgrades existing schema and handles fresh schema', asyn
 
   // Verify FOR UPDATE locking on ledger row before checking global assignment in RPC
   const lockIndex = sql.indexOf('FOR UPDATE');
-  const globalCheckIndex = sql.indexOf('v_existing_booking_id');
+  const globalCheckIndex = sql.indexOf('SELECT id INTO v_existing_booking_id');
   assert.ok(lockIndex > 0 && globalCheckIndex > 0 && lockIndex < globalCheckIndex, 'Must lock ledger row with FOR UPDATE before checking global booking assignment');
 });
+
 

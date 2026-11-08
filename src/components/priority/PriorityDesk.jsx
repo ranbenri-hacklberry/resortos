@@ -763,11 +763,23 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         setDegradedAuditing(false);
         return;
       }
-      const queue = JSON.parse(raw);
-      if (!Array.isArray(queue) || queue.length === 0) {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || parsed.length === 0) {
         setDegradedAuditing(false);
         return;
       }
+
+      // Dedupe queued failed audits by event ID
+      const seenEventIds = new Set();
+      const queue = parsed.filter((item) => {
+        const key = item.event_id || item.id || item.timestamp;
+        if (key) {
+          if (seenEventIds.has(key)) return false;
+          seenEventIds.add(key);
+        }
+        return true;
+      });
+
       setDegradedAuditing(true);
       const token = getStoredToken();
       const headers = { 'Content-Type': 'application/json' };
@@ -830,7 +842,10 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const handleEmergencyEscape = async () => {
     sessionStorage.setItem('cardcom_escape_until', Date.now() + 30 * 60 * 1000);
     setShowUnlinkedChargesModal(false);
+    const eventId = `esc_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     const auditPayload = {
+      event_id: eventId,
+      id: eventId,
       staff_name: operatorName || 'צוות דלפק',
       reason: 'יציאת חירום ידנית מהמודל החוסם',
       timestamp: new Date().toISOString()
@@ -852,9 +867,12 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
 
     if (!auditOk) {
       try {
-        const queue = JSON.parse(localStorage.getItem('cardcom_failed_audit_escapes') || '[]');
-        queue.push(auditPayload);
-        localStorage.setItem('cardcom_failed_audit_escapes', JSON.stringify(queue));
+        const raw = localStorage.getItem('cardcom_failed_audit_escapes');
+        const queue = Array.isArray(JSON.parse(raw || '[]')) ? JSON.parse(raw || '[]') : [];
+        if (!queue.some((item) => (item.event_id && item.event_id === auditPayload.event_id) || (item.id && item.id === auditPayload.event_id))) {
+          queue.push(auditPayload);
+          localStorage.setItem('cardcom_failed_audit_escapes', JSON.stringify(queue));
+        }
       } catch (_) {}
       setDegradedAuditing(true);
     }

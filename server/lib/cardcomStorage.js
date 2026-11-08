@@ -36,6 +36,7 @@ export class CardcomStorage {
     this.cacheFilePath = cacheFilePath || MANAGED_CACHE_FILE;
     this.seenDeals = new Map(); // deal_id -> dealObj
     this.pendingMatches = new Map(); // deal_id -> matchObj
+    this.importedFromRuntimeSettings = false;
     this.initialized = false;
   }
 
@@ -133,6 +134,23 @@ export class CardcomStorage {
     }
   }
 
+  async _fetchPaged(endpoint, headers, pageSize = 100) {
+    const results = [];
+    let offset = 0;
+    while (true) {
+      const sep = endpoint.includes('?') ? '&' : '?';
+      const url = `${this.supabaseUrl}/rest/v1/${endpoint}${sep}limit=${pageSize}&offset=${offset}`;
+      const res = await this.fetchImpl(url, { headers });
+      if (!res.ok) break;
+      const rows = await res.json().catch(() => null);
+      if (!Array.isArray(rows) || rows.length === 0) break;
+      results.push(...rows);
+      if (rows.length < pageSize) break;
+      offset += pageSize;
+    }
+    return results;
+  }
+
   async _loadFromSupabase() {
     const headers = {
       apikey: this.supabaseKey,
@@ -142,51 +160,47 @@ export class CardcomStorage {
     let dedicatedLoaded = false;
     let tablesEmpty = false;
     try {
-      const [seenRes, pendingRes] = await Promise.all([
-        this.fetchImpl(`${this.supabaseUrl}/rest/v1/cardcom_seen_deals?select=*`, { headers }),
-        this.fetchImpl(`${this.supabaseUrl}/rest/v1/cardcom_pending_matches?select=*`, { headers })
+      const [seenRows, pendingRows] = await Promise.all([
+        this._fetchPaged('cardcom_seen_deals?select=*', headers),
+        this._fetchPaged('cardcom_pending_matches?select=*', headers)
       ]);
 
-      if (seenRes.ok && pendingRes.ok) {
-        const seenRows = await seenRes.json();
-        const pendingRows = await pendingRes.json();
-        if (Array.isArray(seenRows) && seenRows.length > 0) {
-          for (const row of seenRows) {
-            if (row?.deal_id) this.seenDeals.set(String(row.deal_id), row);
-          }
+      if (Array.isArray(seenRows) && seenRows.length > 0) {
+        for (const row of seenRows) {
+          if (row?.deal_id) this.seenDeals.set(String(row.deal_id), row);
         }
-        if (Array.isArray(pendingRows) && pendingRows.length > 0) {
-          for (const row of pendingRows) {
-            if (row?.deal_id) this.pendingMatches.set(String(row.deal_id), row);
-          }
+      }
+      if (Array.isArray(pendingRows) && pendingRows.length > 0) {
+        for (const row of pendingRows) {
+          if (row?.deal_id) this.pendingMatches.set(String(row.deal_id), row);
         }
-        if (this.seenDeals.size > 0 || this.pendingMatches.size > 0) {
-          dedicatedLoaded = true;
-        } else {
-          tablesEmpty = true;
-        }
+      }
+
+      if (this.seenDeals.size > 0 || this.pendingMatches.size > 0) {
+        dedicatedLoaded = true;
+      } else {
+        tablesEmpty = true;
       }
     } catch (_) {}
 
-    // Fallback/import from runtime settings or local cache if dedicated tables not yet loaded or empty
-    if (!dedicatedLoaded || tablesEmpty) {
+    // Auto-import from runtime_settings must run once, idempotently, with pagination,
+    // and only when dedicated tables are empty (never override newer state).
+    if ((!dedicatedLoaded || tablesEmpty) && !this.importedFromRuntimeSettings) {
       try {
-        const setRes = await this.fetchImpl(`${this.supabaseUrl}/rest/v1/hotelos_runtime_settings?key=in.(cardcom_seen_deals,cardcom_pending_matches)&select=*`, { headers });
-        if (setRes.ok) {
-          const rows = await setRes.json();
-          if (Array.isArray(rows) && rows.length > 0) {
-            for (const r of rows) {
-              if (r.key === 'cardcom_seen_deals' && r.value) {
-                const list = JSON.parse(r.value);
-                if (Array.isArray(list)) list.forEach((d) => d?.deal_id && this.seenDeals.set(String(d.deal_id), d));
-              }
-              if (r.key === 'cardcom_pending_matches' && r.value) {
-                const list = JSON.parse(r.value);
-                if (Array.isArray(list)) list.forEach((m) => m?.deal_id && this.pendingMatches.set(String(m.deal_id), m));
-              }
+        const rows = await this._fetchPaged('hotelos_runtime_settings?key=in.(cardcom_seen_deals,cardcom_pending_matches)&select=*', headers);
+        if (Array.isArray(rows) && rows.length > 0) {
+          for (const r of rows) {
+            if (r.key === 'cardcom_seen_deals' && r.value) {
+              const list = JSON.parse(r.value);
+              if (Array.isArray(list)) list.forEach((d) => d?.deal_id && this.seenDeals.set(String(d.deal_id), d));
+            }
+            if (r.key === 'cardcom_pending_matches' && r.value) {
+              const list = JSON.parse(r.value);
+              if (Array.isArray(list)) list.forEach((m) => m?.deal_id && this.pendingMatches.set(String(m.deal_id), m));
             }
           }
         }
+        this.importedFromRuntimeSettings = true;
       } catch (_) {}
 
       // If still empty, load from local disk cache
@@ -310,40 +324,9 @@ export class CardcomStorage {
 
     const writeErrors = [];
 
-    // 1. Persist to dedicated tables using on_conflict=terminal_number,deal_id
+    // 1. Transactional RPC is the ONLY write path to dedicated tables
     try {
-      if (seenList.length > 0) {
-        const sRes = await this.fetchImpl(`${this.supabaseUrl}/rest/v1/cardcom_seen_deals?on_conflict=terminal_number,deal_id`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(seenList)
-        });
-        if (!sRes.ok) {
-          writeErrors.push(`cardcom_seen_deals returned ${sRes.status}`);
-        }
-      }
-    } catch (err) {
-      writeErrors.push(`cardcom_seen_deals exception: ${err?.message || 'unknown'}`);
-    }
-
-    try {
-      if (pendingList.length > 0) {
-        const pRes = await this.fetchImpl(`${this.supabaseUrl}/rest/v1/cardcom_pending_matches?on_conflict=terminal_number,deal_id`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(pendingList)
-        });
-        if (!pRes.ok) {
-          writeErrors.push(`cardcom_pending_matches returned ${pRes.status}`);
-        }
-      }
-    } catch (err) {
-      writeErrors.push(`cardcom_pending_matches exception: ${err?.message || 'unknown'}`);
-    }
-
-    // Try transactional RPC persist as well if available
-    try {
-      await this.fetchImpl(`${this.supabaseUrl}/rest/v1/rpc/persist_cardcom_sync`, {
+      const rpcRes = await this.fetchImpl(`${this.supabaseUrl}/rest/v1/rpc/persist_cardcom_sync`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -351,7 +334,14 @@ export class CardcomStorage {
           p_pending: pendingList
         })
       });
-    } catch (_) {}
+      if (!rpcRes.ok) {
+        let errText = '';
+        try { errText = await rpcRes.text(); } catch (_) {}
+        writeErrors.push(`persist_cardcom_sync RPC returned ${rpcRes.status}: ${errText}`);
+      }
+    } catch (err) {
+      writeErrors.push(`persist_cardcom_sync RPC exception: ${err?.message || 'unknown'}`);
+    }
 
     // 2. Always maintain runtime settings sync for edge API consistency
     try {

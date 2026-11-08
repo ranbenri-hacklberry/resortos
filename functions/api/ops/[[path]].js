@@ -47,6 +47,20 @@ async function hmacHex(secret, text) {
   return [...new Uint8Array(sig)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+function formatCardcomDate(d) {
+  if (!d) return '';
+  const str = String(d).trim();
+  if (/^\d{8}$/.test(str)) return str;
+  const dateObj = new Date(str);
+  if (!Number.isNaN(dateObj.getTime())) {
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const year = String(dateObj.getFullYear());
+    return `${day}${month}${year}`;
+  }
+  return str;
+}
+
 async function verifySessionToken(env, token) {
   if (!token || !token.includes('.')) return null;
   const [encoded, sig] = token.split('.');
@@ -74,16 +88,14 @@ async function isAuthorizedOps(request, env) {
   const authHeader = request.headers.get('authorization') || '';
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
   if (token) {
-    if (token === 'dev-local-token') return true;
+    if (token === 'dev-local-token' && env?.ENVIRONMENT === 'development') return true;
     if (deskPin && token === deskPin) return true;
     if (mailboxSecret && token === mailboxSecret) return true;
     const session = await verifySessionToken(env, token);
     if (session) return true;
   }
 
-  // Allow in environments without secrets configured
-  if (!mailboxSecret && !bridgeSecret && !deskPin) return true;
-
+  // Fail closed: Never allow unauthorized access if secrets are not configured
   return false;
 }
 
@@ -275,7 +287,7 @@ export async function onRequest(context) {
 
   // 6. /api/ops/cardcom-terminal/*
   if (head === 'cardcom-terminal') {
-    if (sub !== 'pending' && !(await isAuthorizedOps(request, env))) {
+    if (!(await isAuthorizedOps(request, env))) {
       return errorJson('לא מורשה', 401, 'UNAUTHORIZED');
     }
 
@@ -392,59 +404,124 @@ export async function onRequest(context) {
         return errorJson('Invalid deal amount', 400, 'INVALID_AMOUNT');
       }
 
-      const existingPayments = Array.isArray(booking.clearing_payments) ? [...booking.clearing_payments] : [];
+      // 1. Receipt before invoice (hard rule):
+      // Persist the receipt in the booking (RPC, transaction) with status pending_invoice FIRST.
+      // If the DB fails, no Cardcom call at all!
+      const initialReceiptEntry = {
+        method: 'CARD',
+        amount_ils: amount,
+        amount_agorot: Math.round(amount * 100),
+        deal_number: dealIdStr,
+        txn: dealIdStr,
+        approval: match?.approval || undefined,
+        last4: match?.last4 || undefined,
+        payer_name: match?.payer_name || undefined,
+        terminal,
+        external_id: externalId,
+        invoice_status: 'pending_invoice',
+        recorded_at: new Date().toISOString()
+      };
+
+      const receiptRpcRes = await fetchPostgrest('/rpc/record_cardcom_deal_receipt', {
+        method: 'POST',
+        body: JSON.stringify({
+          p_booking_id: booking_id,
+          p_receipt_entry: initialReceiptEntry
+        })
+      }, env, { requireServiceRole: true });
+
+      if (!receiptRpcRes || !receiptRpcRes.ok) {
+        let errBody = null;
+        try { errBody = await receiptRpcRes.json(); } catch (_) {}
+        const combinedErr = `${errBody?.error || ''} ${errBody?.message || ''} ${errBody?.details || ''}`;
+        if (combinedErr.includes('DEAL_ALREADY_ASSIGNED')) {
+          return errorJson(errBody?.message || 'DEAL_ALREADY_ASSIGNED', 409, 'DEAL_ALREADY_ASSIGNED');
+        }
+        if (combinedErr.includes('BOOKING_NOT_FOUND')) {
+          return errorJson(errBody?.message || 'BOOKING_NOT_FOUND', 404, 'BOOKING_NOT_FOUND');
+        }
+        return errorJson(errBody?.message || errBody?.error || 'Database receipt recording failed', 500, 'DB_WRITE_FAILED');
+      }
+
+      const receiptData = await receiptRpcRes.json().catch(() => ({}));
       let invoiceInfo = null;
 
-      // Check if document already exists on match or booking
-      const existingDocNumber = String(
-        match?.document_number ||
-        match?.invoice_number ||
-        existingPayments.find((p) => String(p.deal_number || p.txn || '') === dealIdStr)?.invoice ||
-        ''
-      ).trim();
-      const existingDocUrl = String(match?.document_url || match?.invoice_url || '');
+      // If already invoiced in ledger, reuse document directly
+      if (receiptData?.ledger_status === 'invoiced' && receiptData?.document_number) {
+        invoiceInfo = {
+          documentNumber: String(receiptData.document_number),
+          documentUrl: String(receiptData.document_url || ''),
+          dealId: dealIdStr,
+          reused: true
+        };
+      }
 
-      // 1. Atomic claim in ledger before calling Cardcom or writing booking
-      // The existing-document reuse path must also go through the claim!
-      let existingLedger = null;
-      try {
-        const ledgerCheck = await fetchPostgrest(`/cardcom_deal_ledger?terminal=eq.${terminal}&deal_id=eq.${encodeURIComponent(dealIdStr)}`, { method: 'GET' }, env, { requireServiceRole: true });
-        if (ledgerCheck && ledgerCheck.ok) {
-          const rows = await ledgerCheck.json();
-          if (Array.isArray(rows) && rows[0]) existingLedger = rows[0];
+      // 2. If not already invoiced, acquire atomic retry claim before calling Cardcom
+      if (!invoiceInfo) {
+        const claimRes = await fetchPostgrest('/rpc/claim_cardcom_deal_retry', {
+          method: 'POST',
+          body: JSON.stringify({
+            p_terminal: terminal,
+            p_deal_id: dealIdStr,
+            p_booking_id: booking_id
+          })
+        }, env, { requireServiceRole: true });
+
+        if (!claimRes || !claimRes.ok) {
+          let cErr = null;
+          try { cErr = await claimRes.json(); } catch (_) {}
+          const cErrCombined = `${cErr?.error || ''} ${cErr?.message || ''} ${cErr?.details || ''}`;
+          if (cErrCombined.includes('DEAL_ALREADY_ASSIGNED')) {
+            return errorJson(cErr?.message || 'DEAL_ALREADY_ASSIGNED', 409, 'DEAL_ALREADY_ASSIGNED');
+          }
+          if (cErrCombined.includes('DEAL_CLAIM_IN_PROGRESS')) {
+            return errorJson(cErr?.message || 'DEAL_CLAIM_IN_PROGRESS', 409, 'DEAL_CLAIM_IN_PROGRESS');
+          }
+          return errorJson(cErr?.message || cErr?.error || 'Failed to claim deal for invoice generation', 500, 'CLAIM_FAILED');
         }
-      } catch (_) {}
 
-      if (existingLedger) {
-        if (String(existingLedger.booking_id) !== String(booking_id)) {
-          return errorJson('Deal is already assigned to another booking', 409, 'DEAL_ALREADY_ASSIGNED');
-        }
-
-        if (existingLedger.status === 'invoiced' && existingLedger.document_number) {
+        const claimData = await claimRes.json().catch(() => ({}));
+        if (claimData?.status === 'invoiced' && claimData?.document_number) {
           invoiceInfo = {
-            documentNumber: existingLedger.document_number,
-            documentUrl: existingLedger.document_url || '',
+            documentNumber: String(claimData.document_number),
+            documentUrl: String(claimData.document_url || ''),
             dealId: dealIdStr,
             reused: true
           };
-        } else if (existingLedger.status === 'claiming' || existingLedger.status === 'reconciliation_needed') {
-          // Reconcile: Look up transaction in Cardcom by DealNumber / ExternalId before creating a new document
-          try {
-            const listRes = await fetch('https://secure.cardcom.solutions/api/v11/Transactions/ListTransactions', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                ApiName: apiName,
-                ApiPassword: apiPassword,
-                LimitForTerminal: Number(terminal),
-                TerminalNumber: Number(terminal),
-                DealNumber: dealIdStr
-              })
-            });
-            if (listRes.ok) {
-              const lData = await listRes.json().catch(() => null);
-              const list = lData?.Transactions || lData?.Deals || (Array.isArray(lData) ? lData : []);
-              const foundTxn = list.find((t) => String(t.DealNumber || t.dealNumber || '') === dealIdStr);
+        }
+      }
+
+      // 3. Reconciliation per Cardcom KB 499:
+      // Look up transaction by TranzactionId / ExternalId before creating a new document
+      if (!invoiceInfo) {
+        try {
+          const fromDateStr = formatCardcomDate(match?.deal_time || new Date(Date.now() - 30 * 86400000).toISOString());
+          const toDateStr = formatCardcomDate(new Date(Date.now() + 86400000).toISOString());
+          const listRes = await fetch('https://secure.cardcom.solutions/api/v11/Transactions/ListTransactions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ApiName: apiName,
+              ApiPassword: apiPassword,
+              LimitForTerminal: Number(terminal),
+              TerminalNumber: Number(terminal),
+              FromDate: fromDateStr,
+              ToDate: toDateStr,
+              TranStatus: 'Success',
+              Page: 1,
+              Page_size: 100
+            })
+          });
+
+          if (listRes.ok) {
+            const lData = await listRes.json().catch(() => null);
+            if (lData?.ResponseCode === 0 || lData?.ResponseCode === '0' || lData?.ResponseCode === undefined) {
+              const list = lData?.Tranzactions || lData?.Transactions || lData?.Deals || (Array.isArray(lData) ? lData : []);
+              const foundTxn = list.find((t) =>
+                String(t.TranzactionId || t.DealNumber || '') === dealIdStr ||
+                String(t.ExternalId || '') === externalId ||
+                String(t.ReturnValue || '') === externalId
+              );
               const recDocNumber = foundTxn?.DocumentNumber || foundTxn?.DocNumber || foundTxn?.InvoiceNumber;
               const recDocUrl = foundTxn?.DocumentUrl || foundTxn?.DocUrl;
               if (recDocNumber) {
@@ -454,116 +531,13 @@ export async function onRequest(context) {
                   dealId: dealIdStr,
                   reused: true
                 };
-                const patchRes = await fetchPostgrest(`/cardcom_deal_ledger?terminal=eq.${terminal}&deal_id=eq.${encodeURIComponent(dealIdStr)}`, {
-                  method: 'PATCH',
-                  body: JSON.stringify({
-                    status: 'invoiced',
-                    document_number: invoiceInfo.documentNumber,
-                    document_url: invoiceInfo.documentUrl,
-                    invoiced_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
-                  })
-                }, env, { requireServiceRole: true });
-                if (!patchRes || !patchRes.ok) {
-                  return errorJson('Failed to update deal ledger with reconciled invoice', 500, 'LEDGER_UPDATE_FAILED');
-                }
               }
             }
-          } catch (_) {}
-
-          if (!invoiceInfo) {
-            return errorJson(`Deal is in ${existingLedger.status} state. Document lookup by ExternalId did not find existing document; manual reconciliation required.`, 409, 'RECONCILIATION_REQUIRED');
           }
-        } else if (existingDocNumber) {
-          const patchClaim = await fetchPostgrest(`/cardcom_deal_ledger?terminal=eq.${terminal}&deal_id=eq.${encodeURIComponent(dealIdStr)}`, {
-            method: 'PATCH',
-            body: JSON.stringify({
-              status: 'invoiced',
-              document_number: existingDocNumber,
-              document_url: existingDocUrl,
-              invoiced_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            })
-          }, env, { requireServiceRole: true });
-          if (!patchClaim || !patchClaim.ok) {
-            return errorJson('Failed to update deal claim in ledger', 500, 'CLAIM_FAILED');
-          }
-          invoiceInfo = {
-            documentNumber: existingDocNumber,
-            documentUrl: existingDocUrl,
-            dealId: dealIdStr,
-            reused: true
-          };
-        }
-      } else {
-        // Ledger row does not exist yet. Claim it atomically.
-        const claimStatus = existingDocNumber ? 'invoiced' : 'claiming';
-        const claimBody = {
-          terminal,
-          deal_id: dealIdStr,
-          booking_id,
-          amount,
-          currency: 'ILS',
-          external_id: externalId,
-          status: claimStatus,
-          document_number: existingDocNumber || null,
-          document_url: existingDocUrl || null,
-          claimed_at: new Date().toISOString(),
-          invoiced_at: existingDocNumber ? new Date().toISOString() : null,
-          updated_at: new Date().toISOString()
-        };
-
-        const claimRes = await fetchPostgrest('/cardcom_deal_ledger', {
-          method: 'POST',
-          body: JSON.stringify(claimBody)
-        }, env, { requireServiceRole: true });
-
-        if (!claimRes || !claimRes.ok) {
-          // Claim conflict or failure: verify ledger row
-          const checkRes = await fetchPostgrest(`/cardcom_deal_ledger?terminal=eq.${terminal}&deal_id=eq.${encodeURIComponent(dealIdStr)}`, { method: 'GET' }, env, { requireServiceRole: true });
-          const rows = (checkRes && checkRes.ok) ? await checkRes.json() : null;
-          if (rows && rows[0]) {
-            const row = rows[0];
-            if (String(row.booking_id) !== String(booking_id)) {
-              return errorJson('Deal is already assigned to another booking', 409, 'DEAL_ALREADY_ASSIGNED');
-            }
-            if (row.status === 'claiming') {
-              return errorJson('Deal invoice creation in progress by another request', 409, 'DEAL_CLAIM_IN_PROGRESS');
-            }
-            if (row.status === 'invoiced' && row.document_number) {
-              invoiceInfo = {
-                documentNumber: row.document_number,
-                documentUrl: row.document_url || '',
-                dealId: dealIdStr,
-                reused: true
-              };
-            }
-          }
-          if (!invoiceInfo) {
-            return errorJson('Failed to acquire atomic claim in ledger', 500, 'CLAIM_FAILED');
-          }
-        } else if (existingDocNumber) {
-          invoiceInfo = {
-            documentNumber: existingDocNumber,
-            documentUrl: existingDocUrl,
-            dealId: dealIdStr,
-            reused: true
-          };
-        }
+        } catch (_) {}
       }
 
-      // Check global assignment in other bookings
-      try {
-        const otherBookings = await fetchPostgrest(`/hotelos_bookings?clearing_payments=cs.[{"deal_number":"${encodeURIComponent(dealIdStr)}"}]&select=id`, { method: 'GET' }, env, { requireServiceRole: true });
-        if (otherBookings && otherBookings.ok) {
-          const rows = await otherBookings.json();
-          if (Array.isArray(rows) && rows.some((r) => String(r.id) !== String(booking_id))) {
-            return errorJson('Deal is already recorded on another booking', 409, 'DEAL_ALREADY_ASSIGNED');
-          }
-        }
-      } catch (_) {}
-
-      // 2. Create document in Cardcom if needed
+      // 4. Create document in Cardcom if still not found
       if (!invoiceInfo) {
         const companyName = String(booking.company_name || booking.invoice_company || booking.business_name || '').trim();
         const taxId = String(booking.tax_id || booking.company_hp || booking.hp || booking.vat_id || booking.business_id || '').trim();
@@ -611,14 +585,15 @@ export async function onRequest(context) {
           });
           const cData = await cardcomRes.json().catch(() => null);
 
+          // Every ambiguous outcome / failure becomes reconciliation_needed (never failed)
           if (!cardcomRes.ok || (cData?.ResponseCode !== undefined && cData?.ResponseCode !== 0 && cData?.ResponseCode !== '0')) {
             const errMsg = cData?.Description || `Cardcom document creation failed with code ${cData?.ResponseCode}`;
-            await fetchPostgrest(`/cardcom_deal_ledger?terminal=eq.${terminal}&deal_id=eq.${encodeURIComponent(dealIdStr)}`, {
-              method: 'PATCH',
+            await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
+              method: 'POST',
               body: JSON.stringify({
-                status: 'failed',
-                error_message: errMsg,
-                updated_at: new Date().toISOString()
+                p_terminal: terminal,
+                p_deal_id: dealIdStr,
+                p_error_message: errMsg
               })
             }, env, { requireServiceRole: true });
             return errorJson(errMsg, 400, 'CARDCOM_CREATE_DOCUMENT_FAILED');
@@ -626,12 +601,12 @@ export async function onRequest(context) {
 
           const docNumber = String(cData?.DocumentNumber || cData?.DocNumber || '').trim();
           if (!docNumber) {
-            await fetchPostgrest(`/cardcom_deal_ledger?terminal=eq.${terminal}&deal_id=eq.${encodeURIComponent(dealIdStr)}`, {
-              method: 'PATCH',
+            await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
+              method: 'POST',
               body: JSON.stringify({
-                status: 'failed',
-                error_message: 'Cardcom returned empty document number',
-                updated_at: new Date().toISOString()
+                p_terminal: terminal,
+                p_deal_id: dealIdStr,
+                p_error_message: 'Cardcom returned empty document number'
               })
             }, env, { requireServiceRole: true });
             return errorJson('Cardcom returned empty document number', 502, 'CARDCOM_INVALID_RESPONSE');
@@ -642,42 +617,22 @@ export async function onRequest(context) {
             documentUrl: String(cData?.DocumentUrl || cData?.DocUrl || cData?.Url || '').trim(),
             dealId: dealIdStr
           };
-
-          const patchLedger = await fetchPostgrest(`/cardcom_deal_ledger?terminal=eq.${terminal}&deal_id=eq.${encodeURIComponent(dealIdStr)}`, {
-            method: 'PATCH',
+        } catch (fetchErr) {
+          const isTimeout = fetchErr.name === 'AbortError';
+          const errMsg = isTimeout ? 'Cardcom timeout' : (fetchErr?.message || 'Network error');
+          await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
+            method: 'POST',
             body: JSON.stringify({
-              status: 'invoiced',
-              document_number: invoiceInfo.documentNumber,
-              document_url: invoiceInfo.documentUrl,
-              invoiced_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
+              p_terminal: terminal,
+              p_deal_id: dealIdStr,
+              p_error_message: errMsg
             })
           }, env, { requireServiceRole: true });
 
-          if (!patchLedger || !patchLedger.ok) {
-            return errorJson('Failed to update deal ledger with generated invoice', 500, 'LEDGER_UPDATE_FAILED');
-          }
-        } catch (fetchErr) {
-          if (fetchErr.name === 'AbortError') {
-            await fetchPostgrest(`/cardcom_deal_ledger?terminal=eq.${terminal}&deal_id=eq.${encodeURIComponent(dealIdStr)}`, {
-              method: 'PATCH',
-              body: JSON.stringify({
-                status: 'reconciliation_needed',
-                error_message: 'Cardcom timeout',
-                updated_at: new Date().toISOString()
-              })
-            }, env, { requireServiceRole: true });
+          if (isTimeout) {
             return errorJson('Cardcom invoice request timed out. Reconciliation required.', 504, 'CARDCOM_TIMEOUT');
           }
-          await fetchPostgrest(`/cardcom_deal_ledger?terminal=eq.${terminal}&deal_id=eq.${encodeURIComponent(dealIdStr)}`, {
-            method: 'PATCH',
-            body: JSON.stringify({
-              status: 'failed',
-              error_message: fetchErr?.message || 'Network error',
-              updated_at: new Date().toISOString()
-            })
-          }, env, { requireServiceRole: true });
-          return errorJson(`Cardcom network error: ${fetchErr?.message || 'unknown'}`, 502, 'CARDCOM_NETWORK_ERROR');
+          return errorJson(`Cardcom network error: ${errMsg}`, 502, 'CARDCOM_NETWORK_ERROR');
         } finally {
           clearTimeout(timer);
         }
@@ -687,69 +642,23 @@ export async function onRequest(context) {
         return errorJson('No invoice generated or found for deal', 500, 'INVOICE_REQUIRED');
       }
 
-      const paymentEntry = {
-        method: 'CARD',
-        amount_ils: amount,
-        amount_agorot: Math.round(amount * 100),
-        deal_number: dealIdStr,
-        txn: dealIdStr,
-        approval: match?.approval || undefined,
-        last4: match?.last4 || undefined,
-        payer_name: match?.payer_name || undefined,
-        invoice: invoiceInfo.documentNumber,
-        invoice_url: invoiceInfo.documentUrl || undefined,
-        document_number: invoiceInfo.documentNumber,
-        document_url: invoiceInfo.documentUrl || undefined,
-        terminal,
-        recorded_at: new Date().toISOString()
-      };
-
-      // 3. Atomic Booking update & DB Write Verification via RPC
-      // No fallback read-modify-write! Propagate RPC error directly.
-      const rpcRes = await fetchPostgrest('/rpc/record_cardcom_deal_payment', {
+      // 5. Finalize invoice: update ledger, booking clearing_payments, and cardcom_pending_matches in DB
+      const finalizeRes = await fetchPostgrest('/rpc/finalize_cardcom_deal_invoice', {
         method: 'POST',
         body: JSON.stringify({
           p_booking_id: booking_id,
-          p_payment_entry: paymentEntry
+          p_deal_number: dealIdStr,
+          p_terminal: terminal,
+          p_document_number: invoiceInfo.documentNumber,
+          p_document_url: invoiceInfo.documentUrl || ''
         })
       }, env, { requireServiceRole: true });
 
-      if (!rpcRes || !rpcRes.ok) {
-        let errBody = null;
-        try { errBody = await rpcRes.json(); } catch (_) {}
-        const errMsg = errBody?.message || errBody?.error || 'Database write failed';
-        if (String(errMsg).includes('DEAL_ALREADY_ASSIGNED')) {
-          return errorJson(errMsg, 409, 'DEAL_ALREADY_ASSIGNED');
-        }
-        if (String(errMsg).includes('BOOKING_NOT_FOUND')) {
-          return errorJson(errMsg, 404, 'BOOKING_NOT_FOUND');
-        }
-        return errorJson(errMsg, 500, 'DB_WRITE_FAILED');
+      if (!finalizeRes || !finalizeRes.ok) {
+        return errorJson('Failed to finalize invoice in database', 500, 'FINALIZE_INVOICE_FAILED');
       }
 
-      // 4. Update pending match record and check result
-      const matchUpdateRes = await fetchPostgrest(`/cardcom_pending_matches?deal_id=eq.${encodeURIComponent(deal_id)}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          status: 'manual_linked',
-          selected_booking_id: booking_id,
-          guest_name: booking.guest_name || booking.invoice_name || null,
-          unit_name: booking.unit_name || booking.unit_id || null,
-          invoice_number: invoiceInfo.documentNumber,
-          invoice_url: invoiceInfo.documentUrl || null,
-          document_number: invoiceInfo.documentNumber,
-          document_url: invoiceInfo.documentUrl || null,
-          approved_at: new Date().toISOString(),
-          payment_recorded_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-      }, env, { requireServiceRole: true });
-
-      if (!matchUpdateRes || !matchUpdateRes.ok) {
-        console.error('[Cloudflare Ops Link] Failed to update cardcom_pending_matches:', matchUpdateRes?.status);
-        return errorJson('Failed to update pending match record', 500, 'PENDING_MATCH_UPDATE_FAILED');
-      }
-
+      // Update runtime settings fallback if present
       if (allRuntimeMatches.length > 0 && match) {
         match.status = 'manual_linked';
         match.selected_booking_id = booking_id;
@@ -772,7 +681,16 @@ export async function onRequest(context) {
         } catch (_) {}
       }
 
-      return json({ ok: true, booking_id, invoice: invoiceInfo, payment: paymentEntry });
+      const finalPayment = {
+        ...initialReceiptEntry,
+        invoice: invoiceInfo.documentNumber,
+        invoice_url: invoiceInfo.documentUrl || undefined,
+        document_number: invoiceInfo.documentNumber,
+        document_url: invoiceInfo.documentUrl || undefined,
+        invoice_status: 'invoiced'
+      };
+
+      return json({ ok: true, booking_id, invoice: invoiceInfo, payment: finalPayment });
     }
 
     // POST /api/ops/cardcom-terminal/audit-escape
@@ -781,15 +699,22 @@ export async function onRequest(context) {
       try { body = await request.json(); } catch {}
       const staffName = body.staff_name || 'צוות';
       const reason = body.reason || 'חירום: עקיפת מודל חוסם להמשך עבודה בדסק';
+      const eventId = body.event_id || body.id || null;
+      const originalTs = body.timestamp || new Date().toISOString();
       let auditRes = null;
       try {
+        const auditRow = {
+          action: 'EMERGENCY_ESCAPE',
+          staff_name: staffName,
+          details: { reason, timestamp: originalTs, event_id: eventId },
+          created_at: originalTs
+        };
+        if (eventId) {
+          auditRow.event_id = eventId;
+        }
         auditRes = await fetchPostgrest('/cardcom_terminal_audit_log', {
           method: 'POST',
-          body: JSON.stringify({
-            action: 'EMERGENCY_ESCAPE',
-            staff_name: staffName,
-            details: { reason, timestamp: new Date().toISOString() }
-          })
+          body: JSON.stringify(auditRow)
         }, env, { requireServiceRole: true });
       } catch (err) {
         console.error('[Cardcom Audit] Escape insert error:', err?.message || 'unknown');
@@ -797,9 +722,12 @@ export async function onRequest(context) {
       }
 
       if (!auditRes || !auditRes.ok) {
+        if (auditRes?.status === 409) {
+          return json({ ok: true, escaped_at: originalTs, deduplicated: true });
+        }
         return errorJson('Failed to record emergency escape audit log in database', 500, 'AUDIT_INSERT_FAILED');
       }
-      return json({ ok: true, escaped_at: new Date().toISOString() });
+      return json({ ok: true, escaped_at: originalTs });
     }
 
     // POST /api/ops/cardcom-terminal/ignore
