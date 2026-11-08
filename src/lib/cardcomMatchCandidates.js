@@ -6,35 +6,48 @@
  * that close part of an unpaid balance.
  */
 
+export function isUnverifiedKinorotPayment(p) {
+  if (!p) return false;
+  const meth = String(p.method || p.source || '').toUpperCase();
+  const hasTxn = Boolean(p.deal_number || p.txn || p.approval || p.deal_id);
+  return (meth === 'KINOROT' || meth.startsWith('KINOROT_')) && !hasTxn;
+}
+
 export function calculateBookingBalances(b) {
-  if (!b) return { totalIls: 0, paidIls: 0, dueIls: 0, depositIls: 0, isUnpaid: false };
+  if (!b) return { totalIls: 0, paidIls: 0, dueIls: 0, depositIls: 0, isUnpaid: false, isUnverifiedPaid: false };
 
   const totalIls = Math.round(Number(b.total_price_agorot ? b.total_price_agorot / 100 : b.total_price || 0));
   const clearing = Array.isArray(b.clearing_payments) ? b.clearing_payments : [];
-  const paidIls = clearing.reduce((sum, p) => {
-    const val = Number(p.amount_agorot ? p.amount_agorot / 100 : p.amount_ils || 0);
-    return sum + (Number.isFinite(val) ? val : 0);
-  }, 0);
 
-  const dueIls = Math.max(0, Math.round(totalIls - paidIls));
+  const verifiedPaidIls = clearing
+    .filter((p) => !isUnverifiedKinorotPayment(p))
+    .reduce((sum, p) => {
+      const val = Number(p.amount_agorot ? p.amount_agorot / 100 : p.amount_ils || 0);
+      return sum + (Number.isFinite(val) ? val : 0);
+    }, 0);
+
+  const hasOnlyUnverifiedKinorot = clearing.length > 0 && clearing.every(isUnverifiedKinorotPayment);
+  const isUnverifiedPaid = String(b.payment_status || '').toUpperCase() === 'PAID' && hasOnlyUnverifiedKinorot;
+
+  const dueIls = isUnverifiedPaid && verifiedPaidIls === 0 ? totalIls : Math.max(0, Math.round(totalIls - verifiedPaidIls));
   const depositIls = Math.round(Number(b.deposit_agorot ? b.deposit_agorot / 100 : b.deposit || 0));
-  const status = String(b.payment_status || '').toUpperCase();
-  const isPaid = status === 'PAID' || (totalIls > 0 && dueIls <= 0);
-  const isUnpaid = !isPaid && (dueIls > 0 || totalIls === 0);
+  const isPaid = !isUnverifiedPaid && (String(b.payment_status || '').toUpperCase() === 'PAID' || (totalIls > 0 && dueIls <= 0));
+  const isUnpaid = isUnverifiedPaid || (!isPaid && (dueIls > 0 || totalIls === 0));
 
   return {
     totalIls,
-    paidIls: Math.round(paidIls),
+    paidIls: Math.round(verifiedPaidIls),
     dueIls,
     depositIls,
     isPaid,
-    isUnpaid
+    isUnpaid,
+    isUnverifiedPaid
   };
 }
 
 export function classifyDealToBooking(dealAmountNum, booking) {
   const dealAmount = Math.round(Number(dealAmountNum || 0));
-  const { totalIls, dueIls, depositIls, isUnpaid } = calculateBookingBalances(booking);
+  const { totalIls, dueIls, depositIls, isUnpaid, isUnverifiedPaid } = calculateBookingBalances(booking);
 
   if (!isUnpaid && dueIls <= 0) {
     return {
@@ -54,17 +67,19 @@ export function classifyDealToBooking(dealAmountNum, booking) {
     return {
       type: 'exact_due',
       priority: 1,
-      tag: 'סגירה מלאה',
+      tag: isUnverifiedPaid ? 'אימות תשלום קינורות' : 'סגירה מלאה',
       tagColor: '#16a34a',
       badgeBg: '#dcfce7',
-      description: `סוגר את מלוא היתרה (₪${dueIls.toLocaleString('he-IL')})`,
+      description: isUnverifiedPaid
+        ? `מאמת תשלום קינורות וסוגר את מלוא היתרה (₪${dueIls.toLocaleString('he-IL')})`
+        : `סוגר את מלוא היתרה (₪${dueIls.toLocaleString('he-IL')})`,
       remainingAfterPayment: 0,
       dueIls,
       totalIls
     };
   }
 
-  // 2. Exact deposit match
+  // 2. Exact configured deposit match
   if (depositIls > 0 && Math.abs(dealAmount - depositIls) < 1) {
     const rem = Math.max(0, dueIls - dealAmount);
     return {
@@ -74,6 +89,23 @@ export function classifyDealToBooking(dealAmountNum, booking) {
       tagColor: '#0d9488',
       badgeBg: '#ccfbf1',
       description: `סוגר מקדמה ₪${depositIls.toLocaleString('he-IL')} (תישאר יתרה ₪${rem.toLocaleString('he-IL')})`,
+      remainingAfterPayment: rem,
+      dueIls,
+      totalIls
+    };
+  }
+
+  // 3. Exact 20% deposit match
+  const deposit20Ils = Math.round(totalIls * 0.20);
+  if (deposit20Ils > 0 && Math.abs(dealAmount - deposit20Ils) < 1) {
+    const rem = Math.max(0, dueIls - dealAmount);
+    return {
+      type: 'exact_20_deposit',
+      priority: 2,
+      tag: 'מקדמה 20%',
+      tagColor: '#0d9488',
+      badgeBg: '#ccfbf1',
+      description: `סוגר מקדמת 20% (₪${deposit20Ils.toLocaleString('he-IL')}) מתוך ₪${totalIls.toLocaleString('he-IL')} (תישאר יתרה ₪${rem.toLocaleString('he-IL')})`,
       remainingAfterPayment: rem,
       dueIls,
       totalIls

@@ -238,22 +238,74 @@ export async function fetchCardcomTransactions({
 }
 
 /**
- * Calculates due amount in ILS for a booking.
+ * Detects if a payment entry is solely an unverified Kinorot note.
+ * Rule: Kinorot note payments without an actual transaction/deal ID are unverified.
  */
-export function getBookingDueIls(booking) {
-  if (!booking) return 0;
-  if (String(booking.payment_status || '').toUpperCase() === 'PAID') return 0;
-  const total = Number(booking.total_price_agorot) || 0;
-  const clearing = Array.isArray(booking.clearing_payments) ? booking.clearing_payments : [];
-  const paid = clearing.reduce((s, row) => s + (Number(row.amount_agorot) || 0), 0);
-  return Math.max(0, Math.round((total - paid) / 100));
+export function isUnverifiedKinorotPayment(p) {
+  if (!p) return false;
+  const meth = String(p.method || p.source || '').toUpperCase();
+  const hasTxn = Boolean(p.deal_number || p.txn || p.approval || p.deal_id);
+  return (meth === 'KINOROT' || meth.startsWith('KINOROT_')) && !hasTxn;
 }
 
 /**
- * Helper to compute string similarity between names.
+ * Calculates due amount in ILS for a booking, discounting unverified Kinorot note payments.
  */
-function nameSimilarity(strA, strB) {
-  const clean = (s) => String(s || '').toLowerCase().replace(/[^a-zא-ת0-9\s]/gi, '').trim();
+export function getBookingDueIls(booking) {
+  if (!booking) return 0;
+  const totalAgorot = Number(booking.total_price_agorot) || 0;
+  const clearing = Array.isArray(booking.clearing_payments) ? booking.clearing_payments : [];
+  const verifiedAgorot = clearing
+    .filter((p) => !isUnverifiedKinorotPayment(p))
+    .reduce((s, row) => s + (Number(row.amount_agorot) || Math.round(Number(row.amount_ils || 0) * 100)), 0);
+
+  const totalIls = Math.round(totalAgorot / 100);
+  const verifiedPaidIls = Math.round(verifiedAgorot / 100);
+  const dueIls = Math.max(0, totalIls - verifiedPaidIls);
+
+  const hasOnlyUnverifiedKinorot = clearing.length > 0 && clearing.every(isUnverifiedKinorotPayment);
+  const isUnverifiedPaid = String(booking.payment_status || '').toUpperCase() === 'PAID' && hasOnlyUnverifiedKinorot;
+
+  if (isUnverifiedPaid && dueIls === 0 && totalIls > 0) {
+    return totalIls;
+  }
+  return dueIls;
+}
+
+/**
+ * Checks if a transaction is a test/verification charge (e.g. 1 ILS or "דניאל דניאל").
+ */
+export function isTestTransaction(deal) {
+  if (!deal) return false;
+  const amt = Number(deal.amount || 0);
+  const name = String(deal.cardOwnerName || '').toLowerCase();
+  if (amt > 0 && amt <= 5) return true;
+  if (/בדיקה|test|ניסיון|דניאל דניאל/i.test(name)) return true;
+  return false;
+}
+
+// Transliteration / synonym pairs for Hebrew <-> English matching
+const HE_EN_PAIRS = [
+  ['דושיין', 'dushein'],
+  ['דושן', 'dushen'],
+  ['יורה', 'yura'],
+  ['יורי', 'yuri'],
+  ['עומר', 'omer'],
+  ['אור', 'or'],
+  ['כהן', 'cohen'],
+  ['כהן', 'kohen'],
+  ['דניאל', 'daniel'],
+  ['מיכאל', 'michael'],
+  ['דוד', 'david'],
+  ['אבי', 'avi'],
+  ['יוסי', 'yossi']
+];
+
+/**
+ * Helper to compute string similarity between names (supports Hebrew and English, partial match).
+ */
+export function nameSimilarity(strA, strB) {
+  const clean = (s) => String(s || '').toLowerCase().replace(/[^a-zא-ת0-9\s]/gi, ' ').replace(/\s+/g, ' ').trim();
   const a = clean(strA);
   const b = clean(strB);
   if (!a || !b) return 0;
@@ -264,14 +316,22 @@ function nameSimilarity(strA, strB) {
   const wordsB = b.split(/\s+/).filter((w) => w.length > 1);
   const overlap = wordsA.filter((w) => wordsB.includes(w));
   if (overlap.length > 0) {
-    return 0.5 + 0.3 * (overlap.length / Math.max(wordsA.length, wordsB.length));
+    return 0.5 + 0.35 * (overlap.length / Math.max(wordsA.length, wordsB.length));
   }
+
+  // Cross-lingual phonetic/transliteration check
+  for (const [he, en] of HE_EN_PAIRS) {
+    if ((a.includes(he) && b.includes(en)) || (a.includes(en) && b.includes(he))) {
+      return 0.85;
+    }
+  }
+
   return 0;
 }
 
 /**
  * Ranks candidate bookings for an unlinked Cardcom terminal deal.
- * Returns top 1-3 candidates sorted by highest score.
+ * Returns top candidates sorted by highest score.
  */
 export function rankCandidateBookings(deal, bookings = [], todayStr = new Date().toISOString().slice(0, 10)) {
   const dealAmount = Number(deal.amount);
@@ -285,16 +345,29 @@ export function rankCandidateBookings(deal, bookings = [], todayStr = new Date()
     // Check if deal is already recorded on this booking
     const clearing = Array.isArray(b.clearing_payments) ? b.clearing_payments : [];
     const alreadyLinked = clearing.some((row) => (
-      String(row.deal_number || row.txn || '').trim() === deal.dealId
+      String(row.deal_number || row.txn || '').trim() === String(deal.dealId || deal.deal_id || '')
       || (deal.approval && String(row.approval || row.ref || '').trim() === deal.approval)
     ));
     if (alreadyLinked) continue;
 
     const totalAgorot = Number(b.total_price_agorot) || 0;
-    const paidAgorot = clearing.reduce((s, row) => s + (Number(row.amount_agorot) || 0), 0);
-    const dueIls = Math.max(0, Math.round((totalAgorot - paidAgorot) / 100));
-    const depositIls = Math.round((Number(b.deposit_agorot) || 0) / 100);
+    const verifiedAgorot = clearing
+      .filter((p) => !isUnverifiedKinorotPayment(p))
+      .reduce((s, row) => s + (Number(row.amount_agorot) || Math.round(Number(row.amount_ils || 0) * 100)), 0);
+
     const totalIls = Math.round(totalAgorot / 100);
+    const verifiedPaidIls = Math.round(verifiedAgorot / 100);
+    const dueIls = Math.max(0, totalIls - verifiedPaidIls);
+    const depositIls = Math.round((Number(b.deposit_agorot) || 0) / 100);
+    const deposit20Ils = Math.round(totalIls * 0.20);
+
+    const hasOnlyUnverifiedKinorot = clearing.length > 0 && clearing.every(isUnverifiedKinorotPayment);
+    const isUnverifiedKinorotPaid = String(b.payment_status || '').toUpperCase() === 'PAID' && hasOnlyUnverifiedKinorot;
+
+    // Fully paid bookings with verified money are skipped
+    if (dueIls === 0 && !isUnverifiedKinorotPaid && totalIls > 0) {
+      continue;
+    }
 
     const guestName = String(b.guest_name || '').trim();
     const cin = String(b.check_in_date || '').slice(0, 10);
@@ -304,36 +377,59 @@ export function rankCandidateBookings(deal, bookings = [], todayStr = new Date()
     const reasons = [];
 
     // 1. Amount match (0-50 pts)
-    if (dueIls > 0 && Math.abs(dealAmount - dueIls) < 0.05) {
+    const effectiveDue = isUnverifiedKinorotPaid && dueIls === 0 ? totalIls : dueIls;
+    if (effectiveDue > 0 && Math.abs(dealAmount - effectiveDue) < 0.5) {
       score += 50;
       reasons.push('exact_due_balance');
-    } else if (depositIls > 0 && Math.abs(dealAmount - depositIls) < 0.05) {
+    } else if (deposit20Ils > 0 && Math.abs(dealAmount - deposit20Ils) < 0.5) {
+      score += 48;
+      reasons.push('exact_20_percent_deposit');
+    } else if (depositIls > 0 && Math.abs(dealAmount - depositIls) < 0.5) {
       score += 45;
       reasons.push('exact_deposit');
-    } else if (totalIls > 0 && Math.abs(dealAmount - totalIls) < 0.05) {
+    } else if (totalIls > 0 && Math.abs(dealAmount - totalIls) < 0.5) {
       score += 40;
       reasons.push('exact_total');
-    } else if (dueIls > 0 && dealAmount < dueIls) {
+    } else if (effectiveDue > 0 && dealAmount < effectiveDue) {
       score += 25;
       reasons.push('partial_balance');
-    } else if (dueIls > 0 && Math.abs(dealAmount - dueIls) / dueIls <= 0.1) {
+    } else if (effectiveDue > 0 && Math.abs(dealAmount - effectiveDue) / effectiveDue <= 0.1) {
       score += 20;
       reasons.push('close_balance');
     }
 
-    // 2. Name match (0-35 pts)
-    if (deal.cardOwnerName && guestName) {
-      const sim = nameSimilarity(deal.cardOwnerName, guestName);
-      if (sim >= 0.85) {
-        score += 35;
-        reasons.push('strong_name_match');
-      } else if (sim >= 0.5) {
-        score += 20;
-        reasons.push('partial_name_match');
+    // 2. Name match (0-35 pts) - check guest_name, invoice_name, company_name
+    const targetNames = [
+      b.guest_name,
+      b.invoice_name,
+      b.company_name,
+      b.guest_contact_name
+    ].filter(Boolean);
+
+    let maxNameSim = 0;
+    if (deal.cardOwnerName) {
+      for (const tName of targetNames) {
+        const sim = nameSimilarity(deal.cardOwnerName, tName);
+        if (sim > maxNameSim) maxNameSim = sim;
       }
     }
 
-    // 3. Phone match (0-30 pts)
+    if (maxNameSim >= 0.85) {
+      score += 35;
+      reasons.push('strong_name_match');
+    } else if (maxNameSim >= 0.4) {
+      score += 20;
+      reasons.push('partial_name_match');
+    }
+
+    // 3. Card 4-digits match (0-30 pts)
+    const bLast4 = String(b.card_last4 || b.last4 || b.credit_card_last4 || (b.stay?.hyp?.last4) || '').replace(/\D/g, '').slice(-4);
+    if (deal.last4 && bLast4 && deal.last4 === bLast4) {
+      score += 30;
+      reasons.push('card_last4_match');
+    }
+
+    // 4. Phone match (0-30 pts)
     if (deal.phone && b.guest_phone) {
       const p1 = normalizePhone(deal.phone);
       const p2 = normalizePhone(b.guest_phone);
@@ -343,7 +439,7 @@ export function rankCandidateBookings(deal, bookings = [], todayStr = new Date()
       }
     }
 
-    // 4. Date proximity (0-15 pts)
+    // 5. Date proximity (0-15 pts)
     if (cin && cout) {
       const inStay = cin <= todayStr && cout >= todayStr;
       const arrivesToday = cin === todayStr;
@@ -367,10 +463,14 @@ export function rankCandidateBookings(deal, bookings = [], todayStr = new Date()
       }
     }
 
-    // 5. Explicit ReturnValue / ExternalId match (+100 pts)
+    // 6. Direct ReturnValue / ExternalId match (+100 pts)
     if (deal.returnValue && (deal.returnValue === b.id || deal.returnValue === b.checkout_token)) {
       score += 100;
       reasons.push('direct_return_value_match');
+    }
+
+    if (isUnverifiedKinorotPaid) {
+      reasons.push('unverified_kinorot_payment');
     }
 
     if (score >= 20) {
@@ -384,7 +484,7 @@ export function rankCandidateBookings(deal, bookings = [], todayStr = new Date()
         unitName: b.unit_name || b.unit_id || 'יחידה',
         checkIn: cin,
         checkOut: cout,
-        dueIls,
+        dueIls: effectiveDue,
         totalIls,
         score,
         reasons
@@ -393,7 +493,7 @@ export function rankCandidateBookings(deal, bookings = [], todayStr = new Date()
   }
 
   candidates.sort((a, b) => b.score - a.score);
-  return candidates.slice(0, 3);
+  return candidates.slice(0, 5);
 }
 
 /**
@@ -551,12 +651,38 @@ export async function createCardcomInvoiceForDeal({
   email,
   phone,
   description,
+  existingDocumentNumber,
+  existingDocumentUrl,
   apiName,
   apiPassword,
   fetchImpl = fetch,
   timeoutMs = 15000
 } = {}) {
   if (!dealId) throw new Error('MISSING_DEAL_ID');
+
+  // Idempotency check: if document already exists on deal, match, or booking, reuse it! Never produce duplicate invoice.
+  const matchedPayment = Array.isArray(booking?.clearing_payments)
+    ? booking.clearing_payments.find((p) => String(p.deal_number || p.txn || '') === String(dealId))
+    : null;
+  const existingDocNum = String(
+    existingDocumentNumber ||
+    matchedPayment?.invoice ||
+    matchedPayment?.document_number ||
+    matchedPayment?.documentNumber ||
+    ''
+  ).trim();
+
+  if (existingDocNum) {
+    return {
+      documentNumber: existingDocNum,
+      documentUrl: String(existingDocumentUrl || matchedPayment?.document_url || matchedPayment?.documentUrl || ''),
+      description: 'Reused existing document',
+      emailSentTo: email || FALLBACK_INVOICE_EMAIL,
+      hasGuestEmail: Boolean(email),
+      reused: true
+    };
+  }
+
   if (!apiName || !apiPassword) throw new Error('MISSING_CARDCOM_CREDENTIALS');
 
   const resolved = booking ? resolveBookingInvoiceDetails(booking, booking.unit_name) : null;

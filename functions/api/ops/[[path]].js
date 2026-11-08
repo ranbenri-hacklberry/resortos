@@ -370,11 +370,27 @@ export async function onRequest(context) {
       }
 
       const amount = match ? Number(match.amount) : 0;
-      let invoiceInfo = null;
-      const apiName = env.CARDCOM_API_NAME;
-      const apiPassword = env.CARDCOM_API_PASSWORD;
+      const existingPayments = Array.isArray(booking.clearing_payments) ? [...booking.clearing_payments] : [];
+      const dealIdStr = String(deal_id);
 
-      if (apiName && apiPassword && amount > 0) {
+      // Rule: Exactly one invoice per deal. If document already exists on deal, match, or booking, reuse it!
+      const existingDocNumber = String(
+        match?.document_number ||
+        match?.invoice_number ||
+        existingPayments.find((p) => String(p.deal_number || p.txn || '') === dealIdStr)?.invoice ||
+        ''
+      ).trim();
+
+      const existingDocUrl = String(match?.document_url || match?.invoice_url || '');
+
+      if (existingDocNumber) {
+        invoiceInfo = {
+          documentNumber: existingDocNumber,
+          documentUrl: existingDocUrl,
+          dealId: dealIdStr,
+          reused: true
+        };
+      } else if (apiName && apiPassword && amount > 0) {
         try {
           const companyName = String(booking.company_name || booking.invoice_company || booking.business_name || '').trim();
           const taxId = String(booking.tax_id || booking.company_hp || booking.hp || booking.vat_id || booking.business_id || '').trim();
@@ -425,10 +441,6 @@ export async function onRequest(context) {
           console.warn('[Cloudflare Ops Link] Cardcom Invoice error:', err);
         }
       }
-
-      // Record clearing_payment idempotently on booking
-      const existingPayments = Array.isArray(booking.clearing_payments) ? [...booking.clearing_payments] : [];
-      const dealIdStr = String(deal_id);
       const paymentEntry = {
         method: 'CARD',
         amount_ils: amount,
@@ -515,19 +527,44 @@ export async function onRequest(context) {
     if (sub === 'ignore' && request.method === 'POST') {
       let body = {};
       try { body = await request.json(); } catch {}
-      const { deal_id } = body;
+      const { deal_id, reason, status } = body;
+      const targetStatus = status || (reason === 'test' ? 'test' : 'ignored');
       if (deal_id) {
         try {
           await fetchPostgrest(`/cardcom_pending_matches?deal_id=eq.${encodeURIComponent(deal_id)}`, {
             method: 'PATCH',
             body: JSON.stringify({
-              status: 'ignored',
+              status: targetStatus,
               updated_at: new Date().toISOString()
             })
           }, env);
         } catch (_) {}
+
+        try {
+          const setRes = await fetchPostgrest('/hotelos_runtime_settings?key=eq.cardcom_pending_matches', { method: 'GET' }, env);
+          if (setRes && setRes.ok) {
+            const rows = await setRes.json();
+            if (Array.isArray(rows) && rows[0]?.value) {
+              const allRuntime = JSON.parse(rows[0].value);
+              if (Array.isArray(allRuntime)) {
+                const target = allRuntime.find((m) => String(m.deal_id) === String(deal_id));
+                if (target) {
+                  target.status = targetStatus;
+                  target.updated_at = new Date().toISOString();
+                  await fetchPostgrest('/hotelos_runtime_settings?key=eq.cardcom_pending_matches', {
+                    method: 'PATCH',
+                    body: JSON.stringify({
+                      value: JSON.stringify(allRuntime),
+                      updated_at: new Date().toISOString()
+                    })
+                  }, env);
+                }
+              }
+            }
+          }
+        } catch (_) {}
       }
-      return json({ ok: true });
+      return json({ ok: true, status: targetStatus });
     }
   }
 

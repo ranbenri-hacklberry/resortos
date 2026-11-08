@@ -82,6 +82,7 @@ print-checkins-*.html
 server/data/*.json
 data/priority-docs.json
 data/grounds-status.json
+data/cardcom-terminal-storage.json
 logs/
 
 public/finance/

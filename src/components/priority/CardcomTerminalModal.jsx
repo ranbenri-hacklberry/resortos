@@ -322,6 +322,7 @@ export default function CardcomTerminalModal({
 }) {
   const [selectedDealIndex, setSelectedDealIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [pendingAction, setPendingAction] = useState(null);
 
   const currentDeal = pendingCharges[Math.min(selectedDealIndex, pendingCharges.length - 1)] || pendingCharges[0];
 
@@ -641,7 +642,13 @@ export default function CardcomTerminalModal({
                   <button
                     type="button"
                     disabled={isBusy}
-                    onClick={() => onLinkDeal?.(dealId, candidate.bookingId)}
+                    onClick={() => setPendingAction({
+                      type: 'link',
+                      dealId,
+                      bookingId: candidate.bookingId,
+                      guestName: candidate.guestName,
+                      amount: amountFormatted
+                    })}
                     style={{
                       width: '100%',
                       padding: '10px 14px',
@@ -685,38 +692,139 @@ export default function CardcomTerminalModal({
         >
           <button
             type="button"
-            onClick={() => onIgnoreDeal?.(dealId)}
+            onClick={() => setPendingAction({
+              type: 'test',
+              dealId,
+              amount: amountFormatted
+            })}
             style={{
-              padding: '8px 14px',
-              backgroundColor: '#fee2e2',
-              color: '#991b1b',
-              border: '1px solid #fecaca',
-              borderRadius: '8px',
-              fontSize: '13px',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
-          >
-            התעלם מסליקה זו
-          </button>
-
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              padding: '8px 20px',
-              backgroundColor: '#e2e8f0',
-              color: '#334155',
-              border: 'none',
+              padding: '8px 16px',
+              backgroundColor: '#fef3c7',
+              color: '#92400e',
+              border: '1px solid #fde68a',
               borderRadius: '8px',
               fontSize: '13px',
               fontWeight: 700,
-              cursor: 'pointer'
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
             }}
           >
-            סגור
+            <AlertCircle size={15} />
+            סמן כבדיקה (דורש אישור)
           </button>
+
+          <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>
+            כל שינוי סטטוס דורש אישור מפורש
+          </div>
         </div>
+
+        {/* Status Change Confirmation Overlay */}
+        {pendingAction ? (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundColor: 'rgba(15, 23, 42, 0.75)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+              padding: '20px',
+              backdropFilter: 'blur(3px)'
+            }}
+          >
+            <div
+              style={{
+                backgroundColor: '#ffffff',
+                borderRadius: '14px',
+                padding: '24px',
+                maxWidth: '440px',
+                width: '100%',
+                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px',
+                textAlign: 'center'
+              }}
+            >
+              <div
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '50%',
+                  backgroundColor: pendingAction.type === 'test' ? '#fef3c7' : '#dcfce7',
+                  color: pendingAction.type === 'test' ? '#d97706' : '#16a34a',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto'
+                }}
+              >
+                {pendingAction.type === 'test' ? <AlertCircle size={26} /> : <CheckCircle2 size={26} />}
+              </div>
+
+              <div>
+                <h4 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: 800, color: '#0f172a' }}>
+                  {pendingAction.type === 'test' ? 'אישור סימון כבדיקה' : 'אישור שיוך סליקה'}
+                </h4>
+                <p style={{ margin: 0, fontSize: '14px', color: '#475569', lineHeight: 1.5 }}>
+                  {pendingAction.type === 'test' ? (
+                    `האם לסמן את העסקה על סך ₪${pendingAction.amount} כבדיקה? העסקה תועבר לסטטוס בדיקה ולא תשויך להזמנה.`
+                  ) : (
+                    `האם לשייך את הסליקה על סך ₪${pendingAction.amount} להזמנה של ${pendingAction.guestName}? הפעולה תרשום תשלום ותפיק חשבונית מס קבלה אחת.`
+                  )}
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const action = pendingAction;
+                    setPendingAction(null);
+                    if (action.type === 'test') {
+                      onIgnoreDeal?.(action.dealId, 'test');
+                    } else if (action.type === 'link') {
+                      onLinkDeal?.(action.dealId, action.bookingId);
+                    }
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    backgroundColor: pendingAction.type === 'test' ? '#d97706' : '#16a34a',
+                    color: '#ffffff',
+                    fontWeight: 800,
+                    fontSize: '15px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  אישור
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPendingAction(null)}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    backgroundColor: '#ffffff',
+                    color: '#475569',
+                    fontWeight: 700,
+                    fontSize: '15px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ביטול
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

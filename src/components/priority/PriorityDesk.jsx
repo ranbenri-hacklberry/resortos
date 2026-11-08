@@ -761,7 +761,13 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       const res = await fetch('/api/ops/cardcom-terminal/pending', { headers });
       if (res.ok) {
         const data = await res.json();
-        setPendingCardcomCharges(Array.isArray(data?.pending) ? data.pending : []);
+        const pending = Array.isArray(data?.pending) ? data.pending : [];
+        setPendingCardcomCharges(pending);
+        if (pending.length > 0) {
+          setShowUnlinkedChargesModal(true);
+        } else {
+          setShowUnlinkedChargesModal(false);
+        }
         const approved = Array.isArray(data?.recently_approved) ? data.recently_approved : [];
         const ackSet = getAcknowledgedDealIds();
         const unacked = approved.filter((d) => d?.deal_id && !ackSet.has(String(d.deal_id)));
@@ -810,7 +816,6 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         saveAcknowledgedDealId(dealId);
         await refreshPendingCharges();
         if (refreshBoard) refreshBoard();
-        setShowUnlinkedChargesModal(false);
         alert('הסליקה שויכה להזמנה בהצלחה והופקה חשבונית מס קבלה!');
       } else {
         const errData = await res.json().catch(() => ({}));
@@ -823,8 +828,8 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
     }
   };
 
-  const handleIgnoreCardcomDeal = async (dealId) => {
-    if (!dealId || !window.confirm('האם להתעלם מסליקה זו?')) return;
+  const handleIgnoreCardcomDeal = async (dealId, reason = 'test') => {
+    if (!dealId) return;
     try {
       const token = getStoredToken();
       const headers = { 'Content-Type': 'application/json' };
@@ -832,7 +837,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       const res = await fetch('/api/ops/cardcom-terminal/ignore', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ deal_id: dealId })
+        body: JSON.stringify({ deal_id: dealId, reason, status: reason === 'test' ? 'test' : 'ignored' })
       });
       if (res.ok) {
         await refreshPendingCharges();

@@ -11,9 +11,13 @@ import {
   resolveBookingInvoiceDetails,
   OutboundRateLimiter,
   isRanPhone,
+  isTestTransaction,
+  isUnverifiedKinorotPayment,
+  getBookingDueIls,
   CARDCOM_CREATE_DOCUMENT_URL
 } from './lib/cardcomTerminalService.js';
-import { isPollerEnabled } from './syncCardcomTerminal.js';
+import { CardcomStorage } from './lib/cardcomStorage.js';
+import { isPollerEnabled, pollCardcomTerminal } from './syncCardcomTerminal.js';
 
 test('normalizeCardcomDeal extracts all transaction fields correctly', () => {
   const raw = {
@@ -406,3 +410,380 @@ test('poller is disabled by default and enabled only when flag is set', () => {
     }
   }
 });
+
+test('1,400 ₪ of "עומר" from 7.11 matches booking kin_685_76154', () => {
+  const deal = {
+    dealId: 'deal-omer-1400',
+    terminal: '184288',
+    amount: 1400,
+    amountAgorot: 140000,
+    approval: '887766',
+    last4: '1122',
+    cardOwnerName: 'עומר',
+    dealTime: '2026-11-07T15:30:00'
+  };
+
+  const bookings = [
+    {
+      id: 'kin_999_other',
+      guest_name: 'יוסי אברהם',
+      unit_name: 'סוויטה 3',
+      total_price_agorot: 200000,
+      clearing_payments: [],
+      check_in_date: '2026-11-20',
+      check_out_date: '2026-11-22'
+    },
+    {
+      id: 'kin_685_76154',
+      guest_name: 'עומר כהן',
+      unit_name: 'סוויטה מונטנה',
+      total_price_agorot: 140000,
+      clearing_payments: [],
+      check_in_date: '2026-11-07',
+      check_out_date: '2026-11-09'
+    }
+  ];
+
+  const candidates = rankCandidateBookings(deal, bookings, '2026-11-07');
+  assert.ok(candidates.length >= 1, 'Should find at least 1 candidate');
+  assert.equal(candidates[0].bookingId, 'kin_685_76154');
+  assert.equal(candidates[0].dueIls, 1400);
+  assert.ok(candidates[0].score >= 80, 'High score from exact balance + name + today arrival');
+});
+
+test('two charges of 180 ₪ of Yura Dushein from 5.11 match booking kin_694_75962 (20% deposit of 900)', () => {
+  const deal1 = {
+    dealId: 'deal-yura-1',
+    terminal: '184288',
+    amount: 180,
+    amountAgorot: 18000,
+    approval: '112233',
+    last4: '4455',
+    cardOwnerName: 'Yura Dushein',
+    dealTime: '2026-11-05T10:00:00'
+  };
+
+  const deal2 = {
+    dealId: 'deal-yura-2',
+    terminal: '184288',
+    amount: 180,
+    amountAgorot: 18000,
+    approval: '112234',
+    last4: '4455',
+    cardOwnerName: 'Yura Dushein',
+    dealTime: '2026-11-05T10:05:00'
+  };
+
+  const bookings = [
+    {
+      id: 'kin_694_75962',
+      guest_name: 'יורה דושיין',
+      unit_name: 'סוויטה אלון',
+      total_price_agorot: 90000, // 900 ILS total -> 20% deposit is 180 ILS
+      clearing_payments: [],
+      check_in_date: '2026-11-05',
+      check_out_date: '2026-11-07'
+    },
+    {
+      id: 'other_booking_900',
+      guest_name: 'אבי שמיר',
+      unit_name: 'סוויטה תמר',
+      total_price_agorot: 90000,
+      clearing_payments: [],
+      check_in_date: '2026-11-25',
+      check_out_date: '2026-11-27'
+    }
+  ];
+
+  const cand1 = rankCandidateBookings(deal1, bookings, '2026-11-05');
+  assert.ok(cand1.length >= 1);
+  assert.equal(cand1[0].bookingId, 'kin_694_75962');
+  assert.ok(cand1[0].reasons.includes('exact_20_percent_deposit'), 'Matches 20% deposit of 900');
+  assert.ok(cand1[0].reasons.includes('strong_name_match'), 'Recognizes Yura Dushein <-> יורה דושיין');
+
+  const cand2 = rankCandidateBookings(deal2, bookings, '2026-11-05');
+  assert.ok(cand2.length >= 1);
+  assert.equal(cand2[0].bookingId, 'kin_694_75962');
+  assert.ok(cand2[0].reasons.includes('exact_20_percent_deposit'));
+});
+
+test('1 ₪ of "דניאל דניאל" is detected as test transaction', () => {
+  const test1 = {
+    dealId: 'deal-test-dan-1',
+    amount: 1,
+    cardOwnerName: 'דניאל דניאל'
+  };
+  assert.equal(isTestTransaction(test1), true);
+
+  const test2 = {
+    dealId: 'deal-test-5ils',
+    amount: 5,
+    cardOwnerName: 'ישראל ישראלי'
+  };
+  assert.equal(isTestTransaction(test2), true);
+
+  const test3 = {
+    dealId: 'deal-test-word',
+    amount: 150,
+    cardOwnerName: 'עסקת בדיקה'
+  };
+  assert.equal(isTestTransaction(test3), true);
+
+  const realDeal = {
+    dealId: 'deal-real-guest',
+    amount: 1200,
+    cardOwnerName: 'משה אהרוני'
+  };
+  assert.equal(isTestTransaction(realDeal), false);
+});
+
+test('600 ₪ from 8.11 matches אור כהן, kin_693_76058', () => {
+  const deal = {
+    dealId: 'deal-or-cohen-600',
+    terminal: '184288',
+    amount: 600,
+    amountAgorot: 60000,
+    approval: '334455',
+    last4: '7788',
+    cardOwnerName: 'Or Cohen',
+    dealTime: '2026-11-08T12:00:00'
+  };
+
+  const bookings = [
+    {
+      id: 'kin_693_76058',
+      guest_name: 'אור כהן',
+      unit_name: 'סוויטה כנרת',
+      total_price_agorot: 60000,
+      clearing_payments: [],
+      check_in_date: '2026-11-08',
+      check_out_date: '2026-11-10'
+    },
+    {
+      id: 'other_kin_booking',
+      guest_name: 'שרה גולד',
+      unit_name: 'סוויטה נוף',
+      total_price_agorot: 60000,
+      clearing_payments: [],
+      check_in_date: '2026-11-28',
+      check_out_date: '2026-11-30'
+    }
+  ];
+
+  const candidates = rankCandidateBookings(deal, bookings, '2026-11-08');
+  assert.ok(candidates.length >= 1);
+  assert.equal(candidates[0].bookingId, 'kin_693_76058');
+  assert.ok(candidates[0].reasons.includes('exact_due_balance'));
+  assert.ok(candidates[0].reasons.includes('strong_name_match'));
+});
+
+test('booking marked PAID solely via Kinorot note without deal ID remains candidate', () => {
+  const kinorotNotePayment = {
+    method: 'KINOROT',
+    note: 'שולם לפי קינורות',
+    amount_ils: 1200
+  };
+  assert.equal(isUnverifiedKinorotPayment(kinorotNotePayment), true);
+
+  const verifiedPayment = {
+    deal_number: 'deal-real-123',
+    approval: '998877',
+    amount_ils: 1200
+  };
+  assert.equal(isUnverifiedKinorotPayment(verifiedPayment), false);
+
+  const booking = {
+    id: 'kin_unverified_note_1',
+    guest_name: 'דוד ישראלי',
+    unit_name: 'וילה מוריה',
+    total_price_agorot: 120000,
+    payment_status: 'PAID',
+    clearing_payments: [kinorotNotePayment],
+    check_in_date: '2026-11-10',
+    check_out_date: '2026-11-12'
+  };
+
+  // Due calculation discounts unverified note
+  const due = getBookingDueIls(booking);
+  assert.equal(due, 1200, 'Unverified Kinorot note is discounted from verified payments');
+
+  const deal = {
+    dealId: 'deal-term-1200',
+    terminal: '184288',
+    amount: 1200,
+    amountAgorot: 120000,
+    approval: '556677',
+    last4: '3344',
+    cardOwnerName: 'דוד ישראלי',
+    dealTime: '2026-11-10T09:00:00'
+  };
+
+  const candidates = rankCandidateBookings(deal, [booking], '2026-11-10');
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].bookingId, 'kin_unverified_note_1');
+  assert.ok(candidates[0].reasons.includes('unverified_kinorot_payment'), 'Identified as unverified Kinorot candidate');
+});
+
+test('exactly one tax invoice per transaction (idempotency and single invoice guarantee)', async () => {
+  let fetchCallCount = 0;
+  const mockFetch = async () => {
+    fetchCallCount++;
+    return {
+      ok: true,
+      json: async () => ({ ResponseCode: 0, DocumentNumber: 'NEW-DOC-1', DocumentUrl: 'https://cardcom/new' })
+    };
+  };
+
+  // 1. Existing document number passed directly: no API call, reused: true
+  const res1 = await createCardcomInvoiceForDeal({
+    dealId: 'deal-doc-reuse-1',
+    amount: 750,
+    existingDocumentNumber: 'DOC-EXISTING-100',
+    existingDocumentUrl: 'https://cardcom/doc/100',
+    fetchImpl: mockFetch
+  });
+  assert.equal(fetchCallCount, 0, 'Did not call Cardcom API');
+  assert.equal(res1.documentNumber, 'DOC-EXISTING-100');
+  assert.equal(res1.reused, true);
+
+  // 2. Booking clearing payment already contains invoice for this deal: no API call, reused: true
+  const bookingWithDoc = {
+    id: 'b-with-doc',
+    guest_name: 'יוסי',
+    clearing_payments: [
+      {
+        deal_number: 'deal-doc-reuse-2',
+        document_number: 'DOC-EXISTING-200',
+        document_url: 'https://cardcom/doc/200'
+      }
+    ]
+  };
+
+  const res2 = await createCardcomInvoiceForDeal({
+    dealId: 'deal-doc-reuse-2',
+    amount: 800,
+    booking: bookingWithDoc,
+    fetchImpl: mockFetch
+  });
+  assert.equal(fetchCallCount, 0, 'Did not call Cardcom API');
+  assert.equal(res2.documentNumber, 'DOC-EXISTING-200');
+  assert.equal(res2.reused, true);
+});
+
+test('CardcomStorage manages seen deals and pending matches in memory', async () => {
+  const storage = new CardcomStorage();
+  await storage.init();
+
+  storage.addSeenDeal({
+    deal_id: 'store-deal-1',
+    terminal_number: '184288',
+    amount: 500,
+    card_owner_name: 'בדיקה'
+  });
+  assert.equal(storage.hasSeenDeal('store-deal-1'), true);
+  assert.equal(storage.hasSeenDeal('non-existent-deal'), false);
+
+  storage.addPendingMatch({
+    deal_id: 'store-deal-1',
+    status: 'pending',
+    amount: 500
+  });
+
+  const active = storage.getActivePendingMatches();
+  assert.ok(active.some((m) => m.deal_id === 'store-deal-1'));
+
+  storage.updateMatchStatus('store-deal-1', 'test');
+  const activeAfterUpdate = storage.getActivePendingMatches();
+  assert.ok(!activeAfterUpdate.some((m) => m.deal_id === 'store-deal-1'), 'Test transaction is no longer active pending match');
+});
+
+test('sync backfill: dry-run does not persist while apply persists proposals', async () => {
+  const mockTransactions = [
+    {
+      DealNumber: 'backfill-deal-999',
+      TerminalNumber: '184288',
+      Amount: 1500,
+      ApprovalNumber: '998877',
+      Last4CardDigitsString: '1234',
+      CardOwnerName: 'ראובן כהן',
+      CardNumberEntryMode: 'Phone',
+      CreateDate: '2026-11-01T10:00:00',
+      ResponseCode: 0,
+      Status: 'Success'
+    }
+  ];
+
+  const mockBookings = [
+    {
+      id: 'b-backfill-match',
+      guest_name: 'ראובן כהן',
+      unit_name: 'סוויטה 1',
+      total_price_agorot: 150000,
+      clearing_payments: [],
+      check_in_date: '2026-11-01',
+      check_out_date: '2026-11-03'
+    }
+  ];
+
+  const mockFetch = async (url) => {
+    if (url.includes('ListTransactions')) {
+      return {
+        ok: true,
+        json: async () => ({ ResponseCode: 0, Transactions: mockTransactions })
+      };
+    }
+    if (url.includes('hotelos_bookings')) {
+      return {
+        ok: true,
+        json: async () => mockBookings
+      };
+    }
+    return { ok: true, json: async () => [] };
+  };
+
+  // Test 1: Dry run
+  const dryStorage = new CardcomStorage({ fetchImpl: mockFetch });
+  await dryStorage.init();
+
+  const dryResult = await pollCardcomTerminal({
+    apiName: 'mock-user',
+    apiPassword: 'mock-pass',
+    sinceDate: '2026-11-01',
+    isDryRun: true,
+    force: true,
+    fetchImpl: mockFetch,
+    storage: dryStorage,
+    bookings: mockBookings
+  });
+
+  assert.equal(dryResult.ok, true);
+  assert.equal(dryResult.isDryRun, true);
+  assert.equal(dryResult.totalPolled, 1);
+  assert.equal(dryResult.dryRunResults.length, 1);
+  assert.equal(dryResult.dryRunResults[0].dealId, 'backfill-deal-999');
+  assert.equal(dryResult.dryRunResults[0].topCandidate.bookingId, 'b-backfill-match');
+  assert.equal(dryStorage.hasSeenDeal('backfill-deal-999'), false, 'Dry run must NOT add deal to storage');
+  assert.equal(dryStorage.getPendingMatches().length, 0, 'Dry run must NOT add matches to storage');
+
+  // Test 2: Apply
+  const applyStorage = new CardcomStorage({ fetchImpl: mockFetch });
+  await applyStorage.init();
+
+  const applyResult = await pollCardcomTerminal({
+    apiName: 'mock-user',
+    apiPassword: 'mock-pass',
+    sinceDate: '2026-11-01',
+    isDryRun: false,
+    force: true,
+    fetchImpl: mockFetch,
+    storage: applyStorage,
+    bookings: mockBookings
+  });
+
+  assert.equal(applyResult.ok, true);
+  assert.equal(applyResult.isDryRun, false);
+  assert.equal(applyStorage.hasSeenDeal('backfill-deal-999'), true, 'Apply must record seen deal');
+  assert.equal(applyStorage.getPendingMatches().length, 1, 'Apply must persist pending match');
+  assert.equal(applyStorage.getPendingMatches()[0].deal_id, 'backfill-deal-999');
+});
+
