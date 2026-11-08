@@ -438,30 +438,8 @@ function intlPhone(raw?: string | null): string {
 const NO_CALL_RE = /לא\s*(?:ל|ת)?התקשר|בלי\s*(?:שיחה|טלפון)|אל\s*תתקשר|בוו?א?טס?א?פ|no\s*calls?|don'?t\s*call|whatsapp\s*only|by\s*whatsapp|не\s*звоните|только\s*(?:в\s*)?whatsapp|لا\s*تتصل|بدون\s*اتصال|عبر\s*واتساب/i;
 
 const LOCKBOX_QUERY_REGEX = /קוד|כספת|מפתח|רหัส|เซฟ|كود|خزنة|مفتاح/i;
-
-export function formatRoomDisplay(roomId: string, rooms: RoomEntry[]): string {
-  const r = rooms.find((x) => x.id === roomId);
-  if (!r) {
-    if (roomId === 'pilot-office') return 'משרד';
-    return roomId.startsWith('k') ? `יחידה ${roomId.slice(1)}` : roomId;
-  }
-  // Musical Courtyard rule: 1, 2, 3 instead of instrument names
-  if (r.id === 'k690' || r.name?.includes('מוסיקלית') || r.name?.includes('מוזיקלית')) {
-    if (r.id === 'k690' || r.letterCode === 'D1' || r.name?.includes('1')) return 'חצר מוזיקלית 1';
-    if (r.id === 'k691' || r.letterCode === 'D2' || r.name?.includes('2')) return 'חצר מוזיקלית 2';
-    if (r.id === 'k692' || r.letterCode === 'D3' || r.name?.includes('3')) return 'חצר מוזיקלית 3';
-    return 'חצר מוזיקלית';
-  }
-  if (r.name) {
-    let clean = r.name
-      .replace(/\s*·\s*בקתה\s*/g, ' ')
-      .replace(/\s*·\s*/g, ' ')
-      .trim();
-    clean = clean.replace(/מוסיקלית/g, 'מוזיקלית');
-    return clean;
-  }
-  return r.letterCode || (roomId.startsWith('k') ? `יחידה ${roomId.slice(1)}` : roomId);
-}
+import { formatRoomDisplay } from './formatRoomDisplay.js';
+export { formatRoomDisplay };
 
 /** Guest units with no stay tonight. A checkout today is free for a new arrival. */
 export function formatVacantToday(rooms: RoomEntry[], bookings: BookingRow[], today: string): string {

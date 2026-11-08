@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {
   calculateBookingBalances,
   classifyDealToBooking,
-  getCandidateUnpaidBookings
+  getCandidateUnpaidBookings,
+  isUnverifiedKinorotPayment
 } from './cardcomMatchCandidates.js';
 
 test('calculateBookingBalances calculates due balance and paid status correctly', () => {
@@ -180,3 +181,48 @@ test('getCandidateUnpaidBookings filters candidates by search query', () => {
   assert.equal(filteredByPhone.length, 1);
   assert.equal(filteredByPhone[0].bookingId, 'b-2');
 });
+
+test('classifyDealToBooking classifies exact 20% deposit match (מקדמה 20%)', () => {
+  const booking = {
+    total_price_agorot: 90000, // 900 ILS total
+    deposit_agorot: 0, // no explicit deposit
+    clearing_payments: []
+  };
+
+  // 20% of 900 is 180 (like Yura Dushein)
+  const result = classifyDealToBooking(180, booking);
+  assert.equal(result.type, 'exact_20_deposit');
+  assert.equal(result.tag, 'מקדמה 20%');
+  assert.equal(result.priority, 2);
+  assert.equal(result.remainingAfterPayment, 720);
+  assert.ok(result.description.includes('מקדמת 20%'));
+  assert.ok(result.description.includes('180'));
+});
+
+test('calculateBookingBalances discounts unverified Kinorot note payments and flags isUnverifiedPaid', () => {
+  const unverifiedPayment = {
+    method: 'KINOROT',
+    note: 'שולם לפי קינורות',
+    amount_ils: 1500
+  };
+  assert.equal(isUnverifiedKinorotPayment(unverifiedPayment), true);
+
+  const booking = {
+    total_price_agorot: 150000, // 1500 ILS
+    payment_status: 'PAID',
+    clearing_payments: [unverifiedPayment]
+  };
+
+  const balances = calculateBookingBalances(booking);
+  assert.equal(balances.totalIls, 1500);
+  assert.equal(balances.paidIls, 0, 'Unverified Kinorot note does not count towards verified paidIls');
+  assert.equal(balances.dueIls, 1500, 'Due balance remains full');
+  assert.equal(balances.isUnverifiedPaid, true, 'Booking is flagged as isUnverifiedPaid');
+  assert.equal(balances.isUnpaid, true, 'Booking is considered unpaid for candidate matching');
+
+  // Classified as verifying Kinorot payment
+  const classification = classifyDealToBooking(1500, booking);
+  assert.equal(classification.tag, 'אימות תשלום קינורות');
+  assert.ok(classification.description.includes('מאמת תשלום קינורות'));
+});
+

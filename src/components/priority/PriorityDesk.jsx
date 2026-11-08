@@ -753,6 +753,60 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const [showAutoApprovedModal, setShowAutoApprovedModal] = useState(false);
   const [showUnlinkedChargesModal, setShowUnlinkedChargesModal] = useState(false);
   const [linkingDealId, setLinkingDealId] = useState(null);
+  const [cardcomFetchError, setCardcomFetchError] = useState(null);
+  const [degradedAuditing, setDegradedAuditing] = useState(false);
+
+  const flushQueuedAudits = useCallback(async () => {
+    try {
+      const raw = localStorage.getItem('cardcom_failed_audit_escapes');
+      if (!raw) {
+        setDegradedAuditing(false);
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        setDegradedAuditing(false);
+        return;
+      }
+
+      // Dedupe queued failed audits by event ID
+      const seenEventIds = new Set();
+      const queue = parsed.filter((item) => {
+        const key = item.event_id || item.id || item.timestamp;
+        if (key) {
+          if (seenEventIds.has(key)) return false;
+          seenEventIds.add(key);
+        }
+        return true;
+      });
+
+      setDegradedAuditing(true);
+      const token = getStoredToken();
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const remaining = [];
+      for (const item of queue) {
+        try {
+          const res = await fetch('/api/ops/cardcom-terminal/audit-escape', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(item)
+          });
+          if (!res.ok) remaining.push(item);
+        } catch (_) {
+          remaining.push(item);
+        }
+      }
+      if (remaining.length > 0) {
+        localStorage.setItem('cardcom_failed_audit_escapes', JSON.stringify(remaining));
+        setDegradedAuditing(true);
+      } else {
+        localStorage.removeItem('cardcom_failed_audit_escapes');
+        setDegradedAuditing(false);
+      }
+    } catch (_) {}
+  }, []);
 
   const refreshPendingCharges = useCallback(async () => {
     try {
@@ -760,8 +814,16 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const res = await fetch('/api/ops/cardcom-terminal/pending', { headers });
       if (res.ok) {
+        setCardcomFetchError(null);
         const data = await res.json();
-        setPendingCardcomCharges(Array.isArray(data?.pending) ? data.pending : []);
+        const pending = Array.isArray(data?.pending) ? data.pending : [];
+        setPendingCardcomCharges(pending);
+        const isEscaped = Number(sessionStorage.getItem('cardcom_escape_until') || 0) > Date.now();
+        if (pending.length > 0 && !isEscaped) {
+          setShowUnlinkedChargesModal(true);
+        } else {
+          setShowUnlinkedChargesModal(false);
+        }
         const approved = Array.isArray(data?.recently_approved) ? data.recently_approved : [];
         const ackSet = getAcknowledgedDealIds();
         const unacked = approved.filter((d) => d?.deal_id && !ackSet.has(String(d.deal_id)));
@@ -769,15 +831,62 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
           setRecentlyApprovedCharges(unacked);
           setShowAutoApprovedModal(true);
         }
+      } else {
+        setCardcomFetchError(`שגיאת שרת (${res.status})`);
+      }
+    } catch (err) {
+      setCardcomFetchError(err?.message || 'שגיאת תקשורת');
+    }
+  }, []);
+
+  const handleEmergencyEscape = async () => {
+    sessionStorage.setItem('cardcom_escape_until', Date.now() + 30 * 60 * 1000);
+    setShowUnlinkedChargesModal(false);
+    const eventId = `esc_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const auditPayload = {
+      event_id: eventId,
+      id: eventId,
+      staff_name: operatorName || 'צוות דלפק',
+      reason: 'יציאת חירום ידנית מהמודל החוסם',
+      timestamp: new Date().toISOString()
+    };
+    let auditOk = false;
+    try {
+      const token = getStoredToken();
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch('/api/ops/cardcom-terminal/audit-escape', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(auditPayload)
+      });
+      if (res.ok) {
+        auditOk = true;
       }
     } catch (_) {}
-  }, []);
+
+    if (!auditOk) {
+      try {
+        const raw = localStorage.getItem('cardcom_failed_audit_escapes');
+        const queue = Array.isArray(JSON.parse(raw || '[]')) ? JSON.parse(raw || '[]') : [];
+        if (!queue.some((item) => (item.event_id && item.event_id === auditPayload.event_id) || (item.id && item.id === auditPayload.event_id))) {
+          queue.push(auditPayload);
+          localStorage.setItem('cardcom_failed_audit_escapes', JSON.stringify(queue));
+        }
+      } catch (_) {}
+      setDegradedAuditing(true);
+    }
+  };
 
   useEffect(() => {
     refreshPendingCharges();
-    const interval = setInterval(refreshPendingCharges, 10000);
+    flushQueuedAudits();
+    const interval = setInterval(() => {
+      refreshPendingCharges();
+      flushQueuedAudits();
+    }, 10000);
     return () => clearInterval(interval);
-  }, [refreshPendingCharges]);
+  }, [refreshPendingCharges, flushQueuedAudits]);
 
   const handleAcknowledgeApprovedDeal = (dealId) => {
     saveAcknowledgedDealId(dealId);
@@ -810,7 +919,6 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         saveAcknowledgedDealId(dealId);
         await refreshPendingCharges();
         if (refreshBoard) refreshBoard();
-        setShowUnlinkedChargesModal(false);
         alert('הסליקה שויכה להזמנה בהצלחה והופקה חשבונית מס קבלה!');
       } else {
         const errData = await res.json().catch(() => ({}));
@@ -823,8 +931,8 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
     }
   };
 
-  const handleIgnoreCardcomDeal = async (dealId) => {
-    if (!dealId || !window.confirm('האם להתעלם מסליקה זו?')) return;
+  const handleIgnoreCardcomDeal = async (dealId, reason = 'test') => {
+    if (!dealId) return;
     try {
       const token = getStoredToken();
       const headers = { 'Content-Type': 'application/json' };
@@ -832,7 +940,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       const res = await fetch('/api/ops/cardcom-terminal/ignore', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ deal_id: dealId })
+        body: JSON.stringify({ deal_id: dealId, reason, status: reason === 'test' ? 'test' : 'ignored' })
       });
       if (res.ok) {
         await refreshPendingCharges();
@@ -2879,6 +2987,33 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
           {saveError || message}
         </div>
       ) : null}
+
+      {degradedAuditing ? (
+        <div
+          role="alert"
+          style={{
+            position: 'fixed',
+            bottom: '72px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 9999,
+            padding: '10px 20px',
+            borderRadius: '999px',
+            background: '#fffbeb',
+            border: '1px solid #fde68a',
+            color: '#92400e',
+            fontSize: '13px',
+            fontWeight: 700,
+            textAlign: 'center',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}
+        >
+          <span>⚠️ רישום ביקורת במצב מוגבל (Degraded Auditing) - יציאות חירום שמורות מקומית וממתינות לסנכרון</span>
+        </div>
+      ) : null}
       <CardcomAutoApprovedModal
         isOpen={showAutoApprovedModal}
         deals={recentlyApprovedCharges}
@@ -2896,6 +3031,9 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         onLinkDeal={handleLinkCardcomDeal}
         onIgnoreDeal={handleIgnoreCardcomDeal}
         linkingDealId={linkingDealId}
+        loadError={cardcomFetchError}
+        onRetry={refreshPendingCharges}
+        onEmergencyEscape={handleEmergencyEscape}
       />
     </div>
   );

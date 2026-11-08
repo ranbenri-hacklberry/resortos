@@ -23,7 +23,7 @@ export function errorJson(message, status = 400, code = 'ERROR') {
   return json({ error: code, message }, status);
 }
 
-export function getPostgrestConfig(env) {
+export function getPostgrestConfig(env, { requireServiceRole = false } = {}) {
   const baseUrl = (
     env?.SUPABASE_URL ||
     env?.STUDIO_BRIDGE_URL ||
@@ -31,7 +31,13 @@ export function getPostgrestConfig(env) {
     'http://127.0.0.1:54321'
   ).replace(/\/$/, '');
 
-  const apiKey = env?.SUPABASE_SERVICE_ROLE_KEY || env?.SUPABASE_ANON_KEY || '';
+  let apiKey = '';
+  if (requireServiceRole) {
+    apiKey = env?.SUPABASE_SERVICE_ROLE_KEY || '';
+  } else {
+    apiKey = env?.SUPABASE_SERVICE_ROLE_KEY || env?.SUPABASE_ANON_KEY || '';
+  }
+
   const tenantId = env?.HOTELOS_TENANT_ID || DEFAULT_TENANT_ID;
   const bridgeSecret = env?.HOTELOS_API_SECRET || '';
 
@@ -43,8 +49,12 @@ export function isLocalPostgrestUrl(baseUrl) {
   return /127\.0\.0\.1|localhost|\[::1\]/i.test(host);
 }
 
-export async function fetchPostgrest(path, options = {}, env) {
-  const { baseUrl, apiKey, bridgeSecret } = getPostgrestConfig(env);
+export async function fetchPostgrest(path, options = {}, env, { requireServiceRole = false } = {}) {
+  const { baseUrl, apiKey, bridgeSecret } = getPostgrestConfig(env, { requireServiceRole });
+  if (requireServiceRole && !apiKey) {
+    console.error('[PostgREST Auth Error] SUPABASE_SERVICE_ROLE_KEY is required for:', path);
+    return null;
+  }
   if (isLocalPostgrestUrl(baseUrl)) return null;
   const url = `${baseUrl}/rest/v1${path}`;
 
