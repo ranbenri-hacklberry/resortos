@@ -16,6 +16,7 @@ import { channelFromKinorotGuest } from '../src/lib/kinorotChannel.js';
 import { readKinorotSyncStatus, writeKinorotSyncStatus } from './kinorotSyncControl.js';
 import { summarizeKinorotDiff } from './kinorotSyncDiff.js';
 import { notifySameDayKinorotBookings } from './kinorotSameDaySms.js';
+import { autoPublishGuestPages } from './autoPublishGuestPages.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -1089,6 +1090,13 @@ export async function main() {
     } catch (err) {
       console.warn(`[kinorot] same-day sms failed: ${err.message || err}`);
     }
+  }
+  // Every new/changed booking gets its guest page on ingest, so SMS sends only reuse it.
+  try {
+    const pub = await autoPublishGuestPages([...(changes.created || []), ...(changes.updated || [])], { today });
+    if (pub.attempted) console.log(`[kinorot] guest pages published=${pub.published} failed=${pub.failed} skipped=${pub.skipped}`);
+  } catch (err) {
+    console.warn(`[kinorot] guest page publish failed: ${err.message || err}`);
   }
   fetch(process.env.HOTELOS_BRIDGE_URL ? `${String(process.env.HOTELOS_BRIDGE_URL).replace(/\/$/, '')}/api/guest-context-push` : 'http://127.0.0.1:4038/api/guest-context-push', {
     method: 'POST'

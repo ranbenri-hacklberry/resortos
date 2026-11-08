@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { CHLOE_WA_URL } from '../lib/checkoutReminder.js';
 import { useTranslation } from 'react-i18next';
 import {
   Calendar as CalendarIcon,
@@ -43,6 +44,8 @@ import HypPayFrame from './HypPayFrame';
 import BankDetailsCard from './BankDetailsCard';
 import GuestChrome from './GuestChrome';
 import GuestReach from './GuestReach';
+import GuestWhatsAppFab from './GuestWhatsAppFab';
+import { guestWhatsAppFabVisible, isCardcomRedirectSearch } from '../lib/guestWhatsAppFab.js';
 import '../guest.css';
 
 function idPhotoBlob(file) {
@@ -205,12 +208,17 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
     if (activeBooking.stay?.id_photo_received_at) setIdSaved(true);
   }, [activeBooking?.checkout_token, activeBooking?.guest_name, activeBooking?.guest_email, activeBooking?.special_requests, activeBooking?.stay?.id_photo_received_at, activeBooking?.balance_payment_preference, activeBooking?.payment_mode, activeBooking?.stay?.payment_choice, activeBooking?.stay?.voucher_code]);
 
-  const shell = (children, center = null) => (
+  const cardcomRedirect = typeof window !== 'undefined' && isCardcomRedirectSearch(window.location.search);
+
+  const shell = (children, center = null, fab = false) => (
     <div
+      className={fab ? 'guest-precheck' : undefined}
       style={{
         background: themeStyles.wrapperBg,
         minHeight: '100dvh',
-        padding: '0.45rem 0.75rem 0.7rem',
+        paddingTop: '0.45rem',
+        paddingInline: '0.75rem',
+        paddingBottom: fab ? undefined : '0.7rem',
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'flex-start',
@@ -227,6 +235,7 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
         />
         {children}
       </div>
+      {fab ? <GuestWhatsAppFab /> : null}
     </div>
   );
 
@@ -235,7 +244,9 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
       <div style={{ textAlign: 'center', paddingTop: '2rem' }}>
         <Clock size={40} color={themeStyles.accent} style={{ marginBottom: '1rem' }} />
         <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>{t('GUEST_LOADING')}</h3>
-      </div>
+      </div>,
+      null,
+      guestWhatsAppFabVisible({ redirecting: cardcomRedirect, surface: 'loading' })
     );
   }
 
@@ -269,7 +280,29 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
             {t('GUEST_RETRY')}
           </button>
         ) : null}
-      </div>
+        {!network && token && missing ? (
+          <a
+            href={CHLOE_WA_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'inline-block',
+              marginTop: '1.25rem',
+              borderRadius: 12,
+              padding: '0.75rem 1.2rem',
+              background: '#25D366',
+              color: '#fff',
+              fontWeight: 800,
+              fontSize: '0.95rem',
+              textDecoration: 'none'
+            }}
+          >
+            {t('GUEST_NOT_FOUND_WHATSAPP')}
+          </a>
+        ) : null}
+      </div>,
+      null,
+      guestWhatsAppFabVisible({ redirecting: cardcomRedirect, surface: 'error' })
     );
   }
 
@@ -696,6 +729,12 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
       </div>
     );
   };
+
+  const showCheckoutFab = guestWhatsAppFabVisible({
+    cardcom: Boolean(payFrame),
+    redirecting: cardcomRedirect,
+    surface: stayReady ? 'portal' : 'form'
+  });
 
   return shell(
     <div>
@@ -1457,6 +1496,8 @@ export default function GuestCheckout({ token, onComplete, theme: themeProp = 'l
           )}
         </>
       )}
-    </div>
+    </div>,
+    null,
+    showCheckoutFab
   );
 }

@@ -129,7 +129,9 @@ async function insertComm(env, row, deps) {
 async function loadBooking(env, bookingId, deps) {
   const rows = await db(
     env,
-    `${BOOKING_TABLE}?id=eq.${encodeURIComponent(bookingId)}&select=id,tenant_id,guest_phone,guest_name,unit_id,checkout_token,stay&limit=1`,
+    // Full row: the mailbox publish rejects rows without dates (INVALID_BOOKING), which is what
+    // broke "send guest link" from the mobile dashboard.
+    `${BOOKING_TABLE}?id=eq.${encodeURIComponent(bookingId)}&deleted_at=is.null&select=*&limit=1`,
     {},
     deps
   );

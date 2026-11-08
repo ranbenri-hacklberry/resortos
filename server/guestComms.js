@@ -23,7 +23,7 @@ function studioKey() {
 
 export async function studioRest(path, options = {}) { return rest(path, options); }
 
-async function rest(path, options = {}) {
+export async function rest(path, options = {}) {
   const url = `${studioBase()}/rest/v1/${path.replace(/^\//, '')}`;
   const response = await fetch(url, {
     ...options,
@@ -386,6 +386,24 @@ export async function sendManagerGuestLink({ bookingId, phone, message, actor })
     const err = new Error('LINK_MISMATCH');
     err.status = 400;
     throw err;
+  }
+  // The stay page reads the booking from the checkout mailbox. Publish before the SMS goes out,
+  // otherwise the guest opens the link and lands on the "link not on the server yet" screen.
+  try {
+    await publishBookingToMailbox(booking);
+  } catch (err) {
+    await insertGuestComm({
+      booking_id: id,
+      channel: 'sms',
+      direction: 'outbound',
+      recipient_phone: recipient,
+      content,
+      status: 'failed',
+      metadata: { kind: 'guest_link', actor: actor || 'agent', error: `PUBLISH_FAILED: ${err.message || err}` }
+    }).catch(() => {});
+    const fail = new Error('PUBLISH_FAILED');
+    fail.status = 502;
+    throw fail;
   }
   return sendAndLogGuestSms({
     booking,
