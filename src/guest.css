@@ -390,3 +390,52 @@ html[data-theme='dark'] .guest-seg button.is-on {
   background: rgba(242, 213, 221, 0.22);
   color: #F2D5DD;
 }
+
+/* Extra scroll room so the corner button sits below primary and pay actions. */
+.guest-precheck {
+  padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+}
+
+.guest-wa-fab {
+  position: fixed;
+  z-index: 30;
+  bottom: calc(0.9rem + env(safe-area-inset-bottom, 0px));
+  inset-inline-start: 0.9rem;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 999px;
+  background: #25D366;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  box-shadow: 0 8px 22px rgba(18, 140, 70, 0.35);
+}
+
+.guest-wa-fab:focus-visible {
+  outline: 3px solid #128C46;
+  outline-offset: 3px;
+}
+
+.guest-wa-fab__tip {
+  position: absolute;
+  bottom: calc(100% + 0.45rem);
+  inset-inline-start: 0;
+  max-width: 14rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 8px;
+  background: #14241c;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.guest-wa-fab:hover .guest-wa-fab__tip,
+.guest-wa-fab:focus-visible .guest-wa-fab__tip {
+  opacity: 1;
+}

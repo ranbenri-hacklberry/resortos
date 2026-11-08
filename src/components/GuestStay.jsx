@@ -16,6 +16,8 @@ import GuestAreaGuide from './GuestAreaGuide';
 import GuestInStay from './GuestInStay';
 import CheckinDrawer, { tabFromPreference } from './CheckinDrawer';
 import GuestReach from './GuestReach';
+import GuestWhatsAppFab from './GuestWhatsAppFab';
+import { guestWhatsAppFabVisible } from '../lib/guestWhatsAppFab.js';
 import { listenHypParentBreakout } from '../lib/guestPayBrowser';
 import '../guest.css';
 
@@ -370,6 +372,11 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
     }
   }
 
+  const showPrecheckFab = guestWhatsAppFabVisible({
+    surface: phase === 'pre' ? 'pre' : 'stay',
+    cardcom: Boolean(iframeUrl) || checkinOpen
+  });
+
   if (showInStay || stay?.self_checked_out_at) {
     return (
       <GuestInStay
@@ -386,7 +393,10 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+    <div
+      className={showPrecheckFab ? 'guest-precheck' : undefined}
+      style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}
+    >
       {justConfirmed || Boolean(stay?.id_photo_received_at || stay?.id_scan) ? (
         <div
           style={{
@@ -693,6 +703,7 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
         onVerifyCash={() => runCheckin('guest_checkin_cash_pin', { pin: cashPin })}
         hostWhatsAppHref={guestHostWhatsAppHref(hostWhatsAppText)}
       />
+      {showPrecheckFab ? <GuestWhatsAppFab /> : null}
     </div>
   );
 }

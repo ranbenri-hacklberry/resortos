@@ -1,6 +1,23 @@
 import { israelToday } from './cabinAccess.js';
 import { guestStayUrl } from './guestStayUrl.js';
 
+/**
+ * Guest-facing unit name for SMS: drops internal staff codes (circled letter + complex number
+ * like 'Ⓓ26', plain 'D26' prefixes, trailing 'D2', parenthesized Latin codes like '(B1)') and the
+ * '·' separator. Cabin numbers that belong to the Hebrew name ('בקתה 2', 'בתי נורית 1') stay so
+ * the guest knows which cabin is theirs. Staff/cleaner messages do not use this.
+ */
+export function guestSmsUnitName(name) {
+  let s = String(name || '').trim();
+  if (!s) return '';
+  s = s.replace(/[\u24B6-\u24E9\u2460-\u24FF]\s*\d*\s*/g, ' ');
+  s = s.replace(/\(\s*[A-Za-z]{1,2}\s*\d{0,3}\s*\)/g, ' ');
+  s = s.replace(/^\s*[A-Za-z]\s?\d{1,3}(?=\s)/, '');
+  s = s.replace(/\s+[A-Za-z]\d{1,3}\s*$/, '');
+  s = s.replace(/\s*·\s*בקתה\s+/g, ' ').replace(/\s*·\s*/g, ' ');
+  return s.replace(/\s+/g, ' ').trim();
+}
+
 export const CHECKOUT_STATUSES = ['staying', 'self_departed', 'auto_departed', 'overdue'];
 export const WIFI_PRESENCE = ['active', 'idle', 'disconnected'];
 
@@ -8,7 +25,7 @@ export const GUEST_SMS_TEMPLATES = [
   {
     id: 'checkin',
     label: 'קישור דף אורח',
-    build: ({ unitName, checkoutUrl } = {}) => (
+    build: ({ unitName: rawUnit, checkoutUrl } = {}, unitName = guestSmsUnitName(rawUnit)) => (
       `שלום! ברוכים הבאים${unitName ? ` ל-${unitName}` : ''}. `
       + 'דף האירוח האישי שלכם כולל מידע על הבקתה, קוד לשער ופעולות מהירות (קישור):\n'
       + (checkoutUrl || '')
@@ -17,7 +34,7 @@ export const GUEST_SMS_TEMPLATES = [
   {
     id: 'stay_link',
     label: 'קישור דף אורח',
-    build: ({ unitName, checkoutUrl } = {}) => (
+    build: ({ unitName: rawUnit, checkoutUrl } = {}, unitName = guestSmsUnitName(rawUnit)) => (
       `שלום! ברוכים הבאים${unitName ? ` ל-${unitName}` : ''}. `
       + 'דף האירוח האישי שלכם כולל מידע על הבקתה, קוד לשער ופעולות מהירות (קישור):\n'
       + (checkoutUrl || '')
@@ -40,14 +57,14 @@ export const GUEST_SMS_TEMPLATES = [
   {
     id: 'cleaning',
     label: 'הודעת ניקיון',
-    build: ({ unitName } = {}) => (
+    build: ({ unitName: rawUnit } = {}, unitName = guestSmsUnitName(rawUnit)) => (
       `שלום! צוות הניקיון יגיע ל-${unitName || 'הבקתה'} לאחר העזיבה. תודה מראש על סגירת הדלת.`
     )
   },
   {
     id: 'checkout_reminder',
     label: 'תזכורת צ׳ק-אאוט',
-    build: ({ unitName, checkoutUrl } = {}) => (
+    build: ({ unitName: rawUnit, checkoutUrl } = {}, unitName = guestSmsUnitName(rawUnit)) => (
       `בוקר טוב! היום יום העזיבה מ-${unitName || 'הבקתה'}. `
       + 'החל מ-08:00 אפשר לסמן צ׳ק-אאוט בדף החדר (קישור):\n'
       + (checkoutUrl || '')
@@ -56,7 +73,7 @@ export const GUEST_SMS_TEMPLATES = [
   {
     id: 'farewell',
     label: 'סמס פרידה',
-    build: ({ unitName } = {}) => (
+    build: ({ unitName: rawUnit } = {}, unitName = guestSmsUnitName(rawUnit)) => (
       `תודה שהתארחתם אצלנו${unitName ? ` ב-${unitName}` : ''}! `
       + 'נסיעה טובה ובטוחה הביתה. נשמח לראותכם שוב.'
     )

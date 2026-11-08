@@ -7,7 +7,9 @@ import { guestStayUrl } from './guestStayUrl.js';
 
 export const DEFAULT_CHECKOUT_TIME = '11:00';
 // Ran 2026-10-29: WhatsApp link to Chloe's line with 'צ׳ק-אאוט' prefilled.
-export const CHLOE_WA_CHECKOUT_URL = `https://wa.me/972515262612?text=${encodeURIComponent('צ׳ק-אאוט')}`;
+export const CHLOE_WA_NUMBER = '972515262612';
+export const CHLOE_WA_URL = `https://wa.me/${CHLOE_WA_NUMBER}`;
+export const CHLOE_WA_CHECKOUT_URL = `https://wa.me/${CHLOE_WA_NUMBER}?text=${encodeURIComponent('צ׳ק-אאוט')}`;
 const STAFF_UNIT_IDS = new Set(['k678', 'k679']);
 
 export function addDaysIso(iso, days) {
