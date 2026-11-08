@@ -305,6 +305,18 @@ test('PostgreSQL Real Integration Tests for Cardcom Terminal Sync & Ledger', asy
           return new Response(JSON.stringify({ ResponseCode: 0, DocumentNumber: 'INV-MOCK-999' }), { status: 200 });
         }
 
+        if (urlStr.includes('/api/v11/Transactions/ListTransactions')) {
+          return new Response(JSON.stringify({
+            ResponseCode: 0,
+            Tranzactions: [{
+              TranzactionId: 'deal-zero-call-1',
+              TerminalNumber: 184288,
+              Amount: 250,
+              CoinId: '1'
+            }]
+          }), { status: 200 });
+        }
+
         // Mock PostgREST endpoints
         if (urlStr.includes('/cardcom_pending_matches?deal_id=eq.')) {
           return new Response(JSON.stringify([{
@@ -621,9 +633,9 @@ test('PostgreSQL Real Integration Tests for Cardcom Terminal Sync & Ledger', asy
           env: mockEnv
         });
 
-        assert.equal(resInvFail.status, 500, 'Must return 500 when Cardcom CreateDocument times out');
+        assert.equal(resInvFail.status, 400, 'Must return 400 when Cardcom CreateDocument fails');
         const bodyInvFail = await resInvFail.json();
-        assert.equal(bodyInvFail.error, 'INVOICE_GENERATION_FAILED');
+        assert.equal(bodyInvFail.error, 'CARDCOM_CREATE_DOCUMENT_FAILED');
 
         // Direct Postgres check: verified receipt WAS saved and counted toward booking balance
         const checkInvFail = await client.query(`SELECT payment_status, clearing_payments FROM public.hotelos_bookings WHERE id = 'b-guard-inv-fail';`);
