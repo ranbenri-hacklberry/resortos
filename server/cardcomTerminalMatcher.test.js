@@ -1054,8 +1054,15 @@ test('ops link endpoint integration: creates invoice with ExternalId, reuses exi
         return new Response(JSON.stringify({ ok: true, status: 'claiming_retry' }), { status: 200 });
       }
       if (urlStr.includes('ListTransactions')) {
-        // Not yet created in Cardcom
-        return new Response(JSON.stringify({ ResponseCode: 0, Tranzactions: [] }), { status: 200 });
+        return new Response(JSON.stringify({
+          ResponseCode: 0,
+          Tranzactions: [{
+            TranzactionId: 'deal-link-777',
+            TerminalNumber: 184288,
+            Amount: 1000,
+            CoinId: '1'
+          }]
+        }), { status: 200 });
       }
       if (urlStr.includes('CreateDocument')) {
         cardcomCreatedDoc = JSON.parse(opts.body);
@@ -1111,6 +1118,17 @@ test('ops link endpoint integration: creates invoice with ExternalId, reuses exi
       if (String(urlStr).includes('/hotelos_bookings?id=eq.b-link-101')) {
         return new Response(JSON.stringify([mockBooking]), { status: 200 });
       }
+      if (String(urlStr).includes('ListTransactions')) {
+        return new Response(JSON.stringify({
+          ResponseCode: 0,
+          Tranzactions: [{
+            TranzactionId: 'deal-link-777',
+            TerminalNumber: 184288,
+            Amount: 1000,
+            CoinId: '1'
+          }]
+        }), { status: 200 });
+      }
       if (String(urlStr).includes('/rpc/record_cardcom_deal_receipt')) {
         return new Response(JSON.stringify({
           error: 'DEAL_ALREADY_ASSIGNED',
@@ -1150,6 +1168,17 @@ test('ops link endpoint integration: creates invoice with ExternalId, reuses exi
       }
       if (String(urlStr).includes('/hotelos_bookings?id=eq.b-link-101')) {
         return new Response(JSON.stringify([mockBooking]), { status: 200 });
+      }
+      if (String(urlStr).includes('ListTransactions')) {
+        return new Response(JSON.stringify({
+          ResponseCode: 0,
+          Tranzactions: [{
+            TranzactionId: 'deal-link-777',
+            TerminalNumber: 184288,
+            Amount: 1000,
+            CoinId: '1'
+          }]
+        }), { status: 200 });
       }
       if (String(urlStr).includes('/rpc/record_cardcom_deal_receipt')) {
         return new Response(JSON.stringify({ error: 'DB_RECEIPT_ERROR' }), { status: 500 });
@@ -1248,7 +1277,15 @@ test('concurrent link requests (Promise.all) produce exactly one Cardcom documen
         return new Response(JSON.stringify({ ok: true, status: 'claiming_retry' }), { status: 200 });
       }
       if (urlStr.includes('ListTransactions')) {
-        return new Response(JSON.stringify({ ResponseCode: 0, Tranzactions: [] }), { status: 200 });
+        return new Response(JSON.stringify({
+          ResponseCode: 0,
+          Tranzactions: [{
+            TranzactionId: 'deal-conc-123',
+            TerminalNumber: 184288,
+            Amount: 800,
+            CoinId: '1'
+          }]
+        }), { status: 200 });
       }
       if (urlStr.includes('CreateDocument')) {
         cardcomDocCount++;
@@ -1323,6 +1360,17 @@ test('ops link fails immediately before Cardcom or booking write if receipt writ
       const urlStr = String(url);
       if (urlStr.includes('/cardcom_pending_matches')) return new Response(JSON.stringify([mockMatch]), { status: 200 });
       if (urlStr.includes('/hotelos_bookings?id=eq.b-claim-fail')) return new Response(JSON.stringify([mockBooking]), { status: 200 });
+      if (urlStr.includes('ListTransactions')) {
+        return new Response(JSON.stringify({
+          ResponseCode: 0,
+          Tranzactions: [{
+            TranzactionId: 'deal-claim-fail-99',
+            TerminalNumber: 184288,
+            Amount: 500,
+            CoinId: '1'
+          }]
+        }), { status: 200 });
+      }
       if (urlStr.includes('/rpc/record_cardcom_deal_receipt')) {
         return new Response(JSON.stringify({ error: 'DB_ERROR' }), { status: 500 });
       }
@@ -1469,7 +1517,15 @@ test('ops link timeout or network error marks reconciliation_needed (never faile
         return new Response(JSON.stringify({ ok: true, status: 'claiming_retry' }), { status: 200 });
       }
       if (urlStr.includes('ListTransactions')) {
-        return new Response(JSON.stringify({ ResponseCode: 0, Tranzactions: [] }), { status: 200 });
+        return new Response(JSON.stringify({
+          ResponseCode: 0,
+          Tranzactions: [{
+            TranzactionId: 'deal-timeout-99',
+            TerminalNumber: 184288,
+            Amount: 500,
+            CoinId: '1'
+          }]
+        }), { status: 200 });
       }
       if (urlStr.includes('CreateDocument')) {
         // Simulate network error / timeout
@@ -2594,7 +2650,151 @@ test('ops link: reject proposal whose terminal isn\'t 184288 with 400 INVALID_TE
   }
 });
 
+test('ops link: rejected amount validation stops with 409 and never calls record_cardcom_deal_receipt', async () => {
+  const { onRequest } = await import('../functions/api/ops/[[path]].js');
 
+  const baseEnv = {
+    SUPABASE_URL: 'https://mock.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'mock-service-key',
+    CHECKOUT_MAILBOX_SECRET: 'test-secret',
+    CARDCOM_API_NAME: 'test-cardcom-user',
+    CARDCOM_API_PASSWORD: 'test-cardcom-password',
+    CARDCOM_TERMINAL: '184288'
+  };
 
+  const mockBooking = { id: 'b-amt-guard-1', guest_name: 'יוסי', total_price_agorot: 50000, clearing_payments: [] };
+  const mockMatch = { deal_id: 'deal-amt-guard-1', amount: 500, terminal: '184288' };
 
+  let receiptRpcCalls = 0;
+  let reconCalls = 0;
+  let createDocCalls = 0;
+  const originalFetch = globalThis.fetch;
 
+  try {
+    globalThis.fetch = async (url, options = {}) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/cardcom_pending_matches')) return new Response(JSON.stringify([mockMatch]), { status: 200 });
+      if (urlStr.includes('/hotelos_bookings?id=eq.b-amt-guard-1')) return new Response(JSON.stringify([mockBooking]), { status: 200 });
+      if (urlStr.includes('ListTransactions')) {
+        // Return transaction with amount 400 (mismatches proposal 500)
+        return new Response(JSON.stringify({
+          ResponseCode: 0,
+          Tranzactions: [{
+            TranzactionId: 'deal-amt-guard-1',
+            TerminalNumber: 184288,
+            Amount: 400,
+            CoinId: '1'
+          }]
+        }), { status: 200 });
+      }
+      if (urlStr.includes('/rpc/record_cardcom_deal_receipt')) {
+        receiptRpcCalls += 1;
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (urlStr.includes('/rpc/mark_cardcom_deal_reconciliation_needed')) {
+        reconCalls += 1;
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (urlStr.includes('CreateDocument')) {
+        createDocCalls += 1;
+        return new Response(JSON.stringify({ ResponseCode: 0 }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    const req = new Request('https://test/api/ops/cardcom-terminal/link', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer test-secret'
+      },
+      body: JSON.stringify({
+        deal_id: 'deal-amt-guard-1',
+        booking_id: 'b-amt-guard-1',
+        terminal: '184288'
+      })
+    });
+
+    const res = await onRequest({ request: req, params: { path: ['cardcom-terminal', 'link'] }, env: baseEnv });
+    assert.equal(res.status, 409, 'Must return 409 RECONCILIATION_REQUIRED on amount mismatch');
+    const body = await res.json();
+    assert.equal(body.error, 'RECONCILIATION_REQUIRED');
+    assert.ok(body.message.includes('Amount mismatch'), 'Message should specify amount mismatch');
+    assert.equal(receiptRpcCalls, 0, 'Must NOT call record_cardcom_deal_receipt when amount validation fails');
+    assert.equal(createDocCalls, 0, 'Must NOT call CreateDocument when amount validation fails');
+    assert.equal(reconCalls, 1, 'Must mark deal as reconciliation_needed');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('ops link: rejected deal validation (missing in Cardcom) stops with 409 and never calls record_cardcom_deal_receipt', async () => {
+  const { onRequest } = await import('../functions/api/ops/[[path]].js');
+
+  const baseEnv = {
+    SUPABASE_URL: 'https://mock.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'mock-service-key',
+    CHECKOUT_MAILBOX_SECRET: 'test-secret',
+    CARDCOM_API_NAME: 'test-cardcom-user',
+    CARDCOM_API_PASSWORD: 'test-cardcom-password',
+    CARDCOM_TERMINAL: '184288'
+  };
+
+  const mockBooking = { id: 'b-deal-guard-1', guest_name: 'שרה', total_price_agorot: 30000, clearing_payments: [] };
+  const mockMatch = { deal_id: 'deal-missing-1', amount: 300, terminal: '184288' };
+
+  let receiptRpcCalls = 0;
+  let reconCalls = 0;
+  let createDocCalls = 0;
+  const originalFetch = globalThis.fetch;
+
+  try {
+    globalThis.fetch = async (url, options = {}) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/cardcom_pending_matches')) return new Response(JSON.stringify([mockMatch]), { status: 200 });
+      if (urlStr.includes('/hotelos_bookings?id=eq.b-deal-guard-1')) return new Response(JSON.stringify([mockBooking]), { status: 200 });
+      if (urlStr.includes('ListTransactions')) {
+        return new Response(JSON.stringify({
+          ResponseCode: 0,
+          Tranzactions: []
+        }), { status: 200 });
+      }
+      if (urlStr.includes('/rpc/record_cardcom_deal_receipt')) {
+        receiptRpcCalls += 1;
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (urlStr.includes('/rpc/mark_cardcom_deal_reconciliation_needed')) {
+        reconCalls += 1;
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (urlStr.includes('CreateDocument')) {
+        createDocCalls += 1;
+        return new Response(JSON.stringify({ ResponseCode: 0 }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    const req = new Request('https://test/api/ops/cardcom-terminal/link', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer test-secret'
+      },
+      body: JSON.stringify({
+        deal_id: 'deal-missing-1',
+        booking_id: 'b-deal-guard-1',
+        terminal: '184288'
+      })
+    });
+
+    const res = await onRequest({ request: req, params: { path: ['cardcom-terminal', 'link'] }, env: baseEnv });
+    assert.equal(res.status, 409, 'Must return 409 RECONCILIATION_REQUIRED when deal is missing');
+    const body = await res.json();
+    assert.equal(body.error, 'RECONCILIATION_REQUIRED');
+    assert.equal(receiptRpcCalls, 0, 'Must NOT call record_cardcom_deal_receipt when deal is missing in Cardcom');
+    assert.equal(createDocCalls, 0, 'Must NOT call CreateDocument when deal is missing in Cardcom');
+    assert.equal(reconCalls, 1, 'Must mark deal as reconciliation_needed');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

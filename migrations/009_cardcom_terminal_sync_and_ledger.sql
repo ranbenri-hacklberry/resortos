@@ -308,10 +308,13 @@ BEGIN
     v_updated_clearing := v_updated_clearing || jsonb_build_array(p_receipt_entry);
   END IF;
 
-  -- Calculate total paid agorot
+  -- Calculate total paid agorot (excluding unverified, failed, or rejected items)
   FOR v_i IN 0 .. (jsonb_array_length(v_updated_clearing) - 1) LOOP
     v_item := v_updated_clearing->v_i;
-    v_total_paid_agorot := v_total_paid_agorot + COALESCE((v_item->>'amount_agorot')::BIGINT, ROUND(COALESCE((v_item->>'amount_ils')::NUMERIC, 0) * 100)::BIGINT);
+    IF COALESCE(v_item->>'status', '') NOT IN ('unverified', 'failed', 'rejected')
+       AND COALESCE(v_item->>'verification_status', '') NOT IN ('unverified', 'failed', 'rejected') THEN
+      v_total_paid_agorot := v_total_paid_agorot + COALESCE((v_item->>'amount_agorot')::BIGINT, ROUND(COALESCE((v_item->>'amount_ils')::NUMERIC, 0) * 100)::BIGINT);
+    END IF;
   END LOOP;
 
   v_total_price_agorot := COALESCE(v_booking.total_price_agorot, 0);
@@ -569,10 +572,14 @@ GRANT EXECUTE ON FUNCTION public.finalize_cardcom_deal_invoice(TEXT, TEXT, TEXT,
 
 -- 9. Mark Reconciliation Needed RPC
 -- Ambiguous outcomes (timeout, network error, missing doc number) become reconciliation_needed (never failed)
+DROP FUNCTION IF EXISTS public.mark_cardcom_deal_reconciliation_needed(TEXT, TEXT, TEXT);
+
 CREATE OR REPLACE FUNCTION public.mark_cardcom_deal_reconciliation_needed(
   p_terminal TEXT,
   p_deal_id TEXT,
-  p_error_message TEXT
+  p_error_message TEXT,
+  p_booking_id TEXT DEFAULT NULL,
+  p_amount NUMERIC DEFAULT NULL
 ) RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -585,12 +592,24 @@ BEGIN
       updated_at = now()
   WHERE terminal = p_terminal AND deal_id = p_deal_id;
 
+  IF NOT FOUND AND p_booking_id IS NOT NULL AND p_amount IS NOT NULL THEN
+    INSERT INTO public.cardcom_deal_ledger (
+      terminal, deal_id, booking_id, amount, currency, external_id, status, error_message, updated_at
+    ) VALUES (
+      p_terminal, p_deal_id, p_booking_id, p_amount, 'ILS', 'deal-' || p_deal_id, 'reconciliation_needed', p_error_message, now()
+    )
+    ON CONFLICT (terminal, deal_id) DO UPDATE
+    SET status = 'reconciliation_needed',
+        error_message = p_error_message,
+        updated_at = now();
+  END IF;
+
   RETURN jsonb_build_object('ok', true, 'status', 'reconciliation_needed');
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.mark_cardcom_deal_reconciliation_needed(TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.mark_cardcom_deal_reconciliation_needed(TEXT, TEXT, TEXT) TO service_role;
+REVOKE ALL ON FUNCTION public.mark_cardcom_deal_reconciliation_needed(TEXT, TEXT, TEXT, TEXT, NUMERIC) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.mark_cardcom_deal_reconciliation_needed(TEXT, TEXT, TEXT, TEXT, NUMERIC) TO service_role;
 
 -- 10. Transactional Storage Persistence RPC (persist seen + pending together)
 -- Preserves staff statuses (manual_linked, test, ignored, approved)

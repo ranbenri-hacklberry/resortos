@@ -598,18 +598,89 @@ export async function onRequest(context) {
         return errorJson('Invalid deal amount', 400, 'INVALID_AMOUNT');
       }
 
-      // 1. Receipt before invoice (hard rule):
-      // Persist the receipt in the booking (RPC, transaction) with status pending_invoice FIRST.
-      // If the DB fails, no Cardcom call at all!
+      // 1. Authoritative transaction evidence validation (Read-only Cardcom lookup BEFORE committing receipt)
+      // Must validate payment evidence before committing an authoritative receipt to avoid inflating booking balances.
+      const { txn, error: txnLookupError, hitPageCap } = await searchCardcomTransaction({
+        terminal,
+        dealIdStr,
+        apiName,
+        apiPassword,
+        dealTime: match?.deal_time
+      });
+
+      if (txnLookupError || hitPageCap) {
+        const reason = txnLookupError
+          ? `Cardcom lookup error: ${txnLookupError.message}`
+          : `Cardcom lookup reached page cap (20 pages) without resolving deal ${dealIdStr}`;
+
+        await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
+          method: 'POST',
+          body: JSON.stringify({
+            p_terminal: terminal,
+            p_deal_id: dealIdStr,
+            p_error_message: reason,
+            p_booking_id: booking_id,
+            p_amount: amount
+          })
+        }, env, { requireServiceRole: true });
+
+        console.error('[STAFF ALERT] Cardcom deal reconciliation required:', {
+          terminal,
+          dealId: dealIdStr,
+          bookingId: booking_id,
+          reason
+        });
+
+        return errorJson(
+          `Deal ${dealIdStr} requires staff reconciliation (${reason}).`,
+          409,
+          'RECONCILIATION_REQUIRED'
+        );
+      }
+
+      const matchCheck = validateCardcomTransactionMatch({
+        txn,
+        terminal,
+        dealIdStr,
+        expectedAmount: amount
+      });
+
+      if (!matchCheck.valid) {
+        await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
+          method: 'POST',
+          body: JSON.stringify({
+            p_terminal: terminal,
+            p_deal_id: dealIdStr,
+            p_error_message: matchCheck.reason,
+            p_booking_id: booking_id,
+            p_amount: amount
+          })
+        }, env, { requireServiceRole: true });
+
+        console.error('[STAFF ALERT] Cardcom deal reconciliation required:', {
+          terminal,
+          dealId: dealIdStr,
+          bookingId: booking_id,
+          reason: matchCheck.reason
+        });
+
+        return errorJson(
+          `Deal ${dealIdStr} transaction validation failed (${matchCheck.reason}).`,
+          409,
+          'RECONCILIATION_REQUIRED'
+        );
+      }
+
+      // 2. Transaction is verified! Persist authoritative receipt in booking BEFORE CreateDocument
       const initialReceiptEntry = {
         method: 'CARD',
         amount_ils: amount,
         amount_agorot: Math.round(amount * 100),
         deal_number: dealIdStr,
         txn: dealIdStr,
-        approval: match?.approval || undefined,
-        last4: match?.last4 || undefined,
-        payer_name: match?.payer_name || undefined,
+        approval: match?.approval || txn?.ApprovalNumber || txn?.approvalNumber || undefined,
+        last4: match?.last4 || txn?.CardLastDigits || txn?.last4 || undefined,
+        payer_name: match?.payer_name || txn?.CardOwnerName || txn?.payer_name || undefined,
         terminal,
         external_id: externalId,
         invoice_status: 'pending_invoice',
@@ -640,7 +711,7 @@ export async function onRequest(context) {
       const receiptData = await receiptRpcRes.json().catch(() => ({}));
       let invoiceInfo = null;
 
-      // 1. If document_number is already known (from imported proposal or ledger), authoritatively verify against Cardcom before reuse
+      // 3. Invoice verification & reuse:
       const knownDocNumber = String(
         receiptData?.document_number ||
         match?.document_number ||
@@ -657,25 +728,44 @@ export async function onRequest(context) {
       ).trim();
 
       if (knownDocNumber) {
-        const { txn, error, hitPageCap } = await searchCardcomTransaction({
-          terminal,
-          dealIdStr,
-          apiName,
-          apiPassword,
-          dealTime: match?.deal_time
-        });
-
-        if (error || hitPageCap) {
-          const reason = error
-            ? `Cardcom verification error: ${error.message}`
-            : `Cardcom verification reached page cap (20 pages) without resolving deal ${dealIdStr}`;
-
+        if (!matchCheck.docNumber) {
+          const reason = `Document missing in Cardcom for deal ${dealIdStr}: expected document ${knownDocNumber}, got none`;
           await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
             method: 'POST',
             body: JSON.stringify({
               p_terminal: terminal,
               p_deal_id: dealIdStr,
-              p_error_message: reason
+              p_error_message: reason,
+              p_booking_id: booking_id,
+              p_amount: amount
+            })
+          }, env, { requireServiceRole: true });
+
+          console.error('[STAFF ALERT] Cardcom deal reconciliation required:', {
+            terminal,
+            dealId: dealIdStr,
+            bookingId: booking_id,
+            reason
+          });
+
+          // Preserve already-verified receipt in booking; return 409 for invoice reconciliation
+          return errorJson(
+            `Deal ${dealIdStr} document reuse verification failed (${reason}).`,
+            409,
+            'RECONCILIATION_REQUIRED'
+          );
+        }
+
+        if (matchCheck.docNumber !== knownDocNumber) {
+          const reason = `Document mismatch for deal ${dealIdStr}: expected document ${knownDocNumber}, got ${matchCheck.docNumber}`;
+          await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
+            method: 'POST',
+            body: JSON.stringify({
+              p_terminal: terminal,
+              p_deal_id: dealIdStr,
+              p_error_message: reason,
+              p_booking_id: booking_id,
+              p_amount: amount
             })
           }, env, { requireServiceRole: true });
 
@@ -687,39 +777,7 @@ export async function onRequest(context) {
           });
 
           return errorJson(
-            `Deal ${dealIdStr} requires staff reconciliation (${reason}).`,
-            409,
-            'RECONCILIATION_REQUIRED'
-          );
-        }
-
-        const matchCheck = validateCardcomTransactionMatch({
-          txn,
-          terminal,
-          dealIdStr,
-          expectedAmount: amount,
-          expectedDocNumber: knownDocNumber
-        });
-
-        if (!matchCheck.valid) {
-          await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
-            method: 'POST',
-            body: JSON.stringify({
-              p_terminal: terminal,
-              p_deal_id: dealIdStr,
-              p_error_message: matchCheck.reason
-            })
-          }, env, { requireServiceRole: true });
-
-          console.error('[STAFF ALERT] Cardcom deal reconciliation required:', {
-            terminal,
-            dealId: dealIdStr,
-            bookingId: booking_id,
-            reason: matchCheck.reason
-          });
-
-          return errorJson(
-            `Deal ${dealIdStr} document reuse verification failed (${matchCheck.reason}).`,
+            `Deal ${dealIdStr} document reuse verification failed (${reason}).`,
             409,
             'RECONCILIATION_REQUIRED'
           );
@@ -731,205 +789,115 @@ export async function onRequest(context) {
           dealId: dealIdStr,
           reused: true
         };
+      } else if (matchCheck.docNumber) {
+        // Document already confirmed in Cardcom transaction
+        invoiceInfo = {
+          documentNumber: matchCheck.docNumber,
+          documentUrl: matchCheck.docUrl || '',
+          dealId: dealIdStr,
+          reused: true
+        };
       }
 
-      // 2. If not already invoiced, acquire atomic retry claim before calling Cardcom
-      if (!invoiceInfo) {
-        const claimRes = await fetchPostgrest('/rpc/claim_cardcom_deal_retry', {
+      // If document was found/verified, finalize it now
+      if (invoiceInfo?.documentNumber) {
+        const finalizeRes = await fetchPostgrest('/rpc/finalize_cardcom_deal_invoice', {
+          method: 'POST',
+          body: JSON.stringify({
+            p_booking_id: booking_id,
+            p_deal_number: dealIdStr,
+            p_terminal: terminal,
+            p_document_number: String(invoiceInfo.documentNumber),
+            p_document_url: String(invoiceInfo.documentUrl || '')
+          })
+        }, env, { requireServiceRole: true });
+
+        if (!finalizeRes || !finalizeRes.ok) {
+          let fErr = null;
+          try { fErr = await finalizeRes.json(); } catch (_) {}
+          console.error('[STAFF ALERT] finalize_cardcom_deal_invoice failed on verified reuse:', fErr);
+          return errorJson('Failed to finalize verified invoice in booking', 500, 'FINALIZE_FAILED');
+        }
+
+        return json({
+          ok: true,
+          booking_id,
+          deal_id: dealIdStr,
+          payment: {
+            status: receiptData?.payment_status || 'PARTIAL',
+            amount,
+            currency: 'ILS',
+            terminal
+          },
+          invoice: invoiceInfo
+        });
+      }
+
+      // 4. If not already invoiced, acquire atomic retry claim before calling Cardcom CreateDocument
+      const wasAmbiguous = Boolean(
+        receiptData?.ledger_status === 'reconciliation_needed' ||
+        receiptData?.status === 'reconciliation_needed'
+      );
+
+      if (wasAmbiguous) {
+        const reason = `Reconciliation completed without finding confirmed document after ambiguous outcome for deal ${dealIdStr}`;
+        await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
           method: 'POST',
           body: JSON.stringify({
             p_terminal: terminal,
             p_deal_id: dealIdStr,
-            p_booking_id: booking_id
+            p_error_message: reason,
+            p_booking_id: booking_id,
+            p_amount: amount
           })
         }, env, { requireServiceRole: true });
 
-        if (!claimRes || !claimRes.ok) {
-          let cErr = null;
-          try { cErr = await claimRes.json(); } catch (_) {}
-          const cErrCombined = `${cErr?.error || ''} ${cErr?.message || ''} ${cErr?.details || ''}`;
-          if (cErrCombined.includes('DEAL_ALREADY_ASSIGNED')) {
-            return errorJson(cErr?.message || 'DEAL_ALREADY_ASSIGNED', 409, 'DEAL_ALREADY_ASSIGNED');
-          }
-          if (cErrCombined.includes('DEAL_CLAIM_IN_PROGRESS')) {
-            return errorJson(cErr?.message || 'DEAL_CLAIM_IN_PROGRESS', 409, 'DEAL_CLAIM_IN_PROGRESS');
-          }
-          return errorJson(cErr?.message || cErr?.error || 'Failed to claim deal for invoice generation', 500, 'CLAIM_FAILED');
+        console.error('[STAFF ALERT] Cardcom deal reconciliation required:', {
+          terminal,
+          dealId: dealIdStr,
+          bookingId: booking_id,
+          reason
+        });
+
+        return errorJson(
+          `Deal ${dealIdStr} is in an ambiguous state and requires staff reconciliation (${reason}).`,
+          409,
+          'RECONCILIATION_REQUIRED'
+        );
+      }
+
+      const claimRes = await fetchPostgrest('/rpc/claim_cardcom_deal_retry', {
+        method: 'POST',
+        body: JSON.stringify({
+          p_terminal: terminal,
+          p_deal_id: dealIdStr,
+          p_booking_id: booking_id
+        })
+      }, env, { requireServiceRole: true });
+
+      if (!claimRes || !claimRes.ok) {
+        let cErr = null;
+        try { cErr = await claimRes.json(); } catch (_) {}
+        const cErrCombined = `${cErr?.error || ''} ${cErr?.message || ''} ${cErr?.details || ''}`;
+        if (cErrCombined.includes('DEAL_ALREADY_ASSIGNED')) {
+          return errorJson(cErr?.message || 'DEAL_ALREADY_ASSIGNED', 409, 'DEAL_ALREADY_ASSIGNED');
         }
+        if (cErrCombined.includes('DEAL_CLAIM_IN_PROGRESS')) {
+          return errorJson(cErr?.message || 'DEAL_CLAIM_IN_PROGRESS', 409, 'DEAL_CLAIM_IN_PROGRESS');
+        }
+        return errorJson(cErr?.message || cErr?.error || 'Failed to claim deal for invoice generation', 500, 'CLAIM_FAILED');
+      }
 
-        const claimData = await claimRes.json().catch(() => ({}));
-        if (claimData?.document_number) {
-          const claimDoc = String(claimData.document_number).trim();
-          const { txn, error, hitPageCap } = await searchCardcomTransaction({
-            terminal,
-            dealIdStr,
-            apiName,
-            apiPassword,
-            dealTime: match?.deal_time
-          });
-
-          if (error || hitPageCap) {
-            const reason = error
-              ? `Cardcom verification error: ${error.message}`
-              : `Cardcom verification reached page cap (20 pages) without resolving deal ${dealIdStr}`;
-
-            await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
-              method: 'POST',
-              body: JSON.stringify({ p_terminal: terminal, p_deal_id: dealIdStr, p_error_message: reason })
-            }, env, { requireServiceRole: true });
-
-            console.error('[STAFF ALERT] Cardcom deal reconciliation required:', {
-              terminal,
-              dealId: dealIdStr,
-              bookingId: booking_id,
-              reason
-            });
-
-            return errorJson(`Deal ${dealIdStr} requires staff reconciliation (${reason}).`, 409, 'RECONCILIATION_REQUIRED');
-          }
-
-          const matchCheck = validateCardcomTransactionMatch({
-            txn,
-            terminal,
-            dealIdStr,
-            expectedAmount: amount,
-            expectedDocNumber: claimDoc
-          });
-
-          if (!matchCheck.valid) {
-            await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
-              method: 'POST',
-              body: JSON.stringify({ p_terminal: terminal, p_deal_id: dealIdStr, p_error_message: matchCheck.reason })
-            }, env, { requireServiceRole: true });
-
-            console.error('[STAFF ALERT] Cardcom deal reconciliation required:', {
-              terminal,
-              dealId: dealIdStr,
-              bookingId: booking_id,
-              reason: matchCheck.reason
-            });
-
-            return errorJson(`Deal ${dealIdStr} document reuse verification failed (${matchCheck.reason}).`, 409, 'RECONCILIATION_REQUIRED');
-          }
-
+      const claimData = await claimRes.json().catch(() => ({}));
+      if (claimData?.document_number) {
+        const claimDoc = String(claimData.document_number).trim();
+        if (matchCheck.docNumber && matchCheck.docNumber === claimDoc) {
           invoiceInfo = {
             documentNumber: claimDoc,
             documentUrl: matchCheck.docUrl || String(claimData.document_url || ''),
             dealId: dealIdStr,
             reused: true
           };
-        }
-      }
-
-      // 3. Cardcom lookup per KB 499: fail-closed ALWAYS, not only when wasAmbiguous
-      const wasAmbiguous = Boolean(
-        receiptData?.ledger_status === 'reconciliation_needed' ||
-        receiptData?.status === 'reconciliation_needed'
-      );
-
-      if (!invoiceInfo) {
-        const { txn, error, hitPageCap } = await searchCardcomTransaction({
-          terminal,
-          dealIdStr,
-          apiName,
-          apiPassword,
-          dealTime: match?.deal_time
-        });
-
-        if (error || hitPageCap) {
-          const reason = error
-            ? `Cardcom lookup error: ${error.message}`
-            : `Cardcom lookup reached page cap (20 pages) without resolving deal ${dealIdStr}`;
-
-          await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
-            method: 'POST',
-            body: JSON.stringify({
-              p_terminal: terminal,
-              p_deal_id: dealIdStr,
-              p_error_message: reason
-            })
-          }, env, { requireServiceRole: true });
-
-          console.error('[STAFF ALERT] Cardcom deal reconciliation required:', {
-            terminal,
-            dealId: dealIdStr,
-            bookingId: booking_id,
-            reason
-          });
-
-          return errorJson(
-            `Deal ${dealIdStr} requires staff reconciliation (${reason}).`,
-            409,
-            'RECONCILIATION_REQUIRED'
-          );
-        }
-
-        if (txn) {
-          const matchCheck = validateCardcomTransactionMatch({
-            txn,
-            terminal,
-            dealIdStr,
-            expectedAmount: amount
-          });
-
-          if (!matchCheck.valid) {
-            await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
-              method: 'POST',
-              body: JSON.stringify({
-                p_terminal: terminal,
-                p_deal_id: dealIdStr,
-                p_error_message: matchCheck.reason
-              })
-            }, env, { requireServiceRole: true });
-
-            console.error('[STAFF ALERT] Cardcom deal reconciliation required:', {
-              terminal,
-              dealId: dealIdStr,
-              bookingId: booking_id,
-              reason: matchCheck.reason
-            });
-
-            return errorJson(
-              `Deal ${dealIdStr} transaction validation failed (${matchCheck.reason}).`,
-              409,
-              'RECONCILIATION_REQUIRED'
-            );
-          }
-
-          if (matchCheck.docNumber) {
-            invoiceInfo = {
-              documentNumber: matchCheck.docNumber,
-              documentUrl: matchCheck.docUrl,
-              dealId: dealIdStr,
-              reused: true
-            };
-          }
-        }
-
-        // If the deal was in an ambiguous state and lookup did not confirm an existing document:
-        if (wasAmbiguous && !invoiceInfo) {
-          const reason = `Reconciliation completed without finding confirmed document after ambiguous outcome for deal ${dealIdStr}`;
-          await fetchPostgrest('/rpc/mark_cardcom_deal_reconciliation_needed', {
-            method: 'POST',
-            body: JSON.stringify({
-              p_terminal: terminal,
-              p_deal_id: dealIdStr,
-              p_error_message: reason
-            })
-          }, env, { requireServiceRole: true });
-
-          console.error('[STAFF ALERT] Cardcom deal reconciliation required:', {
-            terminal,
-            dealId: dealIdStr,
-            bookingId: booking_id,
-            reason
-          });
-
-          return errorJson(
-            `Deal ${dealIdStr} is in an ambiguous state and requires staff reconciliation (${reason}).`,
-            409,
-            'RECONCILIATION_REQUIRED'
-          );
         }
       }
 

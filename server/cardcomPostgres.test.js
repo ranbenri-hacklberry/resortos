@@ -373,6 +373,274 @@ test('PostgreSQL Real Integration Tests for Cardcom Terminal Sync & Ledger', asy
       }
     });
 
+    // Test 6: Endpoint + Postgres test: rejected amount/deal validation cannot increase booking paid total or change payment status
+    await t.test('Test 6: Rejected amount/deal validation cannot increase booking paid total or change payment status', async () => {
+      const { dbName, client } = await createFreshDb('guard_balance');
+      const originalFetch = globalThis.fetch;
+
+      try {
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS public.hotelos_bookings (
+            id TEXT PRIMARY KEY,
+            guest_name TEXT,
+            total_price_agorot BIGINT DEFAULT 0,
+            clearing_payments JSONB DEFAULT '[]'::jsonb,
+            payment_status TEXT DEFAULT 'UNPAID',
+            payment_mode TEXT,
+            updated_at TIMESTAMPTZ DEFAULT now()
+          );
+        `);
+        await client.query(mig009Sql);
+
+        // Seed bookings
+        await client.query(`
+          INSERT INTO public.hotelos_bookings (id, guest_name, total_price_agorot, clearing_payments, payment_status)
+          VALUES
+            ('b-guard-amt', 'יוסי כהן', 50000, '[]'::jsonb, 'UNPAID'),
+            ('b-guard-deal', 'שרה לוי', 30000, '[]'::jsonb, 'UNPAID'),
+            ('b-guard-inv-fail', 'חיים אברהם', 20000, '[]'::jsonb, 'UNPAID');
+        `);
+
+        // Seed pending matches
+        await client.query(`
+          INSERT INTO public.cardcom_pending_matches (id, deal_id, terminal_number, amount, status)
+          VALUES
+            ('match-guard-amt', 'deal-guard-amt', '184288', 500, 'pending'),
+            ('match-guard-deal', 'deal-guard-deal', '184288', 300, 'pending'),
+            ('match-guard-inv-fail', 'deal-guard-inv-fail', '184288', 200, 'pending');
+        `);
+
+        // Bridge PostgREST calls to real PostgreSQL queries (DO NOT mock receipt persistence!)
+        globalThis.fetch = async (url, options = {}) => {
+          const urlStr = String(url);
+
+          // Cardcom API calls
+          if (urlStr.includes('/api/v11/Transactions/ListTransactions')) {
+            const body = JSON.parse(options.body || '{}');
+            const page = body.Page || 1;
+            if (page > 1) {
+              return new Response(JSON.stringify({ ResponseCode: 0, Tranzactions: [] }), { status: 200 });
+            }
+
+            // Return Cardcom transactions:
+            // - deal-guard-amt: amount is 400 ILS (mismatches proposal 500 ILS)
+            // - deal-guard-deal: not returned (deal missing in Cardcom)
+            // - deal-guard-inv-fail: amount is 200 ILS (matches proposal 200 ILS)
+            return new Response(JSON.stringify({
+              ResponseCode: 0,
+              Tranzactions: [
+                {
+                  TranzactionId: 'deal-guard-amt',
+                  TerminalNumber: 184288,
+                  Amount: 400,
+                  CoinId: '1'
+                },
+                {
+                  TranzactionId: 'deal-guard-inv-fail',
+                  TerminalNumber: 184288,
+                  Amount: 200,
+                  CoinId: '1'
+                }
+              ]
+            }), { status: 200 });
+          }
+
+          if (urlStr.includes('/api/v11/Documents/CreateDocument')) {
+            // Simulate Cardcom CreateDocument 504 Gateway Timeout for deal-guard-inv-fail
+            return new Response('Gateway Timeout', { status: 504 });
+          }
+
+          // Real PostgREST DB bridge executing against Postgres client
+          if (urlStr.includes('/cardcom_pending_matches?deal_id=eq.')) {
+            const dealId = decodeURIComponent(urlStr.split('deal_id=eq.')[1].split('&')[0]);
+            if (options.method === 'PATCH') {
+              const payload = JSON.parse(options.body || '{}');
+              await client.query(
+                `UPDATE public.cardcom_pending_matches SET status = COALESCE($1, status), updated_at = now() WHERE deal_id = $2;`,
+                [payload.status, dealId]
+              );
+              return new Response(JSON.stringify([{ deal_id: dealId, status: payload.status }]), { status: 200 });
+            } else {
+              const res = await client.query(`SELECT * FROM public.cardcom_pending_matches WHERE deal_id = $1;`, [dealId]);
+              return new Response(JSON.stringify(res.rows), { status: 200 });
+            }
+          }
+
+          if (urlStr.includes('/hotelos_bookings?id=eq.')) {
+            const bId = decodeURIComponent(urlStr.split('id=eq.')[1].split('&')[0]);
+            const res = await client.query(`SELECT * FROM public.hotelos_bookings WHERE id = $1;`, [bId]);
+            return new Response(JSON.stringify(res.rows), { status: 200 });
+          }
+
+          if (urlStr.includes('/rpc/record_cardcom_deal_receipt')) {
+            // Execute REAL Postgres stored procedure
+            const payload = JSON.parse(options.body || '{}');
+            try {
+              const rpcRes = await client.query(
+                'SELECT record_cardcom_deal_receipt($1, $2::jsonb) AS result;',
+                [payload.p_booking_id, JSON.stringify(payload.p_receipt_entry)]
+              );
+              return new Response(JSON.stringify(rpcRes.rows[0].result), { status: 200 });
+            } catch (err) {
+              return new Response(JSON.stringify({ error: err.message, message: err.message }), { status: 409 });
+            }
+          }
+
+          if (urlStr.includes('/rpc/claim_cardcom_deal_retry')) {
+            const payload = JSON.parse(options.body || '{}');
+            try {
+              const rpcRes = await client.query(
+                'SELECT claim_cardcom_deal_retry($1, $2, $3) AS result;',
+                [payload.p_terminal, payload.p_deal_id, payload.p_booking_id]
+              );
+              return new Response(JSON.stringify(rpcRes.rows[0].result), { status: 200 });
+            } catch (err) {
+              return new Response(JSON.stringify({ error: err.message, message: err.message }), { status: 409 });
+            }
+          }
+
+          if (urlStr.includes('/rpc/mark_cardcom_deal_reconciliation_needed')) {
+            const payload = JSON.parse(options.body || '{}');
+            try {
+              const rpcRes = await client.query(
+                'SELECT mark_cardcom_deal_reconciliation_needed($1, $2, $3, $4, $5) AS result;',
+                [payload.p_terminal, payload.p_deal_id, payload.p_error_message, payload.p_booking_id || null, payload.p_amount || null]
+              );
+              return new Response(JSON.stringify(rpcRes.rows[0].result), { status: 200 });
+            } catch (err) {
+              return new Response(JSON.stringify({ error: err.message, message: err.message }), { status: 409 });
+            }
+          }
+
+          if (urlStr.includes('/rpc/finalize_cardcom_deal_invoice')) {
+            const payload = JSON.parse(options.body || '{}');
+            try {
+              const rpcRes = await client.query(
+                'SELECT finalize_cardcom_deal_invoice($1, $2, $3, $4, $5) AS result;',
+                [payload.p_booking_id, payload.p_deal_number, payload.p_terminal, payload.p_document_number, payload.p_document_url]
+              );
+              return new Response(JSON.stringify(rpcRes.rows[0].result), { status: 200 });
+            } catch (err) {
+              return new Response(JSON.stringify({ error: err.message, message: err.message }), { status: 409 });
+            }
+          }
+
+          if (urlStr.includes('/cardcom_terminal_audit_log')) {
+            return new Response(JSON.stringify({ ok: true }), { status: 201 });
+          }
+
+          return originalFetch(url, options);
+        };
+
+        const mockEnv = {
+          CHECKOUT_MAILBOX_SECRET: 'test-secret',
+          SUPABASE_SERVICE_ROLE_KEY: 'test-service-key',
+          SUPABASE_URL: 'https://mock.supabase.co',
+          CARDCOM_TERMINAL: '184288',
+          CARDCOM_API_NAME: 'test_api',
+          CARDCOM_API_PASSWORD: 'test_pass'
+        };
+
+        // Case A: Amount mismatch (proposal 500 ILS, Cardcom 400 ILS)
+        const reqAmt = new Request('https://resortos.internal/api/ops/cardcom-terminal/link', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-hotelos-mailbox': 'test-secret'
+          },
+          body: JSON.stringify({
+            deal_id: 'deal-guard-amt',
+            booking_id: 'b-guard-amt',
+            terminal: '184288'
+          })
+        });
+
+        const resAmt = await onRequest({
+          request: reqAmt,
+          params: { path: ['cardcom-terminal', 'link'] },
+          env: mockEnv
+        });
+
+        assert.equal(resAmt.status, 409, 'Must return 409 on amount mismatch');
+        const bodyAmt = await resAmt.json();
+        assert.equal(bodyAmt.error, 'RECONCILIATION_REQUIRED');
+        assert.ok(bodyAmt.message.includes('Amount mismatch'), `Message should mention amount mismatch, got: ${bodyAmt.message}`);
+
+        // Direct Postgres check: booking balance did NOT increase and status remains UNPAID
+        const checkAmt = await client.query(`SELECT payment_status, clearing_payments FROM public.hotelos_bookings WHERE id = 'b-guard-amt';`);
+        assert.equal(checkAmt.rows[0].payment_status, 'UNPAID', 'Payment status must remain UNPAID after amount mismatch');
+        assert.deepEqual(checkAmt.rows[0].clearing_payments, [], 'Clearing payments must remain empty after amount mismatch');
+
+        // Case B: Deal not found in Cardcom
+        const reqDeal = new Request('https://resortos.internal/api/ops/cardcom-terminal/link', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-hotelos-mailbox': 'test-secret'
+          },
+          body: JSON.stringify({
+            deal_id: 'deal-guard-deal',
+            booking_id: 'b-guard-deal',
+            terminal: '184288'
+          })
+        });
+
+        const resDeal = await onRequest({
+          request: reqDeal,
+          params: { path: ['cardcom-terminal', 'link'] },
+          env: mockEnv
+        });
+
+        assert.equal(resDeal.status, 409, 'Must return 409 when deal is missing in Cardcom');
+        const bodyDeal = await resDeal.json();
+        assert.equal(bodyDeal.error, 'RECONCILIATION_REQUIRED');
+
+        // Direct Postgres check: booking balance did NOT increase and status remains UNPAID
+        const checkDeal = await client.query(`SELECT payment_status, clearing_payments FROM public.hotelos_bookings WHERE id = 'b-guard-deal';`);
+        assert.equal(checkDeal.rows[0].payment_status, 'UNPAID', 'Payment status must remain UNPAID when deal is missing in Cardcom');
+        assert.deepEqual(checkDeal.rows[0].clearing_payments, [], 'Clearing payments must remain empty when deal is missing');
+
+        // Case C: Valid payment evidence verified, but invoice creation fails (CreateDocument 504)
+        // Must preserve already-verified receipt in booking balance!
+        const reqInvFail = new Request('https://resortos.internal/api/ops/cardcom-terminal/link', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-hotelos-mailbox': 'test-secret'
+          },
+          body: JSON.stringify({
+            deal_id: 'deal-guard-inv-fail',
+            booking_id: 'b-guard-inv-fail',
+            terminal: '184288'
+          })
+        });
+
+        const resInvFail = await onRequest({
+          request: reqInvFail,
+          params: { path: ['cardcom-terminal', 'link'] },
+          env: mockEnv
+        });
+
+        assert.equal(resInvFail.status, 500, 'Must return 500 when Cardcom CreateDocument times out');
+        const bodyInvFail = await resInvFail.json();
+        assert.equal(bodyInvFail.error, 'INVOICE_GENERATION_FAILED');
+
+        // Direct Postgres check: verified receipt WAS saved and counted toward booking balance
+        const checkInvFail = await client.query(`SELECT payment_status, clearing_payments FROM public.hotelos_bookings WHERE id = 'b-guard-inv-fail';`);
+        assert.equal(checkInvFail.rows[0].payment_status, 'PAID', 'Booking must be marked PAID because 200 ILS payment was verified');
+        assert.equal(checkInvFail.rows[0].clearing_payments.length, 1, 'Verified receipt must be preserved in booking');
+        assert.equal(checkInvFail.rows[0].clearing_payments[0].amount_ils, 200);
+        assert.equal(checkInvFail.rows[0].clearing_payments[0].invoice_status, 'pending_invoice');
+
+        // Ledger must be marked reconciliation_needed
+        const ledgerInvFail = await client.query(`SELECT status, error_message FROM public.cardcom_deal_ledger WHERE deal_id = 'deal-guard-inv-fail';`);
+        assert.equal(ledgerInvFail.rows[0].status, 'reconciliation_needed');
+      } finally {
+        globalThis.fetch = originalFetch;
+        await dropDb(dbName, client);
+      }
+    });
+
   } finally {
     await adminClient.end();
   }
