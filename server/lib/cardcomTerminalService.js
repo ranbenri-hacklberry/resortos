@@ -649,6 +649,27 @@ export function formatGuestConfirmationMessage(deal, booking = {}, unitName = ''
 /**
  * Formats guest invoice delivery message with link.
  */
+
+/**
+ * PostgREST select for /cardcom-terminal/send-invoice-whatsapp booking lookup.
+ * hotelos_bookings has no unit_name column — including it returns 42703 and the
+ * handlers used to mis-report that as BOOKING_NOT_FOUND (invoice never sent).
+ */
+export const CARDCOM_INVOICE_WA_BOOKING_SELECT = 'id,guest_name,guest_phone,unit_id';
+
+export function buildCardcomInvoiceWaBookingQuery(bookingId) {
+  const id = String(bookingId || '').trim();
+  return `hotelos_bookings?id=eq.${encodeURIComponent(id)}&select=${CARDCOM_INVOICE_WA_BOOKING_SELECT}&limit=1`;
+}
+
+/** Guest-facing unit label. Drop internal ids (k680 / kin_…) so WhatsApp stays clean. */
+export function unitLabelForInvoiceMessage(booking = {}, fallback = '') {
+  const raw = String(fallback || booking.unit_name || '').trim();
+  if (!raw) return '';
+  if (/^k\d+$/i.test(raw) || /^kin_/i.test(raw)) return '';
+  return raw;
+}
+
 export function formatGuestInvoiceDeliveryMessage(invoiceUrl, invoiceNumber, unitName = '', customLine = '') {
   const docRef = invoiceNumber ? ` מס׳ ${invoiceNumber}` : '';
   const descRef = customLine ? ` עבור ${customLine}` : (unitName ? ` עבור השהייה שלך ב-${unitName}` : ' עבור השהייה שלך');
