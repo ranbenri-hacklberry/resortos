@@ -1,3 +1,5 @@
+import { isUnavailableHoldText } from '../src/lib/unavailableHold.js';
+
 function ymd(value) {
   return String(value || '').slice(0, 10);
 }
@@ -79,3 +81,69 @@ export function kinorotChangeCount(changes) {
     + (changes.updated?.length || 0)
     + (changes.removed?.length || 0);
 }
+
+/** Check if a stay window includes the given Israel date (check_in <= day <= check_out). */
+export function isStayIncludingDay(checkIn, checkOut, day) {
+  const d = ymd(day);
+  const cin = ymd(checkIn);
+  const cout = ymd(checkOut);
+  if (!d || !cin || !cout) return false;
+  return cin <= d && d <= cout;
+}
+
+/** Detect self-made staff operational hold/status names created in ResortOS (not genuine guests from Kinorot). */
+export function isStaffHoldName(name) {
+  const norm = normName(name);
+  if (!norm) return false;
+  return isUnavailableHoldText(norm)
+    || /^(לא נקי|לא זמין|חסום|סגור|תקלה|מגורי צוות|צוות|אחזקה|לניקוי|שיפוץ|שיפוצים|טיפול)/i.test(norm);
+}
+
+function stayBeforeChange(row) {
+  const prev = {
+    check_in_date: row?.check_in_date,
+    check_out_date: row?.check_out_date
+  };
+  for (const item of row?.fields || []) {
+    if (item?.field === 'check_in') prev.check_in_date = item.from;
+    if (item?.field === 'check_out') prev.check_out_date = item.from;
+  }
+  return prev;
+}
+
+/**
+ * Filter diff changes to only those affecting TODAY (check_in <= today <= check_out).
+ * Excludes past stays (check_out < today), future bookings (check_in > today), and staff holds (e.g. "לא נקי").
+ */
+export function filterKinorotChangesForToday(changes, today) {
+  if (!changes || !today) return { created: [], updated: [], removed: [], total: 0 };
+  const d = ymd(today);
+
+  const isEligibleStay = (row) => {
+    if (!row) return false;
+    if (isStaffHoldName(row.guest_name)) return false;
+    return isStayIncludingDay(row.check_in_date, row.check_out_date, d);
+  };
+
+  const isEligibleUpdate = (row) => {
+    if (!row) return false;
+    if (isStaffHoldName(row.guest_name)) return false;
+    // Current stay includes today
+    if (isStayIncludingDay(row.check_in_date, row.check_out_date, d)) return true;
+    // Or stay before change included today (e.g. moved onto or off today)
+    const prev = stayBeforeChange(row);
+    return isStayIncludingDay(prev.check_in_date, prev.check_out_date, d);
+  };
+
+  const created = (changes.created || []).filter(isEligibleStay);
+  const updated = (changes.updated || []).filter(isEligibleUpdate);
+  const removed = (changes.removed || []).filter(isEligibleStay);
+
+  return {
+    created,
+    updated,
+    removed,
+    total: created.length + updated.length + removed.length
+  };
+}
+

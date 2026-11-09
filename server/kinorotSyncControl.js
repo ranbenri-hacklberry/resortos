@@ -4,6 +4,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawnSync } from 'child_process';
 
+import { israelToday } from '../src/lib/cabinAccess.js';
+import { filterKinorotChangesForToday } from './kinorotSyncDiff.js';
+
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const STATUS_FILE = process.env.KINOROT_SYNC_STATUS_FILE || '/tmp/resortos-kinorot-sync-status.json';
 const SCRIPT = path.join(ROOT, 'server', 'syncKinorotCalendar.js');
@@ -22,19 +25,34 @@ function emptyStatus() {
   };
 }
 
-export function readKinorotSyncStatus() {
+export function readKinorotSyncStatus(today = israelToday()) {
   let status = emptyStatus();
   try {
     status = { ...status, ...JSON.parse(fs.readFileSync(STATUS_FILE, 'utf8')) };
   } catch {
     /* first run */
   }
+  if (status.changes) {
+    const filtered = filterKinorotChangesForToday(status.changes, today);
+    if (!filtered.total) {
+      status.changes = null;
+      status.changeId = null;
+    } else {
+      status.changes = filtered;
+    }
+  }
   status.journalUpdatedAt = lastKinJournalIso();
   return status;
 }
 
 export function writeKinorotSyncStatus(patch) {
-  const next = { ...readKinorotSyncStatus(), ...patch, journalUpdatedAt: lastKinJournalIso() };
+  let raw = emptyStatus();
+  try {
+    raw = { ...raw, ...JSON.parse(fs.readFileSync(STATUS_FILE, 'utf8')) };
+  } catch {
+    /* first run */
+  }
+  const next = { ...raw, ...patch, journalUpdatedAt: lastKinJournalIso() };
   fs.writeFileSync(STATUS_FILE, JSON.stringify(next, null, 2));
   return next;
 }
