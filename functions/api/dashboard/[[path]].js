@@ -7,6 +7,10 @@ const DEFAULT_MICROPAY_TOKEN = '1UJIb8c2bfab883c334cb1048f1315c070ca';
 const DEFAULT_MICROPAY_FROM = '0548076123';
 
 export async function sendMicropaySms(env, phone, message) {
+  // Unit tests / dry-run: never hit Micropay.
+  if (env?.DASHBOARD_OTP_DRY_RUN || env?.OTP_DRY_RUN) {
+    return { ok: true, dry_run: true };
+  }
   const token = env?.MICROPAY_TOKEN || DEFAULT_MICROPAY_TOKEN;
   const from = env?.MICROPAY_FROM || DEFAULT_MICROPAY_FROM;
   const url = env?.MICROPAY_URL || MICROPAY_SMS_URL;
@@ -71,6 +75,14 @@ const AUTHORIZED_STAFF = [
     username: 'barak',
     display_name: 'ברק',
     phone: '0503934696',
+    role: 'MANAGER',
+    is_admin: true
+  },
+  {
+    username: 'zuki',
+    display_name: 'צוקי',
+    phone: '0529690024',
+    whatsapp: '972529690024',
     role: 'MANAGER',
     is_admin: true
   },
@@ -180,14 +192,18 @@ export async function signSessionToken(env, user) {
     exp
   });
   const encoded = btoa(unescape(encodeURIComponent(payload)));
-  const sig = await hmacHex(env.CHECKOUT_MAILBOX_SECRET || env.HOTELOS_DESK_PIN || 'dashboard_salt', encoded);
+  const secret = String(env?.CHECKOUT_MAILBOX_SECRET || '').trim();
+  if (!secret) throw new Error('CHECKOUT_MAILBOX_SECRET_REQUIRED');
+  const sig = await hmacHex(secret, encoded);
   return `${encoded}.${sig}`;
 }
 
 export async function verifySessionToken(env, token) {
   if (!token || !token.includes('.')) return null;
+  const secret = String(env?.CHECKOUT_MAILBOX_SECRET || '').trim();
+  if (!secret) return null;
   const [encoded, sig] = token.split('.');
-  const expected = await hmacHex(env.CHECKOUT_MAILBOX_SECRET || env.HOTELOS_DESK_PIN || 'dashboard_salt', encoded);
+  const expected = await hmacHex(secret, encoded);
   if (sig !== expected) return null;
   try {
     const payload = JSON.parse(decodeURIComponent(escape(atob(encoded))));
@@ -246,41 +262,31 @@ export async function onRequest(context) {
         return errorJson('מספר טלפון לא תקין', 400, 'INVALID_PHONE');
       }
 
-      // Check if authorized
-      let staff = findStaffByPhone(normPhone);
-      // For Daniel fallback if user typed "daniel" or special test code
-      if (!staff && (normPhone.includes('50123') || body.username === 'daniel')) {
-        staff = findStaffByUsername('daniel');
-      }
-
-      // If phone is not in predefined list, allow authorized registration if phone matches admin/staff
-      if (!staff) {
-        return errorJson('מספר הטלפון אינו מורשה לגישה לדשבורד. יש לפנות למנהל המערכת.', 403, 'UNAUTHORIZED_PHONE');
-      }
-
-      // Generate 6-digit OTP
-      const cryptoArr = new Uint32Array(1);
-      crypto.getRandomValues(cryptoArr);
-      const code = String(100000 + (cryptoArr[0] % 900000));
-      const challenge = await generateOtpChallenge(env, normPhone, code);
-
-      // Dispatch real SMS to user's mobile via Micropay
-      const smsMessage = `ResortOS: קוד האימות שלך לדשבורד הוא ${code}. הקוד בתוקף ל-5 דקות.`;
-      try {
-        await sendMicropaySms(env, normPhone, smsMessage);
-      } catch (err) {
-        console.error('[SMS Dispatch Error]', err);
+      const staff = findStaffByPhone(normPhone);
+      // Anti-enumeration: same response whether or not the phone is authorized.
+      // SMS + challenge are issued only for authorized staff.
+      let challenge = '';
+      if (staff) {
+        const cryptoArr = new Uint32Array(1);
+        crypto.getRandomValues(cryptoArr);
+        const code = String(100000 + (cryptoArr[0] % 900000));
+        challenge = await generateOtpChallenge(env, normPhone, code);
+        const smsMessage = `ResortOS: קוד האימות שלך לדשבורד הוא ${code}. הקוד בתוקף ל-5 דקות.`;
+        try {
+          await sendMicropaySms(env, normPhone, smsMessage);
+        } catch (err) {
+          console.error('[SMS Dispatch Error]', err);
+        }
       }
 
       return json({
         ok: true,
         channel: 'sms',
         challenge,
-        message: `קוד אימות בן 6 ספרות נשלח ב-SMS לנייד ${normPhone.slice(0, 3)}-***${normPhone.slice(-3)}. הקוד בתוקף ל-5 דקות.`
+        message: 'אם המספר מורשה, נשלח קוד אימות ב-SMS. הקוד בתוקף ל-5 דקות.'
       });
     }
 
-    // 2. Verify OTP: POST /api/dashboard/otp/verify
     if (head === 'otp' && sub === 'verify' && method === 'POST') {
       const body = await request.json().catch(() => ({}));
       const phone = normalizePhone(String(body.phone || ''));
@@ -296,9 +302,11 @@ export async function onRequest(context) {
         return errorJson('קוד האימות שגוי או שפג תוקפו', 401, 'INVALID_OTP');
       }
 
-      let staff = findStaffByPhone(phone);
-      if (!staff && phone.includes('50123')) staff = findStaffByUsername('daniel');
-      if (!staff) staff = { username: 'staff', display_name: 'משתמש מורשה', role: 'MANAGER', phone };
+      const staff = findStaffByPhone(phone);
+      if (!staff) {
+        // Do not invent users; invalid/expired OTP already covered above.
+        return errorJson('קוד האימות שגוי או שפג תוקפו', 401, 'INVALID_OTP');
+      }
 
       const token = await signSessionToken(env, staff);
       return json({
@@ -313,45 +321,13 @@ export async function onRequest(context) {
       });
     }
 
-    // 3. Fallback Password Login: POST /api/dashboard/login
+    // 3. Password login removed — SMS OTP only.
     if (head === 'login' && method === 'POST') {
-      const body = await request.json().catch(() => ({}));
-      const rawUser = String(body.username || '').trim();
-      const password = String(body.password || '').trim();
-
-      const staff = findStaffByUsername(rawUser) || findStaffByPhone(rawUser);
-      if (!staff) {
-        return errorJson('שם משתמש לא נמצא. השתמש ב-max, adam, daniel או במספר הטלפון שלך.', 401, 'USER_NOT_FOUND');
-      }
-
-      // Accepted passwords for staff:
-      const allowedPasswords = [
-        '123456',
-        'hotelos2026',
-        '2026',
-        '1234',
-        env?.HOTELOS_DESK_PIN,
-        normalizePhone(staff.phone),
-        normalizePhone(staff.whatsapp),
-        staff.username,
-        'admin'
-      ].filter(Boolean);
-
-      if (!allowedPasswords.includes(password)) {
-        return errorJson('סיסמה שגויה', 401, 'BAD_PASSWORD');
-      }
-
-      const token = await signSessionToken(env, staff);
-      return json({
-        ok: true,
-        token,
-        user: {
-          username: staff.username,
-          display_name: staff.display_name,
-          role: staff.role,
-          phone: staff.phone
-        }
-      });
+      return errorJson(
+        'התחברות בסיסמה בוטלה. יש להתחבר עם קוד OTP שנשלח ב-SMS.',
+        401,
+        'OTP_REQUIRED'
+      );
     }
 
     // Authenticated endpoints below:
