@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { getStoredToken } from '../../lib/staffAuth.js';
 import { formatCardcomDealDateTimeHe } from '../../../functions/lib/cardcomDealTime.js';
+import { unitFullName } from '../../lib/units.js';
 
 export const ACK_CARDCOM_DEALS_KEY = 'resortos_ack_cardcom_deals';
 
@@ -383,6 +384,13 @@ export default function CardcomTerminalModal({
     return () => { active = false; };
   }, [currentDeal?.deal_id, currentDeal?.amount, currentDeal?.deal_time, searchQuery, retryNonce]);
 
+  useEffect(() => {
+    if (selectedDealIndex >= pendingCharges.length) {
+      setSelectedDealIndex(Math.max(0, pendingCharges.length - 1));
+    }
+  }, [pendingCharges.length, selectedDealIndex]);
+
+
   // Candidates for the current deal (server-side only, no browser computation)
   const candidateBookings = serverSuggestions;
 
@@ -500,40 +508,89 @@ export default function CardcomTerminalModal({
           </div>
         ) : null}
 
-        {/* Multi-deal tabs if more than one pending */}
+        {/* Mobile-friendly deal pager: 1/N + arrows + dots (no overflowing tab strip) */}
         {pendingCharges.length > 1 ? (
           <div
             style={{
               display: 'flex',
-              gap: '6px',
+              flexDirection: 'column',
+              gap: '8px',
               padding: '10px 16px',
-              backgroundColor: '#1e293b',
-              overflowX: 'auto'
+              backgroundColor: '#1e293b'
             }}
           >
-            {pendingCharges.map((ch, idx) => {
-              const active = idx === selectedDealIndex;
-              return (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+              <button
+                type="button"
+                aria-label="עסקה קודמת"
+                disabled={selectedDealIndex <= 0}
+                onClick={() => setSelectedDealIndex((i) => Math.max(0, i - 1))}
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 8,
+                  border: 'none',
+                  backgroundColor: selectedDealIndex <= 0 ? '#334155' : '#475569',
+                  color: '#f8fafc',
+                  cursor: selectedDealIndex <= 0 ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: selectedDealIndex <= 0 ? 0.45 : 1
+                }}
+              >
+                <ChevronRight size={18} />
+              </button>
+              <div style={{ textAlign: 'center', flex: 1, color: '#f8fafc' }}>
+                <div style={{ fontSize: 14, fontWeight: 800 }}>
+                  {selectedDealIndex + 1} / {pendingCharges.length}
+                </div>
+                <div style={{ fontSize: 12, color: '#fbbf24', fontWeight: 700, marginTop: 2 }}>
+                  ₪{Number(currentDeal?.amount || 0).toLocaleString('he-IL')}
+                  {currentDeal?.payer_name ? ` · ${currentDeal.payer_name}` : ''}
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label="עסקה הבאה"
+                disabled={selectedDealIndex >= pendingCharges.length - 1}
+                onClick={() => setSelectedDealIndex((i) => Math.min(pendingCharges.length - 1, i + 1))}
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 8,
+                  border: 'none',
+                  backgroundColor: selectedDealIndex >= pendingCharges.length - 1 ? '#334155' : '#475569',
+                  color: '#f8fafc',
+                  cursor: selectedDealIndex >= pendingCharges.length - 1 ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: selectedDealIndex >= pendingCharges.length - 1 ? 0.45 : 1
+                }}
+              >
+                <ChevronLeft size={18} />
+              </button>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 6 }}>
+              {pendingCharges.map((ch, idx) => (
                 <button
                   key={ch.deal_id || idx}
                   type="button"
+                  aria-label={`עסקה ${idx + 1}`}
                   onClick={() => setSelectedDealIndex(idx)}
                   style={{
-                    padding: '6px 12px',
-                    borderRadius: '6px',
-                    fontSize: '13px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
+                    width: idx === selectedDealIndex ? 16 : 8,
+                    height: 8,
+                    borderRadius: 999,
                     border: 'none',
-                    backgroundColor: active ? '#f59e0b' : '#334155',
-                    color: active ? '#0f172a' : '#cbd5e1',
-                    whiteSpace: 'nowrap'
+                    padding: 0,
+                    cursor: 'pointer',
+                    backgroundColor: idx === selectedDealIndex ? '#f59e0b' : '#64748b'
                   }}
-                >
-                  עסקה {idx + 1}: ₪{Number(ch.amount || 0).toLocaleString('he-IL')}
-                </button>
-              );
-            })}
+                />
+              ))}
+            </div>
           </div>
         ) : null}
 
@@ -744,7 +801,7 @@ export default function CardcomTerminalModal({
                             gap: '4px'
                           }}
                         >
-                          <Home size={12} /> {candidate.unitName}
+                          <Home size={12} /> {unitFullName(candidate.unitId, candidate.unitName)}
                         </span>
                       </div>
                       <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
@@ -769,7 +826,14 @@ export default function CardcomTerminalModal({
                     </div>
                   </div>
 
-                  {/* Financial calculation description */}
+                  {/* Financial calculation: remaining = total − recorded payments only (1:1, no deposit/VAT/fees) */}
+                  {(() => {
+                    const totalIls = Number(candidate.totalIls) || 0;
+                    const paidIls = Number(candidate.paidIls) || 0;
+                    const dealAmt = Number(currentDeal?.amount) || 0;
+                    const dueIls = Math.max(0, totalIls - paidIls);
+                    const afterIls = Math.max(0, dueIls - dealAmt);
+                    return (
                   <div
                     style={{
                       padding: '8px 12px',
@@ -777,21 +841,28 @@ export default function CardcomTerminalModal({
                       backgroundColor: '#f8fafc',
                       fontSize: '13px',
                       display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
+                      flexDirection: 'column',
+                      gap: '6px'
                     }}
                   >
-                    <div>
-                      <span style={{ color: '#475569' }}>יתרה נוכחית: </span>
-                      <b style={{ color: '#0f172a' }}>₪{candidate.dueIls.toLocaleString('he-IL')}</b>
-                      <span style={{ color: '#94a3b8', fontSize: '12px', marginRight: '6px' }}>
-                        (מתוך סה״כ ₪{candidate.totalIls.toLocaleString('he-IL')})
-                      </span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <div>
+                        <span style={{ color: '#475569' }}>יתרה נוכחית: </span>
+                        <b style={{ color: '#0f172a' }}>₪{dueIls.toLocaleString('he-IL')}</b>
+                        <span style={{ color: '#94a3b8', fontSize: '12px', marginRight: '6px' }}>
+                          (סה״כ ₪{totalIls.toLocaleString('he-IL')} − שולם ₪{paidIls.toLocaleString('he-IL')})
+                        </span>
+                      </div>
+                      <div style={{ fontWeight: 700, color: afterIls === 0 ? '#16a34a' : '#b45309' }}>
+                        אחרי שיוך: ₪{afterIls.toLocaleString('he-IL')}
+                      </div>
                     </div>
                     <div style={{ fontWeight: 600, color: candidate.tagColor }}>
                       {candidate.description}
                     </div>
                   </div>
+                    );
+                  })()}
 
                   {/* Link Button */}
                   <button

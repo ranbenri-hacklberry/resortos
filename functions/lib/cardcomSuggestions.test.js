@@ -5,7 +5,9 @@ import {
   isBookingInDateWindow,
   getIsraelDateString,
   shiftDays,
-  computeDateDistance
+  computeDateDistance,
+  calculateBookingBalances,
+  remainingIlsAfterCharge
 } from './cardcomSuggestions.js';
 
 test('date math and timezone: deals in UTC correctly map to Asia/Jerusalem', () => {
@@ -372,3 +374,28 @@ test('hard rule: only bookings with check_in <= D <= check_out (physically on si
   const ids = suggestBookingsForDeal(deal, bookings).map((c) => c.bookingId);
   assert.deepEqual(ids.sort(), ['checkout-day', 'on-site']);
 });
+
+test('Iska-style booking: deposit metadata must not shrink due (1:1 remaining = total - payments)', () => {
+  const booking = {
+    id: 'kin_680_76182',
+    guest_name: 'איסקה קופציק',
+    unit_id: 'k680',
+    check_in_date: '2026-11-08',
+    check_out_date: '2026-11-09',
+    total_price_agorot: 50000,
+    deposit_agorot: 10000,
+    payment_status: 'UNPAID',
+    clearing_payments: [],
+    booking_status: 'CHECKED_IN'
+  };
+  const deal = { amount: 500, deal_time: '2026-11-08T12:10:35.000Z', payer_name: 'איסקה', deal_id: '269337493' };
+  const results = suggestBookingsForDeal(deal, [booking]);
+  assert.equal(results.length, 1);
+  assert.equal(results[0].dueIls, 500);
+  assert.equal(results[0].totalIls, 500);
+  assert.equal(results[0].paidIls, 0);
+  assert.equal(results[0].type, 'exact_due');
+  assert.equal(results[0].remainingAfterPayment, 0);
+  assert.ok(String(results[0].unitName).includes('מול הנוף') || results[0].unitName === 'k680');
+});
+
