@@ -41,11 +41,11 @@ test('rule 1: deal on 8th -> booking 8-9 shown', () => {
   assert.equal(results[0].exactAmountMatch, true);
 });
 
-test('rule 2: booking that starts in a month not shown (never check_in > D+1)', () => {
+test('rule 2: booking that starts after D is not shown (never check_in > D)', () => {
   const deal = {
     dealId: 'deal-8th',
     amount: 1000,
-    dealTime: '2026-11-08T14:00:00Z' // Date D = 2026-11-08, D+1 = 2026-11-09
+    dealTime: '2026-11-08T14:00:00Z' // Date D = 2026-11-08
   };
 
   const futureBooking = {
@@ -69,15 +69,24 @@ test('rule 2: booking that starts in a month not shown (never check_in > D+1)', 
   const oneDayAheadBooking = {
     id: 'b-one-day-ahead',
     guest_name: 'רוני',
-    check_in_date: '2026-11-09', // D + 1 day (slack boundary allowed)
+    check_in_date: '2026-11-09', // D + 1 day — future, must NOT be shown
     check_out_date: '2026-11-11',
     total_price_agorot: 100000,
     clearing_payments: []
   };
 
-  const results = suggestBookingsForDeal(deal, [futureBooking, twoDaysAheadBooking, oneDayAheadBooking]);
-  assert.equal(results.length, 1, 'Only one-day-ahead booking within slack should be shown');
-  assert.equal(results[0].bookingId, 'b-one-day-ahead');
+  const onSiteBooking = {
+    id: 'b-on-site',
+    guest_name: 'נוכח',
+    check_in_date: '2026-11-07',
+    check_out_date: '2026-11-09',
+    total_price_agorot: 100000,
+    clearing_payments: []
+  };
+
+  const results = suggestBookingsForDeal(deal, [futureBooking, twoDaysAheadBooking, oneDayAheadBooking, onSiteBooking]);
+  assert.equal(results.length, 1, 'Only on-site booking (check_in <= D <= check_out) should be shown');
+  assert.equal(results[0].bookingId, 'b-on-site');
 });
 
 test('rule 3: paid booking not shown (balance <= 0 excluded)', () => {
@@ -173,9 +182,10 @@ test('November deal (268711314, 2026-11-02 20:26 IL) never gets Oct 21-30 stays 
   ];
   const stay = [mk('in-house', '2026-11-01', '2026-11-03', 900), mk('checkout-d-1', '2026-10-30', '2026-11-01', 500), mk('future', '2026-11-04', '2026-11-05', 500)];
   const ids = suggestBookingsForDeal(deal, [...october, ...stay]).map((c) => c.bookingId);
-  assert.deepEqual(ids, ['checkout-d-1', 'in-house']);
+  // Strict on-site: checkout on 2026-11-01 is before D=2026-11-02, so only in-house stays.
+  assert.deepEqual(ids, ['in-house']);
   for (const c of suggestBookingsForDeal(deal, [...october, ...stay])) {
-    assert.ok(c.checkOut >= '2026-11-01' && c.checkIn <= '2026-11-03');
+    assert.ok(c.checkIn <= '2026-11-02' && c.checkOut >= '2026-11-02');
   }
 });
 
@@ -304,7 +314,7 @@ test('deal on Nov 8 -> no booking with check_in after Nov 9 in the default list'
     {
       id: 'b-nov-9',
       guest_name: 'אורח נוב 9',
-      check_in_date: '2026-11-09', // check_in = Nov 9 (<= D+1) -> allowed
+      check_in_date: '2026-11-09', // check_in = Nov 9 (> D) -> hidden
       check_out_date: '2026-11-10',
       total_price_agorot: 50000,
       clearing_payments: []
@@ -338,14 +348,27 @@ test('deal on Nov 8 -> no booking with check_in after Nov 9 in the default list'
   const results = suggestBookingsForDeal(deal, bookings);
   const ids = results.map((r) => r.bookingId);
 
-  assert.ok(ids.includes('b-nov-9'), 'Booking with check_in on Nov 9 (D+1) may be shown');
+  assert.ok(!ids.includes('b-nov-9'), 'Booking with check_in on Nov 9 (after D) must not be shown');
   assert.ok(!ids.includes('b-nov-10'), 'Booking with check_in on Nov 10 (after Nov 9) must NOT be in the default list');
   assert.ok(!ids.includes('b-nov-11'), 'Booking with check_in on Nov 11 (after Nov 9) must NOT be in the default list');
   assert.ok(!ids.includes('b-dec-01'), 'Booking with check_in in Dec must NOT be in the default list');
 
-  // Verify none of the returned results have check_in > '2026-11-09'
+  // Verify none of the returned results have check_in > D
   for (const candidate of results) {
-    assert.ok(candidate.checkIn <= '2026-11-09', `Candidate check_in ${candidate.checkIn} must be <= 2026-11-09`);
+    assert.ok(candidate.checkIn <= '2026-11-08', `Candidate check_in ${candidate.checkIn} must be <= 2026-11-08`);
   }
 });
 
+
+
+test('hard rule: only bookings with check_in <= D <= check_out (physically on site)', () => {
+  const deal = { dealId: 'onsite-1', amount: 500, dealTime: '2026-11-08T12:00:00Z' };
+  const bookings = [
+    { id: 'before', guest_name: 'A', check_in_date: '2026-11-01', check_out_date: '2026-11-07', total_price_agorot: 50000, clearing_payments: [], booking_status: 'CONFIRMED' },
+    { id: 'on-site', guest_name: 'B', check_in_date: '2026-11-07', check_out_date: '2026-11-09', total_price_agorot: 50000, clearing_payments: [], booking_status: 'CONFIRMED' },
+    { id: 'future', guest_name: 'C', check_in_date: '2026-11-09', check_out_date: '2026-11-11', total_price_agorot: 50000, clearing_payments: [], booking_status: 'CONFIRMED' },
+    { id: 'checkout-day', guest_name: 'D', check_in_date: '2026-11-06', check_out_date: '2026-11-08', total_price_agorot: 50000, clearing_payments: [], booking_status: 'CONFIRMED' }
+  ];
+  const ids = suggestBookingsForDeal(deal, bookings).map((c) => c.bookingId);
+  assert.deepEqual(ids.sort(), ['checkout-day', 'on-site']);
+});

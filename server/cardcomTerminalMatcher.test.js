@@ -1650,7 +1650,7 @@ test('auth: suggestions and candidates routes require staff auth (same as pendin
   }
 });
 
-test('candidate window rule: deal on Nov 8 -> no booking with check_in after Nov 9 in default list', async () => {
+test('candidate window rule: deal on Nov 8 -> only on-site bookings (check_in <= D <= check_out)', async () => {
   const { suggestBookingsForDeal } = await import('../functions/lib/cardcomSuggestions.js');
 
   const deal = {
@@ -1660,6 +1660,14 @@ test('candidate window rule: deal on Nov 8 -> no booking with check_in after Nov
   };
 
   const bookings = [
+    {
+      id: 'b-on-site',
+      guest_name: 'אורח באתר',
+      check_in_date: '2026-11-07',
+      check_out_date: '2026-11-09',
+      total_price_agorot: 50000,
+      clearing_payments: []
+    },
     {
       id: 'b-nov-9',
       guest_name: 'אורח נוב 9',
@@ -1689,7 +1697,8 @@ test('candidate window rule: deal on Nov 8 -> no booking with check_in after Nov
   const candidates = suggestBookingsForDeal(deal, bookings);
   const ids = candidates.map((c) => c.bookingId);
 
-  assert.ok(ids.includes('b-nov-9'), 'check_in Nov 9 must be included');
+  assert.ok(ids.includes('b-on-site'), 'on-site stay covering D must be included');
+  assert.ok(!ids.includes('b-nov-9'), 'check_in Nov 9 (after D) must NOT be included');
   assert.ok(!ids.includes('b-nov-10'), 'check_in Nov 10 must NOT be included');
   assert.ok(!ids.includes('b-nov-11'), 'check_in Nov 11 must NOT be included');
 });

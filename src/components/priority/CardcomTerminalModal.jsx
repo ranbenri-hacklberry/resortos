@@ -15,6 +15,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { getStoredToken } from '../../lib/staffAuth.js';
+import { formatCardcomDealDateTimeHe } from '../../../functions/lib/cardcomDealTime.js';
 
 export const ACK_CARDCOM_DEALS_KEY = 'resortos_ack_cardcom_deals';
 
@@ -89,11 +90,7 @@ export function CardcomAutoApprovedModal({
 
   const amountStr = Number(currentDeal?.amount || 0).toLocaleString('he-IL');
   const timeStr = currentDeal?.approved_at || currentDeal?.deal_time
-    ? new Date(currentDeal.approved_at || currentDeal.deal_time).toLocaleTimeString('he-IL', {
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: 'Asia/Jerusalem'
-      })
+    ? formatCardcomDealDateTimeHe(currentDeal.approved_at || currentDeal.deal_time)
     : '';
 
   return (
@@ -318,6 +315,7 @@ export default function CardcomTerminalModal({
   units = [],
   onLinkDeal,
   onIgnoreDeal,
+  onSendInvoiceWhatsApp = null,
   linkingDealId = null,
   loadError = null,
   onRetry = null,
@@ -330,6 +328,9 @@ export default function CardcomTerminalModal({
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [suggestionsError, setSuggestionsError] = useState(null);
   const [retryNonce, setRetryNonce] = useState(0);
+  const [linkSuccessOffer, setLinkSuccessOffer] = useState(null);
+  const [waSending, setWaSending] = useState(false);
+  const [waFeedback, setWaFeedback] = useState(null);
 
   const currentDeal = pendingCharges[Math.min(selectedDealIndex, pendingCharges.length - 1)] || pendingCharges[0];
 
@@ -556,7 +557,7 @@ export default function CardcomTerminalModal({
             </div>
             <div style={{ fontSize: '12px', color: '#b45309', fontWeight: 600 }}>
               עסקה {dealId}
-              {currentDeal?.deal_time ? ` · ${new Date(currentDeal.deal_time).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}` : ''}
+              {currentDeal?.deal_time ? ` · ${formatCardcomDealDateTimeHe(currentDeal.deal_time)}` : ''}
             </div>
           </div>
 
@@ -894,6 +895,116 @@ export default function CardcomTerminalModal({
           </div>
         </div>
 
+
+        {linkSuccessOffer ? (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundColor: 'rgba(15, 23, 42, 0.75)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1001,
+              padding: '20px',
+              backdropFilter: 'blur(3px)'
+            }}
+          >
+            <div
+              style={{
+                backgroundColor: '#ffffff',
+                borderRadius: '14px',
+                padding: '24px',
+                maxWidth: '440px',
+                width: '100%',
+                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px',
+                textAlign: 'center'
+              }}
+            >
+              <div style={{ margin: '0 auto', width: 48, height: 48, borderRadius: '50%', backgroundColor: '#dcfce7', color: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <CheckCircle2 size={26} />
+              </div>
+              <h4 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: '#0f172a' }}>הסליקה שויכה והחשבונית מוכנה</h4>
+              <p style={{ margin: 0, fontSize: '14px', color: '#475569', lineHeight: 1.5 }}>
+                {linkSuccessOffer.guestName ? `שויך ל-${linkSuccessOffer.guestName}. ` : ''}
+                {linkSuccessOffer.invoiceNumber ? `חשבונית מס קבלה מס׳ ${linkSuccessOffer.invoiceNumber}. ` : ''}
+                {linkSuccessOffer.noUrl
+                  ? 'אין קישור חשבונית לשליחה בוואטסאפ.'
+                  : 'אפשר לשלוח את קישור החשבונית ללקוח בוואטסאפ דרך קלואי (רק בלחיצה).'}
+              </p>
+              {waFeedback ? (
+                <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: waFeedback.ok ? '#15803d' : '#b91c1c' }}>
+                  {waFeedback.text}
+                </p>
+              ) : null}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {!linkSuccessOffer.noUrl && onSendInvoiceWhatsApp ? (
+                  <button
+                    type="button"
+                    disabled={waSending || Boolean(waFeedback?.ok)}
+                    onClick={async () => {
+                      setWaSending(true);
+                      setWaFeedback(null);
+                      try {
+                        await onSendInvoiceWhatsApp({
+                          dealId: linkSuccessOffer.dealId,
+                          bookingId: linkSuccessOffer.bookingId,
+                          invoiceUrl: linkSuccessOffer.invoiceUrl,
+                          invoiceNumber: linkSuccessOffer.invoiceNumber
+                        });
+                        setWaFeedback({ ok: true, text: 'החשבונית נשלחה ללקוח בוואטסאפ דרך קלואי' });
+                      } catch (err) {
+                        setWaFeedback({ ok: false, text: err?.message || 'שליחת וואטסאפ נכשלה' });
+                      } finally {
+                        setWaSending(false);
+                      }
+                    }}
+                    style={{
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      backgroundColor: waFeedback?.ok ? '#86efac' : '#16a34a',
+                      color: '#0f172a',
+                      fontWeight: 800,
+                      fontSize: '14px',
+                      cursor: waSending || waFeedback?.ok ? 'not-allowed' : 'pointer',
+                      opacity: waSending ? 0.7 : 1
+                    }}
+                  >
+                    {waSending
+                      ? 'שולח…'
+                      : waFeedback?.ok
+                        ? 'נשלח'
+                        : 'לשלוח את החשבונית ללקוח בוואטסאפ דרך קלואי'}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLinkSuccessOffer(null);
+                    setWaFeedback(null);
+                  }}
+                  style={{
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    backgroundColor: '#ffffff',
+                    color: '#334155',
+                    fontWeight: 700,
+                    fontSize: '14px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  סגור
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {/* Status Change Confirmation Overlay */}
         {pendingAction ? (
           <div
@@ -965,7 +1076,30 @@ export default function CardcomTerminalModal({
                     } else if (action.type === 'test') {
                       onIgnoreDeal?.(action.dealId, 'test');
                     } else if (action.type === 'link') {
-                      onLinkDeal?.(action.dealId, action.bookingId);
+                      setWaFeedback(null);
+                      const result = await onLinkDeal?.(action.dealId, action.bookingId);
+                      const invoice = result?.invoice || null;
+                      const invoiceUrl = invoice?.documentUrl || invoice?.document_url || invoice?.invoice_url || '';
+                      const invoiceNumber = invoice?.documentNumber || invoice?.document_number || invoice?.invoice_number || '';
+                      if (result?.ok && invoiceUrl) {
+                        setLinkSuccessOffer({
+                          dealId: action.dealId,
+                          bookingId: action.bookingId,
+                          guestName: action.guestName,
+                          invoiceUrl,
+                          invoiceNumber
+                        });
+                      } else if (result?.ok) {
+                        // Linked but no invoice URL to offer — keep prior alert-less success.
+                        setLinkSuccessOffer({
+                          dealId: action.dealId,
+                          bookingId: action.bookingId,
+                          guestName: action.guestName,
+                          invoiceUrl: '',
+                          invoiceNumber: invoiceNumber || '',
+                          noUrl: true
+                        });
+                      }
                     }
                   }}
                   style={{

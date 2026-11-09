@@ -1,3 +1,4 @@
+import { normalizeCardcomDealTime } from '../../functions/lib/cardcomDealTime.js';
 /**
  * Cardcom Terminal Auto-Link & WhatsApp Approval Service
  *
@@ -114,7 +115,8 @@ export function normalizeCardcomDeal(raw = {}) {
   const lastName = String(raw.CardOwnerLastName || raw.LastName || '').trim();
   const fullName = String(raw.CardOwnerName || raw.Name || [firstName, lastName].filter(Boolean).join(' ') || '').trim();
   const entryMode = String(raw.CardNumberEntryMode || raw.cardNumberEntryMode || raw.entry_mode || '').trim();
-  const dealTime = raw.CreateDate || raw.DealDate || raw.deal_time || new Date().toISOString();
+  const rawDealTime = raw.CreateDate || raw.DealDate || raw.deal_time || new Date().toISOString();
+  const dealTime = normalizeCardcomDealTime(rawDealTime);
   const returnValue = String(raw.ReturnValue || raw.returnValue || raw.ExternalId || raw.order || '').trim();
   const documentNumber = String(
     raw.DocumentNumber
@@ -134,6 +136,25 @@ export function normalizeCardcomDeal(raw = {}) {
     || raw.docUrl
     || raw.Url
     || raw.url
+    || ''
+  ).trim();
+  const rrn = String(
+    raw.RRN
+    || raw.Rrn
+    || raw.ShvaRRN
+    || raw.ShvaRrn
+    || raw.rrn
+    || raw.UID
+    || raw.Uid
+    || ''
+  ).trim();
+  const originalDealId = String(
+    raw.OriginalDealNumber
+    || raw.OriginalDealId
+    || raw.OriginalTranzactionId
+    || raw.RelatedDealNumber
+    || raw.RefundedDealNumber
+    || raw.original_deal_id
     || ''
   ).trim();
   const isRefund = Boolean(
@@ -188,7 +209,14 @@ export function normalizeCardcomDeal(raw = {}) {
     returnValue,
     documentNumber,
     documentUrl,
+    rrn,
+    originalDealId,
     isRefund,
+    isCancel: Boolean(
+      isRefund
+      || String(raw.DealType || raw.dealType || '').toLowerCase().includes('cancel')
+      || String(raw.DealType || raw.dealType || '').toLowerCase().includes('credit')
+    ),
     isIls,
     isSuccess
   };
@@ -289,7 +317,7 @@ export async function fetchCardcomTransactions({
 
     const normalized = list
       .map(normalizeCardcomDeal)
-      .filter((d) => d.dealId && d.isSuccess && !d.isRefund && d.isIls);
+      .filter((d) => d.dealId && d.isSuccess && !d.isRefund && d.isIls && !d.isCancel);
 
     allDeals.push(...normalized);
 
@@ -404,6 +432,83 @@ export function nameSimilarity(strA, strB) {
  * Ranks candidate bookings for an unlinked Cardcom terminal deal.
  * Returns top candidates sorted by highest score.
  */
+
+/**
+ * Fetch Cardcom refunds/cancellations (same ListTransactions window) for pairing
+ * with original charges via deal id / RRN / approval.
+ */
+export async function fetchCardcomCancellations(options = {}) {
+  const {
+    from,
+    to,
+    terminal = DEFAULT_CARDCOM_TERMINAL,
+    apiName,
+    apiPassword,
+    fetchImpl = globalThis.fetch,
+    pageSize = 50,
+    maxPages = 20,
+    timeoutMs = 15000
+  } = options;
+
+  if (!apiName || !apiPassword) throw new Error("CARDCOM_API_CREDENTIALS_REQUIRED");
+  if (!from || !to) throw new Error("CARDCOM_DATE_RANGE_REQUIRED");
+
+  const all = [];
+  let page = 1;
+  while (page <= maxPages) {
+    const body = {
+      ApiName: apiName,
+      ApiPassword: apiPassword,
+      FromDate: formatCardcomDate(from),
+      ToDate: formatCardcomDate(to),
+      LimitForTerminal: Number(terminal),
+      Page: page,
+      PageSize: pageSize
+    };
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let data;
+    try {
+      const res = await fetchImpl(CARDCOM_LIST_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      });
+      data = await res.json().catch(() => null);
+      if (!res.ok || !data) {
+        const err = new Error(data?.Description || `Cardcom API returned ${res.status}`);
+        err.status = res.status;
+        throw err;
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+    if (data.ResponseCode !== undefined && data.ResponseCode !== null && data.ResponseCode !== 0 && data.ResponseCode !== "0") {
+      throw new Error(`Cardcom ListTransactions failed: ${data.Description || "ResponseCode " + data.ResponseCode}`);
+    }
+    const list = data.Tranzactions || data.Transactions || data.Deals || (Array.isArray(data) ? data : []);
+    if (!Array.isArray(list) || list.length === 0) break;
+    for (const raw of list) {
+      const d = normalizeCardcomDeal(raw);
+      if (d.dealId && d.isIls && (d.isRefund || d.isCancel)) all.push(d);
+    }
+    if (list.length < pageSize) break;
+    page += 1;
+  }
+  return all;
+}
+
+/** Pairing keys for a deal (id, original id, rrn, approval). */
+export function cardcomDealPairingKeys(deal) {
+  const keys = new Set();
+  for (const k of [deal?.dealId, deal?.deal_id, deal?.originalDealId, deal?.original_deal_id, deal?.rrn, deal?.approval]) {
+    const v = String(k || "").trim();
+    if (v) keys.add(v);
+  }
+  return keys;
+}
+
 export function rankCandidateBookings(deal, bookings = [], todayStr = new Date().toISOString().slice(0, 10)) {
   return suggestBookingsForDeal(deal, bookings, { dealDate: todayStr, limit: 10 });
 }

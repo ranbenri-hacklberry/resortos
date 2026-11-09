@@ -65,6 +65,38 @@ async function allowStaffOrPrivate(req, res, next) {
             return next();
         }
     } catch {}
+
+    // Dashboard / Pages ops bridge: mailbox secret, desk pin, or signed dashboard session.
+    const authHeader = String(req.headers.authorization || '');
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    const mailboxHeader = String(req.headers['x-hotelos-mailbox'] || '').trim();
+    const bridgeHeader = String(req.headers['x-hotelos-bridge-secret'] || '').trim();
+    const mailboxSecret = String(process.env.CHECKOUT_MAILBOX_SECRET || '').trim();
+    const bridgeSecret = String(process.env.HOTELOS_API_SECRET || '').trim();
+    if ((mailboxSecret && (mailboxHeader === mailboxSecret || token === mailboxSecret))
+      || (bridgeSecret && bridgeHeader === bridgeSecret)) {
+      req.staffUser = { username: 'dashboard', role: 'MANAGER', name: 'דשבורד' };
+      return next();
+    }
+    if (token && token.includes('.') && mailboxSecret) {
+      try {
+        const crypto = await import('node:crypto');
+        const [encoded, sig] = token.split('.');
+        const expected = crypto.createHmac('sha256', mailboxSecret).update(encoded).digest('hex');
+        if (sig === expected) {
+          const payload = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'));
+          if (payload?.exp && Number(payload.exp) > Date.now()) {
+            req.staffUser = {
+              username: payload.username || 'dashboard',
+              role: payload.role || 'MANAGER',
+              name: payload.display_name || payload.username || 'דשבורד'
+            };
+            return next();
+          }
+        }
+      } catch {}
+    }
+
     const hostOrOrigin = String(req.headers.origin || req.headers.host || '');
     const cleanHost = hostOrOrigin.replace(/^https?:\/\//, '').split(':')[0];
     if (isPrivateOrigin(cleanHost ? `http://${cleanHost}` : '')) {
@@ -794,6 +826,61 @@ app.post('/api/ops/cardcom-terminal/ignore', requireStaff, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+app.post('/api/ops/cardcom-terminal/send-invoice-whatsapp', allowStaffOrPrivate, async (req, res) => {
+  try {
+    const bookingId = String(req.body?.booking_id || '').trim();
+    const dealId = String(req.body?.deal_id || '').trim();
+    let invoiceUrl = String(req.body?.invoice_url || req.body?.document_url || '').trim();
+    let invoiceNumber = String(req.body?.invoice_number || req.body?.document_number || '').trim();
+    if (!bookingId) return res.status(400).json({ error: 'MISSING_BOOKING_ID', message: 'Missing booking_id' });
+
+    const { studioRest } = await import('./guestComms.js');
+    const rows = await studioRest(
+      `hotelos_bookings?id=eq.${encodeURIComponent(bookingId)}&select=id,guest_name,guest_phone,unit_id,unit_name&limit=1`
+    );
+    const booking = Array.isArray(rows) ? rows[0] : null;
+    if (!booking) return res.status(404).json({ error: 'BOOKING_NOT_FOUND', message: 'Booking not found' });
+    const phone = String(booking.guest_phone || req.body?.phone || '').trim();
+    if (!phone) return res.status(400).json({ error: 'MISSING_GUEST_PHONE', message: 'אין טלפון אורח בהזמנה' });
+
+    if (!invoiceUrl && dealId) {
+      try {
+        const mrows = await studioRest(
+          `cardcom_pending_matches?deal_id=eq.${encodeURIComponent(dealId)}&select=invoice_url,document_url,invoice_number,document_number&limit=1`
+        );
+        const m = Array.isArray(mrows) ? mrows[0] : null;
+        if (m) {
+          invoiceUrl = String(m.invoice_url || m.document_url || '').trim();
+          if (!invoiceNumber) invoiceNumber = String(m.invoice_number || m.document_number || '').trim();
+        }
+      } catch (_) {}
+    }
+    if (!invoiceUrl) return res.status(400).json({ error: 'MISSING_INVOICE_URL', message: 'אין קישור חשבונית לשליחה' });
+
+    const { formatGuestInvoiceDeliveryMessage } = await import('./lib/cardcomTerminalService.js');
+    const message = formatGuestInvoiceDeliveryMessage(
+      invoiceUrl,
+      invoiceNumber,
+      booking.unit_name || booking.unit_id || ''
+    );
+
+    // Reuse Chloe WhatsApp path (no auto-send — this handler only runs on explicit click).
+    req.body = {
+      booking_id: bookingId,
+      phone,
+      channel: 'whatsapp',
+      message,
+      kind: 'cardcom_invoice_link',
+      deal_id: dealId || undefined
+    };
+    const { handleSendGuestComm } = await import('./guestComms.js');
+    return handleSendGuestComm(req, res);
+  } catch (err) {
+    return res.status(500).json({ error: 'WHATSAPP_SEND_FAILED', message: err?.message || 'send failed' });
+  }
+});
+
 
 app.get('/api/internal/staff', async (req, res) => {
   const ip = req.ip || req.socket?.remoteAddress || '';

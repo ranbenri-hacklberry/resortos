@@ -3,13 +3,13 @@
  * Server-side suggestion generator for unassigned Cardcom terminal deals.
  *
  * Rule (server-side, in the suggestions endpoint):
- * - A deal at date D (Asia/Jerusalem) may be suggested only for bookings where:
- *   check_in <= D+1 day AND check_out >= D-1 day (stayed in or around the charge date, with one day of slack on each side).
- *   Example: stay 8->9, charge on 8 or 9 = shown.
+ * - A deal at date D (Asia/Jerusalem) may be suggested only for bookings where the guest
+ *   was physically on site that day: check_in <= D <= check_out.
+ *   Example: stay 8->9, charge on 8 or 9 = shown; charge on 7 or with check_in on D+1 = hidden.
  * - Older debts (checked out up to 14 days BEFORE D, still unpaid/partial) are NOT mixed into the default list:
  *   they are returned only with options.includeOlderDebts (separate `older_debts` field of the endpoint) or via manual search.
  *   (A November deal must not be offered October stays as default suggestions.)
- * - Never bookings with check_in > D+1. No future bookings.
+ * - Never bookings with check_in > D. No future bookings.
  * - Only bookings with balance > 0 (UNPAID/PARTIAL per the money record). Exclude cancelled ones.
  * - Rank: exact amount match to balance first, then name similarity, then date proximity. Max 10 candidates.
  * - Manual search (by name/phone) stays available as an explicit fallback, but the default list is limited by the rule above.
@@ -150,16 +150,17 @@ export function computeDateDistance(cin, cout, dealDate) {
 
 /**
  * Stay window for deal date D (default suggestions):
- * - check_in <= D + 1 (never future bookings > D+1)
- * - check_out >= D - 1 (stayed in or around D, one day slack)
+ * Hard rule (Ran): guest must be physically on site on charge date D (Asia/Jerusalem):
+ *   check_in <= D <= check_out
+ * No future bookings (check_in > D). No day-of-slack.
  */
 export function isBookingInDateWindow(cin, cout, dealDate) {
   if (!cin || !cout || !dealDate) return false;
   const dCin = cin.slice(0, 10);
   const dCout = cout.slice(0, 10);
   const dTarget = dealDate.slice(0, 10);
-  if (dCin > shiftDays(dTarget, 1)) return false;
-  if (dCout < shiftDays(dTarget, -1)) return false;
+  if (dCin > dTarget) return false;
+  if (dCout < dTarget) return false;
   return true;
 }
 

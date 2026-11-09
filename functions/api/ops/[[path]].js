@@ -1,7 +1,8 @@
 import { json, errorJson, fetchPostgrest, getPostgrestConfig } from '../_db.js';
 import { loadCalendarReplica } from '../../lib/calendarReplica.js';
 import { suggestBookingsForDeal, getIsraelDateString } from '../../lib/cardcomSuggestions.js';
-import { filterUnassignedPendingMatches, linkedDealIdsFromSeen } from '../../lib/cardcomPendingFilter.js';
+import { filterUnassignedPendingMatches, linkedDealIdsFromSeen, cancelledKeysFromSeen } from '../../lib/cardcomPendingFilter.js';
+import { normalizeCardcomDealTime } from '../../lib/cardcomDealTime.js';
 
 const DEMO_TENANT_ID = '22222222-2222-2222-2222-222222222222';
 
@@ -556,15 +557,19 @@ export async function onRequest(context) {
         let pending = [];
         let recentlyApproved = [];
         let linkedDealIds = new Set();
+        let seenRows = [];
         try {
           const [pendingRes, approvedRes, seenRes] = await Promise.all([
             fetchPostgrest('/cardcom_pending_matches?status=eq.pending&order=created_at.desc', { method: 'GET' }, env, { requireServiceRole: true }),
             fetchPostgrest('/cardcom_pending_matches?status=in.(approved,manual_linked)&order=approved_at.desc&limit=15', { method: 'GET' }, env, { requireServiceRole: true }),
-            fetchPostgrest('/cardcom_seen_deals?or=(status.eq.linked,linked_booking_id.not.is.null)&select=deal_id,status,linked_booking_id', { method: 'GET' }, env, { requireServiceRole: true })
+            fetchPostgrest('/cardcom_seen_deals?or=(status.eq.linked,status.eq.refunded,status.eq.cancelled,status.eq.canceled,linked_booking_id.not.is.null)&select=deal_id,status,linked_booking_id,approval_number,entry_mode', { method: 'GET' }, env, { requireServiceRole: true })
           ]);
           if (seenRes && seenRes.ok) {
             const rows = await seenRes.json();
-            if (Array.isArray(rows)) linkedDealIds = linkedDealIdsFromSeen(rows);
+            if (Array.isArray(rows)) {
+              seenRows = rows;
+              linkedDealIds = linkedDealIdsFromSeen(rows);
+            }
           }
           if (pendingRes && pendingRes.ok) {
             const rows = await pendingRes.json();
@@ -592,8 +597,18 @@ export async function onRequest(context) {
           } catch (_) {}
         }
 
-        // Unassigned = no booking AND no Cardcom document; already linked/invoiced deals never show.
-        pending = filterUnassignedPendingMatches(pending, { linkedDealIds });
+        // Unassigned = no booking AND no Cardcom document; already linked/invoiced / cancel-paired deals never show.
+        pending = filterUnassignedPendingMatches(pending, {
+          linkedDealIds,
+          cancelledKeys: cancelledKeysFromSeen(seenRows)
+        });
+        // Correct legacy deal_time (+00:00 Israel wall) on the way out — code path only, no ad-hoc DB write.
+        pending = pending.map((row) => (
+          row?.deal_time ? { ...row, deal_time: normalizeCardcomDealTime(row.deal_time) } : row
+        ));
+        recentlyApproved = recentlyApproved.map((row) => (
+          row?.deal_time ? { ...row, deal_time: normalizeCardcomDealTime(row.deal_time) } : row
+        ));
         return json({ ok: true, pending, recently_approved: recentlyApproved });
       } catch (_) {}
       return json({ ok: true, pending: [], recently_approved: [] });
@@ -1262,6 +1277,110 @@ export async function onRequest(context) {
       };
 
       return json({ ok: true, booking_id, invoice: invoiceInfo, payment: finalPayment });
+    }
+
+
+    // POST /api/ops/cardcom-terminal/send-invoice-whatsapp
+    // Manual only (Ran click): send invoice link to booking guest phone via Chloe WhatsApp path (Studio agent).
+    if (sub === 'send-invoice-whatsapp' && request.method === 'POST') {
+      let body = {};
+      try { body = await request.json(); } catch {}
+      const bookingId = String(body.booking_id || '').trim();
+      const dealId = String(body.deal_id || '').trim();
+      let invoiceUrl = String(body.invoice_url || body.document_url || '').trim();
+      let invoiceNumber = String(body.invoice_number || body.document_number || '').trim();
+      if (!bookingId) return errorJson('Missing booking_id', 400, 'MISSING_BOOKING_ID');
+
+      let booking = null;
+      try {
+        const bRes = await fetchPostgrest(
+          `/hotelos_bookings?id=eq.${encodeURIComponent(bookingId)}&select=id,guest_name,guest_phone,unit_id,unit_name&limit=1`,
+          { method: 'GET' },
+          env,
+          { requireServiceRole: true }
+        );
+        if (bRes && bRes.ok) {
+          const rows = await bRes.json();
+          if (Array.isArray(rows) && rows[0]) booking = rows[0];
+        }
+      } catch (_) {}
+      if (!booking) return errorJson('Booking not found', 404, 'BOOKING_NOT_FOUND');
+      const phone = String(booking.guest_phone || body.phone || '').trim();
+      if (!phone) return errorJson('אין טלפון אורח בהזמנה', 400, 'MISSING_GUEST_PHONE');
+
+      if (!invoiceUrl && dealId) {
+        try {
+          const mRes = await fetchPostgrest(
+            `/cardcom_pending_matches?deal_id=eq.${encodeURIComponent(dealId)}&select=invoice_url,document_url,invoice_number,document_number&limit=1`,
+            { method: 'GET' },
+            env,
+            { requireServiceRole: true }
+          );
+          if (mRes && mRes.ok) {
+            const rows = await mRes.json();
+            if (Array.isArray(rows) && rows[0]) {
+              invoiceUrl = String(rows[0].invoice_url || rows[0].document_url || '').trim();
+              if (!invoiceNumber) invoiceNumber = String(rows[0].invoice_number || rows[0].document_number || '').trim();
+            }
+          }
+        } catch (_) {}
+      }
+      if (!invoiceUrl) return errorJson('אין קישור חשבונית לשליחה', 400, 'MISSING_INVOICE_URL');
+
+      const unitName = booking.unit_name || booking.unit_id || '';
+      const docRef = invoiceNumber ? ` מס׳ ${invoiceNumber}` : '';
+      const descRef = unitName ? ` עבור השהייה שלך ב-${unitName}` : ' עבור השהייה שלך';
+      const message = `בשמחה! הנה קישור לחשבונית המס קבלה${docRef}${descRef}:\n${invoiceUrl}\nנשמח לעמוד לרשותך לכל דבר נוסף ✨`;
+
+      const opsBase = String(env.HOTELOS_OPS_URL || env.STUDIO_PAY_URL || 'https://ops.resortos.app').replace(/\/$/, '');
+      const mailbox = String(env.CHECKOUT_MAILBOX_SECRET || '').trim();
+      const bridge = String(env.HOTELOS_API_SECRET || '').trim();
+      const headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
+      if (mailbox) headers.Authorization = `Bearer ${mailbox}`;
+      if (mailbox) headers['x-hotelos-mailbox'] = mailbox;
+      if (bridge) headers['x-hotelos-bridge-secret'] = bridge;
+
+      let sendRes;
+      try {
+        sendRes = await fetch(`${opsBase}/api/guest-comms/send`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            booking_id: bookingId,
+            phone,
+            channel: 'whatsapp',
+            message,
+            kind: 'cardcom_invoice_link',
+            deal_id: dealId || undefined
+          }),
+          signal: AbortSignal.timeout(15000)
+        });
+      } catch (err) {
+        return errorJson(err?.message || 'שליחת וואטסאפ נכשלה', 502, 'WHATSAPP_SEND_FAILED');
+      }
+      const sendText = await sendRes.text();
+      let sendJson = null;
+      try { sendJson = JSON.parse(sendText); } catch (_) {}
+      if (!sendRes.ok) {
+        return errorJson(
+          sendJson?.error || sendJson?.message || `שליחת וואטסאפ נכשלה (${sendRes.status})`,
+          sendRes.status >= 400 && sendRes.status < 600 ? sendRes.status : 502,
+          'WHATSAPP_SEND_FAILED'
+        );
+      }
+      const rowStatus = sendJson?.row?.status;
+      if (rowStatus && rowStatus !== 'sent') {
+        return errorJson('שליחת וואטסאפ נכשלה בצד הסוכן', 502, 'WHATSAPP_SEND_FAILED');
+      }
+      return json({
+        ok: true,
+        sent: true,
+        booking_id: bookingId,
+        phone,
+        invoice_url: invoiceUrl,
+        invoice_number: invoiceNumber || null,
+        channel: 'whatsapp'
+      });
     }
 
     // POST /api/ops/cardcom-terminal/audit-escape

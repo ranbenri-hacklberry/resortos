@@ -18,6 +18,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   fetchCardcomTransactions,
+  fetchCardcomCancellations,
+  cardcomDealPairingKeys,
   rankCandidateBookings,
   isTestTransaction,
   DEFAULT_CARDCOM_TERMINAL
@@ -151,6 +153,62 @@ export async function pollCardcomTerminal({
   const newMatches = [];
   const dryRunResults = [];
 
+  // Pair Cardcom cancellations/refunds with their original charges (same deal id / RRN / approval).
+  // Both sides drop from the unassigned list via seen status + closing pending.
+  let cancellations = [];
+  try {
+    cancellations = await fetchCardcomCancellations({
+      from: fromDate,
+      to: toDate,
+      terminal,
+      apiName,
+      apiPassword,
+      fetchImpl
+    });
+  } catch (cancelErr) {
+    console.warn('[syncCardcomTerminal] cancellations fetch failed:', cancelErr?.message || cancelErr);
+  }
+  if (!isDryRun && Array.isArray(cancellations) && cancellations.length) {
+    for (const cancel of cancellations) {
+      const keys = cardcomDealPairingKeys(cancel);
+      store.addSeenDeal({
+        deal_id: cancel.dealId,
+        terminal_number: cancel.terminal,
+        amount: cancel.amount,
+        approval_number: cancel.approval,
+        last4: cancel.last4,
+        card_owner_name: cancel.cardOwnerName,
+        deal_time: cancel.dealTime,
+        entry_mode: [
+          cancel.originalDealId ? `orig:${cancel.originalDealId}` : '',
+          cancel.rrn ? `rrn:${cancel.rrn}` : ''
+        ].filter(Boolean).join('|') || cancel.entryMode || '',
+        status: 'refunded'
+      });
+      for (const [pendingId, pending] of store.pendingMatches.entries()) {
+        if (pending?.status !== 'pending') continue;
+        const pendingKeys = cardcomDealPairingKeys({
+          dealId: pending.deal_id,
+          approval: pending.approval,
+          rrn: pending.rrn,
+          originalDealId: pending.original_deal_id
+        });
+        let hit = false;
+        for (const k of keys) {
+          if (pendingKeys.has(k)) { hit = true; break; }
+        }
+        if (cancel.originalDealId && String(cancel.originalDealId) === String(pending.deal_id)) hit = true;
+        if (hit) {
+          store.closePendingMatch(pendingId, {
+            status: 'ignored',
+            ignore_reason: 'paired_cardcom_cancellation',
+            paired_cancel_deal_id: cancel.dealId
+          });
+        }
+      }
+    }
+  }
+
   for (const deal of deals) {
     const dealId = String(deal.dealId);
 
@@ -212,6 +270,7 @@ export async function pollCardcomTerminal({
       amount: deal.amount,
       last4: deal.last4,
       approval: deal.approval,
+      rrn: deal.rrn || null,
       document_number: deal.documentNumber || null,
       document_url: deal.documentUrl || null,
       deal_time: deal.dealTime,

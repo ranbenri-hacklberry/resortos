@@ -903,7 +903,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   };
 
   const handleLinkCardcomDeal = async (dealId, bookingId) => {
-    if (!dealId || !bookingId) return;
+    if (!dealId || !bookingId) return null;
     setLinkingDealId(dealId);
     try {
       const token = getStoredToken();
@@ -915,19 +915,53 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         body: JSON.stringify({ deal_id: dealId, booking_id: bookingId, operator: operatorName || 'דלפק' })
       });
       if (res.ok) {
+        const data = await res.json().catch(() => ({}));
         saveAcknowledgedDealId(dealId);
         await refreshPendingCharges();
         if (refreshBoard) refreshBoard();
-        alert('הסליקה שויכה להזמנה בהצלחה והופקה חשבונית מס קבלה!');
-      } else {
-        const errData = await res.json().catch(() => ({}));
-        alert(`שגיאה בשיוך סליקה: ${errData.error || res.statusText}`);
+        // Return server result so the modal can offer WhatsApp send (no auto-send).
+        return {
+          ok: true,
+          deal_id: dealId,
+          booking_id: bookingId,
+          invoice: data?.invoice || null,
+          payment: data?.payment || null
+        };
       }
+      const errData = await res.json().catch(() => ({}));
+      const msg = errData.message || errData.error || res.statusText;
+      alert(`שגיאה בשיוך סליקה: ${msg}`);
+      return { ok: false, error: msg };
     } catch (err) {
       alert(`שגיאה בשיוך סליקה: ${err.message}`);
+      return { ok: false, error: err.message };
     } finally {
       setLinkingDealId(null);
     }
+  };
+
+  const handleSendInvoiceWhatsApp = async ({ dealId, bookingId, invoiceUrl, invoiceNumber }) => {
+    const token = getStoredToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch('/api/ops/cardcom-terminal/send-invoice-whatsapp', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        deal_id: dealId,
+        booking_id: bookingId,
+        invoice_url: invoiceUrl,
+        invoice_number: invoiceNumber
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error(data.message || data.error || `שגיאת שרת (${res.status})`);
+      err.status = res.status;
+      err.body = data;
+      throw err;
+    }
+    return data;
   };
 
   const handleIgnoreCardcomDeal = async (dealId, reason = 'test') => {
@@ -3069,6 +3103,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         bookings={bookings}
         units={units}
         onLinkDeal={handleLinkCardcomDeal}
+        onSendInvoiceWhatsApp={handleSendInvoiceWhatsApp}
         onIgnoreDeal={handleIgnoreCardcomDeal}
         linkingDealId={linkingDealId}
         loadError={cardcomFetchError}
