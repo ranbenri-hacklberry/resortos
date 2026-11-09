@@ -57,19 +57,22 @@ const NOTE_RE_A = new RegExp(NOTE_DATE + '(?:בוצע[הו]?\\s+)?' + NOTE_VERB 
 const NOTE_RE_B = new RegExp(NOTE_DATE + '(?:(?:בוצע[הו]?|נעשתה|התקבלה)\\s+)?(?<!\\d{3,}\\s*)(העברה(?:\\s+בנקאית)?)(?:\\s+(?:בוצעה|נוספת|התקבלה))?(?:\\s+של)?[\\s-]+' + NOTE_AMT, 'gi');
 // C (amount first): AMOUNT [₪] [תוספת] [מקדמה] [ב]METH, not followed by לברר/לבדוק
 const NOTE_RE_C = new RegExp('(?<!\\d[,.]?)' + NOTE_AMT + '\\s*-?\\s*(?:תוספת\\s+)?(?:מקדמה\\s+)?(?:ש"ח\\s+)?ב?' + NOTE_METH + '(?!\\s*(?:לברר|לבדוק))', 'gi');
+// D: [date] METH AMOUNT — informal notes without שולם, e.g. "8.11 מזומן 560 אדם"
+const NOTE_RE_D = new RegExp(NOTE_DATE + 'ב?\s*' + NOTE_METH + '[\\s-]+' + NOTE_AMT, 'gi');
 // Not-a-payment guard: text just before the match says it is missing/pending/claimed.
 const NOTE_NOT_PAID = /(?:^|\s)(?:לא(?=\s)|טרם|חסר|להשלים|משלימה|יתרה של|נשאר|טוענת ש|אמור ל\S*|ממתין ל|מחכה ל|צריך ל\S*)\s*(?:\S+\s+){0,3}$/;
 
 export function parseKinorotNotePayments(text, { todayIso } = {}) {
   const src = String(text || '').replace(/[\u200e\u200f\u00a0]/g, ' ').replace(/\s+/g, ' ');
   const hits = new Map();
-  for (const [kind, re] of [['A', NOTE_RE_A], ['B', NOTE_RE_B], ['C', NOTE_RE_C]]) {
+  for (const [kind, re] of [['A', NOTE_RE_A], ['B', NOTE_RE_B], ['C', NOTE_RE_C], ['D', NOTE_RE_D]]) {
     re.lastIndex = 0;
     let match;
     while ((match = re.exec(src))) {
       let day, month, year, methodRaw, amountRaw;
       if (kind === 'A') [, day, month, year, methodRaw, amountRaw] = match, methodRaw = methodRaw || match[6];
       else if (kind === 'B') [, day, month, year, methodRaw, amountRaw] = match;
+      else if (kind === 'D') [, day, month, year, methodRaw, amountRaw] = match;
       else [, amountRaw, methodRaw] = match;
       const amount = Number(String(amountRaw || '0').replace(/[,.]/g, ''));
       if (!Number.isFinite(amount) || amount < 50 || amount > 80000) continue;
@@ -101,7 +104,7 @@ export function paymentModeFromKinorotMethod(method) {
   return null;
 }
 
-export function moneyFromKinorotPayment(payment, resid) {
+export function moneyFromKinorotPayment(payment, resid, { existingPayments = [] } = {}) {
   const pay = payment && typeof payment === 'object' ? payment : {};
   const totalIls = Number(pay.total || 0);
   const notePayments = Array.isArray(pay.notePayments) ? pay.notePayments : [];
@@ -110,7 +113,8 @@ export function moneyFromKinorotPayment(payment, resid) {
   const total_price_agorot = Math.round(totalIls * 100);
   const clearing = clearingPaymentsFromKinorotNotes(notePayments, {
     resid: resid || '',
-    last4: pay.last4 || ''
+    last4: pay.last4 || '',
+    existingPayments
   });
   if (pay.voucherRedeemed) {
     return {
@@ -145,8 +149,24 @@ export function moneyFromKinorotPayment(payment, resid) {
   };
 }
 
-export function clearingPaymentsFromKinorotNotes(events, { resid = '', last4 = '' } = {}) {
-  return receivedKinorotNotePayments(events).map((event) => {
+/** Keep a manually-corrected collector (e.g. ברק) when the same Kinorot txn is re-synced. */
+export function preserveKinorotCollector(existingPayments, incoming) {
+  const prev = (Array.isArray(existingPayments) ? existingPayments : [])
+    .map((row) => ({
+      txn: String(row?.txn || ''),
+      collector: String(row?.collector || '').trim()
+    }))
+    .filter((row) => row.txn && row.collector && row.collector !== 'כינורות');
+  const byTxn = new Map(prev.map((row) => [row.txn, row.collector]));
+  return (Array.isArray(incoming) ? incoming : []).map((row) => {
+    const kept = byTxn.get(String(row?.txn || ''));
+    if (!kept) return row;
+    return { ...row, collector: kept };
+  });
+}
+
+export function clearingPaymentsFromKinorotNotes(events, { resid = '', last4 = '', existingPayments = [] } = {}) {
+  const built = receivedKinorotNotePayments(events).map((event) => {
     const method = event.method || 'card';
     const accountKey = method === 'cash' ? 'CASH' : (method === 'bank' || method === 'app' || method === 'check') ? 'BANK' : 'MAX';
     return {
@@ -161,4 +181,5 @@ export function clearingPaymentsFromKinorotNotes(events, { resid = '', last4 = '
       txn: `kinorot_note_${resid || 'res'}_${event.date || 'na'}_${Math.round(event.amount * 100)}_${method}`
     };
   });
+  return preserveKinorotCollector(existingPayments, built);
 }

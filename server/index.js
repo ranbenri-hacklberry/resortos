@@ -263,6 +263,58 @@ app.get('/api/priority/grounds', requireManagerStaff, async (req, res) => {
   }
 });
 
+
+app.post('/api/priority/cash-collect', requireManagerStaff, async (req, res) => {
+  try {
+    const bookingId = String(req.body?.booking_id || '').trim();
+    if (!bookingId) return res.status(400).json({ error: 'BOOKING_REQUIRED' });
+    // Never trust client collector / reported_by — OTP session only.
+    const collectedAgorot = Number(req.body?.collected_agorot);
+    const totalAgorot = req.body?.total_agorot == null ? undefined : Number(req.body.total_agorot);
+    const { createClient } = await import('@supabase/supabase-js');
+    const { tenantOf } = await import('./opsAuthz.js');
+    const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
+    if (!url || !key) return res.status(500).json({ error: 'SUPABASE_MISSING' });
+    const tenant = tenantOf(req.staffUser);
+    if (!tenant) return res.status(403).json({ error: 'TENANT_REQUIRED' });
+    const sb = createClient(url, key, { auth: { persistSession: false } });
+    const { data: booking, error } = await sb
+      .from('hotelos_bookings')
+      .select('*')
+      .eq('id', bookingId)
+      .eq('tenant_id', tenant)
+      .maybeSingle();
+    if (error) return res.status(500).json({ error: error.message || 'LOAD_FAILED' });
+    if (!booking) return res.status(404).json({ error: 'BOOKING_NOT_FOUND' });
+    const { buildPriorityCashPatch } = await import('./priorityCashCollect.js');
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+    const built = buildPriorityCashPatch(booking, {
+      today,
+      staffUser: req.staffUser,
+      totalAgorot: Number.isFinite(totalAgorot) ? totalAgorot : undefined,
+      collectedAgorot: Number.isFinite(collectedAgorot) ? collectedAgorot : undefined
+    });
+    const { data: saved, error: upErr } = await sb
+      .from('hotelos_bookings')
+      .update(built.patch)
+      .eq('id', bookingId)
+      .eq('tenant_id', tenant)
+      .select('*')
+      .maybeSingle();
+    if (upErr) return res.status(500).json({ error: upErr.message || 'SAVE_FAILED' });
+    return res.json({
+      ok: true,
+      collector: built.collector,
+      collected_agorot: built.collectedAgorot,
+      booking: saved || { ...booking, ...built.patch }
+    });
+  } catch (err) {
+    const status = Number(err?.status) || 500;
+    return res.status(status).json({ error: err?.message || 'CASH_COLLECT_FAILED' });
+  }
+});
+
 app.post('/api/priority/grounds', requireManagerStaff, async (req, res) => {
   try {
     const { setGroundStatus } = await import('./groundsStatus.js');

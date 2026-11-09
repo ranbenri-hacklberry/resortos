@@ -41,7 +41,6 @@ import {
   PAYMENT_STATUSES,
   applyPaymentDraft,
   cashCollectedAgorot,
-  collectPriorityCash,
   formatPriorityShekels,
   parsePriorityShekels,
   paymentBreakdown,
@@ -54,7 +53,7 @@ import {
   savePriorityPaymentDrafts
 } from '../../lib/priorityPayment';
 import { addCardSplit } from '../../lib/cardSplit';
-import { cashCollectorChoices, DEFAULT_CASH_COLLECTOR } from '../../lib/cashCollectors';
+import { dirtyFieldLabel, shouldBlockLeave, unsavedLeaveCopy } from '../../lib/priorityUnsavedGuard.js';
 import { pushBookingToCloud, pushUnitToCloud, subscribeToOpsEdgeEvents, syncCloudBookingsToDexie, syncUnitOpsToDexie } from '../../lib/cloudDb';
 import { getStoredToken, listAssignableStaff, staffDisplayName } from '../../lib/staffAuth';
 import { readApiJson } from '../../lib/readApiJson';
@@ -712,8 +711,8 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [proofView, setProofView] = useState('');
-  const [collectors, setCollectors] = useState([DEFAULT_CASH_COLLECTOR]);
-  const [collectorName, setCollectorName] = useState(DEFAULT_CASH_COLLECTOR);
+  const [cashSheet, setCashSheet] = useState(null);
+  const [leaveGuard, setLeaveGuard] = useState(null);
   const [cardSplit, setCardSplit] = useState({ amount: '', last4: '', approval: '' });
   const [taskTitle, setTaskTitle] = useState('');
   const [noteText, setNoteText] = useState('');
@@ -1236,8 +1235,10 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
     const index = visible.findIndex((row) => row.id === selected?.id);
     const start = index < 0 ? 0 : index;
     const next = visible[Math.max(0, Math.min(visible.length - 1, start + delta))];
-    setSelectedId(next.id);
-    setMessage(`${next.name} · ${start + delta + 1} מתוך ${visible.length}`);
+    requestLeave('switch', () => {
+      setSelectedId(next.id);
+      setMessage(`${next.name} · ${start + delta + 1} מתוך ${visible.length}`);
+    });
   };
   moveRef.current = move;
   editorRef.current = editor;
@@ -1391,47 +1392,55 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
     });
   };
 
-  const collectCash = async (row, bookingId = row?.bookingId) => {
-    if (!canEdit || saving) return;
+  const collectCash = async (row, bookingId = row?.bookingId, amountOverride = null) => {
+    if (!canEdit || saving) return false;
     if (!bookingId) {
       setMessage('אין אורח לחיוב');
-      return;
+      return false;
     }
     const booking = bookings.find((item) => item.id === bookingId);
     if (!booking) {
       setMessage('אין אורח לחיוב');
-      return;
+      return false;
     }
     const stored = drafts[row.id] || {};
     const draft = !stored.paymentBookingId || stored.paymentBookingId === bookingId ? stored : {};
     const totalAgorot = draft.amountText != null
       ? parsePriorityShekels(draft.amountText)
       : Number(booking.total_price_agorot) || 0;
-    const collectedRaw = draft.collectedText != null ? String(draft.collectedText).trim() : '';
+    const collectedRaw = amountOverride != null
+      ? String(amountOverride).trim()
+      : (draft.collectedText != null ? String(draft.collectedText).trim() : '');
     const collectedAgorot = collectedRaw ? parsePriorityShekels(collectedRaw) : null;
     if (totalAgorot == null || (collectedRaw && collectedAgorot == null)) {
       setSaveError('הסכום לא תקין');
       setMessage('הסכום לא תקין');
-      return;
+      return false;
     }
     setSaving(true);
     setSaveError('');
     try {
-      const { booking: next, collectedAgorot: recorded } = collectPriorityCash(booking, {
-        today,
-        collector: collectorName,
-        totalAgorot,
-        collectedAgorot: collectedAgorot == null ? undefined : collectedAgorot
+      // Server-authoritative: collector comes from the OTP session only.
+      const data = await staffJson('/api/priority/cash-collect', {
+        booking_id: bookingId,
+        total_agorot: totalAgorot,
+        collected_agorot: collectedAgorot == null ? undefined : collectedAgorot
       });
+      const next = data?.booking;
+      if (!next?.id) throw new Error(data?.error || 'הגבייה לא נשמרה');
       await db.bookings.put(next);
-      await pushBookingToCloud(next, { allowOverlap: true });
       clearPaymentDraft(row.id);
+      const recorded = Number(data.collected_agorot) || 0;
+      const who = data.collector || operator;
       const money = recorded > 0 ? formatPriorityShekels(recorded) : formatPriorityShekels(totalAgorot);
-      setMessage(recorded > 0 ? `${row.name}: נגבה מזומן ${money} · ${collectorName}` : `${row.name}: המזומן כבר רשום`);
+      setMessage(recorded > 0 ? `${row.name}: נגבה מזומן ${money} · ${who}` : `${row.name}: המזומן כבר רשום`);
+      setCashSheet(null);
+      return true;
     } catch (err) {
-      const text = `הגבייה נכשלה ולא נרשמה: ${err?.message || 'שגיאה'}`;
-      setSaveError(text);
-      setMessage(text);
+      const fail = `הגבייה נכשלה ולא נרשמה: ${err?.message || 'שגיאה'}`;
+      setSaveError(fail);
+      setMessage(fail);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -1480,11 +1489,13 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   };
 
   const openGuest = (unitId, booking) => {
-    setSelectedId(unitId);
-    setPinnedBookingId(booking?.id || '');
-    setTaskTitle('');
-    setNoteText('');
-    setMode('form');
+    requestLeave('switch', () => {
+      setSelectedId(unitId);
+      setPinnedBookingId(booking?.id || '');
+      setTaskTitle('');
+      setNoteText('');
+      setMode('form');
+    });
   };
 
   const addDeskTask = async (kind) => {
@@ -1644,7 +1655,7 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
   }, [card?.bookingId]);
 
   const saveChanges = async () => {
-    if (!canEdit || saving || !dirtyCount) return;
+    if (!canEdit || saving || !dirtyCount) return false;
     setSaving(true);
     setSaveError('');
     try {
@@ -1758,14 +1769,18 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         setSaveError(text);
         setCalendarNote(text);
         setMessage(text);
-      } else if (!held.length) {
+        return false;
+      }
+      if (!held.length) {
         setMessage('השינויים נשמרו');
       }
+      return true;
     } catch (err) {
       const text = `השמירה נכשלה ולא נרשמה: ${err?.message || 'שגיאה'}`;
       setSaveError(text);
       setCalendarNote(text);
       setMessage(text);
+      return false;
     } finally {
       setSaving(false);
       setEditor(null);
@@ -1778,6 +1793,21 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
     setGroundDrafts({});
     setMessage('כל השינויים שטרם נשמרו בוטלו');
     setShowSaveConfirmModal(false);
+  };
+
+  const requestLeave = (action, proceed) => {
+    if (!shouldBlockLeave(dirtyCount)) {
+      proceed();
+      return;
+    }
+    setLeaveGuard({ action, proceed });
+  };
+
+  const selectUnitGuarded = (unitId, { openForm = false } = {}) => {
+    requestLeave('switch', () => {
+      setSelectedId(unitId);
+      if (openForm) setMode('form');
+    });
   };
 
   const handleConfirmSave = async () => {
@@ -1896,9 +1926,6 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
           .map(staffDisplayName)
           .filter(Boolean);
         setHousekeepers([...new Set(names)].sort((a, b) => a.localeCompare(b, 'he')));
-        const managers = cashCollectorChoices(people);
-        setCollectors(managers);
-        setCollectorName((current) => (managers.includes(current) ? current : managers[0]));
       })
       .catch(() => {});
     return () => { cancel = true; };
@@ -2123,7 +2150,23 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
     selectedRef.current?.scrollIntoView({ block: 'nearest' });
   }, [selectedId, mode, editor]);
 
-  usePanelHistory(phone && mode === 'form', () => setMode('grid'));
+  usePanelHistory(phone && mode === 'form', () => {
+    if (shouldBlockLeave(dirtyCount)) {
+      setLeaveGuard({ action: 'back' });
+      return;
+    }
+    setMode('grid');
+  });
+
+  useEffect(() => {
+    if (!shouldBlockLeave(dirtyCount)) return undefined;
+    const onBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [dirtyCount]);
 
   const exportExcel = () => {
     const header = COLUMNS.map(([, label]) => label);
@@ -2387,7 +2430,13 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         ) : mode === 'form' && card ? (
           <div className="priority-split-view">
             {phone ? (
-              <button type="button" className="phone-room-back" onClick={() => setMode('grid')} aria-label="חזרה">
+              <button type="button" className="phone-room-back" onClick={() => {
+                if (shouldBlockLeave(dirtyCount)) {
+                  setLeaveGuard({ action: 'back' });
+                  return;
+                }
+                setMode('grid');
+              }} aria-label="חזרה">
                 <span aria-hidden="true">›</span>
                 חזרה
               </button>
@@ -2472,8 +2521,8 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                 <div className="master-col is-finance">
                   <div className="master-col-title">פיננסים וגבייה</div>
                   <div className="finance-row">
-                    <label className="field">
-                      <span>סה״כ לתשלום</span>
+                    <label className={`field${card.payDirty && card.amountText != null ? ' is-dirty' : ''}`}>
+                      <span>{dirtyFieldLabel('סה״כ לתשלום', Boolean(card.payDirty && card.amountText != null))}</span>
                       <input
                         inputMode="decimal"
                         disabled={!canEdit || !card.bookingId}
@@ -2490,17 +2539,11 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                       />
                     ) : null}
                   </div>
-                  <label className="field">
-                    <span>מי גבה</span>
-                    <select
-                      aria-label="מי גבה"
-                      disabled={!canEdit}
-                      value={collectorName}
-                      onChange={(event) => setCollectorName(event.target.value)}
-                    >
-                      {collectors.map((name) => <option key={name} value={name}>{name}</option>)}
-                    </select>
-                  </label>
+                  <div className="field is-readonly-collector" aria-label="גובה מזומן">
+                    <span>גובה מזומן</span>
+                    <strong>{operator}</strong>
+                    <small>נרשם אוטומטית לפי המשתמש המחובר</small>
+                  </div>
                   <label className="field">
                     <span>גביית מזומן (F2)</span>
                     <span className="pay-line">
@@ -2526,15 +2569,25 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                         type="button"
                         className="cash-btn"
                         disabled={!canEdit || !card.bookingId || saving}
-                        onClick={() => collectCash(card)}
+                        onClick={() => {
+                          if (phone) {
+                            const due = Math.max(0, (Number(card.amountAgorot) || 0) - (Number(card.paidAgorot) || 0));
+                            setCashSheet({
+                              row: card,
+                              amountText: String(card.collectedText || '').trim() || (due > 0 ? formatPriorityShekels(due) : '')
+                            });
+                            return;
+                          }
+                          collectCash(card);
+                        }}
                       >
                         גבייה
                       </button>
                     </span>
                   </label>
                   <div className="finance-row is-pay">
-                    <label className="field is-status">
-                      <span>סטטוס</span>
+                    <label className={`field is-status${card.payDirty && card.payStatus ? ' is-dirty' : ''}`}>
+                      <span>{dirtyFieldLabel('סטטוס', Boolean(card.payDirty && card.payStatus))}</span>
                       <select
                         className={priorityPayTone(card.payStatus)}
                         disabled={!canEdit || !card.bookingId}
@@ -2545,8 +2598,8 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
                         {PAYMENT_STATUSES.map((choice) => <option key={choice.key} value={choice.key}>{choice.label}</option>)}
                       </select>
                     </label>
-                    <label className="field">
-                      <span>איך שולם</span>
+                    <label className={`field${card.payDirty && card.payMethod ? ' is-dirty' : ''}`}>
+                      <span>{dirtyFieldLabel('איך שולם', Boolean(card.payDirty && card.payMethod))}</span>
                       <select
                         disabled={!canEdit || !card.bookingId}
                         value={card.bookingId ? (card.payMethod || '') : ''}
@@ -2880,6 +2933,127 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
           today={today}
         />
       ) : null}
+      {cashSheet ? (
+        <div
+          className="priority-save-confirm-backdrop cash-sheet-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="priority-cash-sheet-title"
+          onClick={() => setCashSheet(null)}
+        >
+          <div className="priority-save-confirm-modal cash-sheet-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="priority-save-confirm-header">
+              <div className="priority-save-confirm-title">
+                <div>
+                  <h3 id="priority-cash-sheet-title">גביית מזומן</h3>
+                  <p>{cashSheet.row?.name || 'יחידה'} · נרשם על שם {operator}</p>
+                </div>
+              </div>
+              <button type="button" className="priority-save-confirm-close" onClick={() => setCashSheet(null)} title="סגור">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="priority-save-confirm-body">
+              <label className="field">
+                <span>סכום לגבייה</span>
+                <input
+                  inputMode="decimal"
+                  autoFocus
+                  value={cashSheet.amountText || ''}
+                  onChange={(event) => setCashSheet((current) => ({ ...current, amountText: event.target.value }))}
+                  placeholder="0 ₪"
+                />
+              </label>
+            </div>
+            <div className="priority-save-confirm-footer">
+              <button type="button" className="priority-save-confirm-btn-discard" onClick={() => setCashSheet(null)}>ביטול</button>
+              <button
+                type="button"
+                className="priority-save-confirm-btn-submit"
+                disabled={saving}
+                onClick={() => {
+                  const row = cashSheet.row;
+                  if (!row) return;
+                  collectCash(row, row.bookingId, cashSheet.amountText || '');
+                }}
+              >
+                {saving ? 'שומר…' : 'אישור גבייה'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {leaveGuard ? (
+        <div
+          className="priority-save-confirm-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="priority-leave-guard-title"
+          onClick={() => setLeaveGuard(null)}
+        >
+          <div className="priority-save-confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="priority-save-confirm-header">
+              <div className="priority-save-confirm-title">
+                <AlertTriangle size={18} color="#b45309" />
+                <div>
+                  <h3 id="priority-leave-guard-title">{unsavedLeaveCopy().title}</h3>
+                  <p>{unsavedLeaveCopy().body}</p>
+                </div>
+              </div>
+              <button type="button" className="priority-save-confirm-close" onClick={() => setLeaveGuard(null)} title="סגור">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="priority-save-confirm-footer" style={{ justifyContent: 'space-between' }}>
+              <button
+                type="button"
+                className="priority-save-confirm-btn-discard"
+                onClick={() => {
+                  const proceed = leaveGuard.proceed;
+                  const action = leaveGuard.action;
+                  discardDrafts();
+                  setLeaveGuard(null);
+                  if (typeof proceed === 'function') proceed();
+                  else if (action === 'back') setMode('grid');
+                }}
+              >
+                {unsavedLeaveCopy().discard}
+              </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  className="priority-save-confirm-btn-cancel"
+                  onClick={() => setLeaveGuard(null)}
+                >
+                  {unsavedLeaveCopy().stay}
+                </button>
+                <button
+                  type="button"
+                  className="priority-save-confirm-btn-submit"
+                  disabled={saving || !dirtyCount}
+                  onClick={async () => {
+                    const proceed = leaveGuard.proceed;
+                    const action = leaveGuard.action;
+                    setShowSaveConfirmModal(false);
+                    const ok = await saveChanges();
+                    if (!ok) {
+                      setLeaveGuard(null);
+                      return;
+                    }
+                    setLeaveGuard(null);
+                    if (typeof proceed === 'function') proceed();
+                    else if (action === 'back') setMode('grid');
+                  }}
+                >
+                  {unsavedLeaveCopy().save}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {showSaveConfirmModal ? (
         <div
           className="priority-save-confirm-backdrop"
