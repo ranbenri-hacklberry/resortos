@@ -25,6 +25,11 @@ import {
   DEFAULT_CARDCOM_TERMINAL
 } from './lib/cardcomTerminalService.js';
 import { CardcomStorage } from './lib/cardcomStorage.js';
+import {
+  cardcomBookingRef,
+  hasCardcomBookingRef,
+  recordCardcomPaymentOnBooking
+} from '../functions/lib/cardcomBookingRecord.js';
 
 // Load .env if present
 const __filename = fileURLToPath(import.meta.url);
@@ -90,6 +95,43 @@ export async function loadActiveBookings(fetchImpl = fetch, { fromDaysBack = 14,
   return [];
 }
 
+/** PostgREST adapter for the shared booking-payment recorder (service role, never logged). */
+export function supabaseRestFetch(fetchImpl = fetch) {
+  const base = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  if (!base || !key) return null;
+  return (path, init = {}) => fetchImpl(`${base}/rest/v1${path}`, {
+    ...init,
+    headers: {
+      apikey: key,
+      authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+      ...(init.headers || {})
+    }
+  });
+}
+
+/** Records a deal that carries an exact booking reference (LowProfile custom fields). */
+export async function recordReferencedDeal(deal, ref, { fetchImpl = fetch, restFetch = null } = {}) {
+  const rest = restFetch || supabaseRestFetch(fetchImpl);
+  if (!rest) return { ok: false, reason: 'NO_DB' };
+  return recordCardcomPaymentOnBooking({
+    restFetch: rest,
+    ref,
+    payment: {
+      dealId: String(deal.dealId),
+      amount: deal.amount,
+      approval: deal.approval,
+      last4: deal.last4,
+      documentNumber: deal.documentNumber,
+      at: deal.dealTime,
+      channel: 'guest_page',
+      payerName: deal.cardOwnerName,
+      recordedVia: 'cardcom_terminal_poller_ref'
+    }
+  });
+}
+
 /**
  * Polls Cardcom ListTransactions for terminal, matches against bookings,
  * and persists to managed storage.
@@ -99,7 +141,9 @@ export async function loadActiveBookings(fetchImpl = fetch, { fromDaysBack = 14,
  * - Suspected test transactions remain in status 'pending' (with is_test=true and 'maybe test' badge)
  *   so they are never hidden from staff.
  * - --force allows running on demand or via launchd even if CARDCOM_TERMINAL_SYNC_ENABLED != 1.
- * - The launchd poller NEVER auto-links charges and NEVER issues invoices.
+ * - The launchd poller NEVER issues invoices. It auto-records a charge ONLY when the deal carries
+ *   an exact booking reference (LowProfile custom fields written by the guest page); the Cardcom
+ *   document already exists for those deals. Everything else stays a proposal for staff.
  */
 export async function pollCardcomTerminal({
   apiName = process.env.CARDCOM_API_NAME,
@@ -110,7 +154,8 @@ export async function pollCardcomTerminal({
   force = false,
   fetchImpl = fetch,
   storage = null,
-  bookings: initialBookings = null
+  bookings: initialBookings = null,
+  recordDeal = recordReferencedDeal
 } = {}) {
   if (!isPollerEnabled() && !force && !sinceDate) {
     console.log('[syncCardcomTerminal] Poller is disabled by default (CARDCOM_TERMINAL_SYNC_ENABLED != 1). Skipping run.');
@@ -235,6 +280,50 @@ export async function pollCardcomTerminal({
         });
       }
       continue;
+    }
+
+    // Exact booking reference (guest-page LowProfile): always link, regardless of amount.
+    const ref = cardcomBookingRef(deal);
+    if (hasCardcomBookingRef(ref) && store.seenDeals.get(dealId)?.status !== 'linked') {
+      if (isDryRun) {
+        dryRunResults.push({
+          dealId,
+          date: deal.dealTime?.slice(0, 10) || fromDate,
+          amount: deal.amount,
+          payer: deal.cardOwnerName,
+          last4: deal.last4,
+          approval: deal.approval,
+          isTest: isTestTransaction(deal),
+          linkByReference: true,
+          topCandidate: null,
+          totalCandidates: 0
+        });
+        continue;
+      }
+      let recorded = null;
+      try {
+        recorded = await recordDeal(deal, ref, { fetchImpl });
+      } catch (err) {
+        recorded = { ok: false, reason: err?.code || 'ERROR' };
+      }
+      if (recorded?.ok && recorded.bookingId) {
+        store.closePendingMatch(dealId, { selected_booking_id: recorded.bookingId });
+        store.addSeenDeal({
+          deal_id: dealId,
+          terminal_number: deal.terminal,
+          amount: deal.amount,
+          approval_number: deal.approval,
+          last4: deal.last4,
+          card_owner_name: deal.cardOwnerName,
+          entry_mode: deal.entryMode,
+          deal_time: deal.dealTime,
+          linked_booking_id: recorded.bookingId,
+          status: 'linked'
+        });
+        continue;
+      }
+      console.warn(`[syncCardcomTerminal] deal ${dealId} has a booking reference but was not recorded: ${recorded?.reason || 'unknown'}`);
+      // Fall through: keep it visible to staff instead of dropping it.
     }
 
     // If deal has already been seen, verify it doesn't need repair (seen without pending)

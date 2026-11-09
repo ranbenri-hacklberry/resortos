@@ -1,3 +1,5 @@
+import { buildCardcomRefCustomFields } from './cardcomBookingRecord.js';
+
 export const CARDCOM_DEMO_CARD = {
   number: '4580280000000008',
   month: '12',
@@ -579,6 +581,11 @@ export function buildHypLowProfileBody(user, input) {
   const fullName = `${name.first} ${name.last}`.trim();
   // Defense in depth: never send the demo card to a live terminal, whatever the caller asked for.
   const prefillDemo = Boolean(input.prefillDemoCard) && isCardcomDemoTerminal(user.masof);
+  const refFields = buildCardcomRefCustomFields({
+    token: input.refToken || order,
+    bookingId: input.bookingId,
+    test: input.testPayment === true
+  });
   const body = {
     TerminalNumber: Number(String(user.masof || '').replace(/\D/g, '')) || user.masof,
     ApiName: user.apiName,
@@ -596,7 +603,9 @@ export function buildHypLowProfileBody(user, input) {
       CardOwnerNameValue: fullName,
       CardOwnerPhoneValue: digitsPhone(input.cell) || undefined,
       CardOwnerEmailValue: input.email || undefined,
-      ...(prefillDemo ? { CardOwnerIdValue: CARDCOM_DEMO_CARD.id } : {})
+      ...(prefillDemo ? { CardOwnerIdValue: CARDCOM_DEMO_CARD.id } : {}),
+      // Exact booking reference, returned by ListTransactions so the poller can link the deal.
+      ...(refFields.length ? { CustomFields: refFields } : {})
     },
     AdvancedDefinition: {
       MaxNumOfPayments: maxPay,
