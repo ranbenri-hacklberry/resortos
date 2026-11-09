@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  KINOROT_CHANGES_POPUP_ENABLED,
   hasUnseenKinorotChanges,
   kinorotChangeKey,
   rememberKinorotChanges,
@@ -140,11 +141,25 @@ describe('kinorot popup rules (Nov 9 regression suite)', () => {
     };
     const scoped = sameDayKinorotChanges(changes, today);
     expect(scoped.total).toBe(2);
-    expect(hasUnseenKinorotChanges({ changeId: 'live', changes }, today)).toBe(true);
+    expect(KINOROT_CHANGES_POPUP_ENABLED).toBe(false);
+    // Kill-switch off: popup/badge stay hidden even when same-day guest changes exist.
+    expect(hasUnseenKinorotChanges({ changeId: 'live', changes }, today)).toBe(false);
 
     // After ack ("הבנתי"), changes never reopen
     rememberKinorotChanges(scoped, 'live');
     expect(hasUnseenKinorotChanges({ changeId: 'live', changes }, today)).toBe(false);
+  });
+});
+
+describe('KINOROT_CHANGES_POPUP_ENABLED kill-switch', () => {
+  it('hides popup without deleting modal code', () => {
+    expect(KINOROT_CHANGES_POPUP_ENABLED).toBe(false);
+    const changes = {
+      created: [{ id: 'b1', guest_name: 'Test Guest', unit_id: 'k680', check_in_date: '2026-11-09', check_out_date: '2026-11-10' }],
+      updated: [],
+      removed: []
+    };
+    expect(hasUnseenKinorotChanges({ changeId: 'x', changes }, '2026-11-09')).toBe(false);
   });
 });
 
