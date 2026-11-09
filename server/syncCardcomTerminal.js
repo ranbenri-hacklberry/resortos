@@ -163,6 +163,8 @@ export async function pollCardcomTerminal({
 
     if (alreadyLinkedBooking) {
       if (!isDryRun) {
+        // Close a stale pending row: the deal is already recorded on a booking
+        store.closePendingMatch(dealId, { selected_booking_id: alreadyLinkedBooking.id });
         store.addSeenDeal({
           deal_id: dealId,
           terminal_number: deal.terminal,
@@ -182,6 +184,13 @@ export async function pollCardcomTerminal({
       const existingMatch = store.pendingMatches.get(dealId);
       const existingSeen = store.seenDeals.get(dealId);
       const isResolved = existingSeen?.status === 'linked' || existingSeen?.status === 'ignored' || existingSeen?.status === 'test';
+      if (!isDryRun && existingMatch?.status === 'pending' && (isResolved || existingMatch.document_number || deal.documentNumber)) {
+        // Seen as linked/resolved or already invoiced by Cardcom (e.g. LowProfile booking link) -> not unassigned
+        store.closePendingMatch(dealId, {
+          selected_booking_id: existingSeen?.linked_booking_id || existingMatch.selected_booking_id || null,
+          document_number: existingMatch.document_number || deal.documentNumber || null
+        });
+      }
       if (existingMatch || isResolved) {
         continue;
       }
@@ -190,7 +199,10 @@ export async function pollCardcomTerminal({
     }
 
     const isTest = isTestTransaction(deal);
-    const candidates = rankCandidateBookings(deal, bookings, todayIso);
+    const candidates = rankCandidateBookings(deal, bookings, String(deal.dealTime || todayIso));
+    // A deal that already carries a Cardcom document (booking payment link / LowProfile, or an invoiced ₪1 test)
+    // is not unassigned; record it for audit but never as pending.
+    const hasDocument = Boolean(String(deal.documentNumber || '').trim());
 
     // Suspected tests remain in pending status with is_test=true so staff can inspect & confirm
     const matchRecord = {
@@ -207,7 +219,7 @@ export async function pollCardcomTerminal({
       is_test: isTest,
       candidates,
       current_candidate_index: 0,
-      status: 'pending',
+      status: hasDocument ? 'ignored' : 'pending',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };

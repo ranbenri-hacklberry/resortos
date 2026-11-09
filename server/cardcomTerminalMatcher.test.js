@@ -3061,3 +3061,51 @@ test('ops link: race scenario 2 - worker B marks reconciliation_needed, worker A
   }
 });
 
+
+test('poller closes pending rows for linked / already-invoiced deals and never opens pending for deals with a Cardcom document', async () => {
+  const { pollCardcomTerminal } = await import('./syncCardcomTerminal.js');
+  const tx = (id, amount, extra = {}) => ({
+    DealNumber: id, TerminalNumber: '184288', Amount: amount, ApprovalNumber: `a${id}`,
+    Last4CardDigitsString: '1111', CardOwnerName: 'אורח', CardNumberEntryMode: 'Phone',
+    CreateDate: '2026-11-07T15:52:34', ResponseCode: 0, Status: 'Success', ...extra
+  });
+  const transactions = [
+    tx('linked-on-booking', 200),
+    tx('seen-linked', 700),
+    tx('lowprofile-invoiced', 500, { DocumentNumber: '2' }),
+    tx('new-lowprofile', 900, { DocumentNumber: '3' }),
+    tx('truly-unassigned', 1400)
+  ];
+  const bookings = [{
+    id: 'kin_691_75491', guest_name: 'לינוי', total_price_agorot: 90000,
+    check_in_date: '2026-11-07', check_out_date: '2026-11-08',
+    clearing_payments: [{ txn: 'linked-on-booking', amount: 200 }]
+  }];
+  const fetchImpl = async (url) => (url.includes('ListTransactions')
+    ? { ok: true, json: async () => ({ ResponseCode: 0, Transactions: transactions }) }
+    : { ok: true, json: async () => [], text: async () => '' });
+
+  const storage = new CardcomStorage({ fetchImpl, enableDiskCache: false, supabaseUrl: 'http://mock', supabaseKey: 'mock' });
+  await storage.init();
+  const pending = (deal_id, extra = {}) => storage.pendingMatches.set(deal_id, { deal_id, status: 'pending', ...extra });
+  pending('linked-on-booking');
+  pending('seen-linked');
+  pending('lowprofile-invoiced', { document_number: '2' });
+  storage.seenDeals.set('linked-on-booking', { deal_id: 'linked-on-booking', status: 'seen' });
+  storage.seenDeals.set('seen-linked', { deal_id: 'seen-linked', status: 'linked', linked_booking_id: 'kin_691_75491' });
+  storage.seenDeals.set('lowprofile-invoiced', { deal_id: 'lowprofile-invoiced', status: 'seen' });
+
+  const res = await pollCardcomTerminal({
+    apiName: 'mock', apiPassword: 'mock', sinceDate: '2026-11-07', isDryRun: false, force: true,
+    fetchImpl, storage, bookings
+  });
+  assert.equal(res.ok, true);
+  const status = (id) => storage.pendingMatches.get(id)?.status;
+  assert.equal(status('linked-on-booking'), 'ignored');
+  assert.equal(storage.pendingMatches.get('linked-on-booking').selected_booking_id, 'kin_691_75491');
+  assert.equal(status('seen-linked'), 'ignored');
+  assert.equal(status('lowprofile-invoiced'), 'ignored');
+  assert.equal(status('new-lowprofile'), 'ignored');
+  assert.equal(status('truly-unassigned'), 'pending');
+  assert.deepEqual(storage.getActivePendingMatches().map((m) => m.deal_id), ['truly-unassigned']);
+});

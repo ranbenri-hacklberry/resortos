@@ -154,9 +154,29 @@ test('rule 4: checkout 5 days earlier with balance shown (backwards search up to
     clearing_payments: []
   };
 
-  const results = suggestBookingsForDeal(deal, [checkout5DaysAgo, checkout15DaysAgo]);
+  // Older debts only when explicitly requested (separate older_debts list)
+  assert.equal(suggestBookingsForDeal(deal, [checkout5DaysAgo, checkout15DaysAgo]).length, 0);
+  const results = suggestBookingsForDeal(deal, [checkout5DaysAgo, checkout15DaysAgo], { includeOlderDebts: true });
   assert.equal(results.length, 1);
   assert.equal(results[0].bookingId, 'b-debt-5-days');
+});
+
+test('November deal (268711314, 2026-11-02 20:26 IL) never gets Oct 21-30 stays as default suggestions', () => {
+  const deal = { dealId: '268711314', amount: 500, dealTime: '2026-11-02T18:26:18+00:00', payer_name: 'יובל דוד צוקרמן' };
+  const mk = (id, cin, cout, due) => ({ id, guest_name: id, check_in_date: cin, check_out_date: cout, total_price_agorot: due * 100, clearing_payments: [] });
+  const october = [
+    mk('bracha', '2026-10-21', '2026-10-24', 760),
+    mk('udi', '2026-10-23', '2026-10-24', 900),
+    mk('ilana', '2026-10-26', '2026-10-27', 500),
+    mk('simkovich', '2026-10-29', '2026-10-30', 150),
+    mk('zabusky', '2026-10-30', '2026-10-31', 742)
+  ];
+  const stay = [mk('in-house', '2026-11-01', '2026-11-03', 900), mk('checkout-d-1', '2026-10-30', '2026-11-01', 500), mk('future', '2026-11-04', '2026-11-05', 500)];
+  const ids = suggestBookingsForDeal(deal, [...october, ...stay]).map((c) => c.bookingId);
+  assert.deepEqual(ids, ['checkout-d-1', 'in-house']);
+  for (const c of suggestBookingsForDeal(deal, [...october, ...stay])) {
+    assert.ok(c.checkOut >= '2026-11-01' && c.checkIn <= '2026-11-03');
+  }
 });
 
 test('rule 5: rank exact amount match first, then name similarity, then date proximity', () => {
@@ -206,7 +226,7 @@ test('rule 5: rank exact amount match first, then name similarity, then date pro
     }
   ];
 
-  const results = suggestBookingsForDeal(deal, bookings);
+  const results = suggestBookingsForDeal(deal, bookings, { includeOlderDebts: true });
 
   // Exact amount candidates (B, C, D) must all rank before Candidate A (partial amount)
   assert.equal(results[3].bookingId, 'b-partial-close-date');

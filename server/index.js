@@ -599,7 +599,8 @@ app.get('/api/ops/cardcom-terminal/pending', requireStaff, async (_req, res) => 
       try {
         const all = JSON.parse(fs.readFileSync(file, 'utf8'));
         const list = Array.isArray(all) ? all : [];
-        pending = list.filter((m) => m.status === 'pending');
+        const { filterUnassignedPendingMatches } = await import('../functions/lib/cardcomPendingFilter.js');
+        pending = filterUnassignedPendingMatches(list);
         const twoDaysAgo = Date.now() - 48 * 3600 * 1000;
         recentlyApproved = list
           .filter((m) => (m.status === 'approved' || m.status === 'manual_linked') && (
@@ -634,7 +635,19 @@ app.get(['/api/ops/cardcom-terminal/suggestions', '/api/ops/cardcom-terminal/can
       cardOwnerName: payerName
     };
 
-    const candidates = suggestBookingsForDeal(deal, [], { query, limit: 10 });
+    let bookings = [];
+    const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (supabaseUrl && supabaseKey) {
+      try {
+        const bRes = await fetch(`${supabaseUrl}/rest/v1/hotelos_bookings?booking_status=neq.CANCELED&order=check_in_date.desc&limit=1000`, {
+          headers: { apikey: supabaseKey, authorization: `Bearer ${supabaseKey}` }
+        });
+        const rows = await bRes.json();
+        if (Array.isArray(rows)) bookings = rows;
+      } catch (_) {}
+    }
+    const candidates = suggestBookingsForDeal(deal, bookings, { query, limit: 10 });
     res.json({ ok: true, candidates, suggestions: candidates });
   } catch (err) {
     res.status(500).json({ error: err.message || 'FAILED_TO_GET_SUGGESTIONS' });

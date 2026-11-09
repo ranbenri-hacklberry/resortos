@@ -1,6 +1,7 @@
 import { json, errorJson, fetchPostgrest, getPostgrestConfig } from '../_db.js';
 import { loadCalendarReplica } from '../../lib/calendarReplica.js';
-import { suggestBookingsForDeal } from '../../lib/cardcomSuggestions.js';
+import { suggestBookingsForDeal, getIsraelDateString } from '../../lib/cardcomSuggestions.js';
+import { filterUnassignedPendingMatches, linkedDealIdsFromSeen } from '../../lib/cardcomPendingFilter.js';
 
 const DEMO_TENANT_ID = '22222222-2222-2222-2222-222222222222';
 
@@ -334,7 +335,12 @@ async function handleCardcomSuggestions(request, env) {
     };
 
     const candidates = suggestBookingsForDeal(deal, bookings, { query, limit: 10 });
-    return json({ ok: true, candidates, suggestions: candidates });
+    // Older unpaid debts (checked out up to 14 days before D) are returned separately, never mixed into the default list.
+    const olderDebts = query
+      ? []
+      : suggestBookingsForDeal(deal, bookings, { limit: 10, includeOlderDebts: true })
+        .filter((c) => !candidates.some((x) => x.bookingId === c.bookingId));
+    return json({ ok: true, candidates, suggestions: candidates, older_debts: olderDebts, deal_date: getIsraelDateString(dealTime) });
   } catch (err) {
     return errorJson(err?.message || 'FAILED_TO_GET_SUGGESTIONS', 500, 'SUGGESTIONS_ERROR');
   }
@@ -549,11 +555,17 @@ export async function onRequest(context) {
       try {
         let pending = [];
         let recentlyApproved = [];
+        let linkedDealIds = new Set();
         try {
-          const [pendingRes, approvedRes] = await Promise.all([
+          const [pendingRes, approvedRes, seenRes] = await Promise.all([
             fetchPostgrest('/cardcom_pending_matches?status=eq.pending&order=created_at.desc', { method: 'GET' }, env, { requireServiceRole: true }),
-            fetchPostgrest('/cardcom_pending_matches?status=in.(approved,manual_linked)&order=approved_at.desc&limit=15', { method: 'GET' }, env, { requireServiceRole: true })
+            fetchPostgrest('/cardcom_pending_matches?status=in.(approved,manual_linked)&order=approved_at.desc&limit=15', { method: 'GET' }, env, { requireServiceRole: true }),
+            fetchPostgrest('/cardcom_seen_deals?or=(status.eq.linked,linked_booking_id.not.is.null)&select=deal_id,status,linked_booking_id', { method: 'GET' }, env, { requireServiceRole: true })
           ]);
+          if (seenRes && seenRes.ok) {
+            const rows = await seenRes.json();
+            if (Array.isArray(rows)) linkedDealIds = linkedDealIdsFromSeen(rows);
+          }
           if (pendingRes && pendingRes.ok) {
             const rows = await pendingRes.json();
             if (Array.isArray(rows)) pending = rows;
@@ -580,6 +592,8 @@ export async function onRequest(context) {
           } catch (_) {}
         }
 
+        // Unassigned = no booking AND no Cardcom document; already linked/invoiced deals never show.
+        pending = filterUnassignedPendingMatches(pending, { linkedDealIds });
         return json({ ok: true, pending, recently_approved: recentlyApproved });
       } catch (_) {}
       return json({ ok: true, pending: [], recently_approved: [] });
