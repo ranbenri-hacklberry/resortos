@@ -6,6 +6,13 @@ export const CARDCOM_DEMO_CARD = {
   id: '000000000'
 };
 
+// Cardcom's public sandbox terminals. The demo card above may only ever be prefilled on these.
+export const CARDCOM_DEMO_TERMINALS = new Set(['1000', '1001']);
+
+export function isCardcomDemoTerminal(masof) {
+  return CARDCOM_DEMO_TERMINALS.has(String(masof || '').replace(/\D/g, ''));
+}
+
 export const HYP_BASE = 'https://pay.hyp.co.il/p/';
 export const HYP_TERMINAL_A = '4502210929';
 export const HYP_TERMINAL_B = '4502315932';
@@ -135,6 +142,28 @@ function envTrim(env, key) {
 export function isCardcomTest(env) {
   const flag = envTrim(env, 'CARDCOM_TEST').toLowerCase();
   return flag === '1' || flag === 'true' || flag === 'yes';
+}
+
+// NOTE: CARDCOM_TEST=1 is what routes payments through the Cardcom v11 API (CARDCOM_API_NAME +
+// CARDCOM_A/B_TERMINAL). It is NOT a sandbox switch on its own: when the terminal is a live one
+// (e.g. 184288) every charge is real. The demo card is prefilled only on the sandbox terminals.
+export function cardcomPrefillsDemoCard(env, masof) {
+  return isCardcomTest(env) && isCardcomDemoTerminal(masof);
+}
+
+const warnedLiveCardcomTerminals = new Set();
+
+// Loud, once-per-terminal warning when CARDCOM_TEST is on while a live terminal is configured.
+// Returns true when the combination is live (real charges, no demo prefill).
+export function warnCardcomTestOnLiveTerminal(env, masof, log = console.warn) {
+  if (!isCardcomTest(env)) return false;
+  const terminal = String(masof || '').replace(/\D/g, '');
+  if (!terminal || isCardcomDemoTerminal(terminal)) return false;
+  if (!warnedLiveCardcomTerminals.has(terminal)) {
+    warnedLiveCardcomTerminals.add(terminal);
+    log(`[cardcom] WARNING: CARDCOM_TEST is on with LIVE terminal ${terminal}. Charges are real; demo card prefill is disabled.`);
+  }
+  return true;
 }
 
 function cardcomMasof(env, terminal) {
@@ -548,6 +577,8 @@ export function buildHypLowProfileBody(user, input) {
   const failUrl = withReturnOrder(input.failUrl || successUrl, order);
   const maxPay = Math.max(1, Number(input.tash || 6) || 6);
   const fullName = `${name.first} ${name.last}`.trim();
+  // Defense in depth: never send the demo card to a live terminal, whatever the caller asked for.
+  const prefillDemo = Boolean(input.prefillDemoCard) && isCardcomDemoTerminal(user.masof);
   const body = {
     TerminalNumber: Number(String(user.masof || '').replace(/\D/g, '')) || user.masof,
     ApiName: user.apiName,
@@ -565,13 +596,13 @@ export function buildHypLowProfileBody(user, input) {
       CardOwnerNameValue: fullName,
       CardOwnerPhoneValue: digitsPhone(input.cell) || undefined,
       CardOwnerEmailValue: input.email || undefined,
-      ...(input.prefillDemoCard ? { CardOwnerIdValue: CARDCOM_DEMO_CARD.id } : {})
+      ...(prefillDemo ? { CardOwnerIdValue: CARDCOM_DEMO_CARD.id } : {})
     },
     AdvancedDefinition: {
       MaxNumOfPayments: maxPay,
       MinNumOfPayments: 1,
       RedirectToParent: input.stayInFrame ? false : true,
-      ...(input.prefillDemoCard ? {
+      ...(prefillDemo ? {
         CardNumber: CARDCOM_DEMO_CARD.number,
         CVV: CARDCOM_DEMO_CARD.cvv,
         CardExpirationMonth: CARDCOM_DEMO_CARD.month,
@@ -649,6 +680,8 @@ export async function createHypLowProfilePage(env, input) {
     err.code = 'HYP_AMOUNT';
     throw err;
   }
+  warnCardcomTestOnLiveTerminal(env, user.masof);
+  const prefillDemoCard = cardcomPrefillsDemoCard(env, user.masof);
   let lastErr = null;
   const operations = input.tokenize === false
     ? ['ChargeOnly']
@@ -662,7 +695,7 @@ export async function createHypLowProfilePage(env, input) {
       }, {
         ...input,
         tokenize: operation !== 'ChargeOnly',
-        prefillDemoCard: isCardcomTest(env)
+        prefillDemoCard
       });
       body.Operation = operation;
       const posted = await postJson(

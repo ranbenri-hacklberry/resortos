@@ -33,7 +33,11 @@ import {
   parseHypQuery,
   publicHypSignFields,
   HYP_TERMINAL_A,
-  HYP_TERMINAL_B
+  HYP_TERMINAL_B,
+  cardcomPrefillsDemoCard,
+  createHypLowProfilePage,
+  isCardcomDemoTerminal,
+  warnCardcomTestOnLiveTerminal
 } from './hypPay.js';
 
 test('guest charge uses the terminal locked on the booking', () => {
@@ -590,4 +594,82 @@ test('embedded card charge stays in the frame and the receipt shows the approval
   assert.match(html, /resortos-hyp/);
   assert.match(html, /target="_top"/);
   assert.doesNotMatch(html, /hyp=missing/);
+});
+
+test('Cardcom demo card is only prefilled on sandbox terminals 1000/1001', () => {
+  assert.equal(isCardcomDemoTerminal('1000'), true);
+  assert.equal(isCardcomDemoTerminal(1001), true);
+  assert.equal(isCardcomDemoTerminal('184288'), false);
+  assert.equal(cardcomPrefillsDemoCard({ CARDCOM_TEST: '1' }, '1000'), true);
+  assert.equal(cardcomPrefillsDemoCard({ CARDCOM_TEST: '1' }, '1001'), true);
+  assert.equal(cardcomPrefillsDemoCard({ CARDCOM_TEST: '1' }, '184288'), false);
+  assert.equal(cardcomPrefillsDemoCard({}, '1000'), false);
+
+  // Even if a caller asks for it, a live terminal never gets the demo card.
+  const live = buildHypLowProfileBody(
+    { masof: '184288', apiName: 'api-user', apiPassword: 'api-pass' },
+    { amount: 1, order: 'tok_live', clientName: 'רן בן ארי', cell: '0500000000', prefillDemoCard: true }
+  );
+  assert.equal(live.TerminalNumber, 184288);
+  assert.equal(live.AdvancedDefinition.CardNumber, undefined);
+  assert.equal(live.AdvancedDefinition.CVV, undefined);
+  assert.equal(live.AdvancedDefinition.CardExpirationMonth, undefined);
+  assert.equal(live.AdvancedDefinition.CardExpirationYear, undefined);
+  assert.equal(live.UIDefinition.CardOwnerIdValue, undefined);
+  assert.equal(live.UIDefinition.CardOwnerNameValue, 'רן בן ארי');
+});
+
+test('CARDCOM_TEST with a live terminal warns loudly, once per terminal', () => {
+  const lines = [];
+  const log = (msg) => lines.push(msg);
+  assert.equal(warnCardcomTestOnLiveTerminal({}, '777001', log), false);
+  assert.equal(warnCardcomTestOnLiveTerminal({ CARDCOM_TEST: '1' }, '1000', log), false);
+  assert.equal(lines.length, 0);
+  assert.equal(warnCardcomTestOnLiveTerminal({ CARDCOM_TEST: '1' }, '777001', log), true);
+  assert.equal(warnCardcomTestOnLiveTerminal({ CARDCOM_TEST: '1' }, '777001', log), true);
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /LIVE terminal 777001/);
+});
+
+async function captureLowProfileBody(env) {
+  const realFetch = globalThis.fetch;
+  const realWarn = console.warn;
+  const bodies = [];
+  globalThis.fetch = async (url, opts) => {
+    bodies.push(JSON.parse(opts.body));
+    return new Response(JSON.stringify({ ResponseCode: 0, Url: 'https://secure.cardcom.solutions/lp/x', LowProfileId: 'lp-1' }), { status: 200 });
+  };
+  console.warn = () => {};
+  try {
+    await createHypLowProfilePage(env, { amount: 1, order: 'tok_office', clientName: 'רן בן ארי', purpose: 'deposit', terminal: 'B' });
+  } finally {
+    globalThis.fetch = realFetch;
+    console.warn = realWarn;
+  }
+  return bodies[0];
+}
+
+test('createHypLowProfilePage: CARDCOM_TEST on a live terminal sends no demo card', async () => {
+  const body = await captureLowProfileBody({
+    CARDCOM_TEST: '1',
+    CARDCOM_API_NAME: 'api-name',
+    CARDCOM_API_PASSWORD: 'api-pass',
+    CARDCOM_A_TERMINAL: '184288',
+    CARDCOM_B_TERMINAL: '184288'
+  });
+  assert.equal(body.TerminalNumber, 184288);
+  assert.equal(body.AdvancedDefinition.CardNumber, undefined);
+  assert.equal(body.UIDefinition.CardOwnerIdValue, undefined);
+  assert.equal(body.UIDefinition.CardOwnerNameValue, 'רן בן ארי');
+});
+
+test('createHypLowProfilePage: sandbox terminal 1001 still gets the demo card', async () => {
+  const body = await captureLowProfileBody({
+    CARDCOM_TEST: '1',
+    CARDCOM_API_NAME: 'api-name',
+    CARDCOM_API_PASSWORD: 'api-pass'
+  });
+  assert.equal(body.TerminalNumber, 1001);
+  assert.equal(body.AdvancedDefinition.CardNumber, '4580280000000008');
+  assert.equal(body.UIDefinition.CardOwnerIdValue, '000000000');
 });
