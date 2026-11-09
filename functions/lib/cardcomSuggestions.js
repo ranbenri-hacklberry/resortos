@@ -5,14 +5,16 @@
  * Rule (server-side, in the suggestions endpoint):
  * - A deal at date D (Asia/Jerusalem) may be suggested only for bookings where the guest
  *   was physically on site that day: check_in <= D <= check_out.
- *   Example: stay 8->9, charge on 8 or 9 = shown; charge on 7 or with check_in on D+1 = hidden.
- * - Older debts (checked out up to 14 days BEFORE D, still unpaid/partial) are NOT mixed into the default list:
- *   they are returned only with options.includeOlderDebts (separate `older_debts` field of the endpoint) or via manual search.
- *   (A November deal must not be offered October stays as default suggestions.)
+ * - Older debts (checked out up to 14 days BEFORE D) are NOT mixed into the default list:
+ *   they are returned only with options.includeOlderDebts (separate `older_debts`) or via manual search.
  * - Never bookings with check_in > D. No future bookings.
- * - Only bookings with balance > 0 (UNPAID/PARTIAL per the money record). Exclude cancelled ones.
- * - Rank: exact amount match to balance first, then name similarity, then date proximity. Max 10 candidates.
- * - Manual search (by name/phone) stays available as an explicit fallback, but the default list is limited by the rule above.
+ * - Only bookings with balance > 0 (UNPAID/PARTIAL per the money record).
+ * - CANCELED with open balance + strong name and/or exact amount: keep as flagged
+ *   ("מבוטלת – יתרה פתוחה") — Kinorot "shortened" stays sometimes sync as CANCELED.
+ * - Strong name match outside the on-site window: separate flagged side list
+ *   ("התאמת שם מחוץ לחלון"), never mixed into the default list.
+ * - Rank (default list): strong name match first, then exact amount to balance, then date proximity. Max 10.
+ * - Manual search (by name/phone/notes) stays available as an explicit fallback.
  */
 
 import { unitFullName } from '../../src/lib/units.js';
@@ -66,6 +68,27 @@ export function nameSimilarity(strA, strB) {
   return 0;
 }
 
+/** Best fuzzy match of cardholder name against guest_name, invoice_name, and notes. */
+export function nameSimilarityToBooking(payerName, booking) {
+  if (!payerName) return 0;
+  const fields = [
+    booking?.guest_name,
+    booking?.invoice_name,
+    booking?.notes,
+    booking?.note,
+    booking?.booking_notes,
+    booking?.internal_notes,
+    booking?.guest_notes
+  ];
+  let best = 0;
+  for (const field of fields) {
+    if (!field) continue;
+    best = Math.max(best, nameSimilarity(payerName, field));
+    if (best >= 1) break;
+  }
+  return best;
+}
+
 export function getIsraelDateString(dealTime) {
   if (!dealTime) return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
   if (typeof dealTime === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dealTime.trim())) {
@@ -95,8 +118,6 @@ export function isUnverifiedKinorotPayment(p) {
 export function calculateBookingBalances(b) {
   if (!b) return { totalIls: 0, paidIls: 0, dueIls: 0, depositIls: 0, isUnpaid: false, isUnverifiedPaid: false };
 
-  // 1:1 money: remaining = total - recorded (verified) payments only.
-  // No deposit / VAT / fees / mid-rounding deductions. Deposit is metadata for match hints only.
   const totalAgorot = Number(b.total_price_agorot) || (Number(b.total_price || b.total_ils || b.price || 0) * 100);
   const clearing = Array.isArray(b.clearing_payments) ? b.clearing_payments : [];
 
@@ -133,10 +154,6 @@ export function calculateBookingBalances(b) {
   };
 }
 
-/**
- * Computes calendar day distance between a stay [cin, cout] and deal date D.
- * 0 if stay overlaps D. Otherwise days between closest edge and D.
- */
 export function computeDateDistance(cin, cout, dealDate) {
   const dCin = cin ? cin.slice(0, 10) : '';
   const dCout = cout ? cout.slice(0, 10) : '';
@@ -162,12 +179,6 @@ export function computeDateDistance(cin, cout, dealDate) {
   return minDiff;
 }
 
-/**
- * Stay window for deal date D (default suggestions):
- * Hard rule (Ran): guest must be physically on site on charge date D (Asia/Jerusalem):
- *   check_in <= D <= check_out
- * No future bookings (check_in > D). No day-of-slack.
- */
 export function isBookingInDateWindow(cin, cout, dealDate) {
   if (!cin || !cout || !dealDate) return false;
   const dCin = cin.slice(0, 10);
@@ -178,10 +189,6 @@ export function isBookingInDateWindow(cin, cout, dealDate) {
   return true;
 }
 
-/**
- * Older-debt window: checked out up to 14 days before D (and before the stay window), check_in <= D+1.
- * Callers must still require balance > 0.
- */
 export function isBookingInOlderDebtWindow(cin, cout, dealDate) {
   if (!cin || !cout || !dealDate) return false;
   const dCin = cin.slice(0, 10);
@@ -191,9 +198,14 @@ export function isBookingInOlderDebtWindow(cin, cout, dealDate) {
   return dCout < shiftDays(dTarget, -1) && dCout >= shiftDays(dTarget, -14);
 }
 
-/**
- * Classifies a deal against a booking's balance for UI tags & descriptions.
- */
+export function isCanceledBooking(b) {
+  if (!b) return false;
+  if (b.deleted_at) return true;
+  if (b.canceled === true) return true;
+  const status = String(b.booking_status || '').toUpperCase();
+  return status === 'CANCELED' || status === 'CANCELLED' || status === 'DELETED';
+}
+
 export function classifyCandidate(dealAmountNum, dueIls, totalIls) {
   const dealAmount = Math.round(Number(dealAmountNum || 0));
   const due = Math.round(Number(dueIls || 0));
@@ -206,6 +218,7 @@ export function classifyCandidate(dealAmountNum, dueIls, totalIls) {
       tagColor: '#16a34a',
       badgeBg: '#dcfce7',
       description: `סוגר את מלוא היתרה (₪${due.toLocaleString('he-IL')})`,
+      amountLine: `יתרה ₪${due.toLocaleString('he-IL')} · סוגר מלא`,
       remainingAfterPayment: 0
     };
   }
@@ -219,6 +232,7 @@ export function classifyCandidate(dealAmountNum, dueIls, totalIls) {
       tagColor: '#2563eb',
       badgeBg: '#dbeafe',
       description: `יסגור ₪${dealAmount.toLocaleString('he-IL')} מתוך ₪${due.toLocaleString('he-IL')} (תישאר יתרה ₪${rem.toLocaleString('he-IL')})`,
+      amountLine: `יתרה ₪${due.toLocaleString('he-IL')} · אחרי שיוך ₪${rem.toLocaleString('he-IL')}`,
       remainingAfterPayment: rem
     };
   }
@@ -232,6 +246,7 @@ export function classifyCandidate(dealAmountNum, dueIls, totalIls) {
       tagColor: '#d97706',
       badgeBg: '#fef3c7',
       description: `יסגור את כל היתרה ₪${due.toLocaleString('he-IL')} (עודף: ₪${surplus.toLocaleString('he-IL')})`,
+      amountLine: `יתרה ₪${due.toLocaleString('he-IL')} · עודף ₪${surplus.toLocaleString('he-IL')}`,
       remainingAfterPayment: 0
     };
   }
@@ -243,17 +258,186 @@ export function classifyCandidate(dealAmountNum, dueIls, totalIls) {
     tagColor: '#475569',
     badgeBg: '#f1f5f9',
     description: `יתרה: ₪${due.toLocaleString('he-IL')}`,
+    amountLine: `יתרה ₪${due.toLocaleString('he-IL')}`,
     remainingAfterPayment: due
   };
 }
 
+const FLAG_CANCELED = {
+  flagged: true,
+  flagKind: 'canceled_unpaid',
+  flagLabel: 'מבוטלת – יתרה פתוחה'
+};
+
+const FLAG_OUTSIDE_NAME = {
+  flagged: true,
+  flagKind: 'name_outside_window',
+  flagLabel: 'התאמת שם מחוץ לחלון'
+};
+
+function rankCandidates(candidates) {
+  candidates.sort((a, b) => {
+    const aStrong = a.nameSimilarity >= 0.85 ? 1 : 0;
+    const bStrong = b.nameSimilarity >= 0.85 ? 1 : 0;
+    if (aStrong !== bStrong) return bStrong - aStrong;
+
+    if (Math.abs(b.nameSimilarity - a.nameSimilarity) > 0.05) {
+      return b.nameSimilarity - a.nameSimilarity;
+    }
+
+    const aExact = a.exactAmountMatch ? 1 : 0;
+    const bExact = b.exactAmountMatch ? 1 : 0;
+    if (aExact !== bExact) return bExact - aExact;
+
+    if (a.dateDistance !== b.dateDistance) {
+      return a.dateDistance - b.dateDistance;
+    }
+
+    const dateCmp = b.checkIn.localeCompare(a.checkIn);
+    if (dateCmp !== 0) return dateCmp;
+    return a.bookingId.localeCompare(b.bookingId);
+  });
+  return candidates;
+}
+
+function buildCandidate(b, {
+  dealAmount,
+  dealIdStr,
+  deal,
+  payerName,
+  dealDate,
+  flag = null
+}) {
+  const clearing = Array.isArray(b.clearing_payments) ? b.clearing_payments : [];
+  if (dealIdStr) {
+    const alreadyLinked = clearing.some((row) => (
+      String(row.deal_number || row.txn || '').trim() === dealIdStr
+      || (deal.approval && String(row.approval || row.ref || '').trim() === String(deal.approval).trim())
+    ));
+    if (alreadyLinked) return null;
+  }
+
+  const { totalIls, dueIls, paidIls, isPaid } = calculateBookingBalances(b);
+  if (dueIls <= 0 || isPaid) return null;
+
+  const cin = String(b.check_in_date || b.check_in || '').slice(0, 10);
+  const cout = String(b.check_out_date || b.check_out || '').slice(0, 10);
+  if (!cin || !cout) return null;
+
+  const guestName = String(b.guest_name || b.invoice_name || '').trim();
+  const guestPhone = String(b.guest_phone || b.phone || '').trim();
+  const unitIdRaw = String(b.unit_id || '').trim();
+  const unitName = unitFullName(unitIdRaw, String(b.unit_name || b.unit_id || '').trim());
+  const bookingId = String(b.id || '').trim();
+
+  const exactAmountMatch = Math.abs(dealAmount - dueIls) < 0.5;
+  const nameSim = payerName ? nameSimilarityToBooking(payerName, b) : 0;
+  const dateDist = computeDateDistance(cin, cout, dealDate);
+  const canceled = isCanceledBooking(b);
+
+  const deposit20Ils = Math.round(totalIls * 0.20);
+  const depositIls = Math.round((Number(b.deposit_agorot) || 0) / 100);
+  const isExact20Deposit = deposit20Ils > 0 && Math.abs(dealAmount - deposit20Ils) < 0.5;
+  const isExactDeposit = depositIls > 0 && Math.abs(dealAmount - depositIls) < 0.5;
+
+  let score = 0;
+  const reasons = [];
+
+  if (exactAmountMatch) {
+    score += 50;
+    reasons.push('exact_due_balance');
+  } else if (isExact20Deposit) {
+    score += 48;
+    reasons.push('exact_20_percent_deposit');
+  } else if (isExactDeposit) {
+    score += 45;
+    reasons.push('exact_deposit');
+  } else if (dealAmount < dueIls) {
+    score += 25;
+    reasons.push('partial_balance');
+  } else {
+    score += 15;
+    reasons.push('overpayment');
+  }
+
+  if (nameSim >= 0.85) {
+    score += 35;
+    reasons.push('strong_name_match');
+  } else if (nameSim >= 0.4) {
+    score += 20;
+    reasons.push('partial_name_match');
+  }
+
+  const bLast4 = String(b.card_last4 || b.last4 || b.credit_card_last4 || (b.stay?.hyp?.last4) || '').replace(/\D/g, '').slice(-4);
+  if (deal.last4 && bLast4 && deal.last4 === bLast4) {
+    score += 30;
+    reasons.push('card_last4_match');
+  }
+
+  if (b.isUnverifiedPaid || calculateBookingBalances(b).isUnverifiedPaid) {
+    reasons.push('unverified_kinorot_payment');
+  }
+
+  if (dateDist === 0) {
+    score += 15;
+    reasons.push('in_house_or_today');
+  } else if (dateDist <= 1) {
+    score += 12;
+    reasons.push('slack_boundary');
+  } else if (dateDist <= 5) {
+    score += 8;
+    reasons.push('recent_checkout');
+  } else {
+    score += 4;
+    reasons.push('older_debt');
+  }
+
+  if (canceled) reasons.push('canceled_open_balance');
+
+  const classification = classifyCandidate(dealAmount, dueIls, totalIls);
+  const flagFields = flag || (canceled
+    ? { ...FLAG_CANCELED }
+    : { flagged: false, flagKind: null, flagLabel: null });
+
+  const tag = flagFields.flagged && flagFields.flagLabel
+    ? flagFields.flagLabel
+    : classification.tag;
+  const tagColor = flagFields.flagged ? '#b45309' : classification.tagColor;
+  const badgeBg = flagFields.flagged ? '#ffedd5' : classification.badgeBg;
+
+  return {
+    bookingId,
+    id: bookingId,
+    checkoutToken: b.checkout_token || '',
+    guestName,
+    guestPhone,
+    guestEmail: b.guest_email || b.email || '',
+    unitId: b.unit_id || '',
+    unitName: unitName || 'יחידה',
+    checkIn: cin,
+    checkOut: cout,
+    totalIls,
+    dueIls,
+    paidIls,
+    exactAmountMatch,
+    nameSimilarity: nameSim,
+    dateDistance: dateDist,
+    score,
+    reasons,
+    canceled,
+    ...classification,
+    tag,
+    tagColor,
+    badgeBg,
+    ...flagFields
+  };
+}
+
 /**
- * Server-side suggestion engine for unassigned Cardcom terminal deals.
- *
- * @param {Object} deal { amount, dealTime, deal_time, payer_name, cardOwnerName, dealId, deal_id }
- * @param {Array} bookings List of bookings from DB / PostgREST
- * @param {Object} [options] { query, dealDate, limit = 10 }
- * @returns {Array} Top suggested candidates up to `limit` (default 10)
+ * @param {Object} deal
+ * @param {Array} bookings
+ * @param {Object} [options] { query, dealDate, limit = 10, includeOlderDebts, mode }
+ *   mode: 'default' | 'outside_name'
  */
 export function suggestBookingsForDeal(deal, bookings = [], options = {}) {
   const dealAmount = Number(deal?.amount || 0);
@@ -265,29 +449,15 @@ export function suggestBookingsForDeal(deal, bookings = [], options = {}) {
   const limit = Math.max(1, Math.min(Number(options.limit) || 10, 50));
   const payerName = String(deal?.payer_name || deal?.cardOwnerName || '').trim();
   const dealIdStr = String(deal?.dealId || deal?.deal_id || '').trim();
+  const mode = options.mode || 'default';
 
   const candidates = [];
 
   for (const b of bookings) {
     if (!b) continue;
-    if (b.booking_status === 'CANCELED' || b.booking_status === 'DELETED' || b.deleted_at) {
-      continue;
-    }
 
-    // Check if already linked
-    const clearing = Array.isArray(b.clearing_payments) ? b.clearing_payments : [];
-    if (dealIdStr) {
-      const alreadyLinked = clearing.some((row) => (
-        String(row.deal_number || row.txn || '').trim() === dealIdStr
-        || (deal.approval && String(row.approval || row.ref || '').trim() === String(deal.approval).trim())
-      ));
-      if (alreadyLinked) continue;
-    }
-
-    const { totalIls, dueIls, paidIls, isPaid } = calculateBookingBalances(b);
-
-    // Only bookings with balance > 0 (UNPAID/PARTIAL per money record). Exclude paid bookings.
-    if (dueIls <= 0 || isPaid) {
+    const canceled = isCanceledBooking(b);
+    if (String(b.booking_status || '').toUpperCase() === 'DELETED' || b.deleted_at) {
       continue;
     }
 
@@ -301,134 +471,93 @@ export function suggestBookingsForDeal(deal, bookings = [], options = {}) {
     const unitName = unitFullName(unitIdRaw, String(b.unit_name || b.unit_id || '').trim());
     const bookingId = String(b.id || '').trim();
 
-    // If manual search query is provided: explicit fallback searching by name or phone
+    const nameSimPreview = payerName ? nameSimilarityToBooking(payerName, b) : 0;
+    const { dueIls, isPaid } = calculateBookingBalances(b);
+    if (dueIls <= 0 || isPaid) continue;
+    const exactPreview = Math.abs(dealAmount - dueIls) < 0.5;
+    const strongName = nameSimPreview >= 0.85;
+
     if (query) {
       const matchesQuery =
         guestName.toLowerCase().includes(query) ||
         guestPhone.includes(query) ||
         unitName.toLowerCase().includes(query) ||
+        String(b.notes || b.note || b.booking_notes || '').toLowerCase().includes(query) ||
         bookingId.toLowerCase().includes(query);
       if (!matchesQuery) continue;
-    } else {
-      // Default list: strictly enforce the stay window; older debts only when explicitly requested
-      const inStay = isBookingInDateWindow(cin, cout, dealDate);
-      const inOlderDebt = !inStay && options.includeOlderDebts && isBookingInOlderDebtWindow(cin, cout, dealDate);
-      if (!inStay && !inOlderDebt) {
-        continue;
+      if (canceled && !(strongName || exactPreview)) continue;
+
+      const built = buildCandidate(b, {
+        dealAmount,
+        dealIdStr,
+        deal,
+        payerName,
+        dealDate,
+        flag: canceled ? FLAG_CANCELED : null
+      });
+      if (built) candidates.push(built);
+      continue;
+    }
+
+    if (mode === 'outside_name') {
+      if (!strongName) continue;
+      if (isBookingInDateWindow(cin, cout, dealDate)) continue;
+      if (cin > dealDate) continue;
+      if (canceled && !(strongName || exactPreview)) continue;
+      const built = buildCandidate(b, {
+        dealAmount,
+        dealIdStr,
+        deal,
+        payerName,
+        dealDate,
+        flag: canceled ? FLAG_CANCELED : FLAG_OUTSIDE_NAME
+      });
+      if (built) {
+        if (canceled) {
+          built.flagKind = 'canceled_unpaid';
+          built.flagLabel = FLAG_CANCELED.flagLabel;
+          built.tag = FLAG_CANCELED.flagLabel;
+        } else {
+          built.flagKind = 'name_outside_window';
+          built.flagLabel = FLAG_OUTSIDE_NAME.flagLabel;
+          built.tag = FLAG_OUTSIDE_NAME.flagLabel;
+        }
+        built.flagged = true;
+        candidates.push(built);
       }
+      continue;
     }
 
-    const exactAmountMatch = Math.abs(dealAmount - dueIls) < 0.5;
-    const nameSim = payerName ? nameSimilarity(payerName, guestName) : 0;
-    const dateDist = computeDateDistance(cin, cout, dealDate);
+    const inStay = isBookingInDateWindow(cin, cout, dealDate);
+    const inOlderDebt = !inStay && options.includeOlderDebts && isBookingInOlderDebtWindow(cin, cout, dealDate);
+    if (!inStay && !inOlderDebt) continue;
+    if (cin > dealDate) continue;
 
-    const deposit20Ils = Math.round(totalIls * 0.20);
-    const depositIls = Math.round((Number(b.deposit_agorot) || 0) / 100);
-    const isExact20Deposit = deposit20Ils > 0 && Math.abs(dealAmount - deposit20Ils) < 0.5;
-    const isExactDeposit = depositIls > 0 && Math.abs(dealAmount - depositIls) < 0.5;
-
-    // Compute heuristic score (0-100) and human-readable reasons
-    let score = 0;
-    const reasons = [];
-
-    if (exactAmountMatch) {
-      score += 50;
-      reasons.push('exact_due_balance');
-    } else if (isExact20Deposit) {
-      score += 48;
-      reasons.push('exact_20_percent_deposit');
-    } else if (isExactDeposit) {
-      score += 45;
-      reasons.push('exact_deposit');
-    } else if (dealAmount < dueIls) {
-      score += 25;
-      reasons.push('partial_balance');
-    } else {
-      score += 15;
-      reasons.push('overpayment');
+    if (canceled) {
+      if (!(strongName || exactPreview)) continue;
+      const built = buildCandidate(b, {
+        dealAmount,
+        dealIdStr,
+        deal,
+        payerName,
+        dealDate,
+        flag: FLAG_CANCELED
+      });
+      if (built) candidates.push(built);
+      continue;
     }
 
-    if (nameSim >= 0.85) {
-      score += 35;
-      reasons.push('strong_name_match');
-    } else if (nameSim >= 0.4) {
-      score += 20;
-      reasons.push('partial_name_match');
-    }
-
-    const bLast4 = String(b.card_last4 || b.last4 || b.credit_card_last4 || (b.stay?.hyp?.last4) || '').replace(/\D/g, '').slice(-4);
-    if (deal.last4 && bLast4 && deal.last4 === bLast4) {
-      score += 30;
-      reasons.push('card_last4_match');
-    }
-
-    if (b.isUnverifiedPaid || calculateBookingBalances(b).isUnverifiedPaid) {
-      reasons.push('unverified_kinorot_payment');
-    }
-
-    if (dateDist === 0) {
-      score += 15;
-      reasons.push('in_house_or_today');
-    } else if (dateDist <= 1) {
-      score += 12;
-      reasons.push('slack_boundary');
-    } else if (dateDist <= 5) {
-      score += 8;
-      reasons.push('recent_checkout');
-    } else {
-      score += 4;
-      reasons.push('older_debt');
-    }
-
-    const classification = classifyCandidate(dealAmount, dueIls, totalIls);
-
-    candidates.push({
-      bookingId,
-      id: bookingId,
-      checkoutToken: b.checkout_token || '',
-      guestName,
-      guestPhone,
-      guestEmail: b.guest_email || b.email || '',
-      unitId: b.unit_id || '',
-      unitName: unitName || 'יחידה',
-      checkIn: cin,
-      checkOut: cout,
-      totalIls,
-      dueIls,
-      paidIls,
-      exactAmountMatch,
-      nameSimilarity: nameSim,
-      dateDistance: dateDist,
-      score,
-      reasons,
-      ...classification
+    const built = buildCandidate(b, {
+      dealAmount,
+      dealIdStr,
+      deal,
+      payerName,
+      dealDate,
+      flag: null
     });
+    if (built) candidates.push(built);
   }
 
-  // Rank: exact amount match to balance first, then name similarity, then date proximity.
-  candidates.sort((a, b) => {
-    // 1. Exact amount match to balance first
-    const aExact = a.exactAmountMatch ? 1 : 0;
-    const bExact = b.exactAmountMatch ? 1 : 0;
-    if (aExact !== bExact) {
-      return bExact - aExact;
-    }
-
-    // 2. Name similarity second
-    if (Math.abs(b.nameSimilarity - a.nameSimilarity) > 0.05) {
-      return b.nameSimilarity - a.nameSimilarity;
-    }
-
-    // 3. Date proximity third (smaller distance first)
-    if (a.dateDistance !== b.dateDistance) {
-      return a.dateDistance - b.dateDistance;
-    }
-
-    // Secondary stable sort: newer check-in date first, then ID
-    const dateCmp = b.checkIn.localeCompare(a.checkIn);
-    if (dateCmp !== 0) return dateCmp;
-    return a.bookingId.localeCompare(b.bookingId);
-  });
-
+  rankCandidates(candidates);
   return candidates.slice(0, limit);
 }
