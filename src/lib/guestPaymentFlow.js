@@ -1,4 +1,4 @@
-import { hasRecordedReceipt, kinorotSettlementKind } from './bookingPaid.js';
+import { isFullyPaid } from './bookingPaid.js';
 
 const GUEST_METHOD_CHOICES = ['CREDIT_CARD', 'CASH', 'BANK_TRANSFER', 'VOUCHER'];
 
@@ -72,8 +72,8 @@ function savedPaymentChoice(booking) {
 }
 
 /**
- * The stay guide is for guests who are in-house or whose money is actually recorded.
- * A saved cash, bank, voucher, or already-paid choice is not a receipt.
+ * The stay guide is for guests who are in-house or fully paid.
+ * A deposit, partial clearing row, or saved payment choice is not enough.
  */
 export function bookingMayShowStay(booking) {
   if (!booking) return false;
@@ -81,13 +81,10 @@ export function bookingMayShowStay(booking) {
   const stayStatus = String(booking.booking_status || '');
   if (stayStatus === 'CHECKED_IN' || stayStatus === 'CHECKED_OUT') return true;
   if (booking.stay?.guest_checked_in_at) return true;
-  if (hasRecordedReceipt(booking)) return true;
-  if (booking.stay?.hyp?.paid || booking.stay?.hyp_deposit?.paid) return true;
-  const pay = String(booking.payment_status || '').toUpperCase();
-  if (pay === 'DEPOSIT_PAID' || pay === 'PARTIAL') return true;
-  const settled = kinorotSettlementKind(booking);
-  if (settled === 'booking' || settled === 'comp') return true;
-  if (pay === 'PAID' && settled) return true;
+  // Partial deposit / clearing rows must NOT open the stay guide; that resurfaced the
+  // old staff-will-contact success box. Only fully settled money (or in-house) may land
+  // on Maps / area guide.
+  if (isFullyPaid(booking)) return true;
   return false;
 }
 

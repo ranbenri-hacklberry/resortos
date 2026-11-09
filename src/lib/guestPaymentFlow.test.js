@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   acceptedGuestPaymentChoice,
@@ -6,6 +6,7 @@ import {
   confirmChargePlan,
   confirmShouldStartCardCharge,
   guestCheckoutResumeStep,
+  bookingMayShowStay,
   guestCheckoutResumeView,
   guestCheckoutShowsStay,
   persistGuestPaymentChoice
@@ -224,5 +225,77 @@ describe('guest payment view after method selection', () => {
     expect(node.includes("ALREADY_PAID' ? 'ALREADY_PAID'")).toBe(false);
     expect(pages.includes('persistGuestPaymentChoice')).toBe(true);
     expect(node.includes('persistGuestPaymentChoice')).toBe(true);
+  });
+});
+
+
+describe('stay guide gate - no old unpaid success screen', () => {
+  it('deposit-paid / partial bookings do not open the stay guide', () => {
+    const deposit = {
+      payment_status: 'DEPOSIT_PAID',
+      total_price_agorot: 70000,
+      deposit_agorot: 56000,
+      clearing_payments: [{ amount_agorot: 56000, method: 'cash' }],
+      stay: { id_photo_received_at: '2026-11-08T12:00:00Z' },
+      booking_status: 'CONFIRMED'
+    };
+    const partial = { ...deposit, payment_status: 'PARTIAL' };
+    expect(bookingMayShowStay(deposit)).toBe(false);
+    expect(bookingMayShowStay(partial)).toBe(false);
+    expect(guestCheckoutShowsStay({ booking: deposit })).toBe(false);
+    expect(guestCheckoutResumeView(deposit)).toBe('methods');
+  });
+
+  it('fully paid or in-house still opens the stay guide', () => {
+    const paid = {
+      payment_status: 'PAID',
+      total_price_agorot: 70000,
+      clearing_payments: [{ amount_agorot: 70000, method: 'cash' }],
+      booking_status: 'CONFIRMED'
+    };
+    const inHouse = {
+      payment_status: 'DEPOSIT_PAID',
+      total_price_agorot: 70000,
+      booking_status: 'CHECKED_IN',
+      stay: { guest_checked_in_at: '2026-11-08T15:00:00Z' }
+    };
+    expect(bookingMayShowStay(paid)).toBe(true);
+    expect(bookingMayShowStay(inHouse)).toBe(true);
+  });
+});
+
+describe('regression: old manual-payment success copy must stay gone', () => {
+  const forbidden = 'נציגנו ייצור איתך קשר';
+  const sources = [
+    'src/i18n.js',
+    'src/components/GuestStay.jsx',
+    'src/components/GuestCheckout.jsx',
+    'src/lib/guestPaymentFlow.js'
+  ];
+
+  it('guest source files must not contain the old staff-contact success phrase', () => {
+    for (const rel of sources) {
+      const text = readFileSync(new URL('../../' + rel, import.meta.url), 'utf8');
+      expect(text, rel).not.toContain(forbidden);
+      expect(text, rel).not.toContain('GUEST_ID_RECEIVED');
+      expect(text, rel).not.toContain('GUEST_PAID_CONFIRMED');
+    }
+  });
+
+  it('built guest bundle (if present) must not contain the old phrase or keys', () => {
+    const distDir = new URL('../../dist/assets/', import.meta.url);
+    let files = [];
+    try {
+      files = readdirSync(distDir).filter((name) => /^(guest-|guestStayUrl-).*\.js$/.test(name));
+    } catch {
+      return;
+    }
+    expect(files.length).toBeGreaterThan(0);
+    for (const name of files) {
+      const text = readFileSync(new URL(name, distDir), 'utf8');
+      expect(text, name).not.toContain(forbidden);
+      expect(text, name).not.toContain('GUEST_ID_RECEIVED');
+      expect(text, name).not.toContain('GUEST_PAID_CONFIRMED');
+    }
   });
 });
