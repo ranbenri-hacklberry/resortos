@@ -191,7 +191,7 @@ test('November deal (268711314, 2026-11-02 20:26 IL) never gets Oct 21-30 stays 
   }
 });
 
-test('rule 5: rank exact amount match first, then name similarity, then date proximity', () => {
+test('rule 5: rank strong name first, then exact amount, then date proximity', () => {
   const deal = {
     dealId: 'deal-ranking',
     amount: 500,
@@ -399,3 +399,110 @@ test('Iska-style booking: deposit metadata must not shrink due (1:1 remaining = 
   assert.ok(String(results[0].unitName).includes('מול הנוף') || results[0].unitName === 'k680');
 });
 
+
+test('Omer case: canceled עומר שיבלי with ₪1400 ranks above אפרת ₪500 and is flagged', () => {
+  const deal = {
+    dealId: '269231434',
+    amount: 1400,
+    payer_name: 'עומר',
+    dealTime: '2026-11-07T15:51:50' // Israel wall / D = 2026-11-07
+  };
+
+  const omerCanceled = {
+    id: 'kin_685_76154',
+    guest_name: 'עומר שיבלי',
+    unit_id: 'k685',
+    check_in_date: '2026-11-07',
+    check_out_date: '2026-11-09',
+    booking_status: 'CANCELED',
+    canceled: true,
+    total_price_agorot: 140000,
+    clearing_payments: []
+  };
+
+  const efrat = {
+    id: 'kin_677_75855',
+    guest_name: 'אפרת',
+    unit_id: 'k677',
+    check_in_date: '2026-11-06',
+    check_out_date: '2026-11-07',
+    booking_status: 'CHECKED_OUT',
+    total_price_agorot: 50000,
+    clearing_payments: []
+  };
+
+  const results = suggestBookingsForDeal(deal, [efrat, omerCanceled]);
+  assert.ok(results.length >= 1, 'Should return at least Omer');
+  assert.equal(results[0].bookingId, 'kin_685_76154');
+  assert.equal(results[0].flagged, true);
+  assert.equal(results[0].flagKind, 'canceled_unpaid');
+  assert.equal(results[0].flagLabel, 'מבוטלת – יתרה פתוחה');
+  assert.equal(results[0].exactAmountMatch, true);
+  assert.ok(results[0].nameSimilarity >= 0.85, 'Strong name match for עומר');
+
+  const efratIdx = results.findIndex((c) => c.bookingId === 'kin_677_75855');
+  assert.ok(efratIdx === -1 || efratIdx > 0, 'Efrat must not rank above Omer');
+  if (efratIdx > 0) {
+    assert.notEqual(results[0].bookingId, 'kin_677_75855');
+  }
+});
+
+test('strong name outside on-site window goes to outside_name mode list only', () => {
+  const deal = {
+    dealId: 'deal-outside',
+    amount: 900,
+    payer_name: 'עומר',
+    dealTime: '2026-11-07T12:00:00'
+  };
+
+  const pastOmer = {
+    id: 'b-omer-past',
+    guest_name: 'עומר כהן',
+    check_in_date: '2026-10-20',
+    check_out_date: '2026-10-22',
+    booking_status: 'CHECKED_OUT',
+    total_price_agorot: 90000,
+    clearing_payments: []
+  };
+
+  const onSiteOther = {
+    id: 'b-onsite',
+    guest_name: 'אחר',
+    check_in_date: '2026-11-07',
+    check_out_date: '2026-11-08',
+    booking_status: 'CONFIRMED',
+    total_price_agorot: 90000,
+    clearing_payments: []
+  };
+
+  const defaults = suggestBookingsForDeal(deal, [pastOmer, onSiteOther]);
+  assert.equal(defaults.some((c) => c.bookingId === 'b-omer-past'), false);
+  assert.equal(defaults.some((c) => c.bookingId === 'b-onsite'), true);
+
+  const outside = suggestBookingsForDeal(deal, [pastOmer, onSiteOther], { mode: 'outside_name' });
+  assert.equal(outside.length, 1);
+  assert.equal(outside[0].bookingId, 'b-omer-past');
+  assert.equal(outside[0].flagged, true);
+  assert.equal(outside[0].flagKind, 'name_outside_window');
+  assert.equal(outside[0].flagLabel, 'התאמת שם מחוץ לחלון');
+});
+
+test('name similarity matches notes field', () => {
+  const deal = {
+    amount: 500,
+    payer_name: 'עומר',
+    dealTime: '2026-11-08T12:00:00Z'
+  };
+  const booking = {
+    id: 'b-notes',
+    guest_name: 'משפחה כהן',
+    notes: 'שילם עומר בכרטיס',
+    check_in_date: '2026-11-08',
+    check_out_date: '2026-11-09',
+    total_price_agorot: 50000,
+    clearing_payments: []
+  };
+  const results = suggestBookingsForDeal(deal, [booking]);
+  assert.equal(results.length, 1);
+  assert.ok(results[0].nameSimilarity >= 0.85);
+});

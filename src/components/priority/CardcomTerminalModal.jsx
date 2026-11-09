@@ -326,6 +326,7 @@ export default function CardcomTerminalModal({
   const [searchQuery, setSearchQuery] = useState('');
   const [pendingAction, setPendingAction] = useState(null);
   const [serverSuggestions, setServerSuggestions] = useState([]);
+  const [outsideWindowSuggestions, setOutsideWindowSuggestions] = useState([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [suggestionsError, setSuggestionsError] = useState(null);
   const [retryNonce, setRetryNonce] = useState(0);
@@ -359,7 +360,11 @@ export default function CardcomTerminalModal({
         if (res.ok) {
           const data = await res.json();
           const list = Array.isArray(data?.candidates) ? data.candidates : (Array.isArray(data?.suggestions) ? data.suggestions : []);
+          const outside = Array.isArray(data?.outside_window)
+            ? data.outside_window
+            : (Array.isArray(data?.name_outside_window) ? data.name_outside_window : []);
           setServerSuggestions(list);
+          setOutsideWindowSuggestions(outside);
           setSuggestionsError(null);
         } else {
           let errText = `שגיאת שרת (${res.status})`;
@@ -368,11 +373,13 @@ export default function CardcomTerminalModal({
             if (data?.error || data?.message) errText = data.error || data.message;
           } catch (_) {}
           setServerSuggestions([]);
+          setOutsideWindowSuggestions([]);
           setSuggestionsError(errText);
         }
       } catch (err) {
         if (!active) return;
         setServerSuggestions([]);
+        setOutsideWindowSuggestions([]);
         setSuggestionsError(err?.message || 'שגיאת תקשורת בטעינת מועמדים');
       } finally {
         if (active) {
@@ -392,7 +399,151 @@ export default function CardcomTerminalModal({
 
 
   // Candidates for the current deal (server-side only, no browser computation)
+
   const candidateBookings = serverSuggestions;
+  const outsideBookings = outsideWindowSuggestions;
+
+  const formatHeDate = (ymd) => {
+    if (!ymd || String(ymd).length < 10) return ymd || '';
+    const [y, mo, d] = String(ymd).slice(0, 10).split('-');
+    return `${d}.${mo}`;
+  };
+
+  const linkButtonLabel = (candidate) => {
+    if (isBusy) return 'משייך תשלום ומפיק חשבונית מס קבלה…';
+    if (candidate?.flagLabel) return `שייך – ${candidate.flagLabel}`;
+    const due = Math.round(Number(candidate?.dueIls) || 0);
+    const dealAmt = Math.round(Number(currentDeal?.amount) || 0);
+    if (candidate?.type === 'exact_due' || (due > 0 && Math.abs(dealAmt - due) < 0.5)) {
+      return 'שייך – סגירה מלאה';
+    }
+    if (candidate?.type === 'overpayment' || (due > 0 && dealAmt > due)) {
+      const surplus = Math.max(0, dealAmt - due);
+      return `שייך – סגירה + עודף ₪${surplus.toLocaleString('he-IL')}`;
+    }
+    if (candidate?.type === 'partial_payment' || (due > 0 && dealAmt < due)) {
+      const rem = Math.max(0, due - dealAmt);
+      return `שייך – נשאר ₪${rem.toLocaleString('he-IL')}`;
+    }
+    return 'שייך סליקה זו להזמנה';
+  };
+
+  const renderCandidateCard = (candidate) => {
+    const stayUrl = candidate.checkoutToken
+      ? `https://resortos.app/stay/${candidate.checkoutToken}`
+      : null;
+    const amountLine = candidate.amountLine
+      || (candidate.dueIls != null ? `יתרה ₪${Number(candidate.dueIls).toLocaleString('he-IL')}` : '');
+
+    return (
+      <div
+        key={candidate.bookingId}
+        style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '12px',
+          border: candidate.flagged ? '2px solid #f59e0b' : '1px solid #e2e8f0',
+          padding: '14px 16px',
+          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.04)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px'
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
+              {candidate.guestName}
+            </span>
+            <span
+              style={{
+                fontSize: '12px',
+                fontWeight: 700,
+                padding: '2px 8px',
+                borderRadius: '6px',
+                backgroundColor: '#e0f2fe',
+                color: '#0369a1',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              <Home size={12} /> {unitFullName(candidate.unitId, candidate.unitName)}
+            </span>
+          </div>
+          <div style={{ fontSize: '13px', color: '#475569', marginTop: '6px', lineHeight: 1.45 }}>
+            <div>כניסה {formatHeDate(candidate.checkIn)}</div>
+            <div>יציאה {formatHeDate(candidate.checkOut)}</div>
+          </div>
+          {stayUrl ? (
+            <a
+              href={stayUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                marginTop: 6,
+                fontSize: 12,
+                fontWeight: 700,
+                color: '#2563eb',
+                textDecoration: 'none'
+              }}
+            >
+              <ExternalLink size={12} /> כרטיס אורח
+            </a>
+          ) : null}
+        </div>
+
+        {amountLine ? (
+          <div
+            style={{
+              padding: '8px 12px',
+              borderRadius: '8px',
+              backgroundColor: '#f8fafc',
+              fontSize: '13px',
+              fontWeight: 700,
+              color: '#0f172a'
+            }}
+          >
+            {amountLine}
+          </div>
+        ) : null}
+
+        <button
+          type="button"
+          disabled={isBusy}
+          onClick={() => setPendingAction({
+            type: 'link',
+            dealId,
+            bookingId: candidate.bookingId,
+            guestName: candidate.guestName,
+            amount: amountFormatted
+          })}
+          style={{
+            width: '100%',
+            padding: '10px 14px',
+            borderRadius: '8px',
+            border: 'none',
+            backgroundColor: '#16a34a',
+            color: '#ffffff',
+            fontSize: '14px',
+            fontWeight: 700,
+            cursor: isBusy ? 'not-allowed' : 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            opacity: isBusy ? 0.7 : 1
+          }}
+        >
+          <Check size={16} />
+          {linkButtonLabel(candidate)}
+        </button>
+      </div>
+    );
+  };
+
 
   if (!isOpen) return null;
   if ((!pendingCharges || pendingCharges.length === 0) && !loadError) return null;
@@ -744,7 +895,7 @@ export default function CardcomTerminalModal({
                 טוען מועמדים מהשרת...
               </div>
             </div>
-          ) : candidateBookings.length === 0 ? (
+                    ) : (candidateBookings.length + outsideBookings.length) === 0 ? (
             <div
               style={{
                 textAlign: 'center',
@@ -764,206 +915,18 @@ export default function CardcomTerminalModal({
               </div>
             </div>
           ) : (
-            candidateBookings.map((candidate) => {
-              const isRecommended = candidate.priority === 1;
-
-              return (
-                <div
-                  key={candidate.bookingId}
-                  style={{
-                    backgroundColor: '#ffffff',
-                    borderRadius: '12px',
-                    border: isRecommended ? '2px solid #22c55e' : '1px solid #e2e8f0',
-                    padding: '14px 16px',
-                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.04)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '10px'
-                  }}
-                >
-                  {/* Candidate Header */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
-                          {candidate.guestName}
-                        </span>
-                        <span
-                          style={{
-                            fontSize: '12px',
-                            fontWeight: 700,
-                            padding: '2px 8px',
-                            borderRadius: '6px',
-                            backgroundColor: '#e0f2fe',
-                            color: '#0369a1',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}
-                        >
-                          <Home size={12} /> {unitFullName(candidate.unitId, candidate.unitName)}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
-                        📅 תאריכים: {candidate.checkIn} עד {candidate.checkOut}
-                        {candidate.guestPhone ? ` · 📞 ${candidate.guestPhone}` : ''}
-                      </div>
-                    </div>
-
-                    {/* Classification Tag Badge */}
-                    <div
-                      style={{
-                        padding: '4px 10px',
-                        borderRadius: '6px',
-                        fontSize: '12px',
-                        fontWeight: 700,
-                        backgroundColor: candidate.badgeBg || '#e2e8f0',
-                        color: candidate.tagColor || '#1e293b',
-                        whiteSpace: 'nowrap'
-                      }}
-                    >
-                      {candidate.tag}
-                    </div>
+            <>
+              {candidateBookings.map((candidate) => renderCandidateCard(candidate))}
+              {outsideBookings.length > 0 ? (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: '#92400e', margin: '8px 2px' }}>
+                    התאמת שם מחוץ לחלון
                   </div>
-
-                  {/* Financial calculation: remaining = total − recorded payments only (1:1, no deposit/VAT/fees) */}
-                  {(() => {
-                    const totalIls = Number(candidate.totalIls) || 0;
-                    const paidIls = Number(candidate.paidIls) || 0;
-                    const dealAmt = Number(currentDeal?.amount) || 0;
-                    const dueIls = Math.max(0, totalIls - paidIls);
-                    const afterIls = Math.max(0, dueIls - dealAmt);
-                    return (
-                  <div
-                    style={{
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      backgroundColor: '#f8fafc',
-                      fontSize: '13px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '6px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <div>
-                        <span style={{ color: '#475569' }}>יתרה נוכחית: </span>
-                        <b style={{ color: '#0f172a' }}>₪{dueIls.toLocaleString('he-IL')}</b>
-                        <span style={{ color: '#94a3b8', fontSize: '12px', marginRight: '6px' }}>
-                          (סה״כ ₪{totalIls.toLocaleString('he-IL')} − שולם ₪{paidIls.toLocaleString('he-IL')})
-                        </span>
-                      </div>
-                      <div style={{ fontWeight: 700, color: afterIls === 0 ? '#16a34a' : '#b45309' }}>
-                        אחרי שיוך: ₪{afterIls.toLocaleString('he-IL')}
-                      </div>
-                    </div>
-                    <div style={{ fontWeight: 600, color: candidate.tagColor }}>
-                      {candidate.description}
-                    </div>
-                  </div>
-                    );
-                  })()}
-
-                  {/* Link Button */}
-                  <button
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => setPendingAction({
-                      type: 'link',
-                      dealId,
-                      bookingId: candidate.bookingId,
-                      guestName: candidate.guestName,
-                      amount: amountFormatted
-                    })}
-                    style={{
-                      width: '100%',
-                      padding: '10px 14px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      backgroundColor: isRecommended ? '#16a34a' : '#2563eb',
-                      color: '#ffffff',
-                      fontSize: '14px',
-                      fontWeight: 700,
-                      cursor: isBusy ? 'not-allowed' : 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '8px',
-                      opacity: isBusy ? 0.7 : 1
-                    }}
-                  >
-                    <Check size={16} />
-                    {isBusy
-                      ? 'משייך תשלום ומפיק חשבונית מס קבלה…'
-                      : candidate.type === 'partial_payment'
-                      ? `שייך כתשלום חלקי להזמנה זו (יסגור ₪${amountFormatted})`
-                      : 'שייך סליקה זו להזמנה'}
-                  </button>
+                  {outsideBookings.map((candidate) => renderCandidateCard(candidate))}
                 </div>
-              );
-            })
+              ) : null}
+            </>
           )}
-        </div>
-
-        {/* Modal Footer */}
-        <div
-          style={{
-            padding: '12px 20px',
-            backgroundColor: '#ffffff',
-            borderTop: '1px solid #e2e8f0',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => setPendingAction({
-              type: 'test',
-              dealId,
-              amount: amountFormatted
-            })}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#fef3c7',
-              color: '#92400e',
-              border: '1px solid #fde68a',
-              borderRadius: '8px',
-              fontSize: '13px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <AlertCircle size={15} />
-            סמן כבדיקה (דורש אישור)
-          </button>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>
-              כל שינוי סטטוס דורש אישור מפורש
-            </span>
-            {onEmergencyEscape ? (
-              <button
-                type="button"
-                onClick={() => setPendingAction({ type: 'escape' })}
-                style={{
-                  padding: '6px 12px',
-                  backgroundColor: '#f1f5f9',
-                  color: '#475569',
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '6px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
-              >
-                המשך לעת עתה (חירום)
-              </button>
-            ) : null}
-          </div>
         </div>
 
 

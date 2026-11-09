@@ -310,8 +310,9 @@ async function handleCardcomSuggestions(request, env) {
 
     let bookings = [];
     try {
+      // Include CANCELED rows: engine surfaces canceled+open-balance with strong name/exact amount as flagged.
       const bRes = await fetchPostgrest(
-        '/hotelos_bookings?booking_status=neq.CANCELED&order=check_in_date.desc&limit=1000',
+        '/hotelos_bookings?booking_status=neq.DELETED&order=check_in_date.desc&limit=1000',
         { method: 'GET' },
         env,
         { requireServiceRole: true }
@@ -338,7 +339,21 @@ async function handleCardcomSuggestions(request, env) {
       ? []
       : suggestBookingsForDeal(deal, bookings, { limit: 10, includeOlderDebts: true })
         .filter((c) => !candidates.some((x) => x.bookingId === c.bookingId));
-    return json({ ok: true, candidates, suggestions: candidates, older_debts: olderDebts, deal_date: getIsraelDateString(dealTime) });
+    // Strong name matches outside the on-site window — flagged side list only.
+    const outsideName = query
+      ? []
+      : suggestBookingsForDeal(deal, bookings, { limit: 10, mode: 'outside_name' })
+        .filter((c) => !candidates.some((x) => x.bookingId === c.bookingId)
+          && !olderDebts.some((x) => x.bookingId === c.bookingId));
+    return json({
+      ok: true,
+      candidates,
+      suggestions: candidates,
+      older_debts: olderDebts,
+      outside_window: outsideName,
+      name_outside_window: outsideName,
+      deal_date: getIsraelDateString(dealTime)
+    });
   } catch (err) {
     return errorJson(err?.message || 'FAILED_TO_GET_SUGGESTIONS', 500, 'SUGGESTIONS_ERROR');
   }
