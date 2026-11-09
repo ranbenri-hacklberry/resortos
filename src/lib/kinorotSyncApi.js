@@ -202,7 +202,12 @@ export function unseenKinorotChanges(changes, ackedKeys = readAckedKinorotChange
   };
 }
 
+/** Temporary kill-switch for the legacy "עדכון מיומן כינורות" popup (and its unread badge).
+ *  Keep the modal/sync code; a redesign will replace this later. Flip to true to re-enable. */
+export const KINOROT_CHANGES_POPUP_ENABLED = false;
+
 export function hasUnseenKinorotChanges(status, today = israelToday()) {
+  if (!KINOROT_CHANGES_POPUP_ENABLED) return false;
   if (!status?.changes) return false;
   return unseenKinorotChanges(status.changes, undefined, today).total > 0;
 }
