@@ -73,10 +73,8 @@ async function allowStaffOrPrivate(req, res, next) {
     const bridgeHeader = String(req.headers['x-hotelos-bridge-secret'] || '').trim();
     const mailboxSecret = String(process.env.CHECKOUT_MAILBOX_SECRET || '').trim();
     const bridgeSecret = String(process.env.HOTELOS_API_SECRET || '').trim();
-    const deskPin = String(process.env.HOTELOS_DESK_PIN || '').trim();
     if ((mailboxSecret && (mailboxHeader === mailboxSecret || token === mailboxSecret))
-      || (bridgeSecret && bridgeHeader === bridgeSecret)
-      || (deskPin && token === deskPin)) {
+      || (bridgeSecret && bridgeHeader === bridgeSecret)) {
       req.staffUser = { username: 'dashboard', role: 'MANAGER', name: 'דשבורד' };
       return next();
     }

@@ -248,7 +248,7 @@ function validateCardcomTransactionMatch({ txn, terminal, dealIdStr, expectedAmo
 
 async function verifySessionToken(env, token) {
   if (!token || !token.includes('.')) return null;
-  const secret = String(env?.CHECKOUT_MAILBOX_SECRET || env?.HOTELOS_API_SECRET || env?.HOTELOS_DESK_PIN || '').trim();
+  const secret = String(env?.CHECKOUT_MAILBOX_SECRET || env?.HOTELOS_API_SECRET || '').trim();
   if (!secret) return null;
   const [encoded, sig] = token.split('.');
   const expected = await hmacHex(secret, encoded);
