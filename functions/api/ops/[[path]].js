@@ -269,8 +269,6 @@ async function isAuthorizedOps(request, env) {
   const bridgeHeader = request.headers.get('x-hotelos-bridge-secret') || '';
   const mailboxSecret = String(env?.CHECKOUT_MAILBOX_SECRET || '').trim();
   const bridgeSecret = String(env?.HOTELOS_API_SECRET || '').trim();
-  const deskPin = String(env?.HOTELOS_DESK_PIN || '').trim();
-
   if (mailboxSecret && mailboxHeader === mailboxSecret) return true;
   if (bridgeSecret && bridgeHeader === bridgeSecret) return true;
 
@@ -278,7 +276,6 @@ async function isAuthorizedOps(request, env) {
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
   if (token) {
     if (token === 'dev-local-token' && env?.ENVIRONMENT === 'development') return true;
-    if (deskPin && token === deskPin) return true;
     if (mailboxSecret && token === mailboxSecret) return true;
     const session = await verifySessionToken(env, token);
     if (session) return true;

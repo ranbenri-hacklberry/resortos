@@ -29,16 +29,16 @@ const DEFAULT_DEV_USER = {
   username: 'max',
   display_name: 'מקס (רני)',
   role: 'MANAGER',
-  phone: '0506102416',
   tenant_id: DEMO_TENANT_ID
 };
 
+// Localhost-only fast switch labels — no phone numbers in the client bundle.
 const PRESET_STAFF_SWITCH = [
-  { id: '00000000-0000-0000-0000-000000000001', username: 'max', display_name: 'מקס (רני)', role: 'MANAGER', phone: '0506102416', tenant_id: DEMO_TENANT_ID },
-  { id: '00000000-0000-0000-0000-000000000002', username: 'adam', display_name: 'אדם', role: 'MANAGER', phone: '0543387383', tenant_id: DEMO_TENANT_ID },
-  { id: '00000000-0000-0000-0000-000000000003', username: 'daniel', display_name: 'דניאל', role: 'MANAGER', phone: '0501234567', tenant_id: DEMO_TENANT_ID },
-  { id: '00000000-0000-0000-0000-000000000004', username: 'barak', display_name: 'ברק', role: 'MANAGER', phone: '0503934696', tenant_id: DEMO_TENANT_ID },
-  { id: '00000000-0000-0000-0000-000000000005', username: 'ops', display_name: 'צוות תפעול (אבו/טופ)', role: 'OPERATIONS', phone: '0540000000', tenant_id: DEMO_TENANT_ID }
+  { id: '00000000-0000-0000-0000-000000000001', username: 'max', display_name: 'מקס (רני)', role: 'MANAGER', tenant_id: DEMO_TENANT_ID },
+  { id: '00000000-0000-0000-0000-000000000002', username: 'adam', display_name: 'אדם', role: 'MANAGER', tenant_id: DEMO_TENANT_ID },
+  { id: '00000000-0000-0000-0000-000000000003', username: 'daniel', display_name: 'דניאל', role: 'MANAGER', tenant_id: DEMO_TENANT_ID },
+  { id: '00000000-0000-0000-0000-000000000004', username: 'barak', display_name: 'ברק', role: 'MANAGER', tenant_id: DEMO_TENANT_ID },
+  { id: '00000000-0000-0000-0000-000000000005', username: 'ops', display_name: 'צוות תפעול', role: 'OPERATIONS', tenant_id: DEMO_TENANT_ID }
 ];
 
 const isLocalHost = typeof window !== 'undefined' && (
@@ -174,18 +174,13 @@ export default function DashboardApp() {
   }, [token, activeTab]);
 
   // Auth form states
-  const [authMode, setAuthMode] = useState('otp'); // 'otp' | 'password'
-  const [phone, setPhone] = useState('0506102416'); // default owner mobile
+  const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [challenge, setChallenge] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otpMessage, setOtpMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  // Password fallback states (prefilled with max/123456 for convenience)
-  const [username, setUsername] = useState('max');
-  const [password, setPassword] = useState('123456');
 
   // Verify stored session on boot
   useEffect(() => {
@@ -235,7 +230,7 @@ export default function DashboardApp() {
       const res = await fetch('/api/dashboard/otp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, username: authMode === 'otp' ? undefined : username })
+        body: JSON.stringify({ phone })
       });
       let data = {};
       try {
@@ -300,48 +295,6 @@ export default function DashboardApp() {
     }
   };
 
-  const handlePasswordLogin = async (e) => {
-    if (e) e.preventDefault();
-    setError('');
-    setLoading(true);
-    if (isLocalHost) {
-      setToken('dev-local-token');
-      setUser(DEFAULT_DEV_USER);
-      setLoading(false);
-      return;
-    }
-    try {
-      const res = await fetch('/api/dashboard/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-      let data = {};
-      try {
-        data = await res.json();
-      } catch {
-        data = { ok: res.ok };
-      }
-      if (!res.ok || !data.ok || !data.token) {
-        throw new Error(data.message || data.error || 'פרטי התחברות שגויים');
-      }
-      setToken(data.token);
-      setUser(data.user);
-      try {
-        localStorage.setItem(DASHBOARD_TOKEN_KEY, data.token);
-        localStorage.setItem(DASHBOARD_USER_KEY, JSON.stringify(data.user));
-      } catch {}
-      if (data.user.role === 'FINANCE') {
-        setActiveTab('financials');
-      } else {
-        setActiveTab('priority');
-      }
-    } catch (err) {
-      setError(err.message || 'שגיאה בהתחברות');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleLogout = () => {
     setToken('');
@@ -468,69 +421,40 @@ export default function DashboardApp() {
             </div>
           )}
 
-          {/* Form: OTP Channel */}
-          {authMode === 'otp' ? (
-            <div>
+          {/* Form: OTP only — no staff directory, no password */}
+          <div>
               {!otpSent ? (
                 <form onSubmit={handleSendOtp} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8rem', color: '#D4C5B9', fontWeight: 700, marginBottom: '0.4rem' }}>
-                      מספר טלפון מורשה (לוואטסאפ / SMS)
+                      מספר טלפון
                     </label>
-                    <div style={{ position: 'relative' }}>
-                      <input 
-                        type="tel"
-                        dir="ltr"
-                        required
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="050-6102416 / 054-8317887"
-                        style={{
-                          width: '100%',
-                          background: 'rgba(255, 255, 255, 0.06)',
-                          border: '1px solid rgba(197, 160, 89, 0.4)',
-                          borderRadius: '14px',
-                          padding: '0.85rem 1rem',
-                          color: '#FFFFFF',
-                          fontSize: '1rem',
-                          fontWeight: 700,
-                          textAlign: 'left',
-                          boxSizing: 'border-box',
-                          outline: 'none'
-                        }}
-                      />
-                    </div>
-                    <div style={{ marginTop: '0.45rem', display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
-                      <button
-                        type="button"
-                        onClick={() => setPhone('0506102416')}
-                        style={{ background: 'rgba(197, 160, 89, 0.2)', border: '1px solid rgba(197, 160, 89, 0.4)', color: '#F1D699', borderRadius: '8px', padding: '0.2rem 0.55rem', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
-                      >
-                        מקס (נייד 050-6102416)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPhone('0548317887')}
-                        style={{ background: 'rgba(197, 160, 89, 0.2)', border: '1px solid rgba(197, 160, 89, 0.4)', color: '#F1D699', borderRadius: '8px', padding: '0.2rem 0.55rem', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
-                      >
-                        מקס (ווטסאפ 054-8317887)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPhone('0543387383')}
-                        style={{ background: 'rgba(255, 255, 255, 0.08)', border: '1px solid rgba(255, 255, 255, 0.15)', color: '#D4C5B9', borderRadius: '8px', padding: '0.2rem 0.55rem', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
-                      >
-                        אדם (054-3387383)
-                      </button>
-                    </div>
-                    <span style={{ fontSize: '0.72rem', color: '#9E897C', display: 'block', marginTop: '0.35rem' }}>
-                      מקס (נייד: 050-6102416 / ווטסאפ: 054-8317887), אדם (054-3387383) או מנהלי מתחם מורשים
-                    </span>
+                    <input
+                      type="tel"
+                      dir="ltr"
+                      required
+                      autoComplete="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="05X-XXXXXXX"
+                      style={{
+                        width: '100%',
+                        background: 'rgba(255, 255, 255, 0.06)',
+                        border: '1px solid rgba(197, 160, 89, 0.4)',
+                        borderRadius: '14px',
+                        padding: '0.85rem 1rem',
+                        color: '#FFFFFF',
+                        fontSize: '1rem',
+                        fontWeight: 700,
+                        textAlign: 'left',
+                        boxSizing: 'border-box',
+                        outline: 'none'
+                      }}
+                    />
                   </div>
-
                   <button
                     type="submit"
-                    disabled={loading}
+                    disabled={loading || !String(phone || '').trim()}
                     style={{
                       marginTop: '0.5rem',
                       background: 'linear-gradient(135deg, #C5A059, #99742B)',
@@ -557,12 +481,11 @@ export default function DashboardApp() {
                   <div style={{ background: 'rgba(197, 160, 89, 0.1)', border: '1px solid rgba(197, 160, 89, 0.3)', borderRadius: '12px', padding: '0.75rem', fontSize: '0.8rem', color: '#F1D699' }}>
                     {otpMessage}
                   </div>
-
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8rem', color: '#D4C5B9', fontWeight: 700, marginBottom: '0.4rem' }}>
                       הזן קוד אימות בן 6 ספרות
                     </label>
-                    <input 
+                    <input
                       type="text"
                       dir="ltr"
                       maxLength={6}
@@ -570,7 +493,7 @@ export default function DashboardApp() {
                       required
                       value={otp}
                       onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                      placeholder="123456"
+                      placeholder="------"
                       style={{
                         width: '100%',
                         background: 'rgba(255, 255, 255, 0.08)',
@@ -587,7 +510,6 @@ export default function DashboardApp() {
                       }}
                     />
                   </div>
-
                   <button
                     type="submit"
                     disabled={loading || otp.length < 6}
@@ -611,10 +533,9 @@ export default function DashboardApp() {
                     {loading ? <RefreshCw size={18} className="animate-spin" /> : <ShieldCheck size={18} />}
                     <span>{loading ? 'מאמת...' : 'אמת והיכנס לדשבורד'}</span>
                   </button>
-
                   <button
                     type="button"
-                    onClick={() => setOtpSent(false)}
+                    onClick={() => { setOtpSent(false); setOtp(''); setChallenge(''); setOtpMessage(''); }}
                     style={{
                       background: 'transparent',
                       border: 'none',
@@ -628,119 +549,7 @@ export default function DashboardApp() {
                   </button>
                 </form>
               )}
-
-              <div style={{ marginTop: '1.5rem', textAlign: 'center', borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '1rem' }}>
-                <button
-                  type="button"
-                  onClick={() => { setAuthMode('password'); setError(''); }}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#C5A059',
-                    fontSize: '0.78rem',
-                    fontWeight: 700,
-                    cursor: 'pointer'
-                  }}
-                >
-                  מעבר לכניסה באמצעות שם משתמש וסיסמה / PIN
-                </button>
-              </div>
-            </div>
-          ) : (
-            /* Form: Password Fallback */
-            <form onSubmit={handlePasswordLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', color: '#D4C5B9', fontWeight: 700, marginBottom: '0.4rem' }}>
-                  שם משתמש
-                </label>
-                <input 
-                  type="text"
-                  required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="adam / daniel / max"
-                  style={{
-                    width: '100%',
-                    background: 'rgba(255, 255, 255, 0.06)',
-                    border: '1px solid rgba(197, 160, 89, 0.4)',
-                    borderRadius: '14px',
-                    padding: '0.85rem 1rem',
-                    color: '#FFFFFF',
-                    fontSize: '0.95rem',
-                    fontWeight: 700,
-                    boxSizing: 'border-box',
-                    outline: 'none'
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', color: '#D4C5B9', fontWeight: 700, marginBottom: '0.4rem' }}>
-                  סיסמה / קוד PIN
-                </label>
-                <input 
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••"
-                  style={{
-                    width: '100%',
-                    background: 'rgba(255, 255, 255, 0.06)',
-                    border: '1px solid rgba(197, 160, 89, 0.4)',
-                    borderRadius: '14px',
-                    padding: '0.85rem 1rem',
-                    color: '#FFFFFF',
-                    fontSize: '0.95rem',
-                    fontWeight: 700,
-                    boxSizing: 'border-box',
-                    outline: 'none'
-                  }}
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                style={{
-                  marginTop: '0.5rem',
-                  background: 'linear-gradient(135deg, #C5A059, #99742B)',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  borderRadius: '14px',
-                  padding: '0.9rem',
-                  fontSize: '0.95rem',
-                  fontWeight: 800,
-                  cursor: loading ? 'wait' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.5rem',
-                  boxShadow: '0 6px 16px rgba(197, 160, 89, 0.35)'
-                }}
-              >
-                {loading ? <RefreshCw size={18} className="animate-spin" /> : <KeyRound size={18} />}
-                <span>{loading ? 'מתחבר...' : 'התחבר לדשבורד'}</span>
-              </button>
-
-              <div style={{ marginTop: '1rem', textAlign: 'center' }}>
-                <button
-                  type="button"
-                  onClick={() => { setAuthMode('otp'); setError(''); }}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#C5A059',
-                    fontSize: '0.78rem',
-                    fontWeight: 700,
-                    cursor: 'pointer'
-                  }}
-                >
-                  חזרה לכניסה מהירה באמצעות קוד SMS (OTP)
-                </button>
-              </div>
-            </form>
-          )}
+          </div>
         </div>
       </div>
     );
@@ -1220,7 +1029,7 @@ export default function DashboardApp() {
                                 מחובר
                               </span>
                             ) : (
-                              <span style={{ fontSize: '0.68rem', color: isDark ? '#94A3B8' : '#736055' }}>{staff.phone}</span>
+                              <span style={{ fontSize: '0.68rem', color: isDark ? '#94A3B8' : '#736055' }}>{staff.role}</span>
                             )}
                           </button>
                         );
