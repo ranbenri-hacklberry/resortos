@@ -1304,19 +1304,33 @@ export async function onRequest(context) {
       if (!bookingId) return errorJson('Missing booking_id', 400, 'MISSING_BOOKING_ID');
 
       let booking = null;
+      let lookupStatus = 0;
+      let lookupBody = null;
       try {
         const bRes = await fetchPostgrest(
-          `/hotelos_bookings?id=eq.${encodeURIComponent(bookingId)}&select=id,guest_name,guest_phone,unit_id,unit_name&limit=1`,
+          `/hotelos_bookings?id=eq.${encodeURIComponent(bookingId)}&select=id,guest_name,guest_phone,unit_id&limit=1`,
           { method: 'GET' },
           env,
           { requireServiceRole: true }
         );
+        lookupStatus = bRes ? bRes.status : 0;
         if (bRes && bRes.ok) {
           const rows = await bRes.json();
           if (Array.isArray(rows) && rows[0]) booking = rows[0];
+        } else if (bRes) {
+          try { lookupBody = await bRes.json(); } catch (_) { lookupBody = null; }
         }
       } catch (_) {}
-      if (!booking) return errorJson('Booking not found', 404, 'BOOKING_NOT_FOUND');
+      if (!booking) {
+        if (lookupStatus && lookupStatus !== 404) {
+          return errorJson(
+            lookupBody?.message || lookupBody?.error || `Booking lookup failed (${lookupStatus})`,
+            502,
+            'BOOKING_LOOKUP_FAILED'
+          );
+        }
+        return errorJson('Booking not found', 404, 'BOOKING_NOT_FOUND');
+      }
       const phone = String(booking.guest_phone || body.phone || '').trim();
       if (!phone) return errorJson('אין טלפון אורח בהזמנה', 400, 'MISSING_GUEST_PHONE');
 
@@ -1339,7 +1353,8 @@ export async function onRequest(context) {
       }
       if (!invoiceUrl) return errorJson('אין קישור חשבונית לשליחה', 400, 'MISSING_INVOICE_URL');
 
-      const unitName = booking.unit_name || booking.unit_id || '';
+      const rawUnit = String(body.unit_name || '').trim();
+      const unitName = (/^k\d+$/i.test(rawUnit) || /^kin_/i.test(rawUnit)) ? '' : rawUnit;
       const docRef = invoiceNumber ? ` מס׳ ${invoiceNumber}` : '';
       const descRef = unitName ? ` עבור השהייה שלך ב-${unitName}` : ' עבור השהייה שלך';
       const message = `בשמחה! הנה קישור לחשבונית המס קבלה${docRef}${descRef}:\n${invoiceUrl}\nנשמח לעמוד לרשותך לכל דבר נוסף ✨`;

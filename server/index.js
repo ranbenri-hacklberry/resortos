@@ -836,11 +836,21 @@ app.post('/api/ops/cardcom-terminal/send-invoice-whatsapp', allowStaffOrPrivate,
     if (!bookingId) return res.status(400).json({ error: 'MISSING_BOOKING_ID', message: 'Missing booking_id' });
 
     const { studioRest } = await import('./guestComms.js');
-    const rows = await studioRest(
-      `hotelos_bookings?id=eq.${encodeURIComponent(bookingId)}&select=id,guest_name,guest_phone,unit_id,unit_name&limit=1`
-    );
-    const booking = Array.isArray(rows) ? rows[0] : null;
-    if (!booking) return res.status(404).json({ error: 'BOOKING_NOT_FOUND', message: 'Booking not found' });
+    const { buildCardcomInvoiceWaBookingQuery, unitLabelForInvoiceMessage, formatGuestInvoiceDeliveryMessage } = await import('./lib/cardcomTerminalService.js');
+    let booking = null;
+    let lookupErr = null;
+    try {
+      const rows = await studioRest(buildCardcomInvoiceWaBookingQuery(bookingId));
+      booking = Array.isArray(rows) ? rows[0] : null;
+    } catch (err) {
+      lookupErr = err;
+    }
+    if (!booking) {
+      if (lookupErr) {
+        return res.status(502).json({ error: 'BOOKING_LOOKUP_FAILED', message: lookupErr?.message || 'Booking lookup failed' });
+      }
+      return res.status(404).json({ error: 'BOOKING_NOT_FOUND', message: 'Booking not found' });
+    }
     const phone = String(booking.guest_phone || req.body?.phone || '').trim();
     if (!phone) return res.status(400).json({ error: 'MISSING_GUEST_PHONE', message: 'אין טלפון אורח בהזמנה' });
 
@@ -858,11 +868,11 @@ app.post('/api/ops/cardcom-terminal/send-invoice-whatsapp', allowStaffOrPrivate,
     }
     if (!invoiceUrl) return res.status(400).json({ error: 'MISSING_INVOICE_URL', message: 'אין קישור חשבונית לשליחה' });
 
-    const { formatGuestInvoiceDeliveryMessage } = await import('./lib/cardcomTerminalService.js');
+    const unitName = unitLabelForInvoiceMessage(booking, req.body?.unit_name);
     const message = formatGuestInvoiceDeliveryMessage(
       invoiceUrl,
       invoiceNumber,
-      booking.unit_name || booking.unit_id || ''
+      unitName
     );
 
     // Reuse Chloe WhatsApp path (no auto-send — this handler only runs on explicit click).
