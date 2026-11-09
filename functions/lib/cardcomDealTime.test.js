@@ -27,3 +27,22 @@ test('normalizeCardcomDealTime keeps real non-zero offsets as absolute instants'
 test('formatCardcomDealDateTimeHe is dd.mm HH:MM Asia/Jerusalem', () => {
   assert.equal(formatCardcomDealDateTimeHe('2026-11-05T11:54:38+00:00'), '05.11 11:54');
 });
+
+test('formatCardcomDealDateTimeHe does not double-shift already-normalized UTC from pending API', () => {
+  // Cardcom CreateDate wall 15:51 IL persisted as +00:00 (legacy).
+  assert.equal(formatCardcomDealDateTimeHe('2026-11-07T15:51:50+00:00'), '07.11 15:51');
+  // Pending endpoint emits normalizeCardcomDealTime(...) → true UTC .000Z
+  assert.equal(formatCardcomDealDateTimeHe('2026-11-07T13:51:50.000Z'), '07.11 15:51');
+  // Iska: wall 14:10 IL
+  assert.equal(formatCardcomDealDateTimeHe('2026-11-08T14:10:35+00:00'), '08.11 14:10');
+  assert.equal(formatCardcomDealDateTimeHe('2026-11-08T12:10:35.000Z'), '08.11 14:10');
+});
+
+test('normalize then format is stable (idempotent display)', () => {
+  const raw = '2026-11-07T15:51:50+00:00';
+  const once = normalizeCardcomDealTime(raw);
+  assert.equal(once, '2026-11-07T13:51:50.000Z');
+  assert.equal(formatCardcomDealDateTimeHe(raw), '07.11 15:51');
+  assert.equal(formatCardcomDealDateTimeHe(once), '07.11 15:51');
+  assert.equal(formatCardcomDealDateTimeHe(normalizeCardcomDealTime(once)), '07.11 15:51');
+});
