@@ -16,27 +16,35 @@ export function isUnverifiedKinorotPayment(p) {
 export function calculateBookingBalances(b) {
   if (!b) return { totalIls: 0, paidIls: 0, dueIls: 0, depositIls: 0, isUnpaid: false, isUnverifiedPaid: false };
 
-  const totalIls = Math.round(Number(b.total_price_agorot ? b.total_price_agorot / 100 : b.total_price || 0));
+  // 1:1 money: remaining = total - recorded (verified) payments only.
+  // No deposit / VAT / fees / mid-rounding deductions. Deposit is metadata for match hints only.
+  const totalAgorot = Number(b.total_price_agorot) || (Number(b.total_price || 0) * 100);
   const clearing = Array.isArray(b.clearing_payments) ? b.clearing_payments : [];
 
-  const verifiedPaidIls = clearing
+  const verifiedAgorot = clearing
     .filter((p) => !isUnverifiedKinorotPayment(p))
     .reduce((sum, p) => {
-      const val = Number(p.amount_agorot ? p.amount_agorot / 100 : p.amount_ils || 0);
+      const val = Number(p.amount_agorot ? p.amount_agorot : (Number(p.amount_ils || 0) * 100));
       return sum + (Number.isFinite(val) ? val : 0);
     }, 0);
 
   const hasOnlyUnverifiedKinorot = clearing.length > 0 && clearing.every(isUnverifiedKinorotPayment);
   const isUnverifiedPaid = String(b.payment_status || '').toUpperCase() === 'PAID' && hasOnlyUnverifiedKinorot;
 
-  const dueIls = isUnverifiedPaid && verifiedPaidIls === 0 ? totalIls : Math.max(0, Math.round(totalIls - verifiedPaidIls));
-  const depositIls = Math.round(Number(b.deposit_agorot ? b.deposit_agorot / 100 : b.deposit || 0));
+  const dueAgorot = isUnverifiedPaid && verifiedAgorot === 0
+    ? totalAgorot
+    : Math.max(0, totalAgorot - verifiedAgorot);
+
+  const totalIls = totalAgorot / 100;
+  const verifiedPaidIls = verifiedAgorot / 100;
+  const dueIls = dueAgorot / 100;
+  const depositIls = (Number(b.deposit_agorot) || Number(b.deposit || 0) * 100) / 100;
   const isPaid = !isUnverifiedPaid && (String(b.payment_status || '').toUpperCase() === 'PAID' || (totalIls > 0 && dueIls <= 0));
   const isUnpaid = isUnverifiedPaid || (!isPaid && (dueIls > 0 || totalIls === 0));
 
   return {
     totalIls,
-    paidIls: Math.round(verifiedPaidIls),
+    paidIls: verifiedPaidIls,
     dueIls,
     depositIls,
     isPaid,

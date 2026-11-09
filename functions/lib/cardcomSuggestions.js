@@ -15,6 +15,15 @@
  * - Manual search (by name/phone) stays available as an explicit fallback, but the default list is limited by the rule above.
  */
 
+import { unitFullName } from '../../src/lib/units.js';
+
+/** Remaining after a charge: due - this deal (no deposit/VAT/fees). */
+export function remainingIlsAfterCharge(dueIls, dealAmount) {
+  const due = Number(dueIls) || 0;
+  const deal = Number(dealAmount) || 0;
+  return Math.max(0, due - deal);
+}
+
 const HE_EN_PAIRS = [
   ['דושיין', 'dushein'],
   ['דושן', 'dushen'],
@@ -86,8 +95,9 @@ export function isUnverifiedKinorotPayment(p) {
 export function calculateBookingBalances(b) {
   if (!b) return { totalIls: 0, paidIls: 0, dueIls: 0, depositIls: 0, isUnpaid: false, isUnverifiedPaid: false };
 
+  // 1:1 money: remaining = total - recorded (verified) payments only.
+  // No deposit / VAT / fees / mid-rounding deductions. Deposit is metadata for match hints only.
   const totalAgorot = Number(b.total_price_agorot) || (Number(b.total_price || b.total_ils || b.price || 0) * 100);
-  const totalIls = Math.round(totalAgorot / 100);
   const clearing = Array.isArray(b.clearing_payments) ? b.clearing_payments : [];
 
   const verifiedAgorot = clearing
@@ -97,13 +107,17 @@ export function calculateBookingBalances(b) {
       return sum + (Number.isFinite(val) ? val : 0);
     }, 0);
 
-  const verifiedPaidIls = Math.round(verifiedAgorot / 100);
-
   const hasOnlyUnverifiedKinorot = clearing.length > 0 && clearing.every(isUnverifiedKinorotPayment);
   const isUnverifiedPaid = String(b.payment_status || '').toUpperCase() === 'PAID' && hasOnlyUnverifiedKinorot;
 
-  const dueIls = isUnverifiedPaid && verifiedPaidIls === 0 ? totalIls : Math.max(0, totalIls - verifiedPaidIls);
-  const depositIls = Math.round(Number(b.deposit_agorot ? b.deposit_agorot / 100 : b.deposit || 0));
+  const dueAgorot = isUnverifiedPaid && verifiedAgorot === 0
+    ? totalAgorot
+    : Math.max(0, totalAgorot - verifiedAgorot);
+
+  const totalIls = totalAgorot / 100;
+  const verifiedPaidIls = verifiedAgorot / 100;
+  const dueIls = dueAgorot / 100;
+  const depositIls = (Number(b.deposit_agorot) || Number(b.deposit || 0) * 100) / 100;
 
   const isPaid = !isUnverifiedPaid && (String(b.payment_status || '').toUpperCase() === 'PAID' || (totalIls > 0 && dueIls <= 0));
   const isUnpaid = isUnverifiedPaid || (!isPaid && dueIls > 0);
@@ -191,19 +205,21 @@ export function classifyCandidate(dealAmountNum, dueIls, totalIls) {
       tag: 'סגירה מלאה',
       tagColor: '#16a34a',
       badgeBg: '#dcfce7',
-      description: `סוגר את מלוא היתרה (₪${due.toLocaleString('he-IL')})`
+      description: `סוגר את מלוא היתרה (₪${due.toLocaleString('he-IL')})`,
+      remainingAfterPayment: 0
     };
   }
 
   if (due > 0 && dealAmount < due) {
-    const rem = due - dealAmount;
+    const rem = remainingIlsAfterCharge(due, dealAmount);
     return {
       type: 'partial_payment',
       priority: 2,
       tag: 'תשלום חלקי',
       tagColor: '#2563eb',
       badgeBg: '#dbeafe',
-      description: `יסגור ₪${dealAmount.toLocaleString('he-IL')} מתוך ₪${due.toLocaleString('he-IL')} (תישאר יתרה ₪${rem.toLocaleString('he-IL')})`
+      description: `יסגור ₪${dealAmount.toLocaleString('he-IL')} מתוך ₪${due.toLocaleString('he-IL')} (תישאר יתרה ₪${rem.toLocaleString('he-IL')})`,
+      remainingAfterPayment: rem
     };
   }
 
@@ -215,7 +231,8 @@ export function classifyCandidate(dealAmountNum, dueIls, totalIls) {
       tag: 'סגירת יתרה + עודף',
       tagColor: '#d97706',
       badgeBg: '#fef3c7',
-      description: `יסגור את כל היתרה ₪${due.toLocaleString('he-IL')} (עודף: ₪${surplus.toLocaleString('he-IL')})`
+      description: `יסגור את כל היתרה ₪${due.toLocaleString('he-IL')} (עודף: ₪${surplus.toLocaleString('he-IL')})`,
+      remainingAfterPayment: 0
     };
   }
 
@@ -225,7 +242,8 @@ export function classifyCandidate(dealAmountNum, dueIls, totalIls) {
     tag: 'יתרה פתוחה',
     tagColor: '#475569',
     badgeBg: '#f1f5f9',
-    description: `יתרה: ₪${due.toLocaleString('he-IL')}`
+    description: `יתרה: ₪${due.toLocaleString('he-IL')}`,
+    remainingAfterPayment: due
   };
 }
 
@@ -266,7 +284,7 @@ export function suggestBookingsForDeal(deal, bookings = [], options = {}) {
       if (alreadyLinked) continue;
     }
 
-    const { totalIls, dueIls, isPaid } = calculateBookingBalances(b);
+    const { totalIls, dueIls, paidIls, isPaid } = calculateBookingBalances(b);
 
     // Only bookings with balance > 0 (UNPAID/PARTIAL per money record). Exclude paid bookings.
     if (dueIls <= 0 || isPaid) {
@@ -279,7 +297,8 @@ export function suggestBookingsForDeal(deal, bookings = [], options = {}) {
 
     const guestName = String(b.guest_name || b.invoice_name || '').trim();
     const guestPhone = String(b.guest_phone || b.phone || '').trim();
-    const unitName = String(b.unit_name || b.unit_id || '').trim();
+    const unitIdRaw = String(b.unit_id || '').trim();
+    const unitName = unitFullName(unitIdRaw, String(b.unit_name || b.unit_id || '').trim());
     const bookingId = String(b.id || '').trim();
 
     // If manual search query is provided: explicit fallback searching by name or phone
@@ -376,7 +395,7 @@ export function suggestBookingsForDeal(deal, bookings = [], options = {}) {
       checkOut: cout,
       totalIls,
       dueIls,
-      paidIls: totalIls - dueIls,
+      paidIls,
       exactAmountMatch,
       nameSimilarity: nameSim,
       dateDistance: dateDist,

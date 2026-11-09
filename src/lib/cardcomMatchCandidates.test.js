@@ -279,3 +279,21 @@ test('candidate rules: deal on 8th -> booking 8-9 shown; month ahead not shown; 
   assert.ok(!ids.includes('b-paid'), 'Paid booking must NOT be shown');
 });
 
+test('Iska-style: deposit_agorot must not become dueIls when unpaid with empty clearing', () => {
+  const booking = {
+    id: 'kin_680_76182',
+    total_price_agorot: 50000,
+    deposit_agorot: 10000,
+    payment_status: 'UNPAID',
+    clearing_payments: []
+  };
+  const balances = calculateBookingBalances(booking);
+  assert.equal(balances.totalIls, 500);
+  assert.equal(balances.paidIls, 0);
+  assert.equal(balances.dueIls, 500);
+  assert.equal(balances.depositIls, 100);
+  const result = classifyDealToBooking(500, booking);
+  assert.equal(result.type, 'exact_due');
+  assert.equal(result.remainingAfterPayment, 0);
+});
+
