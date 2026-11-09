@@ -22,6 +22,7 @@ const GuestCheckout = lazy(() => import('./components/GuestCheckout'));
 const Settings = lazy(() => import('./components/Settings'));
 const SharedTaskTracker = lazy(() => import('./components/SharedTaskTracker'));
 const KinorotSyncChangesModal = lazy(() => import('./components/KinorotSyncChangesModal'));
+const KinorotAuditPanel = lazy(() => import('./components/KinorotAuditPanel'));
 
 const DEMO_TENANT_ID = '22222222-2222-2222-2222-222222222222';
 
@@ -33,6 +34,7 @@ function App() {
   const [authReady, setAuthReady] = useState(false);
   const [sessionUser, setSessionUser] = useState(null);
   const [kinorotSync, setKinorotSync] = useState(null);
+  const [kinorotAuditOpen, setKinorotAuditOpen] = useState(false);
   const [kinorotBusy, setKinorotBusy] = useState(false);
   const [kinorotSeenTick, setKinorotSeenTick] = useState(0);
 
@@ -460,6 +462,14 @@ function App() {
             ) : null}
             <NetworkStatusPill isLight={isLight} />
             <button
+                type="button"
+                className="app-nav-chip"
+                onClick={() => setKinorotAuditOpen(true)}
+                title="יומן פעולות כינורות"
+              >
+                יומן כינורות
+              </button>
+              <button
               type="button"
               onClick={handleKinorotSync}
               disabled={kinorotBusy || Boolean(kinorotSync?.running)}
@@ -736,6 +746,11 @@ function App() {
       ) : null}
       {hasUnseenKinorotChanges(kinorotSync) ? (
         <Suspense fallback={null}>
+          {kinorotAuditOpen ? (
+            <Suspense fallback={null}>
+              <KinorotAuditPanel open={kinorotAuditOpen} onClose={() => setKinorotAuditOpen(false)} />
+            </Suspense>
+          ) : null}
           <KinorotSyncChangesModal
             theme={theme}
             changes={unseenKinorotChanges(kinorotSync.changes)}

@@ -932,6 +932,42 @@ app.post('/api/guest/self-checkout-effects', async (req, res) => {
   }
 });
 
+
+app.get('/api/kinorot/audit', requireManagerStaff, async (req, res) => {
+  try {
+    const { listKinorotAudit } = await import('./kinorotAuditLog.js');
+    const { displayAuditRow } = await import('../src/lib/kinorotAudit.js');
+    const rows = await listKinorotAudit({
+      resId: req.query.res_id,
+      bookingId: req.query.booking_id,
+      guestName: req.query.guest,
+      limit: req.query.limit
+    });
+    const safe = (Array.isArray(rows) ? rows : []).map((row) => {
+      const shown = displayAuditRow(row);
+      return {
+        id: row.id,
+        ts: shown.ts,
+        actor: shown.actor,
+        action: shown.action,
+        guest_name: shown.guest_name,
+        unit_id: row.unit_id || null,
+        unit_name: shown.unit_name || null,
+        check_in_date: row.check_in_date || null,
+        check_out_date: row.check_out_date || null,
+        dates: shown.dates,
+        success: shown.success,
+        error: shown.error,
+        source: shown.source,
+        request_diff: row.request_diff || null
+      };
+    });
+    res.json({ rows: safe });
+  } catch (err) {
+    res.status(502).json({ error: err.message || 'KINOROT_AUDIT_FAILED' });
+  }
+});
+
 app.get('/api/kinorot/sync', requireManagerStaff, async (req, res) => {
   try {
     const { readKinorotSyncStatus } = await import('./kinorotSyncControl.js');

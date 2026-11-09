@@ -23,7 +23,9 @@ function slim(row) {
     unit_id: row.unit_id,
     guest_name: row.guest_name || 'אורח',
     check_in_date: ymd(row.check_in_date),
-    check_out_date: ymd(row.check_out_date)
+    check_out_date: ymd(row.check_out_date),
+    total_price_agorot: row.total_price_agorot == null ? null : Number(row.total_price_agorot) || 0,
+    booking_status: row.booking_status || null
   };
 }
 
@@ -57,6 +59,16 @@ export function summarizeKinorotDiff({ incoming = [], existing = [], today }) {
     }
     if (guestChanged(prev.guest_name, row.guest_name)) {
       fields.push({ field: 'guest', from: prev.guest_name, to: row.guest_name });
+    }
+    const prevPrice = prev.total_price_agorot == null ? null : Number(prev.total_price_agorot) || 0;
+    const nextPrice = row.total_price_agorot == null ? null : Number(row.total_price_agorot) || 0;
+    if (prevPrice != null && nextPrice != null && prevPrice !== nextPrice) {
+      fields.push({ field: 'price', from: prevPrice, to: nextPrice });
+    }
+    const prevStatus = String(prev.booking_status || '');
+    const nextStatus = String(row.booking_status || '');
+    if (prevStatus && nextStatus && prevStatus !== nextStatus) {
+      fields.push({ field: 'status', from: prevStatus, to: nextStatus });
     }
     if (fields.length) updated.push({ ...slim(row), fields });
   }
