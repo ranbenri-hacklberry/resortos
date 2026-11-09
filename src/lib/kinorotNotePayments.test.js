@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  preserveKinorotCollector,
   clearingPaymentsFromKinorotNotes,
   moneyFromKinorotPayment,
   parseKinorotNotePayments
@@ -163,4 +164,51 @@ describe('kinorot note payments', () => {
       ['cash', 'CASH', 128000, '']
     ]);
   });
+
+  it('parses Lian\'s exact note: 560 cash + 140 Bit as PAID with balance 0', () => {
+    const note = 'כניסה ב  15\nיציאה ב 11\n8.11 מזומן 560 אדם\n09.11 שולם בביט 140';
+    const events = parseKinorotNotePayments(note, { todayIso: '2026-11-09' });
+    expect(events).toEqual([
+      { date: '2026-11-08', method: 'cash', amount: 560 },
+      { date: '2026-11-09', method: 'app', amount: 140 }
+    ]);
+    const money = moneyFromKinorotPayment({ total: 700, notePayments: events }, '74692');
+    expect(money.payment_status).toBe('PAID');
+    expect(money.total_price_agorot).toBe(70000);
+    expect(money.clearing_payments.map((row) => [row.method, row.amount_agorot])).toEqual([
+      ['cash', 56000],
+      ['app', 14000]
+    ]);
+    const paid = money.clearing_payments.reduce((sum, row) => sum + row.amount_agorot, 0);
+    expect(paid).toBe(70000);
+  });
+
+  it('parses Bit/PayBox/bank transfer variants including spaced "ב bit"', () => {
+    expect(parseKinorotNotePayments('09.11 שולם בביט 140', { todayIso: '2026-11-09' })).toEqual([
+      { date: '2026-11-09', method: 'app', amount: 140 }
+    ]);
+    expect(parseKinorotNotePayments('09.11 שולם בפייבוקס 140', { todayIso: '2026-11-09' })[0].method).toBe('app');
+    expect(parseKinorotNotePayments('09.11 שולם בהעברה 140', { todayIso: '2026-11-09' })[0].method).toBe('bank');
+    const spaced = parseKinorotNotePayments('09.11 שולם ב bit 140', { todayIso: '2026-11-09' });
+    expect(spaced.some((row) => row.method === 'app' && row.amount === 140)).toBe(true);
+  });
+
+  it('preserves a corrected collector when the same Kinorot txn is rebuilt', () => {
+    const events = parseKinorotNotePayments('8.11 שולם במזומן 560', { todayIso: '2026-11-09' });
+    const built = clearingPaymentsFromKinorotNotes(events, {
+      resid: '74692',
+      existingPayments: [{
+        txn: 'kinorot_note_74692_2026-11-08_56000_cash',
+        collector: 'ברק',
+        source: 'KINOROT',
+        amount_agorot: 56000
+      }]
+    });
+    expect(built[0].collector).toBe('ברק');
+    expect(preserveKinorotCollector(
+      [{ txn: 'kinorot_note_74692_2026-11-08_56000_cash', collector: 'ברק' }],
+      [{ txn: 'kinorot_note_74692_2026-11-08_56000_cash', collector: 'כינורות' }]
+    )[0].collector).toBe('ברק');
+  });
+
 });

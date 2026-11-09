@@ -4257,3 +4257,29 @@
 
 
 
+
+.priority-root .field.is-readonly-collector {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.priority-root .field.is-readonly-collector strong {
+  font-size: 0.95rem;
+}
+.priority-root .field.is-readonly-collector small {
+  color: #64748b;
+  font-size: 0.75rem;
+}
+.priority-root .field.is-dirty > span:first-child {
+  color: #b45309;
+  font-weight: 800;
+}
+.priority-root.is-phone .cash-sheet-modal {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  margin: 0;
+  border-radius: 16px 16px 0 0;
+  max-height: 70vh;
+}

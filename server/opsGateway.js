@@ -510,7 +510,7 @@ async function collectUnitCash(user, unitId, body) {
   const booking = await bookingOnUnitToday(user, unitId);
   if (!booking) return { ok: false, skipped: 'no_booking' };
   const at = new Date().toISOString();
-  const collector = String(body?.reported_by || user?.name || 'משרד').slice(0, 80);
+  const collector = String(user?.display_name || user?.name || user?.username || 'משרד').slice(0, 80);
   const { booking: next } = addCashCollection(booking, { amountAgorot: amount, collector, at, today });
   await rest(
     'PATCH',
@@ -543,7 +543,7 @@ async function setUnitPaymentStatus(user, unitId, body) {
   if (!booking) return { ok: false, skipped: 'no_booking' };
   const at = new Date().toISOString();
   const next = applyPaymentStatus(booking, status, at);
-  const collector = String(body?.reported_by || user?.name || 'משרד').slice(0, 80);
+  const collector = String(user?.display_name || user?.name || user?.username || 'משרד').slice(0, 80);
   await rest(
     'PATCH',
     `hotelos_bookings?id=eq.${encodeURIComponent(booking.id)}`,
@@ -642,7 +642,7 @@ async function holdUnitNight(user, unitId, body) {
     control.startKinorotSync({ quick: true });
     const finished = await waitForKinorotSync(control, syncFrom, 90000).catch(() => null);
     const seen = finished ? await kinHoldVisible(created.placeId, created.resId) : null;
-    const collector = String(body?.reported_by || user?.name || 'משרד').slice(0, 80);
+    const collector = String(user?.display_name || user?.name || user?.username || 'משרד').slice(0, 80);
     await saveUnit(user, unitId, {
       room_log_actor: collector,
       room_log_note: seen ? 'נחסם ללילה ביומן כינורות' : 'החסימה נשמרה בכינורות, היומן עדיין לא נקלט'
