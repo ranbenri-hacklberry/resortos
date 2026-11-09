@@ -68,6 +68,12 @@ export function normalizeCardcomDealTime(raw, { correctUtcTaggedLegacy = true } 
   }
   const str = String(raw).trim();
 
+  // Already normalized by this helper (Date#toISOString → ….sssZ). Never re-apply
+  // legacy wall correction — that would double-shift (15:51 IL → 13:51Z → 11:51Z).
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(str)) {
+    return str;
+  }
+
   // Legacy: Israel wall incorrectly persisted as UTC.
   if (
     correctUtcTaggedLegacy &&
@@ -91,10 +97,16 @@ export function normalizeCardcomDealTime(raw, { correctUtcTaggedLegacy = true } 
   return Number.isNaN(d.getTime()) ? str : d.toISOString();
 }
 
-/** dd.mm HH:MM in Asia/Jerusalem for popup UI. */
+/** dd.mm HH:MM in Asia/Jerusalem for popup UI.
+ * Pending API may already emit true UTC via normalizeCardcomDealTime (… .000Z).
+ * Do NOT re-apply legacy wall/+00:00 correction on those values — that double-shifts
+ * e.g. Cardcom 15:51 IL → 13:51Z → wrongly shown as 13:51 instead of 15:51.
+ */
 export function formatCardcomDealDateTimeHe(raw) {
   if (!raw) return '';
-  const iso = normalizeCardcomDealTime(raw);
+  const str = String(raw).trim();
+  const alreadyNormalizedUtc = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(str);
+  const iso = normalizeCardcomDealTime(str, { correctUtcTaggedLegacy: !alreadyNormalizedUtc });
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   const parts = Object.fromEntries(
