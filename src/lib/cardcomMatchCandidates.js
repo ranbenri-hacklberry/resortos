@@ -157,12 +157,32 @@ export function classifyDealToBooking(dealAmountNum, booking) {
   };
 }
 
+import {
+  isBookingInDateWindow,
+  getIsraelDateString,
+  computeDateDistance,
+  nameSimilarity,
+  suggestBookingsForDeal
+} from '../../functions/lib/cardcomSuggestions.js';
+
+export {
+  isBookingInDateWindow,
+  getIsraelDateString,
+  computeDateDistance,
+  nameSimilarity,
+  suggestBookingsForDeal
+};
+
 /**
  * Returns candidate unpaid bookings evaluated against a deal amount.
  */
-export function getCandidateUnpaidBookings(dealAmountNum, bookings = [], query = '') {
+export function getCandidateUnpaidBookings(dealAmountNum, bookings = [], query = '', dealOrDate = null) {
   const dealAmount = Number(dealAmountNum || 0);
   const q = String(query || '').toLowerCase().trim();
+  const deal = typeof dealOrDate === 'object' && dealOrDate !== null ? dealOrDate : { amount: dealAmount, deal_time: dealOrDate };
+  const dealTime = deal?.deal_time || deal?.dealTime || dealOrDate;
+  const dealDate = dealTime ? getIsraelDateString(dealTime) : null;
+  const payerName = String(deal?.payer_name || deal?.cardOwnerName || '').trim();
 
   const candidates = [];
 
@@ -188,8 +208,16 @@ export function getCandidateUnpaidBookings(dealAmountNum, bookings = [], query =
         || cin.includes(q)
         || cout.includes(q);
       if (!matchQuery) continue;
+    } else if (dealDate && cin && cout) {
+      // Default list with deal date: strictly enforce candidate window
+      if (!isBookingInDateWindow(cin, cout, dealDate)) {
+        continue;
+      }
     }
 
+    const exactAmountMatch = Math.abs(dealAmount - dueIls) < 0.5;
+    const nameSim = payerName ? nameSimilarity(payerName, guestName) : 0;
+    const dateDist = dealDate && cin && cout ? computeDateDistance(cin, cout, dealDate) : 0;
     const classification = classifyDealToBooking(dealAmount, b);
 
     candidates.push({
@@ -201,15 +229,30 @@ export function getCandidateUnpaidBookings(dealAmountNum, bookings = [], query =
       checkOut: cout,
       totalIls,
       dueIls,
+      exactAmountMatch,
+      nameSimilarity: nameSim,
+      dateDistance: dateDist,
       ...classification
     });
   }
 
-  // Sort by priority (exact full first, then exact deposit, then partial payment, then overpayment, then by date)
+  // Rank: exact amount match to balance first, then name similarity, then date proximity
   candidates.sort((a, b) => {
+    const aExact = a.exactAmountMatch ? 1 : 0;
+    const bExact = b.exactAmountMatch ? 1 : 0;
+    if (aExact !== bExact) return bExact - aExact;
+
+    if (Math.abs(b.nameSimilarity - a.nameSimilarity) > 0.05) {
+      return b.nameSimilarity - a.nameSimilarity;
+    }
+
+    if (a.dateDistance !== b.dateDistance) {
+      return a.dateDistance - b.dateDistance;
+    }
+
     if (a.priority !== b.priority) return a.priority - b.priority;
     return (b.checkIn || '').localeCompare(a.checkIn || '');
   });
 
-  return candidates;
+  return candidates.slice(0, 10);
 }

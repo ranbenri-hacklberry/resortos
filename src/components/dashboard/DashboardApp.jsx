@@ -141,6 +141,8 @@ export default function DashboardApp() {
   const [dashShowAutoApproved, setDashShowAutoApproved] = useState(false);
   const [dashPendingCharges, setDashPendingCharges] = useState([]);
 
+  const [dashCardcomError, setDashCardcomError] = useState(null);
+
   useEffect(() => {
     const checkCardcom = async () => {
       try {
@@ -148,6 +150,7 @@ export default function DashboardApp() {
         const headers = activeToken ? { Authorization: `Bearer ${activeToken}` } : {};
         const res = await fetch('/api/ops/cardcom-terminal/pending', { headers });
         if (res.ok) {
+          setDashCardcomError(null);
           const data = await res.json();
           const pending = Array.isArray(data?.pending) ? data.pending : [];
           setDashPendingCharges(pending);
@@ -158,8 +161,12 @@ export default function DashboardApp() {
             setDashRecentlyApproved(unacked);
             setDashShowAutoApproved(true);
           }
+        } else {
+          setDashCardcomError(`שגיאה בטעינת סליקות קארדקום (${res.status})`);
         }
-      } catch (_) {}
+      } catch (err) {
+        setDashCardcomError(err?.message || 'שגיאת תקשורת בטעינת סליקות');
+      }
     };
     checkCardcom();
     const interval = setInterval(checkCardcom, 10000);
@@ -758,6 +765,27 @@ export default function DashboardApp() {
         fontFamily: phoneDash ? 'Tahoma, "Segoe UI", Arial, sans-serif' : 'Heebo, Assistant, system-ui, sans-serif'
       }}
     >
+      {dashCardcomError && activeTab !== 'priority' ? (
+        <div
+          role="alert"
+          style={{
+            backgroundColor: '#fee2e2',
+            color: '#991b1b',
+            border: '1px solid #f87171',
+            borderRadius: '8px',
+            padding: '8px 16px',
+            margin: '8px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: '13px',
+            fontWeight: 500
+          }}
+        >
+          <span>⚠️ {dashCardcomError}</span>
+        </div>
+      ) : null}
+
       {dashPendingCharges.length > 0 && activeTab !== 'priority' ? (
         <CardcomMobilePill
           pendingCount={dashPendingCharges.length}

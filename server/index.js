@@ -588,7 +588,7 @@ app.post('/api/ops/call-me/transfer', requireStaff, async (req, res) => {
   }
 });
 
-app.get('/api/ops/cardcom-terminal/pending', async (_req, res) => {
+app.get('/api/ops/cardcom-terminal/pending', requireStaff, async (_req, res) => {
   try {
     const fs = await import('node:fs');
     const path = await import('node:path');
@@ -612,6 +612,32 @@ app.get('/api/ops/cardcom-terminal/pending', async (_req, res) => {
     res.json({ ok: true, pending, recently_approved: recentlyApproved });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.get(['/api/ops/cardcom-terminal/suggestions', '/api/ops/cardcom-terminal/candidates', '/api/ops/suggestions', '/api/ops/candidates'], requireStaff, async (req, res) => {
+  try {
+    const { suggestBookingsForDeal } = await import('../functions/lib/cardcomSuggestions.js');
+    const dealId = req.query?.deal_id || req.query?.dealId;
+    const amount = Number(req.query?.amount);
+    const dealTime = req.query?.deal_time || req.query?.date;
+    const payerName = req.query?.payer_name || req.query?.name || '';
+    const query = req.query?.q || '';
+
+    const deal = {
+      dealId,
+      deal_id: dealId,
+      amount,
+      dealTime,
+      deal_time: dealTime,
+      payer_name: payerName,
+      cardOwnerName: payerName
+    };
+
+    const candidates = suggestBookingsForDeal(deal, [], { query, limit: 10 });
+    res.json({ ok: true, candidates, suggestions: candidates });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'FAILED_TO_GET_SUGGESTIONS' });
   }
 });
 

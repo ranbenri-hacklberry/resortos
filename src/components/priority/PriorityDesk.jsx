@@ -2127,7 +2127,25 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
 
   return (
     <div className={`priority-root${phone ? ' is-phone' : ''}`} dir="rtl">
-      {phone && pendingCardcomCharges?.length > 0 ? (
+      {phone && cardcomFetchError ? (
+        <div
+          role="alert"
+          style={{
+            backgroundColor: '#fee2e2',
+            color: '#991b1b',
+            border: '1px solid #f87171',
+            borderRadius: '8px',
+            padding: '8px 16px',
+            margin: '8px 16px',
+            fontSize: '13px',
+            fontWeight: 500,
+            cursor: 'pointer'
+          }}
+          onClick={refreshPendingCharges}
+        >
+          ⚠️ שגיאה בסליקות: {cardcomFetchError} (לחץ לרענון)
+        </div>
+      ) : phone && pendingCardcomCharges?.length > 0 ? (
         <CardcomMobilePill
           pendingCount={pendingCardcomCharges.length}
           totalAmount={pendingCardcomCharges.reduce((s, c) => s + (Number(c.amount) || 0), 0)}
@@ -2240,7 +2258,17 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
           <Printer size={14} /> דף חדר A4
         </button>
         <span className="tb-sep" />
-        {pendingCardcomCharges?.length > 0 ? (
+        {cardcomFetchError ? (
+          <button
+            type="button"
+            className="tb-btn is-highlight"
+            style={{ backgroundColor: '#fee2e2', color: '#991b1b', borderColor: '#f87171', fontWeight: 600 }}
+            onClick={refreshPendingCharges}
+            title={cardcomFetchError}
+          >
+            ⚠️ שגיאה בסליקות: {cardcomFetchError} (רענן)
+          </button>
+        ) : pendingCardcomCharges?.length > 0 ? (
           <button
             type="button"
             className="tb-btn is-highlight"

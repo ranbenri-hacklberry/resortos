@@ -1579,6 +1579,11 @@ export default defineConfig(({ mode }) => {
         '/api/agent-locks': {
           target: env.HOTELOS_BRIDGE_URL || 'http://127.0.0.1:4038',
           changeOrigin: true
+        },
+        '/api/ops/cardcom-terminal': {
+          target: env.HOTELOS_BACKEND_URL || 'https://resortos.app',
+          changeOrigin: true,
+          secure: true
         }
       }
     },
@@ -1624,6 +1629,11 @@ export default defineConfig(({ mode }) => {
         '/api/agent-locks': {
           target: env.HOTELOS_BRIDGE_URL || 'http://127.0.0.1:4038',
           changeOrigin: true
+        },
+        '/api/ops/cardcom-terminal': {
+          target: env.HOTELOS_BACKEND_URL || 'https://resortos.app',
+          changeOrigin: true,
+          secure: true
         }
       }
     },

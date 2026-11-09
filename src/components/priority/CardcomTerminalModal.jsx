@@ -14,7 +14,7 @@ import {
   ChevronRight,
   Sparkles
 } from 'lucide-react';
-import { getCandidateUnpaidBookings } from '../../lib/cardcomMatchCandidates.js';
+import { getStoredToken } from '../../lib/staffAuth.js';
 
 export const ACK_CARDCOM_DEALS_KEY = 'resortos_ack_cardcom_deals';
 
@@ -326,14 +326,64 @@ export default function CardcomTerminalModal({
   const [selectedDealIndex, setSelectedDealIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [pendingAction, setPendingAction] = useState(null);
+  const [serverSuggestions, setServerSuggestions] = useState([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [suggestionsError, setSuggestionsError] = useState(null);
+  const [retryNonce, setRetryNonce] = useState(0);
 
   const currentDeal = pendingCharges[Math.min(selectedDealIndex, pendingCharges.length - 1)] || pendingCharges[0];
 
-  // Candidates for the current deal
-  const candidateBookings = useMemo(() => {
-    if (!currentDeal?.amount) return [];
-    return getCandidateUnpaidBookings(currentDeal.amount, bookings, searchQuery);
-  }, [currentDeal?.amount, bookings, searchQuery]);
+  useEffect(() => {
+    let active = true;
+    const fetchServerSuggestions = async () => {
+      if (!currentDeal?.amount) {
+        setServerSuggestions([]);
+        setSuggestionsLoading(false);
+        setSuggestionsError(null);
+        return;
+      }
+      setSuggestionsLoading(true);
+      setSuggestionsError(null);
+      try {
+        const token = getStoredToken();
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const qParam = searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : '';
+        const dealIdParam = currentDeal.deal_id ? `&deal_id=${encodeURIComponent(currentDeal.deal_id)}` : '';
+        const amountParam = currentDeal.amount ? `&amount=${encodeURIComponent(currentDeal.amount)}` : '';
+        const timeParam = (currentDeal.deal_time || currentDeal.dealTime) ? `&deal_time=${encodeURIComponent(currentDeal.deal_time || currentDeal.dealTime)}` : '';
+        const nameParam = (currentDeal.payer_name || currentDeal.cardOwnerName) ? `&payer_name=${encodeURIComponent(currentDeal.payer_name || currentDeal.cardOwnerName)}` : '';
+        const res = await fetch(`/api/ops/cardcom-terminal/suggestions?${dealIdParam}${amountParam}${timeParam}${nameParam}${qParam}`, { headers });
+        if (!active) return;
+        if (res.ok) {
+          const data = await res.json();
+          const list = Array.isArray(data?.candidates) ? data.candidates : (Array.isArray(data?.suggestions) ? data.suggestions : []);
+          setServerSuggestions(list);
+          setSuggestionsError(null);
+        } else {
+          let errText = `שגיאת שרת (${res.status})`;
+          try {
+            const data = await res.json();
+            if (data?.error || data?.message) errText = data.error || data.message;
+          } catch (_) {}
+          setServerSuggestions([]);
+          setSuggestionsError(errText);
+        }
+      } catch (err) {
+        if (!active) return;
+        setServerSuggestions([]);
+        setSuggestionsError(err?.message || 'שגיאת תקשורת בטעינת מועמדים');
+      } finally {
+        if (active) {
+          setSuggestionsLoading(false);
+        }
+      }
+    };
+    fetchServerSuggestions();
+    return () => { active = false; };
+  }, [currentDeal?.deal_id, currentDeal?.amount, currentDeal?.deal_time, searchQuery, retryNonce]);
+
+  // Candidates for the current deal (server-side only, no browser computation)
+  const candidateBookings = serverSuggestions;
 
   if (!isOpen) return null;
   if ((!pendingCharges || pendingCharges.length === 0) && !loadError) return null;
@@ -581,7 +631,62 @@ export default function CardcomTerminalModal({
             gap: '12px'
           }}
         >
-          {candidateBookings.length === 0 ? (
+          {suggestionsError ? (
+            <div
+              style={{
+                textAlign: 'center',
+                padding: '32px 20px',
+                color: '#b91c1c',
+                backgroundColor: '#ffffff',
+                borderRadius: '12px',
+                border: '1px solid #fecaca',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '10px'
+              }}
+            >
+              <AlertCircle size={32} color="#dc2626" />
+              <div style={{ fontSize: '15px', fontWeight: 700, color: '#991b1b' }}>
+                שגיאה בטעינת מועמדים להזמנה
+              </div>
+              <div style={{ fontSize: '13px', color: '#b91c1c' }}>
+                {suggestionsError}
+              </div>
+              <button
+                type="button"
+                onClick={() => setRetryNonce((n) => n + 1)}
+                style={{
+                  marginTop: '6px',
+                  padding: '8px 18px',
+                  backgroundColor: '#dc2626',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: 'pointer'
+                }}
+              >
+                נסה שוב
+              </button>
+            </div>
+          ) : suggestionsLoading ? (
+            <div
+              style={{
+                textAlign: 'center',
+                padding: '40px 20px',
+                color: '#64748b',
+                backgroundColor: '#ffffff',
+                borderRadius: '12px',
+                border: '1px dashed #cbd5e1'
+              }}
+            >
+              <div style={{ fontSize: '14px', fontWeight: 600, color: '#475569' }}>
+                טוען מועמדים מהשרת...
+              </div>
+            </div>
+          ) : candidateBookings.length === 0 ? (
             <div
               style={{
                 textAlign: 'center',
