@@ -134,7 +134,7 @@ export default function DashboardApp() {
     }
     const role = user?.role;
     if (role === 'FINANCE') return 'financials';
-    return 'operations';
+    return 'priority';
   });
 
   const [dashRecentlyApproved, setDashRecentlyApproved] = useState([]);
@@ -291,7 +291,7 @@ export default function DashboardApp() {
       if (data.user.role === 'FINANCE') {
         setActiveTab('financials');
       } else {
-        setActiveTab('operations');
+        setActiveTab('priority');
       }
     } catch (err) {
       setError(err.message || 'שגיאה באימות הקוד');
@@ -334,7 +334,7 @@ export default function DashboardApp() {
       if (data.user.role === 'FINANCE') {
         setActiveTab('financials');
       } else {
-        setActiveTab('operations');
+        setActiveTab('priority');
       }
     } catch (err) {
       setError(err.message || 'שגיאה בהתחברות');

@@ -819,10 +819,8 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
         const data = await res.json();
         const pending = Array.isArray(data?.pending) ? data.pending : [];
         setPendingCardcomCharges(pending);
-        const isEscaped = Number(sessionStorage.getItem('cardcom_escape_until') || 0) > Date.now();
-        if (pending.length > 0 && !isEscaped) {
-          setShowUnlinkedChargesModal(true);
-        } else {
+        // Never auto-open: the modal opens only from the orange "סליקות לא משויכות" bar.
+        if (pending.length === 0) {
           setShowUnlinkedChargesModal(false);
         }
         const approved = Array.isArray(data?.recently_approved) ? data.recently_approved : [];
