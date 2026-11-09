@@ -270,10 +270,11 @@ test('candidate rules: deal on 8th -> booking 8-9 shown; month ahead not shown; 
   const allBookings = [bookingStay8to9, bookingMonthAhead, bookingPaid, bookingCheckout5DaysAgo];
   const candidates = getCandidateUnpaidBookings(1000, allBookings, '', deal);
 
-  assert.equal(candidates.length, 2);
+  assert.equal(candidates.length, 1);
   const ids = candidates.map((c) => c.bookingId);
   assert.ok(ids.includes('b-8-9'), 'Stay 8->9 must be shown');
-  assert.ok(ids.includes('b-checkout-5d-ago'), 'Checkout 5 days earlier must be shown');
+  // Older debts (checkout 5 days earlier) are no longer mixed into the default list (server returns them as older_debts)
+  assert.ok(!ids.includes('b-checkout-5d-ago'), 'Checkout 5 days earlier is not a default suggestion');
   assert.ok(!ids.includes('b-month-ahead'), 'Booking starting in a month must NOT be shown');
   assert.ok(!ids.includes('b-paid'), 'Paid booking must NOT be shown');
 });

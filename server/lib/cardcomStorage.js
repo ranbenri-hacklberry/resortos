@@ -289,6 +289,16 @@ export class CardcomStorage {
     });
   }
 
+  /** Closes a still-pending match (deal already linked or invoiced). Never touches resolved rows or seen status. */
+  closePendingMatch(dealId, extra = {}) {
+    const id = String(dealId);
+    const existing = this.pendingMatches.get(id);
+    if (!existing || existing.status !== 'pending') return false;
+    const clean = Object.fromEntries(Object.entries(extra).filter(([, v]) => v !== null && v !== undefined && v !== ''));
+    this.pendingMatches.set(id, { ...existing, ...clean, status: 'ignored', updated_at: new Date().toISOString() });
+    return true;
+  }
+
   updateMatchStatus(dealId, status, extra = {}) {
     const id = String(dealId);
     const existing = this.pendingMatches.get(id);

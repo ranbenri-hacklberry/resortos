@@ -6,7 +6,9 @@
  * - A deal at date D (Asia/Jerusalem) may be suggested only for bookings where:
  *   check_in <= D+1 day AND check_out >= D-1 day (stayed in or around the charge date, with one day of slack on each side).
  *   Example: stay 8->9, charge on 8 or 9 = shown.
- * - Plus a backwards search for older debts: bookings that checked out up to 14 days BEFORE D and are still unpaid or partially paid.
+ * - Older debts (checked out up to 14 days BEFORE D, still unpaid/partial) are NOT mixed into the default list:
+ *   they are returned only with options.includeOlderDebts (separate `older_debts` field of the endpoint) or via manual search.
+ *   (A November deal must not be offered October stays as default suggestions.)
  * - Never bookings with check_in > D+1. No future bookings.
  * - Only bookings with balance > 0 (UNPAID/PARTIAL per the money record). Exclude cancelled ones.
  * - Rank: exact amount match to balance first, then name similarity, then date proximity. Max 10 candidates.
@@ -147,26 +149,31 @@ export function computeDateDistance(cin, cout, dealDate) {
 }
 
 /**
- * Checks if a booking falls within the allowed candidate window for deal date D.
+ * Stay window for deal date D (default suggestions):
  * - check_in <= D + 1 (never future bookings > D+1)
- * - check_out >= D - 14 (stayed around D with 1 day slack or checked out up to 14 days before D)
+ * - check_out >= D - 1 (stayed in or around D, one day slack)
  */
 export function isBookingInDateWindow(cin, cout, dealDate) {
   if (!cin || !cout || !dealDate) return false;
   const dCin = cin.slice(0, 10);
   const dCout = cout.slice(0, 10);
   const dTarget = dealDate.slice(0, 10);
-
-  const dPlus1 = shiftDays(dTarget, 1);
-  const dMinus14 = shiftDays(dTarget, -14);
-
-  // Never bookings with check_in > D+1
-  if (dCin > dPlus1) return false;
-
-  // Bookings checked out up to 14 days before D (or stayed around D)
-  if (dCout < dMinus14) return false;
-
+  if (dCin > shiftDays(dTarget, 1)) return false;
+  if (dCout < shiftDays(dTarget, -1)) return false;
   return true;
+}
+
+/**
+ * Older-debt window: checked out up to 14 days before D (and before the stay window), check_in <= D+1.
+ * Callers must still require balance > 0.
+ */
+export function isBookingInOlderDebtWindow(cin, cout, dealDate) {
+  if (!cin || !cout || !dealDate) return false;
+  const dCin = cin.slice(0, 10);
+  const dCout = cout.slice(0, 10);
+  const dTarget = dealDate.slice(0, 10);
+  if (dCin > shiftDays(dTarget, 1)) return false;
+  return dCout < shiftDays(dTarget, -1) && dCout >= shiftDays(dTarget, -14);
 }
 
 /**
@@ -283,8 +290,10 @@ export function suggestBookingsForDeal(deal, bookings = [], options = {}) {
         bookingId.toLowerCase().includes(query);
       if (!matchesQuery) continue;
     } else {
-      // Default list: strictly enforce date window rule
-      if (!isBookingInDateWindow(cin, cout, dealDate)) {
+      // Default list: strictly enforce the stay window; older debts only when explicitly requested
+      const inStay = isBookingInDateWindow(cin, cout, dealDate);
+      const inOlderDebt = !inStay && options.includeOlderDebts && isBookingInOlderDebtWindow(cin, cout, dealDate);
+      if (!inStay && !inOlderDebt) {
         continue;
       }
     }
