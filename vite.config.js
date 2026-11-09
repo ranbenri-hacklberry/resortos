@@ -1491,10 +1491,37 @@ function dashboardApiPlugin(env) {
   };
 }
 
+function apiOnlyLockdownPlugin(env) {
+  const isOpsLockdown = env.LOCK_OPS_API_ONLY === 'true' || env.LOCK_OPS_API_ONLY === '1' || process.env.LOCK_OPS_API_ONLY === '1' || process.env.LOCK_OPS_API_ONLY === 'true';
+  const handle = (req, res, next) => {
+    const host = String(req.headers.host || req.headers['x-forwarded-host'] || '');
+    const isOpsHost = host.includes('ops.resortos.');
+    if (isOpsLockdown || isOpsHost) {
+      const urlPath = String(req.url || '').split('?')[0];
+      if (!urlPath.startsWith('/api/') && !urlPath.startsWith('/pg/') && urlPath !== '/pg') {
+        res.statusCode = 404;
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.end('Not Found');
+        return;
+      }
+    }
+    next();
+  };
+  return {
+    name: 'api-only-lockdown',
+    configureServer(server) {
+      server.middlewares.use(handle);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(handle);
+    }
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   return {
-    plugins: [react(), tailwindcss(), staffAuthPlugin(env), agentLocksPlugin(env), mailboxPublishPlugin(env), dashboardApiPlugin(env), openFinancePlugin(env), kinorotSyncPlugin(env), micropaySmsPlugin(env), guestCommsPlugin(env)],
+    plugins: [apiOnlyLockdownPlugin(env), react(), tailwindcss(), staffAuthPlugin(env), agentLocksPlugin(env), mailboxPublishPlugin(env), dashboardApiPlugin(env), openFinancePlugin(env), kinorotSyncPlugin(env), micropaySmsPlugin(env), guestCommsPlugin(env)],
     optimizeDeps: {
       entries: ['index.html', 'src/main.jsx'],
       include: [

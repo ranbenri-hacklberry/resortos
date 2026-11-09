@@ -117,7 +117,8 @@ async function staffFrom(req) {
       if (!agent || !canUseOps(agent)) return null;
       return agent;
     }
-    if (token.startsWith('dev-') || token === 'dev-local-token') {
+    const mailboxSecret = String(process.env.CHECKOUT_MAILBOX_SECRET || '').trim();
+    if (mailboxSecret && token === mailboxSecret) {
       return {
         id: '00000000-0000-0000-0000-000000000001',
         username: 'max',
@@ -127,21 +128,19 @@ async function staffFrom(req) {
         is_active: true
       };
     }
-    const user = await rpc('hotelos_me', { p_token: token });
-    if (!canUseOps(user)) return null;
+    if ((token.startsWith('dev-') || token === 'dev-local-token') && process.env.ENVIRONMENT === 'development') {
+      return {
+        id: '00000000-0000-0000-0000-000000000001',
+        username: 'max',
+        display_name: 'מקס (רני)',
+        role: 'MANAGER',
+        tenant_id: '22222222-2222-2222-2222-222222222222',
+        is_active: true
+      };
+    }
+    const user = await rpc('hotelos_me', { p_token: token }).catch(() => null);
+    if (!user || !canUseOps(user)) return null;
     return user;
-  }
-  const ip = String(req.ip || req.socket?.remoteAddress || '');
-  const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
-  if (isLocal) {
-    return {
-      id: '00000000-0000-0000-0000-000000000001',
-      username: 'max',
-      display_name: 'מקס (רני)',
-      role: 'MANAGER',
-      tenant_id: '22222222-2222-2222-2222-222222222222',
-      is_active: true
-    };
   }
   return null;
 }
