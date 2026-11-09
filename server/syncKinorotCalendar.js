@@ -14,7 +14,7 @@ import { moneyFromKinorotPayment } from '../src/lib/kinorotNotePayments.js';
 import { appendStayHoursToken, notesFromResviewHtml, parseStayHoursFromNotes } from '../src/lib/kinorotStayHours.js';
 import { channelFromKinorotGuest } from '../src/lib/kinorotChannel.js';
 import { readKinorotSyncStatus, writeKinorotSyncStatus } from './kinorotSyncControl.js';
-import { summarizeKinorotDiff } from './kinorotSyncDiff.js';
+import { filterKinorotChangesForToday, summarizeKinorotDiff } from './kinorotSyncDiff.js';
 import { notifySameDayKinorotBookings } from './kinorotSameDaySms.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1094,23 +1094,23 @@ export async function main() {
     method: 'POST'
   }).catch(() => {});
   const okAt = new Date().toISOString();
+  const popupChanges = filterKinorotChangesForToday(changes, today);
+  const popupTotal = horizon.mode === 'duty'
+    ? (popupChanges.created.length + popupChanges.updated.length)
+    : popupChanges.total;
   writeKinorotSyncStatus({
     running: false,
     mode: horizon.mode,
     lastOkAt: okAt,
     lastError: null,
     rows: rows.length,
-    ...(changes.total ? {
-      changeId: okAt,
-      changes: {
-        created: changes.created,
-        updated: changes.updated,
-        removed: horizon.mode === 'duty' ? [] : changes.removed,
-        total: horizon.mode === 'duty'
-          ? (changes.created.length + changes.updated.length)
-          : changes.total
-      }
-    } : {})
+    changeId: popupTotal ? okAt : null,
+    changes: popupTotal ? {
+      created: popupChanges.created,
+      updated: popupChanges.updated,
+      removed: horizon.mode === 'duty' ? [] : popupChanges.removed,
+      total: popupTotal
+    } : null
   });
 }
 

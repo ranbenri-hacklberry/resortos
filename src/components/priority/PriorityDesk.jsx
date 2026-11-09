@@ -73,6 +73,7 @@ import CardcomTerminalModal, {
   saveAcknowledgedDealIds
 } from './CardcomTerminalModal';
 import { formatManagerMeeting } from '../../lib/managerMeetings';
+import { rememberKinorotChanges } from '../../lib/kinorotSyncApi';
 import './priority.css';
 
 const UNIT_TYPE = {
@@ -1697,6 +1698,19 @@ export default function PriorityDesk({ tenantId = '', canEdit = false, active = 
       });
       const failed = [...result.failed, ...payment.failed, ...holdFailed, ...groundFailed];
       if (held.length) {
+        try {
+          rememberKinorotChanges({
+            created: held.map((h) => ({
+              id: `kin_${h.placeId || ''}_${h.resId || ''}`,
+              unit_id: h.unitId,
+              check_in_date: h.checkIn,
+              check_out_date: h.checkOut,
+              guest_name: h.guestName || 'לא זמין'
+            }))
+          });
+        } catch {
+          /* ignore */
+        }
         const savedNote = failed.length
           ? 'חלק מהחדרים נשמרו כלא נקי'
           : 'נשמר. החדר לניקוי';
