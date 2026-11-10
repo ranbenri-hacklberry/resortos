@@ -1004,7 +1004,7 @@ test('ops link endpoint integration: creates invoice with ExternalId, reuses exi
   const baseEnv = {
     SUPABASE_URL: 'https://mock.supabase.co',
     SUPABASE_SERVICE_ROLE_KEY: 'mock-service-key',
-    HOTELOS_DESK_PIN: '1234',
+    CHECKOUT_MAILBOX_SECRET: 'test-secret',
     CARDCOM_API_NAME: 'test-cardcom-user',
     CARDCOM_API_PASSWORD: 'test-cardcom-password'
   };
@@ -1086,7 +1086,7 @@ test('ops link endpoint integration: creates invoice with ExternalId, reuses exi
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: 'Bearer 1234'
+        Authorization: 'Bearer test-secret'
       },
       body: JSON.stringify({
         deal_id: 'deal-link-777',
@@ -1144,7 +1144,7 @@ test('ops link endpoint integration: creates invoice with ExternalId, reuses exi
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: 'Bearer 1234'
+        Authorization: 'Bearer test-secret'
       },
       body: JSON.stringify({
         deal_id: 'deal-link-777',
@@ -1196,7 +1196,7 @@ test('ops link endpoint integration: creates invoice with ExternalId, reuses exi
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: 'Bearer 1234'
+        Authorization: 'Bearer test-secret'
       },
       body: JSON.stringify({
         deal_id: 'deal-link-777',
@@ -1225,7 +1225,7 @@ test('concurrent link requests (Promise.all) produce exactly one Cardcom documen
   const baseEnv = {
     SUPABASE_URL: 'https://mock.supabase.co',
     SUPABASE_SERVICE_ROLE_KEY: 'mock-service-key',
-    HOTELOS_DESK_PIN: '1234',
+    CHECKOUT_MAILBOX_SECRET: 'test-secret',
     CARDCOM_API_NAME: 'test-cardcom-user',
     CARDCOM_API_PASSWORD: 'test-cardcom-password'
   };
@@ -1309,7 +1309,7 @@ test('concurrent link requests (Promise.all) produce exactly one Cardcom documen
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: 'Bearer 1234'
+        Authorization: 'Bearer test-secret'
       },
       body: JSON.stringify({
         deal_id: 'deal-conc-123',
@@ -1346,7 +1346,7 @@ test('ops link fails immediately before Cardcom or booking write if receipt writ
   const baseEnv = {
     SUPABASE_URL: 'https://mock.supabase.co',
     SUPABASE_SERVICE_ROLE_KEY: 'mock-service-key',
-    HOTELOS_DESK_PIN: '1234',
+    CHECKOUT_MAILBOX_SECRET: 'test-secret',
     CARDCOM_API_NAME: 'test-cardcom-user',
     CARDCOM_API_PASSWORD: 'test-cardcom-password'
   };
@@ -1385,7 +1385,7 @@ test('ops link fails immediately before Cardcom or booking write if receipt writ
 
     const req = new Request('https://test/api/ops/cardcom-terminal/link', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer 1234' },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-secret' },
       body: JSON.stringify({ deal_id: 'deal-claim-fail-99', booking_id: 'b-claim-fail' })
     });
 
@@ -1406,7 +1406,7 @@ test('ops link timeout reconciliation looks up document by ExternalId and avoids
   const baseEnv = {
     SUPABASE_URL: 'https://mock.supabase.co',
     SUPABASE_SERVICE_ROLE_KEY: 'mock-service-key',
-    HOTELOS_DESK_PIN: '1234',
+    CHECKOUT_MAILBOX_SECRET: 'test-secret',
     CARDCOM_API_NAME: 'test-cardcom-user',
     CARDCOM_API_PASSWORD: 'test-cardcom-password'
   };
@@ -1471,7 +1471,7 @@ test('ops link timeout reconciliation looks up document by ExternalId and avoids
 
     const req = new Request('https://test/api/ops/cardcom-terminal/link', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer 1234' },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-secret' },
       body: JSON.stringify({ deal_id: 'deal-rec-555', booking_id: 'b-rec-1' })
     });
 
@@ -1496,7 +1496,7 @@ test('ops link timeout or network error marks reconciliation_needed (never faile
   const baseEnv = {
     SUPABASE_URL: 'https://mock.supabase.co',
     SUPABASE_SERVICE_ROLE_KEY: 'mock-service-key',
-    HOTELOS_DESK_PIN: '1234',
+    CHECKOUT_MAILBOX_SECRET: 'test-secret',
     CARDCOM_API_NAME: 'test-cardcom-user',
     CARDCOM_API_PASSWORD: 'test-cardcom-password'
   };
@@ -1542,7 +1542,7 @@ test('ops link timeout or network error marks reconciliation_needed (never faile
 
     const req = new Request('https://test/api/ops/cardcom-terminal/link', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer 1234' },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-secret' },
       body: JSON.stringify({ deal_id: 'deal-timeout-99', booking_id: 'b-timeout-1' })
     });
 
