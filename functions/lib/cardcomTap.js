@@ -2,6 +2,7 @@ import { fetchPostgrest } from '../api/_db.js';
 import { buildHypLowProfileBody, isHypLowProfilePaid, lpResultToHypParams } from './hypPay.js';
 import {
   DOCUMENT_URL,
+  FALLBACK_INVOICE_EMAIL,
   LOW_PROFILE_CREATE_URL,
   LOW_PROFILE_RESULT_URL,
   MANUAL_CHARGE_URL,
@@ -36,6 +37,10 @@ import {
   sdkSucceeded,
   splitInstallments
 } from './cardcomTapCore.js';
+import {
+  invoiceMailboxConfigured,
+  triggerMailboxIngestViaServer
+} from './cardcomInvoiceMailbox.js';
 
 const memoryBuckets = new Map();
 
@@ -398,6 +403,27 @@ async function commitPayment(env, store, { key, loaded, booking, dealNumber, amo
   });
   await store.put(dealKey(dealNumber), { ...result, recorded });
   await store.put(idemKey(key), { status: 'done', public: result, dealNumber });
+
+  const hasDocument = Boolean(document?.documentNumber || existingDeal?.documentNumber);
+  const guestEmail = String(booking?.guest_email || '').trim().toLowerCase();
+  const needsMailboxCheck = !hasDocument && invoiceMailboxConfigured(env) && (
+    !guestEmail || guestEmail === FALLBACK_INVOICE_EMAIL.toLowerCase()
+  );
+
+  if (needsMailboxCheck && recorded) {
+    const payment = {
+      txn: dealNumber,
+      deal_number: dealNumber,
+      amount_agorot: Math.round(amount * 100),
+      gateway: 'cardcom'
+    };
+    triggerMailboxIngestViaServer(env, {
+      payment,
+      guestEmail,
+      bookingId: booking?.id || loaded?.id || ''
+    }).catch(() => {});
+  }
+
   return result;
 }
 

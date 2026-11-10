@@ -12,6 +12,7 @@ import { tryHandleNetwork } from './routerGateway.js';
 import { tryHandleAssetBeacons } from './assetBeaconWatch.js';
 import { registerInventoryRoutes } from './inventoryGateway.js';
 import { registerExpenseRoutes } from './expenses.js';
+import { tryHandleCardcomInvoice } from './cardcomInvoiceGateway.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -130,6 +131,7 @@ app.use(async (req, res, next) => {
         if (await tryHandleClimate(req, res)) return;
         if (await tryHandleNetwork(req, res)) return;
         if (await tryHandleAssetBeacons(req, res)) return;
+        if (await tryHandleCardcomInvoice(req, res)) return;
         if (await tryHandleOps(req, res)) return;
     } catch (err) {
         res.status(500).json({ error: err.message || 'OPS_FAILED' });
