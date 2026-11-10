@@ -673,3 +673,20 @@ test('createHypLowProfilePage: sandbox terminal 1001 still gets the demo card', 
   assert.equal(body.AdvancedDefinition.CardNumber, '4580280000000008');
   assert.equal(body.UIDefinition.CardOwnerIdValue, '000000000');
 });
+
+test('LowProfile carries the exact booking reference in Cardcom CustomFields', () => {
+  const body = buildHypLowProfileBody(
+    { masof: '184288', apiName: 'api-user', apiPassword: 'api-pass' },
+    { amount: 1, order: 'tok_test0000000000000000000000000001', bookingId: 'web_pilot-office_20261109_0001', clientName: 'רן בן ארי' }
+  );
+  assert.equal(body.ReturnValue, 'tok_test0000000000000000000000000001');
+  assert.deepEqual(body.UIDefinition.CustomFields, [
+    { Id: 1, Value: 'tok_test0000000000000000000000000001' },
+    { Id: 2, Value: 'web_pilot-office_20261109_0001' }
+  ]);
+  const noRef = buildHypLowProfileBody(
+    { masof: '184288', apiName: 'api-user', apiPassword: 'api-pass' },
+    { amount: 10, order: 'walk-in', clientName: 'x' }
+  );
+  assert.equal(noRef.UIDefinition.CustomFields, undefined);
+});

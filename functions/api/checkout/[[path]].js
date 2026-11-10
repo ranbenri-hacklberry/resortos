@@ -52,6 +52,9 @@ import {
   UNIT_PROPERTY
 } from '../../lib/unitNames.js';
 import { loadCalendarReplica } from '../../lib/calendarReplica.js';
+import { fetchPostgrest } from '../_db.js';
+import { recordCardcomPaymentOnBooking } from '../../lib/cardcomBookingRecord.js';
+import { mailboxHasPayment, protectPaymentState } from '../../lib/guestPaymentState.js';
 
 const TOKEN_RE = /^tok_[A-Za-z0-9_-]+$/;
 const BOOKING_PREFIX = 'booking:';
@@ -193,10 +196,43 @@ async function markHypPaid(env, token, row, params, extra = {}) {
     purpose: stay.hyp_intent?.purpose || extra.purpose || 'balance'
   });
   await persistHypPayment(env, token, stored, result);
+  await recordGuestPaymentInResortOS(env, token, stored, result);
   if (stay.hyp_card?.token) {
     await persistReservationPaymentMethod(env, stored, stay.hyp_card);
   }
   return { stored, result };
+}
+
+/**
+ * Record the guest-page Cardcom payment on the ResortOS booking right away (idempotent by deal id).
+ * The Cardcom document was already issued with the LowProfile charge; nothing is invoiced here.
+ * If this write fails, the terminal poller records the same deal later via the LowProfile custom fields.
+ */
+export async function recordGuestPaymentInResortOS(env, token, row, result, { restFetch } = {}) {
+  const dealId = String(result?.id || '').trim();
+  if (!dealId) return { ok: false, reason: 'NO_DEAL_ID' };
+  const amount = Number(result?.amount) || Number(row?.stay?.hyp_intent?.amount) || 0;
+  try {
+    const recorded = await recordCardcomPaymentOnBooking({
+      restFetch: restFetch || ((path, init) => fetchPostgrest(path, init, env)),
+      ref: { token, bookingId: row?.id },
+      payment: {
+        dealId,
+        amount,
+        approval: result?.auth,
+        last4: result?.last4,
+        documentNumber: result?.hesh,
+        channel: 'guest_page',
+        payerName: row?.guest_name,
+        recordedVia: 'cardcom_guest_page'
+      }
+    });
+    if (!recorded.ok) console.warn('[resortos payment record]', recorded.reason || 'FAILED');
+    return recorded;
+  } catch (err) {
+    console.warn('[resortos payment record]', err?.code || err?.message || 'ERROR');
+    return { ok: false, reason: err?.code || 'ERROR' };
+  }
 }
 
 const HYP_PAYMENTS_TABLE = `CREATE TABLE IF NOT EXISTS hyp_payments (
@@ -1005,10 +1041,12 @@ async function handleCheckout(context) {
         || existing.payment_status === 'PAID'
         || existing.stay?.hyp_deposit?.paid
         || existing.stay?.hyp?.paid
+        || mailboxHasPayment(existing)
       )
     );
     if (mailboxPaid) {
-      const kept = {
+      // Paid state on the mailbox row is authoritative: a ResortOS publish never clears it.
+      const kept = protectPaymentState(existing, {
         ...existing,
         guest_name: booking.guest_name || existing.guest_name,
         guest_phone: booking.guest_phone || existing.guest_phone,
@@ -1026,7 +1064,7 @@ async function handleCheckout(context) {
           checkout_time: existing.stay?.checkout_time || booking.stay?.checkout_time || '11:00'
         },
         expires_at: stayExpiresAt(existing)
-      };
+      });
       if (booking.booking_status === 'CHECKED_IN' || booking.booking_status === 'CHECKED_OUT') {
         kept.booking_status = booking.booking_status;
       }
@@ -1037,14 +1075,14 @@ async function handleCheckout(context) {
       if (!savedKept) return json({ error: 'MAILBOX_WRITE_FAILED' }, 503);
       return json(publicBooking(kept));
     }
-    const stored = {
+    const stored = protectPaymentState(existing, {
       ...existing,
       ...booking,
       booking_status: booking.booking_status || 'PENDING',
       payment_status: booking.payment_status || 'UNPAID',
       expires_at: stayExpiresAt({ ...existing, ...booking }),
       updated_at: new Date().toISOString()
-    };
+    });
     if (publishFingerprint(existing) === publishFingerprint(stored)) {
       return json(publicBooking(existing));
     }

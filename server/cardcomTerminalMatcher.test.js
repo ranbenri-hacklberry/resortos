@@ -508,20 +508,22 @@ test('two charges of 180 ₪ of Yura Dushein from 5.11 match booking kin_694_759
   assert.ok(cand2[0].reasons.includes('exact_20_percent_deposit'));
 });
 
-test('1 ₪ of "דניאל דניאל" is detected as test transaction', () => {
+test('a deal is a test only when explicitly flagged, never because of a small amount', () => {
   const test1 = {
-    dealId: 'deal-test-dan-1',
+    dealId: 'deal-small-1',
     amount: 1,
     cardOwnerName: 'דניאל דניאל'
   };
-  assert.equal(isTestTransaction(test1), true);
+  assert.equal(isTestTransaction(test1), false, 'a real guest can pay ₪1');
 
   const test2 = {
-    dealId: 'deal-test-5ils',
+    dealId: 'deal-small-5ils',
     amount: 5,
     cardOwnerName: 'ישראל ישראלי'
   };
-  assert.equal(isTestTransaction(test2), true);
+  assert.equal(isTestTransaction(test2), false);
+  assert.equal(isTestTransaction({ ...test2, customFields: { token: '', bookingId: '', test: true } }), true);
+  assert.equal(isTestTransaction({ ...test2, isTest: true }), true);
 
   const test3 = {
     dealId: 'deal-test-word',

@@ -17,6 +17,7 @@ import { normalizeCardcomDealTime } from '../../functions/lib/cardcomDealTime.js
  */
 
 import { suggestBookingsForDeal } from '../../functions/lib/cardcomSuggestions.js';
+import { parseCardcomCustomFields } from '../../functions/lib/cardcomBookingRecord.js';
 
 export const CARDCOM_LIST_URL = 'https://secure.cardcom.solutions/api/v11/Transactions/ListTransactions';
 export const CARDCOM_CREATE_DOCUMENT_URL = 'https://secure.cardcom.solutions/api/v11/Documents/CreateDocument';
@@ -118,6 +119,7 @@ export function normalizeCardcomDeal(raw = {}) {
   const rawDealTime = raw.CreateDate || raw.DealDate || raw.deal_time || new Date().toISOString();
   const dealTime = normalizeCardcomDealTime(rawDealTime);
   const returnValue = String(raw.ReturnValue || raw.returnValue || raw.ExternalId || raw.order || '').trim();
+  const customFields = parseCardcomCustomFields(raw.CustomFields || raw.customFields);
   const documentNumber = String(
     raw.DocumentNumber
     || raw.documentNumber
@@ -207,6 +209,7 @@ export function normalizeCardcomDeal(raw = {}) {
     entryMode,
     dealTime,
     returnValue,
+    customFields,
     documentNumber,
     documentUrl,
     rrn,
@@ -371,14 +374,15 @@ export function getBookingDueIls(booking) {
 }
 
 /**
- * Checks if a transaction is a suspected test charge (e.g. <= 5 ILS or name contains "בדיקה" / "test").
+ * A deal is a test ONLY when it is explicitly flagged: the LowProfile test custom field,
+ * an explicit isTest flag, or a card-owner name that says so ("בדיקה" / "test" / "ניסיון").
+ * The amount alone never makes a deal a test (a real guest can pay ₪1).
  * No hardcoded personal names.
  */
 export function isTestTransaction(deal) {
   if (!deal) return false;
-  const amt = Number(deal.amount || 0);
+  if (deal.isTest === true || deal.customFields?.test === true) return true;
   const name = String(deal.cardOwnerName || '').toLowerCase();
-  if (amt > 0 && amt <= 5) return true;
   if (/בדיקה|test|ניסיון/i.test(name)) return true;
   return false;
 }
@@ -463,7 +467,7 @@ export async function fetchCardcomCancellations(options = {}) {
       ToDate: formatCardcomDate(to),
       LimitForTerminal: Number(terminal),
       Page: page,
-      PageSize: pageSize
+      Page_size: Math.min(2000, Math.max(10, Number(pageSize) || 50))
     };
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
