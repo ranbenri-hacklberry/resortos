@@ -569,7 +569,7 @@ function sleep(ms) {
 
 function runKinorotHold(unitId) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [path.join(ROOT, 'server/kinorotHold.js'), String(unitId || '')], { cwd: ROOT });
+    const child = spawn(process.execPath, [path.join(ROOT, 'server/kinorotHold.js'), String(unitId || '')], { cwd: ROOT, env: { ...process.env, KINOROT_ACTOR: String(process.env.KINOROT_ACTOR || 'staff') } });
     let out = '';
     let errText = '';
     const timer = setTimeout(() => {
@@ -632,6 +632,7 @@ async function holdUnitNight(user, unitId, body) {
   if (nightHolds.has(unitId)) return { ok: false, skipped: 'in_progress' };
   nightHolds.add(unitId);
   try {
+    process.env.KINOROT_ACTOR = String(user?.name || user?.id || 'staff');
     const created = await runKinorotHold(unitId);
     const control = await import('./kinorotSyncControl.js');
     const running = control.readKinorotSyncStatus();

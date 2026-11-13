@@ -1246,7 +1246,7 @@ function kinorotSyncPlugin(env) {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const urlPath = requestPath(req);
-        if (urlPath !== '/api/kinorot/sync' && urlPath !== '/api/kinorot/hold' && urlPath !== '/api/kinorot/note') {
+        if (urlPath !== '/api/kinorot/sync' && urlPath !== '/api/kinorot/hold' && urlPath !== '/api/kinorot/note' && urlPath !== '/api/kinorot/audit') {
           next();
           return;
         }
@@ -1264,7 +1264,10 @@ function kinorotSyncPlugin(env) {
               const child = spawn(process.execPath, [
                 'server/kinorotHold.js',
                 String(body?.unit_id || '')
-              ], { cwd: process.cwd() });
+              ], {
+                cwd: process.cwd(),
+                env: { ...process.env, KINOROT_ACTOR: String(user?.name || user?.id || 'staff') }
+              });
               let out = '';
               let errText = '';
               child.stdout.on('data', (chunk) => { out += chunk; });
@@ -1293,7 +1296,7 @@ function kinorotSyncPlugin(env) {
             }
             const { spawn } = await import('node:child_process');
             const runNote = (args, stdin) => new Promise((resolve, reject) => {
-              const child = spawn(process.execPath, ['server/kinorotReservationNote.js', ...args], { cwd: process.cwd() });
+              const child = spawn(process.execPath, ['server/kinorotReservationNote.js', ...args], { cwd: process.cwd(), env: { ...process.env, KINOROT_ACTOR: String(user?.name || user?.id || 'staff') } });
               let out = '';
               let errText = '';
               const timer = setTimeout(() => {
@@ -1336,6 +1339,42 @@ function kinorotSyncPlugin(env) {
               ));
             }
             return sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+          }
+          if (urlPath === '/api/kinorot/audit') {
+            if (req.method !== 'GET') return sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+            try {
+              const { listKinorotAudit } = await import('./server/kinorotAuditLog.js');
+              const { displayAuditRow } = await import('./src/lib/kinorotAudit.js');
+              const url = new URL(req.url, 'http://localhost');
+              const rows = await listKinorotAudit({
+                resId: url.searchParams.get('res_id'),
+                bookingId: url.searchParams.get('booking_id'),
+                guestName: url.searchParams.get('guest'),
+                limit: url.searchParams.get('limit')
+              });
+              const safe = (Array.isArray(rows) ? rows : []).map((row) => {
+                const shown = displayAuditRow(row);
+                return {
+                  id: row.id,
+                  ts: shown.ts,
+                  actor: shown.actor,
+                  action: shown.action,
+                  guest_name: shown.guest_name,
+                  unit_id: row.unit_id || null,
+                  unit_name: shown.unit_name || null,
+                  check_in_date: row.check_in_date || null,
+                  check_out_date: row.check_out_date || null,
+                  dates: shown.dates,
+                  success: shown.success,
+                  error: shown.error,
+                  source: shown.source,
+                  request_diff: row.request_diff || null
+                };
+              });
+              return sendJson(res, 200, { rows: safe });
+            } catch (err) {
+              return sendJson(res, 502, { error: err.message || 'KINOROT_AUDIT_FAILED' });
+            }
           }
           const control = await import('./server/kinorotSyncControl.js');
           if (req.method === 'GET') {

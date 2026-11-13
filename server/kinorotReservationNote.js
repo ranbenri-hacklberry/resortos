@@ -6,12 +6,14 @@ import {
   reservationNoteFromHtml,
   withReservationNote
 } from '../src/lib/kinorotReservationNote.js';
+import { fieldsToObject, pickSnapshotFields } from '../src/lib/kinorotAudit.js';
 import {
   kinorotLogin,
   kinorotRequest,
   loadKinorotJar,
   saveKinorotJar
 } from './syncKinorotCalendar.js';
+import { kinorotWrite } from './kinorotWrite.js';
 
 const BASE = 'https://app.kinorotgo.co.il';
 const REQUIRED = ['guestname', 'checkin', 'checkout', 'res', 'unit[]', 'price[]'];
@@ -49,32 +51,58 @@ export async function readKinorotReservationNote(resId) {
   const jar = loadKinorotJar();
   const html = await reservationHtml(id, jar);
   saveKinorotJar(jar);
-  return { ok: true, resId: id, note: reservationNoteFromHtml(html) };
+  return { ok: true, resId: id, note: reservationNoteFromHtml(html), fields: pickSnapshotFields(fieldsToObject(reservationFormFields(html))) };
 }
 
-export async function writeKinorotReservationNote(resId, note) {
+export async function writeKinorotReservationNote(resId, note, { actor = 'system', source = 'kinorotReservationNote' } = {}) {
   const id = String(resId || '').trim();
   if (!/^\d+$/.test(id)) throw fail('הזמנה לא תקינה', 400);
   const text = String(note || '').slice(0, 4000);
-  const jar = loadKinorotJar();
-  const html = await reservationHtml(id, jar);
-  const fields = withReservationNote(reservationFormFields(html), text);
-  assertReservationFields(fields);
-  const body = new FormData();
-  for (const [name, value] of fields) body.append(name, value);
-  const saved = await kinorotRequest(`${BASE}/reservationnew-page-3-080726.php`, jar, {
-    method: 'POST',
-    body,
-    followRedirect: false,
-    headers: {
-      Referer: `${BASE}/bookres.php?res=${id}&hp=1`,
-      Origin: BASE
+
+  await kinorotWrite({
+    action: 'note',
+    actor,
+    source,
+    kinorotResId: id,
+    snapshotBefore: async () => {
+      const jar = loadKinorotJar();
+      const html = await reservationHtml(id, jar);
+      saveKinorotJar(jar);
+      return pickSnapshotFields(fieldsToObject(reservationFormFields(html)));
+    },
+    write: async () => {
+      const jar = loadKinorotJar();
+      const html = await reservationHtml(id, jar);
+      const fields = withReservationNote(reservationFormFields(html), text);
+      assertReservationFields(fields);
+      const body = new FormData();
+      for (const [name, value] of fields) body.append(name, value);
+      const saved = await kinorotRequest(`${BASE}/reservationnew-page-3-080726.php`, jar, {
+        method: 'POST',
+        body,
+        followRedirect: false,
+        headers: {
+          Referer: `${BASE}/bookres.php?res=${id}&hp=1`,
+          Origin: BASE
+        }
+      });
+      saveKinorotJar(jar);
+      if (!/res=\d+/.test(saved.location || '') && saved.status >= 400) {
+        throw fail('כינורות לא שמר את ההערה', 502);
+      }
+      return {
+        ok: true,
+        resId: id,
+        status: saved.status,
+        location: saved.location || null,
+        requestFields: pickSnapshotFields(fieldsToObject(fields))
+      };
+    },
+    snapshotAfter: async () => {
+      const check = await readKinorotReservationNote(id);
+      return check.fields;
     }
   });
-  saveKinorotJar(jar);
-  if (!/res=\d+/.test(saved.location || '') && saved.status >= 400) {
-    throw fail('כינורות לא שמר את ההערה', 502);
-  }
   const check = await readKinorotReservationNote(id);
   if (check.note.trim() !== text.trim()) throw fail('כינורות לא שמר את ההערה', 502);
   return check;
@@ -84,8 +112,9 @@ const isDirect = process.argv[1] && path.resolve(process.argv[1]) === fileURLToP
 if (isDirect) {
   const command = process.argv[2];
   const resId = process.argv[3];
+  const actor = process.env.KINOROT_ACTOR || 'system';
   const run = command === 'set'
-    ? writeKinorotReservationNote(resId, JSON.parse(fs.readFileSync(0, 'utf8')).note)
+    ? writeKinorotReservationNote(resId, JSON.parse(fs.readFileSync(0, 'utf8')).note, { actor, source: 'cli:kinorotReservationNote' })
     : readKinorotReservationNote(resId);
   run
     .then((row) => process.stdout.write(JSON.stringify(row)))

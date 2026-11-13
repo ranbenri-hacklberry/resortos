@@ -978,7 +978,7 @@ function loadExistingKinRows(incoming, today, horizon = syncHorizon()) {
 SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json)
 FROM (
   SELECT id, unit_id, guest_name, check_in_date::text, check_out_date::text,
-         booking_status, deleted_at
+         booking_status, deleted_at, total_price_agorot
   FROM public.hotelos_bookings
   WHERE id LIKE 'kin\\_%' ESCAPE '\\'
     AND (
@@ -1078,6 +1078,12 @@ export async function main() {
   const out = runSql(sql);
   console.log(out.trim().split('\n').slice(-8).join('\n'));
   console.log(`[kinorot] upserted ${rows.length} rows`);
+  try {
+    const { recordExternalKinorotChanges } = await import('./kinorotExternalAudit.js');
+    await recordExternalKinorotChanges(changes);
+  } catch (err) {
+    console.error(`[kinorot-audit] external sync log failed: ${err?.message || err}`);
+  }
   if (!horizon.skipEnrich) markFullEnrich();
   if (horizon.mode !== 'duty') {
     try {
