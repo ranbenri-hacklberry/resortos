@@ -387,38 +387,6 @@ export default function GuestStay({ booking, unitName, themeStyles, justConfirme
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-      {justConfirmed || Boolean(stay?.id_photo_received_at || stay?.id_scan) ? (
-        <div
-          style={{
-            background: isPaid ? '#10B98115' : themeStyles.accentSoft,
-            border: `1px solid ${isPaid ? '#10B98166' : themeStyles.accent}`,
-            borderRadius: 14,
-            padding: '1rem 1.15rem',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 10
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 900, color: isPaid ? '#059669' : themeStyles.accent, fontSize: '1rem' }}>
-            <span>✓</span>
-            <span>{isPaid ? t('GUEST_PAID_CONFIRMED_TITLE') : t('GUEST_ID_RECEIVED_TITLE')}</span>
-          </div>
-          <p style={{ margin: 0, color: themeStyles.textMuted, fontSize: '0.86rem', lineHeight: 1.55, fontWeight: 600 }}>
-            {isPaid ? t('GUEST_PAID_CONFIRMED_BODY') : t('GUEST_ID_RECEIVED_BODY')}
-          </p>
-          <div style={{ marginTop: 4, paddingTop: 8, borderTop: `1px dashed ${isPaid ? '#10B98144' : `${themeStyles.accent}44`}` }}>
-            <GuestReach
-              token={booking.checkout_token}
-              unitId={booking.unit_id}
-              cabin={unitName}
-              guestName={booking.guest_name}
-              dates={`${booking.check_in_date || ''}–${booking.check_out_date || ''}`}
-              themeStyles={themeStyles}
-              t={t}
-            />
-          </div>
-        </div>
-      ) : null}
 
       {bankWaiting ? (
         <div
