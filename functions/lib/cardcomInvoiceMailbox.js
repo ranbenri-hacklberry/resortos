@@ -241,3 +241,36 @@ export const MAILBOX_CONFIG = {
   searchDaysBack: 7,
   maxEmails: 50
 };
+
+export async function triggerMailboxIngestViaServer(env, { payment, guestEmail, bookingId } = {}) {
+  const serverUrl = String(env?.SERVER_URL || env?.BACKEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const token = env?.INVOICE_INGEST_TOKEN || env?.DISPATCH_TOKEN || '';
+  
+  const endpoint = payment
+    ? `${serverUrl}/api/cardcom-invoice/lookup`
+    : `${serverUrl}/api/cardcom-invoice/ingest`;
+  
+  const body = payment
+    ? { payment, guestEmail, bookingId }
+    : { force: false };
+  
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Invoice-Ingest-Token': token
+      },
+      body: JSON.stringify(body)
+    });
+    
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      return { ok: false, status: response.status, error: text };
+    }
+    
+    return await response.json();
+  } catch (err) {
+    return { ok: false, error: err.message, network: true };
+  }
+}
