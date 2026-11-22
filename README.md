@@ -10,6 +10,33 @@ The goal is simple:
 
 **People should not have to operate ResortOS. ResortOS should operate the property through people, robots, and connected systems.**
 
+ResortOS is an operations system for hospitality properties (cabins, suites, small resorts). It tracks occupancy and bookings, runs housekeeping and maintenance workflows, hosts a guest stay portal, and talks to staff on WhatsApp. Payments (Cardcom / HYP), calendar sync, and a manager dashboard sit on the same model.
+
+It is used against live property operations; the longer-term vision (robots, IoT, fully autonomous loops) is described further down and should not be read as a completed feature list.
+
+### Tech Stack
+
+- **Frontend:** React 19, Vite (multiple entry apps: guest portal, landing, agents, reviews), Tailwind CSS, Framer Motion, i18next
+- **Offline / data:** Dexie.js, Supabase (PostgreSQL) + `pg` for some server jobs
+- **Edge & hosting:** Cloudflare Pages and Workers (`wrangler.jsonc`, SMS worker, ops worker), plus optional Vercel static deploys
+- **Native:** Capacitor Android
+- **Server / jobs:** Node.js + Express bridge; calendar sync, Channex, payment flows
+- **Interfaces:** WhatsApp operations agent, guest portal, manager dashboard / desk
+
+### Architecture
+
+```
+Guest portal / dashboard / landing   (Vite + React, some Dexie offline)
+                 │
+     Cloudflare Pages + Worker functions
+                 │
+            Supabase / PostgreSQL
+                 │
+    Express bridge, WhatsApp agent, sync jobs (calendar, payments)
+```
+
+Property state (units, bookings, housekeeping, guest stay) is the source of truth. People get WhatsApp or a dashboard; guests get a portal and payment link; automations write back into the same operational model.
+
 ## The idea
 
 Most hospitality software gives people information and asks them to act.
